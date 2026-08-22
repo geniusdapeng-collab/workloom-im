@@ -1780,7 +1780,41 @@ const captainRouter = router({
           const wsName = kind === "fleet_daily" ? "集团CEO" : undefined;
           const charter = await loadCharter(app, scope);
           const r = await runBriefingBeat(app, scope, kind, { llmCall: call });
-          return { ...r, name: wsName ?? charter.identity.name };
+          // IM 通道推送（方案双通道；charter.briefing.channel=im|both 时推送，mock 驱动留痕）
+          let imPushed = false;
+          if (r.eventId && !r.skipped && charter.briefing.channel !== "app") {
+            const textRow = await app.connect().then(async (c) => {
+              try {
+                await c.query("BEGIN");
+                await c.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+                const q = await c.query<{ payload: Record<string, unknown> }>(`SELECT payload FROM biz_events WHERE event_id=$1`, [r.eventId]);
+                await c.query("COMMIT");
+                return q.rows[0]?.payload;
+              } catch (e) { await c.query("ROLLBACK").catch(() => undefined); throw e; } finally { c.release(); }
+            });
+            const text = String(((textRow?.decision as Record<string, unknown>)?.after as Record<string, unknown>)?.text ?? "");
+            if (text) {
+              const driver = new MockChannelDriver("wecom");
+              const sent = await driver.sendText({ conversationId: `chairman-${scope.workspaceId}` }, text);
+              await gatewayAppend(getGatewayPool(), {
+                ...scope, actor: { id: "im-channels", type: "system" }, sessionId: `ceo-im-${scope.workspaceId}`,
+              }, {
+                who: { type: "system", id: "im-channels" },
+                context: { tenant_id: scope.tenantId, workspace_id: scope.workspaceId, time: new Date().toISOString(), channel: "wecom" },
+                object: { type: "conversation", id: `chairman-${scope.workspaceId}` },
+                decision: {
+                  action: "im.outbound",
+                  params: { channel_msg_id: sent.channelMsgId, ref_event: r.eventId, kind },
+                  after: { text: text.slice(0, 500) },
+                  basis: [`简报双通道推送（charter.briefing.channel=${charter.briefing.channel}）`],
+                },
+                rule_impact: [],
+                model_trace: { model_id: "im-channels", tier: "standard" },
+              });
+              imPushed = true;
+            }
+          }
+          return { ...r, name: wsName ?? charter.identity.name, imPushed };
         }
       }
     }),
@@ -1810,6 +1844,33 @@ const captainRouter = router({
         client.release();
       }
     }),
+
+  /** 董事长请示队列（L4 pending + 事件依据链；P21 inline 三手势数据源） */
+  chairmanQueue: protectedProcedure.query(async ({ ctx }) => {
+    const scope = scopeOf(ctx.identity);
+    const app = getAppPool();
+    const client = await app.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+      const r = await client.query<{
+        approval_id: string; event_id: string; snapshot: Record<string, unknown>; payload: Record<string, unknown>;
+      }>(
+        `SELECT a.approval_id, a.event_id, a.snapshot, e.payload
+         FROM approvals a JOIN biz_events e ON e.event_id = a.event_id AND e.workspace_id = a.workspace_id
+         WHERE a.workspace_id=$1 AND a.status='pending' AND a.tier='l4_chairman'
+         ORDER BY a.approval_id LIMIT 20`,
+        [scope.workspaceId],
+      );
+      await client.query("COMMIT");
+      return r.rows;
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
+  }),
 
   /** 成绩单（方案 §七） */
   scorecard: protectedProcedure.query(async ({ ctx }) => {
