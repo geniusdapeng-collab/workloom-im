@@ -17,7 +17,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-9A7B2D)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%2013%2B%20%C2%B7%20Apple%20Silicon-black)](https://github.com/geniusdapeng-collab/workloom-im/releases)
 [![Runtime](https://img.shields.io/badge/runtime%20foundation-DeepSeek%20Harness-4C6FFF)](https://www.npmjs.com/package/@deepseek-ai/dsh)
-[![Tests](https://img.shields.io/badge/tests-168%20vitest%20%2B%20371%20suite%20%2B%20dsh--gate-green)]()
+[![Tests](https://img.shields.io/badge/tests-168%20vitest%20%2B%20428%20suite%20%2B%20dsh--gate-green)]()
 [![Data](https://img.shields.io/badge/data%20sovereignty-local--first%20PG17-blueviolet)]()
 [![Website](https://img.shields.io/badge/website-workloom.ok.kimi.link-e8b96a)](https://workloom.ok.kimi.link)
 
@@ -62,7 +62,7 @@ WorkLoom 的答案是：**大模型是蒸汽机，企业 Agent IM 是织机。**
 | `packages/base/wizard` | **行业落地向导**：首次装机的状态机与编排（技能一/二/三→交付配置），行业内容零预置（D18） |
 | `skills/official/` | 官方套件：`industry-entry/`（行业落地四技能+快速上线模板）、`product-feedback/`（反哺分析技能）（D17） |
 | `vendor/{dsh,dsh-im}` | dsh 0.1.1-rc.1 审计基线（只读）/ dsh IM 通道插件（MIT 回馈） |
-| `scripts/` | migrate / seed / demo / verify-chain / **suite（371 场景用例）** / dsh-gate |
+| `scripts/` | migrate / seed / demo / verify-chain / **suite（428 场景用例）** / dsh-gate |
 
 **最小跑通路径**（Linux/macOS；需要 PostgreSQL 17 + pgvector 监听 5432）：
 
@@ -74,20 +74,22 @@ psql -U postgres -d workloom -c "CREATE EXTENSION vector;"
 pnpm db:migrate && pnpm db:seed          # 迁移 + 演示种子（服务业门店演示工作区）
 pnpm typecheck && pnpm test              # 类型检查 + vitest（DB 集成见下）
 pnpm db:verify-chain                     # 哈希链全库逐条重算验证
-pnpm suite                               # 371 条全场景用例（含 spawn server 的 HTTP E2E）
+pnpm suite                               # 428 条全场景用例（含 spawn server 的 HTTP E2E）
 pnpm demo                                # 端到端演示剧本
 pnpm dev                                 # 起 server(:8787) + web(:5173)
 # DB 集成测试（默认 skip）：
 RUN_DB_TESTS=1 pnpm -C packages/base test
 ```
 
+**开箱即运行态**：`db:seed` 完成即进入一个「忠实客户高频重度使用」的全模拟运行态——经营剧场（默认首页 `/`）有数字CEO 晨报、员工卫星群、待决策请示、实况字幕流，全部为演示种子数据 + 内置确定性模型（零外部依赖）。页面顶部**常显琥珀色横幅**提示「当前为全模拟运行态」，点击「接入真实数据 →」进入**落地向导**（`/onboarding`）：① 环境自检（自动）→ ② 真实大模型（DeepSeek/Kimi/智谱/OpenAI 预设一键填，**真实试调通过才落盘**，保存即全链生效免重启）→ ③ 经营主体 → ④ 启用真实模式（横幅熄灭，全程五元事件留痕）。ask 问询另支持联网实时检索事实面（`ASK_WEB_SEARCH=1`，Bing RSS，keyless），与库内实时数据合并供模型合成。
+
 **适用 / 不适用**：
 - ✅ 适用：**通用 Agent 协作底座**——任何「有明确产出指标 + 大量重复处置动作」的组织：服务业门店（餐饮/零售/生活服务）、**社媒营销团队**（选题/文案/发布/互动/复盘）、**AI 视频与内容创作团队**（脚本/分镜/素材/排期/评论处置）等；需要 AI Agent 进组织、上产线、可问责的团队。行业能力以 Bundle 可插拔加载，`bundles/` 下附服务业门店参考实现。
 - ❌ 不适用：纯聊天机器人/Copilot 侧边栏诉求；无状态问答 SaaS；不愿自托管 PG 的场景（数据主权设计是 local-first）。
 
-**事实源文档索引**：[`CHANGELOG.md`](CHANGELOG.md) 版本变更 · [`docs/DECISIONS.md`](docs/DECISIONS.md) ADR · [`docs/AUDIT.md`](docs/AUDIT.md) 审计记录 · [`docs/SUITE.md`](docs/SUITE.md) 371 用例清单 · [`docs/03-功能清单-用户版.md`](docs/03-功能清单-用户版.md) 功能全表 · [`docs/04-行业落地向导-用户版.md`](docs/04-行业落地向导-用户版.md) 落地向导 · [`docs/methodology/01-行业落地三技能体系.md`](docs/methodology/01-行业落地三技能体系.md) 行业落地方法论。安全铁律与编码规范见各包文件头注释与 `docs/AUDIT.md` 附录。
+**事实源文档索引**：[`CHANGELOG.md`](CHANGELOG.md) 版本变更 · [`docs/DECISIONS.md`](docs/DECISIONS.md) ADR · [`docs/AUDIT.md`](docs/AUDIT.md) 审计记录 · [`docs/SUITE.md`](docs/SUITE.md) 428 用例清单 · [`docs/03-功能清单-用户版.md`](docs/03-功能清单-用户版.md) 功能全表 · [`docs/04-行业落地向导-用户版.md`](docs/04-行业落地向导-用户版.md) 落地向导 · [`docs/methodology/01-行业落地三技能体系.md`](docs/methodology/01-行业落地三技能体系.md) 行业落地方法论。安全铁律与编码规范见各包文件头注释与 `docs/AUDIT.md` 附录。
 
-**给 AI 助手的修改纪律**：改网关/权限/RLS/append-only 相关代码前必读 `docs/AUDIT.md` 第 1 轮 P0 教训（RLS 事务级上下文必须配显式事务）；每个逻辑变更一个 commit；修复必须附回归测试（套件已有 371 条，往 `scripts/suite.ts` 加用例优先于新建测试文件）。
+**给 AI 助手的修改纪律**：改网关/权限/RLS/append-only 相关代码前必读 `docs/AUDIT.md` 第 1 轮 P0 教训（RLS 事务级上下文必须配显式事务）；每个逻辑变更一个 commit；修复必须附回归测试（套件已有 428 条，往 `scripts/suite.ts` 加用例优先于新建测试文件）。
 
 
 ---
@@ -363,7 +365,7 @@ WorkLoom 把 IM 通道适配层抽成了独立的 dsh 插件 [`vendor/dsh-im`](v
 | [门店店长使用指南](docs/01-门店店长使用指南.md) | 门店店长 / 门店负责人 | 下载安装 → 配置 → 日常使用，全程无技术术语 |
 | [新客户首次接入完整流程](docs/02-新客户首次接入完整流程.md) | 任意行业新客户 | 从下载到正式使用的通用接入流程（约 30 分钟） |
 | [功能清单（用户版）](docs/03-功能清单-用户版.md) | 所有人 | 全部功能按使用场景分类，业务语言描述 |
-| [测试套件用例清单](docs/SUITE.md) | 开发者 / AI 助手 | 371 条场景用例全表（`pnpm suite` 运行时导出） |
+| [测试套件用例清单](docs/SUITE.md) | 开发者 / AI 助手 | 428 条场景用例全表（`pnpm suite` 运行时导出） |
 | [架构决策记录](docs/DECISIONS.md) | 开发者 | ADR：为什么这么设计（含否决方案论证） |
 | [审计记录](docs/AUDIT.md) | 开发者 / 安全 | 六轮审计的问题、根因、修复与门禁实测 |
 
@@ -386,7 +388,7 @@ pnpm typecheck         # 全仓类型检查
 pnpm test              # vitest 168 例（base 152 + runtime 12 + shared 4）
 RUN_DB_TESTS=1 pnpm -C packages/base test   # PG 集成测试（默认 skip）
 pnpm db:verify-chain   # 哈希链全库重算（篡改检测）
-pnpm suite             # 371 条全场景用例（服务层 344 + HTTP E2E 27）
+pnpm suite             # 428 条全场景用例（服务层 344 + HTTP E2E 27）
 pnpm demo              # 端到端演示剧本
 pnpm doctor            # 环境自检
 
@@ -408,7 +410,7 @@ LLM_MODEL=deepseek-chat
 
 行业化落地经「落地向导」自动化完成（D18/D20）：写 LLM_* 四 env + `registerAskFactProvider` 注册行业事实面 + 装载行业 bundle（六槽），代码零改动即真实运行。
 
-仓库结构：`apps/{server, web, site, desktop}` + `packages/{shared, db, base, runtime}` + `bundles/`（行业包）+ `vendor/{dsh, dsh-im}`，pnpm monorepo。核心底座：**`packages/base/workdata`（WorkData 数据大脑）**。371 条场景用例清单见 [`docs/SUITE.md`](docs/SUITE.md)；CI 门禁（每次 push 全量执行上述全部检查）见 `.github/workflows/ci.yml`。
+仓库结构：`apps/{server, web, site, desktop}` + `packages/{shared, db, base, runtime}` + `bundles/`（行业包）+ `vendor/{dsh, dsh-im}`，pnpm monorepo。核心底座：**`packages/base/workdata`（WorkData 数据大脑）**。428 条场景用例清单见 [`docs/SUITE.md`](docs/SUITE.md)；CI 门禁（每次 push 全量执行上述全部检查）见 `.github/workflows/ci.yml`。
 
 ## 数字CEO（公司CEO/集团CEO，D21–D23）
 
@@ -439,7 +441,7 @@ LLM_MODEL=deepseek-chat
 
 ## 路线图
 
-- ✅ 当前：Mac 桌面包一键启航 + 官网 + CI 质量门禁（371 场景用例 + 哈希链验证，每次 push 全量执行）
+- ✅ 当前：Mac 桌面包一键启航 + 官网 + CI 质量门禁（428 场景用例 + 哈希链验证，每次 push 全量执行）
 - 🔜 Intel Mac 包 / Windows 包
 - 🔜 技能市场 industry 层开放（脱敏审核流水线 + 跨组织安装）
 - 🔜 更多领域 bundles（社媒营销、AI 视频与内容创作、餐饮、零售、物业）
