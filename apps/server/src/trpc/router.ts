@@ -33,6 +33,7 @@ import { providerFromEnv } from "@workloom/base/model-router";
 import {
   loadCharter, parseCharter, transition, defaultCharter,
   runBriefingBeat, runQueueBeat, runDeviationBeat, runBreakerBeat, buildScorecard,
+  runOutcomeReviewBeat, runHrReviewBeat, runBoardPackBeat, runOrgScanBeat, applyReplacement,
   type CeoTransition,
 } from "@workloom/base/captain";
 import {
@@ -471,6 +472,27 @@ const approvalsRouter = router({
         // E1 联调接线（PF.5/F2.4）：fence.rule.propose 手势通过 → 激活规则版本
         if (!res.deduped && res.status === "approved") {
           await activateFenceRuleAfterApproval(scopeOf(ctx.identity), input.approvalId);
+          // D22 汰换重生：hr.replacement 批准 → 旧停用 + 新员工上岗
+          const scope2 = scopeOf(ctx.identity);
+          const app2 = getAppPool();
+          const c2 = await app2.connect();
+          try {
+            await c2.query("BEGIN");
+            await c2.query("SELECT set_config('app.workspace_id', $1, true)", [scope2.workspaceId]);
+            const snap = await c2.query<{ snapshot: Record<string, unknown> }>(
+              `SELECT snapshot FROM approvals WHERE approval_id=$1`, [input.approvalId],
+            );
+            await c2.query("COMMIT");
+            const ss = snap.rows[0]?.snapshot ?? {};
+            if (ss.kind === "hr.replacement" && ss.design && typeof ss.agent_id === "string") {
+              await applyReplacement(app2, scope2, ss.design as never, ss.agent_id);
+            }
+          } catch (e) {
+            await c2.query("ROLLBACK").catch(() => undefined);
+            throw e;
+          } finally {
+            c2.release();
+          }
         }
         return res;
       } catch (err) {
@@ -1765,15 +1787,19 @@ const captainRouter = router({
 
   /** 手动触发节拍（演示/调度共用入口）：briefing/queue/deviation/breaker */
   runBeat: capabilityWriteProcedure("quest")
-    .input(z.object({ beat: z.enum(["daily", "weekly", "monthly", "fleet_daily", "queue", "deviation", "breaker"]) }))
+    .input(z.object({ beat: z.enum(["daily", "weekly", "monthly", "fleet_daily", "queue", "deviation", "breaker", "outcome", "hr", "board", "orgscan"]) }))
     .mutation(async ({ ctx, input }) => {
       const scope = scopeOf(ctx.identity);
       const app = getAppPool();
       const call = llmCall();
       switch (input.beat) {
-        case "queue": return runQueueBeat(app, scope);
+        case "queue": return runQueueBeat(app, scope, { llmCall: call });
         case "deviation": return runDeviationBeat(app, scope);
         case "breaker": return runBreakerBeat(app, scope);
+        case "outcome": return runOutcomeReviewBeat(app, scope);
+        case "hr": return runHrReviewBeat(app, scope, { llmCall: call });
+        case "board": return runBoardPackBeat(app, scope, { llmCall: call });
+        case "orgscan": return runOrgScanBeat(app, scope);
         default: {
           const kind = input.beat === "fleet_daily" ? "fleet_daily" : input.beat;
           // fleet_daily：单店模型退化为本店晨报口径（方案 §三：编制不空转；多店聚合在 P22 视图层轮询）
@@ -1871,6 +1897,49 @@ const captainRouter = router({
       client.release();
     }
   }),
+
+  /** 董事长反馈（赞/踩 → ceo.feedback 事件 + 组织记忆奖励信号） */
+  feedback: writeProcedure
+    .input(z.object({ eventId: z.string(), signal: z.enum(["up", "down"]), note: z.string().max(200).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const scope = scopeOf(ctx.identity);
+      await gatewayAppend(getGatewayPool(), {
+        ...scope, actor: { id: ctx.identity.memberNo, type: "human" }, sessionId: `ceo-feedback-${scope.workspaceId}`,
+      }, {
+        who: { type: "human", id: ctx.identity.memberNo },
+        context: { tenant_id: scope.tenantId, workspace_id: scope.workspaceId, time: new Date().toISOString() },
+        object: { type: "task", id: input.eventId },
+        decision: {
+          action: "ceo.feedback",
+          params: { ref_event: input.eventId, signal: input.signal, note: input.note ?? "" },
+          after: {},
+          basis: [`董事长对决策 ${input.eventId} 的${input.signal === "up" ? "点赞" : "点踩"}（入组织记忆，成为后续决策奖励信号）`],
+        },
+        rule_impact: [],
+        model_trace: { model_id: "human-chairman", tier: "standard" },
+      });
+      // 组织记忆写入（pattern 类：奖励/纠正信号）
+      const app = getAppPool();
+      const client = await app.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+        await client.query(
+          `INSERT INTO org_memory (memory_id, tenant_id, workspace_id, scope, kind, content, source_events, status)
+           VALUES ($1,$2,$3,'workspace','pattern',$4,$5,'active') ON CONFLICT (memory_id) DO NOTHING`,
+          [`mem-fb-${Date.now().toString(36)}`, scope.tenantId, scope.workspaceId,
+           `【${ctx.identity.memberNo}】董事长${input.signal === "up" ? "认可" : "否定"}决策 ${input.eventId}${input.note ? `：${input.note}` : ""}`,
+           [input.eventId]],
+        );
+        await client.query("COMMIT");
+      } catch (e) {
+        await client.query("ROLLBACK").catch(() => undefined);
+        throw e;
+      } finally {
+        client.release();
+      }
+      return { ok: true };
+    }),
 
   /** 成绩单（方案 §七） */
   scorecard: protectedProcedure.query(async ({ ctx }) => {
