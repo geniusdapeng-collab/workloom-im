@@ -410,6 +410,16 @@ LLM_MODEL=deepseek-chat
 
 仓库结构：`apps/{server, web, site, desktop}` + `packages/{shared, db, base, runtime}` + `bundles/`（行业包）+ `vendor/{dsh, dsh-im}`，pnpm monorepo。核心底座：**`packages/base/workdata`（WorkData 数据大脑）**。371 条场景用例清单见 [`docs/SUITE.md`](docs/SUITE.md)；CI 门禁（每次 push 全量执行上述全部检查）见 `.github/workflows/ci.yml`。
 
+## 数字CEO（公司CEO/集团CEO，D21）
+
+底座内置三层指挥链内核：数字员工班组之上，**公司CEO（工作区级）** 对最小经营单元负责、**集团CEO（租户级）** 对多店协奏负责，人类（董事长）只做「提目标、听汇报、批少数决策」。
+
+- **默认关闭**：启用须经六步深度授权（风险揭示/逐项确认/边界设定/试用计划/身份核验/签署留痕），见 [`docs/CEO-RISK-DISCLOSURE.md`](docs/CEO-RISK-DISCLOSURE.md)；
+- **影子→试用→正式**：影子期模拟决策不执行（dry_run 留痕），试用期自治边界自动降一档，到期不自动续期；
+- **五级审批路由**：L2 公司CEO 裁决 / L3 集团CEO / L4 董事长请示，Decision Memo 依据链强制；
+- **自治熔断**：KPI 跌破宪章下限自动收紧授权一档；
+- 演示：`pnpm db:seed` 后打开 **P21 董事长视图**（试用态演示），触发「晨报/L2 裁决/偏差扫描/熔断巡检」节拍。
+
 ## 安全设计
 
 - **数据主权**：local-first，全部业务数据存于企业本地 PostgreSQL，RLS 行级安全隔离多租户

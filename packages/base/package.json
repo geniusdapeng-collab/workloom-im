@@ -14,7 +14,11 @@
     "./night-shift": "./night-shift/index.ts",
     "./review-console": "./review-console/index.ts",
     "./tenancy": "./tenancy/index.ts",
-    "./wizard": "./wizard/index.ts"
+    "./wizard": "./wizard/index.ts",
+    "./captain": {
+      "types": "./captain/index.ts",
+      "default": "./captain/index.ts"
+    }
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
