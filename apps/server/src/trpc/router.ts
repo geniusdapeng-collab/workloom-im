@@ -1941,6 +1941,61 @@ const captainRouter = router({
       return { ok: true };
     }),
 
+  /** 经营剧场聚合态（P0 首页：治理态/请示/简报/员工卫星/实况流，5s 心跳数据源） */
+  theater: protectedProcedure.query(async ({ ctx }) => {
+    const scope = scopeOf(ctx.identity);
+    const app = getAppPool();
+    const charter = await loadCharter(app, scope);
+    const client = await app.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+      const tiers = await client.query<{ tier: string; n: string }>(
+        `SELECT tier, count(*)::text AS n FROM approvals WHERE workspace_id=$1 AND status='pending' GROUP BY 1`,
+        [scope.workspaceId],
+      );
+      const briefing = await client.query<{ payload: Record<string, unknown>; created_at: string }>(
+        `SELECT payload, created_at FROM biz_events WHERE workspace_id=$1 AND payload->'decision'->>'action' IN ('ceo.briefing','ceo.board_pack')
+         ORDER BY seq DESC LIMIT 1`,
+        [scope.workspaceId],
+      );
+      const agents = await client.query<{ id: string; preset_key: string; name: string }>(
+        `SELECT id, preset_key, name FROM agents WHERE workspace_id=$1 AND status='ready' ORDER BY id LIMIT 12`,
+        [scope.workspaceId],
+      );
+      const grades = await client.query<{ agent_id: string; grade: string }>(
+        `SELECT DISTINCT ON (payload->'decision'->'params'->>'agent_id')
+           payload->'decision'->'params'->>'agent_id' AS agent_id,
+           payload->'decision'->'params'->>'grade' AS grade
+         FROM biz_events WHERE workspace_id=$1 AND payload->'decision'->>'action'='hr.review'
+         ORDER BY 1, seq DESC`,
+        [scope.workspaceId],
+      );
+      const events = await client.query<{ event_id: string; action: string; who: string; created_at: string }>(
+        `SELECT event_id, payload->'decision'->>'action' AS action, payload->'who'->>'id' AS who, created_at
+         FROM biz_events WHERE workspace_id=$1 ORDER BY seq DESC LIMIT 14`,
+        [scope.workspaceId],
+      );
+      await client.query("COMMIT");
+      const gradeMap = Object.fromEntries(grades.rows.map((g) => [g.agent_id, g.grade]));
+      return {
+        mode: charter.mode,
+        ceoName: charter.identity.name,
+        pendingByTier: Object.fromEntries(tiers.rows.map((t) => [t.tier, Number(t.n)])),
+        latestBriefing: briefing.rows[0]
+          ? { text: String(((briefing.rows[0].payload.decision as Record<string, unknown>).after as Record<string, unknown>)?.text ?? ""), at: briefing.rows[0].created_at }
+          : null,
+        satellites: agents.rows.map((a) => ({ id: a.id, presetKey: a.preset_key, name: a.name, grade: gradeMap[a.id] ?? "正常" })),
+        ticker: events.rows,
+      };
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
+  }),
+
   /** 成绩单（方案 §七） */
   scorecard: protectedProcedure.query(async ({ ctx }) => {
     return buildScorecard(getAppPool(), scopeOf(ctx.identity));
