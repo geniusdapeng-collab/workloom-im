@@ -94,6 +94,7 @@ import {
   listProfileSlugs,
   recheckBundle,
 } from "@workloom/base/bundles";
+import { serviceRouter } from "../service/router.js";
 
 /** system router：健康检查（公开） */
 const systemRouter = router({
@@ -2286,6 +2287,7 @@ export const appRouter = router({
   im: imRouter,
   bundles: bundlesRouter,
   captain: captainRouter,
+  service: serviceRouter,
 });
 
 export type AppRouter = typeof appRouter;
