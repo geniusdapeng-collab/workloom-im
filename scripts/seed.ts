@@ -715,7 +715,36 @@ async function main(): Promise<void> {
       dupSkipped += 1;
     }
   }
+
   console.log(`✓ 五元事件：新写入 ${inserted} 条，幂等丢弃 ${dupSkipped} 条（L1.4）`);
+
+  // CEO 晨报事件（剧场汇报气泡/董事长视图简报流的数据源；幂等键 E-8999）
+  {
+    const ev = {
+      event_id: "E-8999",
+      who: { type: "agent", id: "captain", version: "v1.0" },
+      context: { tenant_id: TENANT_ID, workspace_id: WS_ID, time: new Date().toISOString(), stage: "stable", store: WS_NAME },
+      object: { type: "workspace", id: WS_ID, label: WS_NAME },
+      decision: {
+        action: "ceo.briefing",
+        after: { text: "董事长，早报已备：昨夜班组完成 14 项作业（评论/巡检/对账各线正常），1 件差评处置请您拍板；本周 OCC 与 RevPAR 趋势见节拍控制台。试用期边界降一档执行中。" },
+        basis: ["CEO Loop 日频晨报 08:30"],
+      },
+      rule_impact: [],
+      receipt: { synced: true, snapshot_uri: "data/snapshots/e-8999.png", verified_at: new Date().toISOString() },
+      model_trace: { model_id: "mock-hotel-001", tier: "standard", window: "peak", credits: 1 },
+    };
+    const checked = safeParseBusinessEvent(ev);
+    if (!checked.success) throw new Error(`晨报事件未过校验：${checked.error.message}`);
+    const payload = JSON.stringify(checked.data);
+    const hash = eventHash(prevHash, checked.data);
+    await gw.query(
+      `INSERT INTO biz_events (event_id, tenant_id, workspace_id, session_id, payload, prev_hash, hash, created_at)
+       VALUES ($1,$2,$3,NULL,$4,$5,$6,$7) ON CONFLICT (tenant_id, event_id) DO NOTHING`,
+      [ev.event_id, TENANT_ID, WS_ID, payload, prevHash, hash, ev.context.time],
+    );
+    console.log("✓ CEO 晨报事件（剧场汇报气泡数据源）");
+  }
 
   // 审批样例：取最近两条 review 结果事件挂审批（一 pending 一 approved）
   const reviewEvents = await gw.query(
