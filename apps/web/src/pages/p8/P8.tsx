@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ensureDemoLogin, trpc } from "../../lib/trpc";
+import { FENCE_LEVEL_TEXT, actionText, dictText } from "../../lib/display";
 import { Bridge } from "../../shell/Bridge";
 import {
   BannerAlert,
@@ -520,7 +521,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
                           {f.declared ? `${f.name} ${f.version}` : "声明悬空：规则不存在"}
                         </span>
                         <span className={`shrink-0 text-micro ${f.declared ? "text-go" : "text-alert"}`}>
-                          {f.declared ? `已声明 · ${f.level}${f.isBaseline ? " 🔒" : ""}` : "✗ 标红"}
+                          {f.declared ? `已声明 · ${dictText(FENCE_LEVEL_TEXT, f.level)}${f.isBaseline ? " 🔒" : ""}` : "✗ 标红"}
                         </span>
                       </div>
                     ))}
@@ -612,7 +613,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
                       >
                         <EventIdChip id={e.eventId} />
                         <span className="min-w-0 flex-1 truncate text-caption text-ink2">
-                          {e.action}
+                          {actionText(e.action)}
                           {e.ruleResults.length > 0 && <span className="ml-1 text-micro text-warn">{e.ruleResults.join(" ")}</span>}
                         </span>
                         <span className={`shrink-0 text-micro ${e.receiptSynced ? "text-go" : "text-warn"}`}>

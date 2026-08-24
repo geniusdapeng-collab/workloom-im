@@ -9,6 +9,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ensureDemoLogin, trpc } from "../../lib/trpc";
+import { APPROVAL_STATUS_TEXT, actionText, dictText, shortId } from "../../lib/display";
 import { Bridge } from "../../shell/Bridge";
 import {
   BannerAlert,
@@ -133,13 +134,13 @@ export default function P4() {
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-[11px] text-ink3">{a.approval_id}</span>
+                  <span className="font-mono text-[11px] text-ink3">{shortId(a.approval_id)}</span>
                   <span className={`rounded border px-1 py-0.5 text-micro ${
                     tier === "双人" ? "border-need/50 text-need" : tier === "必审" ? "border-warn/50 text-warn" : "border-line text-ink3"
                   }`}>{tier}</span>
                 </div>
                 <div className="mt-1 text-body text-ink2">
-                  {a.event ? `${a.event.who.id} · ${a.event.decision.action}` : a.event_id}
+                  {a.event ? `${a.event.who.id} · ${actionText(a.event.decision.action)}` : shortId(a.event_id)}
                 </div>
                 {isConflict(a) && <div className="mt-0.5 text-micro text-alert">⚠ 快照冲突（E5.3）</div>}
               </button>
@@ -188,7 +189,7 @@ export default function P4() {
             <div className="mb-1.5 text-caption font-bold text-holo">IM 卡片同步（P4E4）</div>
             <div className="text-caption text-ink2">渠道 inapp（本地回环 D7）· 审批人映射 {role}</div>
             <div className="mt-1 font-mono text-micro text-ink3">
-              幂等键 {selected.approval_id} · 同事件同渠道不重复推送（L5.3）· 回调签名校验（E5.2）
+              幂等键 {shortId(selected.approval_id)} · 同事件同渠道不重复推送（L5.3）· 回调签名校验（E5.2）
             </div>
             <div className="mt-1 text-micro text-go">✓ {selected.status === "pending" ? "已推送" : "已原地更新"}</div>
           </div>
@@ -248,14 +249,14 @@ export default function P4() {
             {/* 原生审批卡（桌面详情版） */}
             <div className="rounded-msg border border-warn/40 bg-card p-4">
               <div className="mb-2.5 flex items-center gap-2">
-                <span className="text-h2 font-bold text-warn">◆ 舰长决断 · {selected.status === "pending" ? "待审" : selected.status}</span>
+                <span className="text-h2 font-bold text-warn">◆ 舰长决断 · {dictText(APPROVAL_STATUS_TEXT, selected.status)}</span>
                 <EventIdChip id={selected.event_id} />
                 <span className={`rounded border px-1.5 py-0.5 text-micro ${
                   tierOf(selected) === "双人" ? "border-need/50 text-need" : tierOf(selected) === "必审" ? "border-warn/50 text-warn" : "border-line text-ink3"
                 }`}>{tierOf(selected)}</span>
                 {selected.event && (
                   <span className="font-mono text-micro text-ink3">
-                    来源 {selected.event.who.id} · {selected.event.decision.action}
+                    来源 {selected.event.who.id} · {actionText(selected.event.decision.action)}
                   </span>
                 )}
               </div>
