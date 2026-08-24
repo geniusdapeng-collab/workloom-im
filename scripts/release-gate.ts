@@ -87,18 +87,20 @@ const WS_CANDIDATES = [
 ];
 const WS_LIST: typeof WS_CANDIDATES = [];
 {
-  const app = new pg.Client({ connectionString: APP_URL });
-  await app.connect();
-  try {
-    await app.query("SELECT set_config('app.tenant_id','tenant-demo',false)");
-    const r = await app.query(`SELECT slug FROM workspaces WHERE slug = ANY($1::text[])`, [WS_CANDIDATES.map((w) => w.slug)]);
-    const have = new Set(r.rows.map((x) => x.slug));
-    for (const w of WS_CANDIDATES) if (have.has(w.slug)) WS_LIST.push(w);
-    console.log(`工作区探测：${WS_LIST.map((w) => w.wsId).join(" / ") || "（无演示工作区）"}
-`);
-  } finally {
-    await app.end();
+  // RLS 收紧口径（0013⑧：workspaces 仅按 app.workspace_id 直查，不开租户口径）——逐候选设上下文探测，新旧策略均兼容
+  for (const w of WS_CANDIDATES) {
+    const app = new pg.Client({ connectionString: APP_URL });
+    await app.connect();
+    try {
+      await app.query("SELECT set_config('app.workspace_id',$1,false)", [w.wsId]);
+      const r = await app.query(`SELECT slug FROM workspaces WHERE id=$1`, [w.wsId]);
+      if (r.rows[0]?.slug === w.slug) WS_LIST.push(w);
+    } catch { /* 该区不存在或不可见，跳过 */ } finally {
+      await app.end();
+    }
   }
+  console.log(`工作区探测：${WS_LIST.map((w) => w.wsId).join(" / ") || "（无演示工作区）"}
+`);
 }
 if (WS_LIST.length === 0) {
   results.push({ id: "G-01", name: "工作区探测", ok: false, detail: "无任何演示工作区（请先播种 db:seed*）", ms: 0 });
@@ -224,9 +226,10 @@ await check("T-03", "编排 · 事件哈希链完整（验链脚本）", async (
   const out = execSync("pnpm db:verify-chain", {
     cwd: new URL("..", import.meta.url).pathname, stdio: "pipe", env: { ...process.env },
   }).toString();
-  assert(out.includes("逐条重算全部一致"), "验链失败");
+  // 验链口径兼容：旧版「逐条重算全部一致」/ 新版六项检查「全库验证通过」（D31 远端硬化版）
+  assert(/逐条重算全部一致|全库验证通过/.test(out), "验链失败");
   const m = out.match(/(\d+) 条事件/);
-  return `全库 ${m?.[1] ?? "?"} 条事件逐条重算一致`;
+  return `全库 ${m?.[1] ?? "?"} 条事件验链一致`;
 });
 
 /* ================= 裁决 ================= */
