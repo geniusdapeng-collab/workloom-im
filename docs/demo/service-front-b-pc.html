@@ -216,7 +216,7 @@ tr:hover td{background:rgba(10,18,48,.4)}
           </table>
         </div>
 
-        <div style="margin-bottom:8px;font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--ink2)">待审区（pending_review · <span id="pendN">1</span>）</div>
+        <div style="margin-bottom:8px;font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--ink2)">待审区（待审核 · <span id="pendN">1</span>）</div>
         <div id="pendBox" style="margin-bottom:20px">
           <div class="card" style="border-color:rgba(255,194,77,.35);display:flex;align-items:center;gap:12px;padding:10px 14px" id="pendRow">
             <span style="font-size:16px">📝</span>
@@ -226,7 +226,7 @@ tr:hover td{background:rgba(10,18,48,.4)}
             </div>
             <button class="btn btn-go" style="padding:6px 12px" onclick="approve()">✓ 批准生效</button>
           </div>
-          <div style="font-size:10px;color:var(--ink3);margin-top:6px">批准即发布：文档状态/五元事件/approvals 审批行三写同一 COMMIT，联动审批台（围栏动作 kb.publish，D16）。</div>
+          <div style="font-size:10px;color:var(--ink3);margin-top:6px">批准即发布：文档状态/五元事件/approvals 审批行三写同一 COMMIT，联动审批台（围栏动作 发布知识文档，D16）。</div>
         </div>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
@@ -288,7 +288,7 @@ tr:hover td{background:rgba(10,18,48,.4)}
           <div class="metric"><div class="l">今日工单</div><div class="v">3</div></div>
           <div class="metric"><div class="l">工单完结率</div><div class="v" style="color:var(--go)">33%</div></div>
           <div class="metric"><div class="l">SLA 超时</div><div class="v" style="color:var(--go)">0</div><div class="h">在时限内</div></div>
-          <div class="metric"><div class="l">满意度均分</div><div class="v">5</div><div class="h">C 端办结评价（tck-seed-003 五星）</div></div>
+          <div class="metric"><div class="l">满意度均分</div><div class="v">5</div><div class="h">C 端办结评价（···003 五星）</div></div>
         </div>
         <div class="card" style="padding:14px;margin-bottom:12px">
           <div style="margin-bottom:6px;font-size:11px;font-weight:700;color:var(--holo)">模型链路四维评测（scripts/eval/report/report.md · 2026-08-23）</div>
@@ -316,8 +316,8 @@ tr:hover td{background:rgba(10,18,48,.4)}
     <!-- 右栏（P22 right 镜像） -->
     <aside class="col-right">
       <div class="col-label">数据口径 · GOVERNANCE</div>
-      <div class="gov-card">全部数据来自 <span class="mono" style="font-size:10px;color:var(--holo)">trpc.service.*</span>；写操作落五元事件，批准生效联动 approvals 审批台（kb.publish，D16）。</div>
-      <div class="gov-card"><div class="h">待审知识</div><b class="orb" style="font-size:16px;color:var(--warn)" id="govPend">1</b> 篇（pending_review）</div>
+      <div class="gov-card">全部数据来自 <span class="mono" style="font-size:10px;color:var(--holo)">trpc.service.*</span>；写操作落五元事件，批准生效联动 approvals 审批台（发布知识文档，D16）。</div>
+      <div class="gov-card"><div class="h">待审知识</div><b class="orb" style="font-size:16px;color:var(--warn)" id="govPend">1</b> 篇（待审核）</div>
       <div class="gov-card"><div class="h">SLA 超时</div><b class="orb" style="font-size:16px;color:var(--go)">0</b> 单</div>
       <div class="gov-card"><div class="h">工单状态机</div>新建 → 已分派 → 处理中 → 已办结/已关闭；非法跃迁 409 拒绝（H1/H3）。</div>
     </aside>
@@ -397,19 +397,19 @@ function createCol(){
   banner("info",`已新建集合「${n}」（kb.collection.create 已留痕）`);
 }
 function approve(){
-  document.getElementById("pendBox").innerHTML=`<div style="border-radius:8px;border:1px dashed var(--line);padding:16px;text-align:center;font-size:11px;color:var(--ink3)">暂无待审文档——抓取/录入的文档经批准生效后才进入检索索引（kb.publish）</div>`;
+  document.getElementById("pendBox").innerHTML=`<div style="border-radius:8px;border:1px dashed var(--line);padding:16px;text-align:center;font-size:11px;color:var(--ink3)">暂无待审文档——抓取/录入的文档经批准生效后才进入检索索引（发布知识文档）</div>`;
   document.getElementById("pendN").textContent="0";
   document.getElementById("govPend").textContent="0";
   document.getElementById("mKb").textContent="集合 2 · 待审 0";
-  banner("info","「官网抓取 · 云栖酒店服务与设施页」v1 已批准生效——文档状态/五元事件/approvals 审批行 三写同一 COMMIT（围栏动作 kb.publish，审批台可见 D16）");
+  banner("info","「官网抓取 · 云栖酒店服务与设施页」v1 已批准生效——文档状态/五元事件/approvals 审批行 三写同一 COMMIT（围栏动作 发布知识文档，审批台可见 D16）");
 }
 function regSite(){ banner("info","已登记抓取源 kbs-official-site——可「立即抓取」入库"); }
 function crawl(){
   const r=document.getElementById("siteResult"); r.style.display="block";
-  r.textContent="抓取完成：结构化 12 条入知识库（文档 kbd-site-crawl-001；LLM 结构化正常）——已进入待审区 pending_review";
-  banner("info","官网抓取完成，新文档已进入待审区（pending_review）");
+  r.textContent="抓取完成：结构化 12 条入知识库（文档 kbd-site-crawl-001；LLM 结构化正常）——已进入待审区 待审核";
+  banner("info","官网抓取完成，新文档已进入待审区（待审核）");
 }
-/* 试检索（kb.search 投影：命中块来自 seed kb_chunks） */
+/* 试检索（检索知识库 投影：命中块来自 seed kb_chunks） */
 function doSearch(){
   const q=document.getElementById("q").value.trim(); if(!q)return;
   const HITS={
@@ -456,14 +456,14 @@ function closeDoc(){ document.getElementById("docMask").style.display="none"; do
 /* ===== 工单台（P22 ticketsSection 镜像；seed c_tickets×3 + 状态机） ===== */
 const KIND={repair:"报修",delivery:"送物",complaint:"投诉",service_request:"服务请求",consult:"咨询",other:"其他"};
 const TICKETS=[
-  {id:"tck-seed-001",kind:"repair",title:"8306 空调不制冷",status:"processing",priority:"high",dept:"工程部",assignee:"王师傅",sla:"8/24 02:32",rating:null,created:"8/23 21:32"},
-  {id:"tck-seed-002",kind:"delivery",title:"送两瓶矿泉水到 1208",status:"assigned",priority:"normal",dept:"客房部",assignee:null,sla:"8/24 02:32",rating:null,created:"8/23 23:32"},
-  {id:"tck-seed-003",kind:"complaint",title:"隔壁房间深夜噪音扰民",status:"done",priority:"high",dept:"值班经理",assignee:"刘经理",sla:"8/24 00:32",rating:5,created:"8/23 16:32"}
+  {id:"···001",kind:"repair",title:"8306 空调不制冷",status:"processing",priority:"high",dept:"工程部",assignee:"王师傅",sla:"8/24 02:32",rating:null,created:"8/23 21:32"},
+  {id:"···002",kind:"delivery",title:"送两瓶矿泉水到 1208",status:"assigned",priority:"normal",dept:"客房部",assignee:null,sla:"8/24 02:32",rating:null,created:"8/23 23:32"},
+  {id:"···003",kind:"complaint",title:"隔壁房间深夜噪音扰民",status:"done",priority:"high",dept:"值班经理",assignee:"刘经理",sla:"8/24 00:32",rating:5,created:"8/23 16:32"}
 ];
 const TL={
-  "tck-seed-001":[["create","c_user · cu-xiaoli",'{"note":"用户对话中建单"}',"2026/8/23 21:32:00"],["assign","agent · agt-service-desk",'{"note":"智能分派 → 工程部"}',"2026/8/23 21:33:00"],["start","staff · 王师傅",'{"note":"已接单，携带工具前往 8306"}',"2026/8/23 22:57:00"]],
-  "tck-seed-002":[["create","c_user · cu-zhangwei",'{"note":"服务台自助提交"}',"2026/8/23 23:32:00"],["assign","agent · agt-service-desk",'{"note":"智能分派 → 客房部"}',"2026/8/23 23:33:00"]],
-  "tck-seed-003":[["create","c_user · cu-xiaoli",'{"note":"投诉类必建单"}',"2026/8/23 16:32:00"],["assign","agent · agt-service-desk",'{"note":"智能分派 → 值班经理"}',"2026/8/23 16:33:00"],["start","staff · 刘经理",'{"note":"现场处理中"}',"2026/8/23 16:52:00"],["complete","staff · 刘经理",'{"note":"已沟通提醒并赠果盘致歉"}',"2026/8/23 17:22:00"],["rate","c_user · cu-xiaoli",'{"note":"满意度 5 星"}',"2026/8/23 17:52:00"]]
+  "···001":[["create","c_user · cu-xiaoli",'{"note":"用户对话中建单"}',"2026/8/23 21:32:00"],["assign","agent · agt-service-desk",'{"note":"智能分派 → 工程部"}',"2026/8/23 21:33:00"],["start","staff · 王师傅",'{"note":"已接单，携带工具前往 8306"}',"2026/8/23 22:57:00"]],
+  "···002":[["create","c_user · cu-zhangwei",'{"note":"服务台自助提交"}',"2026/8/23 23:32:00"],["assign","agent · agt-service-desk",'{"note":"智能分派 → 客房部"}',"2026/8/23 23:33:00"]],
+  "···003":[["create","c_user · cu-xiaoli",'{"note":"投诉类必建单"}',"2026/8/23 16:32:00"],["assign","agent · agt-service-desk",'{"note":"智能分派 → 值班经理"}',"2026/8/23 16:33:00"],["start","staff · 刘经理",'{"note":"现场处理中"}',"2026/8/23 16:52:00"],["complete","staff · 刘经理",'{"note":"已沟通提醒并赠果盘致歉"}',"2026/8/23 17:22:00"],["rate","c_user · cu-xiaoli",'{"note":"满意度 5 星"}',"2026/8/23 17:52:00"]]
 };
 let fStatus="",fDept="",assignFor=null,completeFor=null;
 const S_LABEL={created:"新建",assigned:"已分派",processing:"处理中",done:"已办结",closed:"已关闭"};

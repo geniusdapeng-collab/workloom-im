@@ -107,7 +107,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
       <!-- 服务预警（SLA 超时；P22 insights alert 范式） -->
       <div class="card" style="border-color:rgba(255,84,112,.5);background:rgba(255,84,112,.06)">
         <div style="margin-bottom:4px;font-size:13.5px;font-weight:700;color:var(--alert)">▲ 服务预警 · SLA 超时风险</div>
-        <div style="font-size:11px;line-height:1.7;color:var(--ink2)">工单 <span class="mono" style="color:var(--holo)">tck-seed-001</span>「8306 空调不制冷」高优先级处理中已 3 小时，距 SLA 截止（08/24 02:32）不足 18 小时未办结将升级——请催办工程部王师傅。</div>
+        <div style="font-size:11px;line-height:1.7;color:var(--ink2)">工单 <span class="mono" style="color:var(--holo)">···001</span>「8306 空调不制冷」高优先级处理中已 3 小时，距 SLA 截止（08/24 02:32）不足 18 小时未办结将升级——请催办工程部王师傅。</div>
         <div style="margin-top:8px;display:flex;gap:8px">
           <button class="act-btn pressable" style="flex:1;border-color:rgba(255,84,112,.55);color:var(--alert)" onclick="toast('已催办 王师傅（pushMessage mock:true）')">催办处理人</button>
           <button class="act-btn pressable" style="flex:1;border-color:var(--gline);color:var(--goldhi)" onclick="location.hash='tickets'">去工单台 →</button>
@@ -142,7 +142,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
       <div class="route-tag">镜像：apps/web/src/pages/p22/P22.tsx ticketsSection · 数据 scripts/seed.ts c_tickets</div>
       <div id="tkList" style="display:flex;flex-direction:column;gap:10px"></div>
       <div class="card" style="border-style:dashed;text-align:center;padding:18px">
-        <div style="font-size:11px;color:var(--ink3)">已办结 1 单：tck-seed-003「隔壁房间深夜噪音扰民」· 满意度 ★★★★★</div>
+        <div style="font-size:11px;color:var(--ink3)">已办结 1 单：···003「隔壁房间深夜噪音扰民」· 满意度 ★★★★★</div>
       </div>
     </section>
 
@@ -158,7 +158,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
         <div style="margin-top:2px;font-size:10px;color:var(--ink3)">酒店前台常见问题与服务说明（演示种子）</div>
         <div style="margin-top:8px;border-top:1px solid var(--line);padding-top:8px;display:flex;justify-content:space-between;align-items:center">
           <div><div style="font-size:12px">云栖酒店住客服务须知</div><div style="font-size:10px;color:var(--ink3)">手工录入 · v1 · 切块 4</div></div>
-          <span class="chip chip-go">active</span>
+          <span class="chip chip-go">生效中</span>
         </div>
       </div>
       <div class="card">
@@ -166,7 +166,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
         <div style="margin-top:2px;font-size:10px;color:var(--ink3)">送物清单、餐饮、康体 SPA 等服务与价格</div>
         <div style="margin-top:8px;border-top:1px solid var(--line);padding-top:8px;display:flex;justify-content:space-between;align-items:center">
           <div><div style="font-size:12px">商品与服务目录</div><div style="font-size:10px;color:var(--ink3)">手工录入 · v1 · 切块 4</div></div>
-          <span class="chip chip-go">active</span>
+          <span class="chip chip-go">生效中</span>
         </div>
       </div>
       <!-- 待审批准（P22 pendingReviews + approveDocument 镜像） -->
@@ -179,7 +179,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
             <div style="margin-top:2px;font-size:10px;color:var(--ink3)">来源 https://www.yunqi-hotel.example · 定时 0 3 * * *</div>
           </div>
         </div>
-        <button class="act-btn pressable" style="width:100%;margin-top:10px;border-color:rgba(61,255,178,.5);color:var(--go)" onclick="approve()">✓ 批准生效（kb.publish）</button>
+        <button class="act-btn pressable" style="width:100%;margin-top:10px;border-color:rgba(61,255,178,.5);color:var(--go)" onclick="approve()">✓ 批准生效（发布知识文档）</button>
       </div>
       <div class="card">
         <div style="font-size:11px;font-weight:700;color:var(--holo)">🔎 试检索</div>
@@ -202,7 +202,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
             <div style="font-size:15px;font-weight:600">刘经理</div>
             <div style="margin-top:2px;font-size:11px;color:var(--ink2)">值班经理 · 服务前台管理</div>
           </div>
-          <span class="chip chip-gold">owner</span>
+          <span class="chip chip-gold">所有者</span>
         </div>
       </div>
       <button class="card pressable" style="width:100%;text-align:left;display:flex;align-items:center;gap:10px" onclick="toast('进入守夜战队频道（P9）')">
@@ -267,10 +267,10 @@ function route(){
 }
 window.addEventListener("hashchange",route);
 
-/* ===== 待办工单（seed tck-seed-001/002，状态机可点翻转） ===== */
+/* ===== 待办工单（seed ···001/002，状态机可点翻转） ===== */
 const TICKETS=[
-  {id:"tck-seed-001",kind:"报修",title:"8306 空调不制冷",status:"processing",priority:"high",dept:"工程部",assignee:"王师傅",meta:"对话中建单 · 智能分派 → 工程部 · 王师傅已接单"},
-  {id:"tck-seed-002",kind:"送物",title:"送两瓶矿泉水到 1208",status:"assigned",priority:"normal",dept:"客房部",assignee:null,meta:"服务台自助提交 · 智能分派 → 客房部"}
+  {id:"···001",kind:"报修",title:"8306 空调不制冷",status:"processing",priority:"high",dept:"工程部",assignee:"王师傅",meta:"对话中建单 · 智能分派 → 工程部 · 王师傅已接单"},
+  {id:"···002",kind:"送物",title:"送两瓶矿泉水到 1208",status:"assigned",priority:"normal",dept:"客房部",assignee:null,meta:"服务台自助提交 · 智能分派 → 客房部"}
 ];
 const S_LABEL={created:"新建",assigned:"已分派",processing:"处理中",done:"已办结"};
 function sChip(s){const c=s==="done"?"chip-go":s==="processing"?"chip-holo":s==="assigned"?"chip-gold":"chip-line";return `<span class="chip ${c}">${S_LABEL[s]}</span>`;}
@@ -306,7 +306,7 @@ function complete(id){
 
 /* ===== 知识库待审批准 + 试检索 ===== */
 function approve(){
-  document.getElementById("pendCard").innerHTML=`<div style="text-align:center;padding:8px"><div style="font-size:12.5px;font-weight:700;color:var(--go)">✓ 已批准生效</div><div style="margin-top:4px;font-size:10px;line-height:1.6;color:var(--ink3)">文档状态/五元事件/approvals 审批行 三写同一 COMMIT（kb.publish，D16）</div></div>`;
+  document.getElementById("pendCard").innerHTML=`<div style="text-align:center;padding:8px"><div style="font-size:12.5px;font-weight:700;color:var(--go)">✓ 已批准生效</div><div style="margin-top:4px;font-size:10px;line-height:1.6;color:var(--ink3)">文档状态/五元事件/approvals 审批行 三写同一 COMMIT（发布知识文档，D16）</div></div>`;
   document.getElementById("kbPend").textContent="待审 0";
   banner("info","「官网抓取 · 云栖酒店服务与设施页」v1 已批准生效，进入检索索引");
 }

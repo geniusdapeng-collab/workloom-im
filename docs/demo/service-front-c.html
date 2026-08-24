@@ -221,7 +221,7 @@ input,textarea,select{font-family:inherit}
           <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#3dffb2" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
         </div>
         <h2 style="margin-top:16px;font-size:17px;font-weight:600">工单已提交</h2>
-        <p class="mono" style="margin-top:8px;font-size:13px;color:var(--gold)" id="svcDoneId">tck-seed-004</p>
+        <p class="mono" style="margin-top:8px;font-size:13px;color:var(--gold)" id="svcDoneId">···004</p>
         <p style="margin-top:8px;font-size:12px;color:var(--ink2)" id="svcDoneMeta">维修报修 · 约 30 分钟内上门</p>
         <button class="gold-btn pressable" style="margin-top:32px" onclick="svcHome()">返回服务大厅</button>
       </div>
@@ -231,7 +231,7 @@ input,textarea,select{font-family:inherit}
   <!-- ============ 工单（apps/webc/src/pages/TicketsPage.tsx） ============ -->
   <section class="view" id="v-tickets">
     <div class="phead"><h1 id="tkTitle">我的工单</h1><button class="rt" id="tkBack" style="display:none" onclick="tkList()">返回</button></div>
-    <div class="route-tag">镜像：apps/webc/src/pages/TicketsPage.tsx · 数据 scripts/seed.ts 工单×3（tck-seed-001/002/003）</div>
+    <div class="route-tag">镜像：apps/webc/src/pages/TicketsPage.tsx · 数据 scripts/seed.ts 工单×3（···001/002/003）</div>
     <div class="scroll" id="tkList" style="padding:16px">
       <div style="display:flex;flex-direction:column;gap:12px" id="tkCards"></div>
     </div>
@@ -241,7 +241,7 @@ input,textarea,select{font-family:inherit}
     <div id="rateSheet" class="sheet" style="display:none">
       <div style="width:40px;height:4px;border-radius:99px;background:var(--line);margin:0 auto 16px"></div>
       <h3 style="text-align:center;font-size:15px;font-weight:600;color:var(--goldhi)">服务满意度评价</h3>
-      <p style="margin-top:4px;text-align:center;font-size:11px;color:var(--ink3)">工单 tck-seed-003 已完成，请为本次服务打分</p>
+      <p style="margin-top:4px;text-align:center;font-size:11px;color:var(--ink3)">工单 ···003 已完成，请为本次服务打分</p>
       <div style="margin-top:16px;display:flex;justify-content:center;gap:12px" id="stars"></div>
       <textarea id="rateComment" rows="2" placeholder="补充您的感受（选填）" style="margin-top:16px;width:100%;border-radius:12px;border:1px solid var(--line);background:var(--bg900);padding:10px 12px;font-size:12.5px;color:var(--ink);outline:none;resize:none"></textarea>
       <button class="gold-btn pressable" style="margin-top:12px" id="rateBtn" onclick="submitRate()" disabled>提交评价</button>
@@ -251,7 +251,7 @@ input,textarea,select{font-family:inherit}
   <!-- ============ 消息（apps/webc/src/pages/MessagesPage.tsx） ============ -->
   <section class="view" id="v-messages">
     <div class="phead"><h1>消息通知</h1></div>
-    <div class="route-tag">镜像：apps/webc/src/pages/MessagesPage.tsx · 数据 scripts/seed.ts 通知×3（ntf-seed-001/002/003）</div>
+    <div class="route-tag">镜像：apps/webc/src/pages/MessagesPage.tsx · 数据 scripts/seed.ts 通知×3（···001/002/003）</div>
     <div class="scroll" style="padding:16px">
       <div style="display:flex;flex-direction:column;gap:12px">
         <div class="notice fadein">
@@ -333,7 +333,7 @@ input,textarea,select{font-family:inherit}
 /* ================= 路由（App.tsx hash 直达镜像） ================= */
 const VIEWS = ["chat","service","tickets","messages","me"];
 const SRC = {
-  chat:"镜像：apps/webc/src/pages/ChatPage.tsx · /app/c#chat · 会话 scripts/seed.ts cv-seed-001/002",
+  chat:"镜像：apps/webc/src/pages/ChatPage.tsx · /app/c#chat · 会话 scripts/seed.ts ···001/002",
   service:"镜像：apps/webc/src/pages/ServicePage.tsx · /app/c#service",
   tickets:"镜像：apps/webc/src/pages/TicketsPage.tsx · /app/c#tickets",
   messages:"镜像：apps/webc/src/pages/MessagesPage.tsx · /app/c#messages",
@@ -350,7 +350,7 @@ function route(){
 }
 window.addEventListener("hashchange", route);
 
-/* ================= 对话页（ChatPage 打字机镜像；数据 seed cv-seed-001/002） ================= */
+/* ================= 对话页（ChatPage 打字机镜像；数据 seed ···001/002） ================= */
 const flow = document.getElementById("chatFlow");
 let typing = null;
 function scrollBottom(){ flow.scrollTop = flow.scrollHeight; }
@@ -413,7 +413,7 @@ function answer(text){
     });
   } else if(/空调|制冷|不冷|维修|报修|8306/.test(text)){
     addAi("很抱歉给您带来不便。我已为您生成维修工单，工程部会尽快上门处理，进度会实时通知您。", b=>{
-      b.insertAdjacentHTML("beforeend", ticketNotice('工单 tck-seed-001「8306 空调不制冷」已受理') + actionBar());
+      b.insertAdjacentHTML("beforeend", ticketNotice('工单 ···001「8306 空调不制冷」已受理') + actionBar());
     });
   } else {
     addAi("这个问题我还在学习中，已为您转专人处理，稍后会有服务员与您联系。您也可以直接描述需要的服务。", b=>{
@@ -462,18 +462,18 @@ function svcForm(kind){
 }
 function svcSubmit(){
   const s = SVC[svcKind];
-  document.getElementById("svcDoneId").textContent = "tck-seed-00"+(4+Math.floor(Math.random()*5));
+  document.getElementById("svcDoneId").textContent = "···00"+(4+Math.floor(Math.random()*5));
   document.getElementById("svcDoneMeta").textContent = `${s.t} · ${s.sla}`;
   svcShow(document.getElementById("svcDone"));
 }
 
 /* ================= 工单页（TicketsPage 镜像；seed 工单×3 + 时间线） ================= */
 const TICKETS = [
-  { id:"tck-seed-001", kind:"维修报修", title:"8306 空调不制冷", status:"处理中", chip:"chip-gold", time:"8/23 21:32", sla:"预计响应：8/24 02:32 前",
+  { id:"···001", kind:"维修报修", title:"8306 空调不制冷", status:"处理中", chip:"chip-gold", time:"8/23 21:32", sla:"预计响应：8/24 02:32 前",
     tl:[["工单已提交，AI 前台已受理","我 · 8/23 21:32"],["智能分派 → 工程部","agt-service-desk · 8/23 21:33"],["已接单，携带工具前往 8306","王师傅 · 8/23 22:57"]] },
-  { id:"tck-seed-002", kind:"送物服务", title:"送两瓶矿泉水到 1208", status:"已受理", chip:"chip-holo", time:"8/23 23:32", sla:"预计响应：8/24 02:32 前",
+  { id:"···002", kind:"送物服务", title:"送两瓶矿泉水到 1208", status:"已受理", chip:"chip-holo", time:"8/23 23:32", sla:"预计响应：8/24 02:32 前",
     tl:[["服务台自助提交","我 · 8/23 23:32"],["智能分派 → 客房部","agt-service-desk · 8/23 23:33"]] },
-  { id:"tck-seed-003", kind:"投诉建议", title:"隔壁房间深夜噪音扰民", status:"已完成", chip:"chip-go", time:"8/23 16:32", sla:"", rated:true,
+  { id:"···003", kind:"投诉建议", title:"隔壁房间深夜噪音扰民", status:"已完成", chip:"chip-go", time:"8/23 16:32", sla:"", rated:true,
     tl:[["投诉类必建单","我 · 8/23 16:32"],["智能分派 → 值班经理","agt-service-desk · 8/23 16:33"],["现场处理中","刘经理 · 8/23 16:52"],["已沟通提醒并赠果盘致歉","刘经理 · 8/23 17:22"],["满意度 5 星","我 · 8/23 17:52"]] }
 ];
 function tkList(){
@@ -537,7 +537,7 @@ function submitRate(){
   if(tip){ tip.style.display="block"; tip.classList.add("fadein"); }
 }
 
-/* ================= 首屏 seeded 会话流（cv-seed-001 退房时间 + cv-seed-002 8306 建单） ================= */
+/* ================= 首屏 seeded 会话流（···001 退房时间 + ···002 8306 建单） ================= */
 function seedChat(){
   addTime("8/23 21:05");
   addUser("退房时间是几点？会员能延迟吗？");
@@ -546,7 +546,7 @@ function seedChat(){
     addTime("8/23 21:32");
     addUser("房间空调好像不制冷，能找人看看吗？8306");
     addAi("很抱歉给您带来不便。我已为您生成维修工单，工程部会尽快上门处理，进度会实时通知您。", b2=>{
-      b2.insertAdjacentHTML("beforeend", ticketNotice('工单 tck-seed-001「8306 空调不制冷」已受理') + actionBar());
+      b2.insertAdjacentHTML("beforeend", ticketNotice('工单 ···001「8306 空调不制冷」已受理') + actionBar());
     });
   });
 }
