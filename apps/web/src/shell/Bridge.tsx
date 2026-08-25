@@ -22,9 +22,9 @@ function StarField() {
         className="absolute inset-0 animate-drift"
         style={{
           background:
-            "radial-gradient(60% 45% at 18% 8%, rgb(36 27 77 / .55), transparent 70%)," +
-            "radial-gradient(50% 40% at 85% 20%, rgb(58 42 110 / .38), transparent 70%)," +
-            "radial-gradient(70% 50% at 50% 110%, rgb(36 27 77 / .45), transparent 70%)",
+            "radial-gradient(60% 45% at 18% 8%, rgb(255 224 236 / .7), transparent 70%)," +
+            "radial-gradient(50% 40% at 85% 20%, rgb(232 224 255 / .6), transparent 70%)," +
+            "radial-gradient(70% 50% at 50% 110%, rgb(255 233 226 / .65), transparent 70%)",
         }}
       />
       {/* 星点层（确定性伪随机分布；随 drift 同层缓漂） */}
@@ -32,15 +32,15 @@ function StarField() {
         className="absolute inset-0 animate-drift"
         style={{
           backgroundImage:
-            "radial-gradient(1px 1px at 12% 22%, rgb(234 241 255 / .8) 50%, transparent 51%)," +
-            "radial-gradient(1px 1px at 34% 68%, rgb(234 241 255 / .5) 50%, transparent 51%)," +
-            "radial-gradient(1.5px 1.5px at 57% 15%, rgb(69 224 255 / .6) 50%, transparent 51%)," +
-            "radial-gradient(1px 1px at 72% 47%, rgb(234 241 255 / .7) 50%, transparent 51%)," +
-            "radial-gradient(1px 1px at 88% 78%, rgb(234 241 255 / .45) 50%, transparent 51%)," +
+            "radial-gradient(1px 1px at 12% 22%, rgb(255 122 158 / .55) 50%, transparent 51%)," +
+            "radial-gradient(1px 1px at 34% 68%, rgb(255 122 158 / .35) 50%, transparent 51%)," +
+            "radial-gradient(1.5px 1.5px at 57% 15%, rgb(77 150 255 / .5) 50%, transparent 51%)," +
+            "radial-gradient(1px 1px at 72% 47%, rgb(255 36 66 / .4) 50%, transparent 51%)," +
+            "radial-gradient(1px 1px at 88% 78%, rgb(255 122 158 / .4) 50%, transparent 51%)," +
             "radial-gradient(1.5px 1.5px at 25% 88%, rgb(255 181 69 / .5) 50%, transparent 51%)," +
-            "radial-gradient(1px 1px at 45% 40%, rgb(234 241 255 / .55) 50%, transparent 51%)," +
-            "radial-gradient(1px 1px at 66% 90%, rgb(234 241 255 / .6) 50%, transparent 51%)," +
-            "radial-gradient(1px 1px at 94% 10%, rgb(234 241 255 / .5) 50%, transparent 51%)," +
+            "radial-gradient(1px 1px at 45% 40%, rgb(255 122 158 / .4) 50%, transparent 51%)," +
+            "radial-gradient(1px 1px at 66% 90%, rgb(255 122 158 / .4) 50%, transparent 51%)," +
+            "radial-gradient(1px 1px at 94% 10%, rgb(255 122 158 / .35) 50%, transparent 51%)," +
             "radial-gradient(1.5px 1.5px at 8% 55%, rgb(69 224 255 / .4) 50%, transparent 51%)",
         }}
       />
@@ -81,14 +81,14 @@ export function Bridge({
     <div className="min-h-screen bg-bg950">
       <StarField />
       <div className="relative flex min-h-screen items-start justify-center py-8">
-        <div className="relative w-bridge overflow-hidden rounded-bridge border border-line bg-gradient-to-b from-[#0a1230eb] to-[#050a1af5] shadow-[0_30px_80px_rgba(0,0,0,.55)]">
+        <div className="relative w-bridge overflow-hidden rounded-bridge border border-line bg-gradient-to-b from-[#fffffff2] to-[#fff5f7f5] shadow-[0_30px_80px_rgba(255,36,66,.12)]">
           <CornerTicks />
 
           {/* 顶栏（原型 V4.0 .abar chrome 条） */}
           <header className="flex items-center gap-3.5 border-b border-line bg-bg950/90 px-4.5 py-2.5 backdrop-blur-md">
             <div className="flex items-center gap-2.5 text-[15px] font-black tracking-wider">
               <span className="inline-block h-4 w-4 rotate-45 rounded gold-grad shadow-[0_0_14px_rgba(255,160,60,.6)]" />
-              <span className="bg-gradient-to-r from-[#fff6e3] to-gold bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-gold to-gold2 bg-clip-text text-transparent">
                 WorkLoom
               </span>
             </div>

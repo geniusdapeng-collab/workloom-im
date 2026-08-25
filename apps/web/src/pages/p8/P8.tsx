@@ -397,7 +397,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
       if (r.kind === "clarify") {
         setBanner({ level: "warn", text: `意图含糊，未建任务（F3.2）：${r.question}` });
       } else {
-        nav(`/p2/${encodeURIComponent(r.threadId)}`); // 建单成功 → P2 任务舱
+        nav(`/p2/${encodeURIComponent(r.threadId)}`); // 建单成功 → P2 任务页
       }
     } finally {
       setSending(false);
@@ -591,7 +591,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
                       onClick={() => void dispatch()}
                       className="mt-2 cursor-pointer rounded-lg gold-grad px-4 py-2 text-caption font-black text-ongold disabled:opacity-40"
                     >
-                      💬 发消息 · 派遣任务（→P2 任务舱 F3.1）
+                      💬 发消息 · 派遣任务（→P2 任务页 F3.1）
                     </button>
                   </div>
                 )}
