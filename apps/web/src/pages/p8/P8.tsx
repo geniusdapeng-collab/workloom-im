@@ -1,5 +1,5 @@
 /**
- * P8 船员名册（F9：通讯录 · 人机混编，Agent 是一等公民 IM.3；PRD P8-①②③④⑤ 逐条对账）
+ * P8 团队成员（F9：通讯录 · 人机混编，Agent 是一等公民 IM.3；PRD P8-①②③④⑤ 逐条对账）
  *  - 人类成员卡（P8E2：圆头像；角色与权限范围展示 经营者/只读/集团；三端权限一致 F5.6；
  *    在线状态=近 24h 事件留痕推导，不伪造 presence）
  *  - Agent 成员卡（P8E1：方头像+版本角标+LV 徽章+段位；围栏绑定 tags；技能包；
@@ -15,7 +15,7 @@
  * 状态变体：p8 默认 / p8_agent 档案态；加载=成员卡骨架屏（G10）；空态=仅官方 preset 引导（§2.2）；
  *          权限态=非管理员隐藏「加装/派遣」入口（E2.6）；错误态=preset 校验失败卡片标红（F2.10）
  * 数据：roster.list / roster.profile（PRD P8-⑤：成员+preset 注册表投影 + 工时聚合 + who.id 事件流投影；本页无直接写入）
- * 轮询口径（D6）：名册 10s，档案事件流 15s
+ * 轮询口径（D6）：团队成员 10s，档案事件流 15s
  */
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
@@ -125,7 +125,7 @@ function HumanCard({ h }: { h: HumanRow }) {
       <div className="mt-2 border-t border-line/60 pt-2 text-micro leading-relaxed text-ink3">
         {ROLE_SCOPE[h.role] ?? ""}
         <div className="mt-1 flex gap-3">
-          <span>30 天决断 <b className="font-orb text-holo">{h.stats.decided30}</b></span>
+          <span>30 天审批 <b className="font-orb text-holo">{h.stats.decided30}</b></span>
           <span>派遣 <b className="font-orb text-holo">{h.stats.dispatched30}</b></span>
           <span>沉淀 <b className="font-orb text-holo">{h.stats.settled30}</b></span>
         </div>
@@ -250,10 +250,10 @@ function RosterHome() {
   const agents = data?.agents ?? [];
   const onlineAgents = agents.filter((a) => a.online).length;
 
-  /* 左栏：名册导航 + 在线概览 */
+  /* 左栏：团队成员导航 + 在线概览 */
   const left = (
     <>
-      <div className="mb-2 px-1 text-[11px] tracking-[.2em] text-ink3">名册 · ROSTER</div>
+      <div className="mb-2 px-1 text-[11px] tracking-[.2em] text-ink3">团队成员 · ROSTER</div>
       <div className="mb-1.5 rounded-lg border border-line bg-card px-3 py-2.5">
         <div className="text-caption font-bold text-ink">人类船员 · {humans.length}</div>
         <div className="mt-0.5 text-micro text-ink3">{humans.filter((h) => h.online).length} 人在线（近 24h 留痕）</div>
@@ -295,14 +295,14 @@ function RosterHome() {
     <Bridge left={left} right={right}>
       <div className="flex min-h-full flex-col">
         <div className="mb-3 flex items-baseline gap-3">
-          <h2 className="text-h1 font-black tracking-wider">船员名册</h2>
+          <h2 className="text-h1 font-black tracking-wider">团队成员</h2>
           <span className="text-[11px] tracking-[.2em] text-ink3">P8 · CREW · 人机混编通讯录 IM.3</span>
         </div>
 
         {failed && (
           <div className="mb-3">
             <BannerAlert level="warn" actionLabel="重试" onAction={() => void load()}>
-              名册数据加载失败（连接中断·重连中，不伪造数据）——点击重试
+              团队成员数据加载失败（连接中断·重连中，不伪造数据）——点击重试
             </BannerAlert>
           </div>
         )}
@@ -397,7 +397,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
       if (r.kind === "clarify") {
         setBanner({ level: "warn", text: `意图含糊，未建任务（F3.2）：${r.question}` });
       } else {
-        nav(`/p2/${encodeURIComponent(r.threadId)}`); // 建单成功 → P2 任务舱
+        nav(`/p2/${encodeURIComponent(r.threadId)}`); // 建单成功 → P2 任务中心
       }
     } finally {
       setSending(false);
@@ -431,7 +431,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
         onClick={() => nav("/p8")}
         className="mt-2 w-full cursor-pointer rounded-lg border border-line bg-bg800/50 px-3 py-1.5 text-caption text-ink3 hover:border-gline"
       >
-        ← 返回名册
+        ← 返回团队成员
       </button>
     </>
   );
@@ -468,7 +468,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
         {!ready ? (
           <><SkeletonBlock lines={2} h={40} /><SkeletonBlock lines={8} /></>
         ) : !p ? (
-          <EmptyState icon="🛰" title="船员不存在或已离舰" hint="返回名册选择其他船员" actionLabel="← 返回名册" onAction={() => nav("/p8")} />
+          <EmptyState icon="🛰" title="船员不存在或已离舰" hint="返回团队成员选择其他船员" actionLabel="← 返回团队成员" onAction={() => nav("/p8")} />
         ) : (
           <>
             <div className="mb-3 flex items-baseline gap-3">
@@ -501,7 +501,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
                   <div className="flex justify-between"><span className="text-ink3">版本（who.version 归因）</span><span className="font-mono text-ink2">{p.agent.version}</span></div>
                   <div className="flex justify-between"><span className="text-ink3">工作区</span><span className="text-ink2">{p.workspaceName}</span></div>
                   <div className="flex justify-between"><span className="text-ink3">来源 Bundle</span><span className="text-ink2">{p.bundle}</span></div>
-                  <div className="flex justify-between"><span className="text-ink3">战队</span><span className="text-ink2">{p.agent.nightShift ? "守夜战队 · 夜班窗口自动上线" : "日常班组"}</span></div>
+                  <div className="flex justify-between"><span className="text-ink3">战队</span><span className="text-ink2">{p.agent.nightShift ? "夜班中心 · 夜班窗口自动上线" : "日常班组"}</span></div>
                 </div>
                 <div className="mt-2.5 border-t border-line/60 pt-2">
                   <LevelBadge level={p.game.level} rank={p.game.rank} name={p.agent.name} version={p.agent.version} />
@@ -532,7 +532,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
               <div className="rounded-msg border border-line bg-card p-3.5">
                 <div className="mb-2 text-caption font-bold text-holo">装备 · 技能包</div>
                 {p.skills.length === 0 ? (
-                  <div className="text-caption text-ink3">暂无技能包（→P6 装备库安装）</div>
+                  <div className="text-caption text-ink3">暂无技能包（→P6 技能中心安装）</div>
                 ) : (
                   <div className="space-y-1.5">
                     {p.skills.map((s) => (
@@ -540,7 +540,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
                         key={s.id}
                         type="button"
                         onClick={() => nav("/p6")}
-                        title="技能包行 → P6 装备库"
+                        title="技能包行 → P6 技能中心"
                         className="flex w-full cursor-pointer items-center gap-2 rounded-lg border border-line bg-bg800/40 px-2.5 py-1.5 text-left text-caption hover:border-gline"
                       >
                         <span className="min-w-0 flex-1 truncate text-ink2">🎒 {s.name} <span className="font-mono text-micro text-ink3">v{s.version}</span></span>
@@ -591,7 +591,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
                       onClick={() => void dispatch()}
                       className="mt-2 cursor-pointer rounded-lg gold-grad px-4 py-2 text-caption font-black text-ongold disabled:opacity-40"
                     >
-                      💬 发消息 · 派遣任务（→P2 任务舱 F3.1）
+                      💬 发消息 · 派遣任务（→P2 任务中心 F3.1）
                     </button>
                   </div>
                 )}
@@ -632,7 +632,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
   );
 }
 
-/** P8 入口：/p8 名册；/p8/agent/:agentId 档案态（p8_agent） */
+/** P8 入口：/p8 团队成员；/p8/agent/:agentId 档案态（p8_agent） */
 export default function P8() {
   const { agentId } = useParams<{ agentId: string }>();
   return agentId ? <AgentProfilePage agentId={agentId} /> : <RosterHome />;

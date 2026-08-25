@@ -119,7 +119,7 @@ export const ACTION_TEXT: Record<string, string> = {
   "memory.upsert": "更新组织记忆",
   // 夜班
   "night.note": "夜班记录",
-  "night.package": "生成夜班战报",
+  "night.package": "生成夜班日报",
   "night.handoff": "夜班交接",
   "trigger.fired": "触发定时任务",
   // 服务前台
