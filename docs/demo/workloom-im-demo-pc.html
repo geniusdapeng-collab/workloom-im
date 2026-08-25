@@ -1,0 +1,1657 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1440">
+<title>WorkLoom IM · 云栖酒店 · 全系统高保真 Demo（PC）</title>
+<style>
+/* ===== 暗金 HUD 设计口径（镜像 apps/web：#0a1230 舰桥 / 暗金 / 全息青细线） ===== */
+:root{
+  --bg950:#050a1a; --bg900:#0a1230; --bg800:#101a3d; --bg700:#16224a;
+  --panel:#0c1432; --card:#0e1736;
+  --line:rgba(120,180,255,.16); --gline:rgba(233,181,88,.38);
+  --gold:#e9b558; --goldhi:#ffd98a; --ongold:#2a1f08;
+  --holo:#45e0ff; --go:#6adf8a; --warn:#ffbe6a; --alert:#ff5470;
+  --ink:#eef3ff; --ink2:#b9c6e8; --ink3:#7280a8;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:var(--bg950);color:var(--ink);font:14px/1.6 "PingFang SC","Microsoft YaHei",sans-serif}
+body{min-width:1440px}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+input,select{font:inherit;color:var(--ink);background:var(--bg900);border:1px solid var(--line);border-radius:6px;padding:6px 10px;outline:none}
+input:focus{border-color:var(--gline)}
+a{color:inherit;text-decoration:none}
+.mono{font-family:ui-monospace,Menlo,monospace}
+.orb{font-family:"Arial Narrow",Arial,sans-serif;letter-spacing:.04em}
+/* 星野背景（镜像 Bridge StarField：星云晕染 + 星点层，禁死黑满铺） */
+.starfield{position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:
+   radial-gradient(60% 45% at 18% 8%, rgba(36,27,77,.55), transparent 70%),
+   radial-gradient(50% 40% at 85% 20%, rgba(58,42,110,.38), transparent 70%),
+   radial-gradient(70% 50% at 50% 110%, rgba(36,27,77,.45), transparent 70%);}
+.starpoints{position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:
+   radial-gradient(1px 1px at 12% 22%, rgba(234,241,255,.8) 50%, transparent 51%),
+   radial-gradient(1px 1px at 34% 68%, rgba(234,241,255,.5) 50%, transparent 51%),
+   radial-gradient(1.5px 1.5px at 57% 15%, rgba(69,224,255,.6) 50%, transparent 51%),
+   radial-gradient(1px 1px at 72% 47%, rgba(234,241,255,.7) 50%, transparent 51%),
+   radial-gradient(1px 1px at 88% 78%, rgba(234,241,255,.45) 50%, transparent 51%),
+   radial-gradient(1.5px 1.5px at 25% 88%, rgba(255,181,69,.5) 50%, transparent 51%),
+   radial-gradient(1px 1px at 45% 40%, rgba(234,241,255,.55) 50%, transparent 51%),
+   radial-gradient(1px 1px at 66% 90%, rgba(234,241,255,.6) 50%, transparent 51%),
+   radial-gradient(1.5px 1.5px at 94% 10%, rgba(234,241,255,.5) 50%, transparent 51%),
+   radial-gradient(1.5px 1.5px at 8% 55%, rgba(69,224,255,.4) 50%, transparent 51%);}
+/* ===== DEMO 导航条（演示专用，非生产组件；逐项标注真实路由） ===== */
+.demonav{position:sticky;top:0;z-index:60;display:flex;flex-wrap:wrap;align-items:center;gap:4px;
+  padding:5px 12px;background:#080d22f2;border-bottom:1px solid var(--gline);backdrop-filter:blur(6px)}
+.demonav .tag{font-size:10px;letter-spacing:.18em;color:var(--gold);border:1px solid var(--gline);border-radius:4px;padding:1px 6px;margin-right:4px}
+.demonav a{font-size:11px;color:var(--ink3);border:1px solid var(--line);border-radius:4px;padding:1px 7px}
+.demonav a b{color:var(--ink2);font-weight:600}
+.demonav a i{font-style:normal;color:var(--holo);font-size:10px;margin-left:3px}
+.demonav a.cur{border-color:var(--gold);color:var(--gold);background:rgba(233,181,88,.08)}
+.demonav a:hover{border-color:var(--gold);color:var(--gold)}
+/* ===== 舰桥外壳（镜像 Bridge.tsx：圆角舰桥 + HUD 四角金刻度 + 顶栏） ===== */
+.bridgewrap{position:relative;z-index:1;display:flex;justify-content:center;padding:22px 0 90px}
+.bridge{position:relative;width:1380px;border:1px solid var(--line);border-radius:20px;overflow:hidden;
+  background:linear-gradient(to bottom,#0a1230eb,#050a1af5);box-shadow:0 30px 80px rgba(0,0,0,.55)}
+.tick{position:absolute;width:18px;height:18px;border:2px solid var(--gold);z-index:10;pointer-events:none}
+.tick.tl{top:-1px;left:-1px;border-right:0;border-bottom:0;border-top-left-radius:20px}
+.tick.tr{top:-1px;right:-1px;border-left:0;border-bottom:0;border-top-right-radius:20px}
+.tick.bl{bottom:-1px;left:-1px;border-right:0;border-top:0;border-bottom-left-radius:20px}
+.tick.br{bottom:-1px;right:-1px;border-left:0;border-top:0;border-bottom-right-radius:20px}
+.abar{display:flex;align-items:center;gap:14px;padding:10px 18px;border-bottom:1px solid var(--line);background:rgba(5,10,26,.9)}
+.logo{display:flex;align-items:center;gap:9px;font-size:15px;font-weight:900;letter-spacing:.08em}
+.logo .diamond{width:15px;height:15px;transform:rotate(45deg);border-radius:3px;background:linear-gradient(135deg,#ffd98a,#c8842a);box-shadow:0 0 14px rgba(255,160,60,.6)}
+.logo .word{background:linear-gradient(to right,#fff6e3,var(--gold));-webkit-background-clip:text;background-clip:text;color:transparent}
+.abar .ws{font-size:12px;color:var(--ink3)}
+.abar .ws b{color:var(--ink2)}
+.hlink{font-size:11px;border:1px solid var(--line);border-radius:4px;padding:2px 8px;color:var(--ink2)}
+.hlink.gold{border-color:var(--gline);color:var(--gold)}
+.hlink:hover{border-color:var(--gold)}
+/* 夜班状态胶囊（镜像 NightStatusPill：已就绪态 · 青呼吸） */
+.nightpill{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(69,224,255,.4);background:rgba(69,224,255,.07);
+  border-radius:999px;padding:3px 12px;font-size:11px;color:var(--holo)}
+.nightpill .dot{width:7px;height:7px;border-radius:50%;background:var(--holo);animation:breath 1.6s ease-in-out infinite;box-shadow:0 0 8px var(--holo)}
+@keyframes breath{50%{opacity:.35}}
+/* 紧急制动杆（镜像 EmergencyBrake：描边红杆 + 二次确认） */
+.brake{border:1px solid rgba(255,84,112,.55);border-radius:8px;padding:4px 12px;font-size:11px;font-weight:800;letter-spacing:.1em;color:var(--alert)}
+.brake:hover{background:rgba(255,84,112,.1)}
+.brake.arm{border-color:var(--alert);background:rgba(255,84,112,.2);box-shadow:0 0 16px rgba(255,84,112,.4)}
+/* 模拟数据横幅（镜像 SimBanner D24） */
+.simbanner{padding:5px 18px;font-size:11px;color:var(--warn);background:rgba(255,190,106,.06);border-bottom:1px solid rgba(255,190,106,.25)}
+/* IM 三栏（§4.1：236 左｜弹性中｜264 右，栏间全息青细线） */
+.cols{display:flex;min-height:660px}
+.col-l{width:236px;border-right:1px solid var(--line);padding:12px;flex:none}
+.col-r{width:264px;border-left:1px solid var(--line);padding:12px;flex:none}
+.col-c{flex:1;padding:18px;min-width:0}
+.colhead{font-size:11px;letter-spacing:.2em;color:var(--ink3);padding:0 4px;margin-bottom:8px}
+/* 通用卡片与元件 */
+.card{border:1px solid var(--line);border-radius:10px;background:var(--card)}
+.cardpad{padding:12px}
+.litem{margin-bottom:6px;border:1px solid var(--line);border-radius:8px;background:var(--card);padding:9px 11px;cursor:pointer}
+.litem:hover{border-color:var(--gline)}
+.rowbet{display:flex;align-items:center;justify-content:space-between}
+.chip{display:inline-block;border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-size:10px;color:var(--ink3)}
+.chip.go{border-color:rgba(106,223,138,.4);color:var(--go)}
+.chip.warn{border-color:rgba(255,190,106,.4);color:var(--warn)}
+.chip.holo{border-color:rgba(69,224,255,.4);color:var(--holo)}
+.chip.gold{border-color:var(--gline);color:var(--goldhi)}
+.chip.alert{border-color:rgba(255,84,112,.5);color:var(--alert)}
+.btn{border:1px solid var(--line);border-radius:6px;padding:4px 12px;font-size:12px;color:var(--ink2)}
+.btn:hover{border-color:var(--gline);color:var(--gold)}
+.btn.gold{border-color:var(--gline);color:var(--goldhi);font-weight:700}
+.btn.goldgrad{background:linear-gradient(135deg,#ffd98a,#d9a144);color:var(--ongold);font-weight:700;border:none}
+.btn.go{border-color:rgba(106,223,138,.5);color:var(--go)}
+.btn.warn{border-color:rgba(255,190,106,.5);color:var(--warn)}
+.btn.holo{border-color:rgba(69,224,255,.4);color:var(--holo)}
+.btn.alert{border-color:rgba(255,84,112,.5);color:var(--alert)}
+.h1{font-size:20px;font-weight:900;letter-spacing:.06em}
+.h2{font-size:15px;font-weight:800}
+.sub{font-size:11px;letter-spacing:.2em;color:var(--ink3)}
+.small{font-size:12px;color:var(--ink2)}
+.tiny{font-size:10px;color:var(--ink3)}
+.tabbtn{border:1px solid var(--line);border-radius:6px;padding:6px 14px;font-size:13px;font-weight:700;color:var(--ink3)}
+.tabbtn.cur{background:linear-gradient(135deg,#ffd98a,#d9a144);color:var(--ongold);border:none}
+.tabbtn:not(.cur):hover{border-color:var(--gline);color:var(--ink2)}
+table.grid{width:100%;border-collapse:collapse;font-size:12px}
+table.grid th{font-weight:400;font-size:10px;color:var(--ink3);text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);background:rgba(16,26,61,.6)}
+table.grid td{padding:7px 10px;border-bottom:1px solid rgba(120,180,255,.08);color:var(--ink2)}
+table.grid tr:last-child td{border-bottom:0}
+table.grid tr:hover td{background:rgba(16,26,61,.4)}
+/* toast */
+#toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:99;display:none;
+  border:1px solid var(--gline);background:#0c1432f2;border-radius:10px;padding:10px 18px;font-size:13px;color:var(--goldhi);box-shadow:0 10px 40px rgba(0,0,0,.5)}
+/* 实况字幕条（镜像 P0 ticker / LiveTicker：36s 线性滚动） */
+.ticker{border-top:1px solid rgba(120,180,255,.12);background:rgba(12,20,50,.6);overflow:hidden;padding:6px 0}
+.ticker .in{display:inline-flex;gap:34px;white-space:nowrap;font-size:11px;color:var(--ink3);animation:tick 36s linear infinite;padding-left:20px}
+.ticker b{color:var(--ink2)}
+@keyframes tick{to{transform:translateX(-50%)}}
+/* ===== 剧场（镜像 P0） ===== */
+.theater{position:relative;min-height:760px;display:flex;flex-direction:column;background:#07070d;border-radius:20px;overflow:hidden}
+.thead{position:relative;z-index:5;display:flex;align-items:center;gap:12px;padding:10px 16px}
+.stage{position:relative;z-index:2;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 16px}
+.stars-cv{position:absolute;inset:0;width:100%;height:100%}
+/* 织元体全息 CEO（镜像 Hologram：三层光环 + 人形光躯 + 基座投影） */
+.holo-box{position:relative;width:224px;height:224px;margin:0 auto}
+.ring{position:absolute;border-radius:50%;border:1px solid;transform:rotateX(68deg)}
+.ring.r0{inset:0;border-color:rgba(200,132,42,.53);animation:spin 9s linear infinite}
+.ring.r1{inset:14px;border-color:rgba(200,132,42,.33);animation:spin 7s linear infinite reverse}
+.ring.r2{inset:28px;border-color:rgba(200,132,42,.2);animation:spin 5s linear infinite}
+@keyframes spin{to{transform:rotateX(68deg) rotate(360deg)}}
+.holo-base{position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);width:130px;height:12px;border-radius:50%;
+  background:radial-gradient(ellipse,rgba(200,132,42,.33),transparent 70%)}
+.holo-scan{animation:scan 2.8s ease-in-out infinite}
+@keyframes scan{0%,100%{transform:translateY(6px)}50%{transform:translateY(150px)}}
+.holo-core{animation:corep 2.4s ease-in-out infinite}
+@keyframes corep{50%{opacity:.55}}
+/* 卫星群 */
+.sat{position:absolute;z-index:6;transform:translate(-50%,-50%)}
+.sat .pt{display:block;width:10px;height:10px;border-radius:50%;animation:satp 2.6s ease-in-out infinite}
+@keyframes satp{50%{transform:scale(1.35)}}
+.sat .nm{position:absolute;left:50%;top:14px;transform:translateX(-50%);white-space:nowrap;font-size:10px;color:var(--ink3);opacity:0;transition:opacity .2s}
+.sat:hover .nm{opacity:1}
+.sat:hover .pt{transform:scale(1.5)}
+/* 打字气泡 / 聊天 */
+.bubble{border:1px solid rgba(255,190,106,.5);border-radius:12px;background:rgba(14,23,54,.9);padding:12px;font-size:13px;line-height:1.7;color:var(--ink);backdrop-filter:blur(4px)}
+.chatline{display:flex;gap:8px}
+.chatmsg{max-width:85%;border-radius:12px;padding:8px 12px;font-size:13px;border:1px solid var(--line)}
+.chatmsg.me{background:var(--panel);color:var(--ink2);margin-left:auto}
+.chatmsg.ceo{border-color:var(--gline);background:var(--card)}
+.askcard{border:1px solid rgba(255,190,106,.4);border-radius:12px;background:rgba(255,190,106,.05);padding:12px;box-shadow:0 0 40px rgba(255,190,106,.12)}
+.askinner{border:1px solid rgba(255,190,106,.3);border-radius:8px;background:var(--card);padding:11px;margin-top:8px}
+.chipbtn{border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:11px;color:var(--ink3)}
+.chipbtn:hover{border-color:var(--gline);color:var(--gold)}
+.chatinput{flex:1;border-radius:999px;padding:9px 16px;font-size:13px}
+.sendbtn{border-radius:999px;border:1px solid var(--gline);background:rgba(233,181,88,.1);padding:9px 22px;font-size:13px;color:var(--gold)}
+/* 开门礼遮罩 */
+.ceremony{position:absolute;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;background:#07070d;transition:opacity .7s}
+.ceremony .core{width:12px;height:12px;border-radius:50%;background:var(--gold);margin:0 auto 16px;transition:all .7s}
+.ceremony.s2 .core{transform:scale(3);box-shadow:0 0 60px #ffd98a}
+/* 弹层 */
+.mask{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center}
+.mask.on{display:flex}
+.modal{width:300px;border:1px solid var(--gline);border-radius:12px;background:var(--card);padding:16px}
+.modal.amber{border-color:rgba(255,190,106,.5);box-shadow:0 0 50px rgba(255,190,106,.15)}
+/* 视图切换 */
+.view{display:none}
+.view.on{display:block}
+/* KPI 仪表（镜像 KpiGauge） */
+.kpi{border:1px solid var(--line);border-radius:10px;background:var(--card);padding:12px;position:relative;overflow:hidden}
+.kpi .v{font-size:22px;font-weight:800;margin-top:4px}
+.kpi .d{font-size:10px;margin-top:2px}
+.kpi .ringbg{position:absolute;right:-14px;top:-14px;width:64px;height:64px;border-radius:50%;border:2px solid rgba(69,224,255,.15)}
+.up{color:var(--go)} .down{color:var(--alert)}
+/* 交接班卡（镜像 HandoffCard） */
+.handoff{border:1px solid var(--gline);border-radius:10px;background:linear-gradient(135deg,rgba(233,181,88,.08),transparent);padding:12px 14px}
+.handoff .c3{display:flex;gap:22px;margin-top:8px}
+.handoff .n{font-size:20px;font-weight:800}
+/* 雷达告警卡 */
+.radar{border:1px solid rgba(255,190,106,.4);border-radius:10px;background:var(--card);padding:11px 13px}
+.radar.p0{border-color:rgba(255,84,112,.5)}
+/* 三手势条（镜像 TriGestureBar） */
+.trigest{display:flex;gap:8px}
+/* 星环悬浮球（演示快捷导航，非生产组件） */
+.orb-ball{position:fixed;right:26px;bottom:26px;z-index:80;width:54px;height:54px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#ffe9b8,#c8842a 70%);box-shadow:0 0 22px rgba(233,181,88,.55),0 0 60px rgba(233,181,88,.2);
+  display:flex;align-items:center;justify-content:center;font-size:20px;color:#3a2a08;font-weight:900;cursor:pointer;animation:orbfloat 3.4s ease-in-out infinite}
+@keyframes orbfloat{50%{transform:translateY(-6px)}}
+.orb-menu{position:fixed;right:26px;bottom:90px;z-index:80;display:none;flex-direction:column;gap:5px;
+  border:1px solid var(--gline);border-radius:12px;background:#0a1230f5;padding:10px;box-shadow:0 16px 50px rgba(0,0,0,.6)}
+.orb-menu.on{display:flex}
+.orb-menu .t{font-size:10px;letter-spacing:.18em;color:var(--gold);margin-bottom:3px}
+.orb-menu a{font-size:12px;color:var(--ink2);border:1px solid var(--line);border-radius:6px;padding:4px 10px}
+.orb-menu a:hover{border-color:var(--gold);color:var(--gold)}
+.orb-menu a i{font-style:normal;color:var(--holo);font-size:10px;margin-left:4px}
+/* 围栏级别灯（镜像 FenceLight） */
+.fencepill{display:inline-flex;align-items:center;gap:5px;font-size:11px}
+.fencepill .d{width:7px;height:7px;border-radius:50%}
+/* 等距职场画布 */
+#floorCv{width:100%;height:440px;cursor:pointer;border-radius:12px}
+.qr{width:84px;height:84px;border:1px solid var(--line);border-radius:6px;background:#eaf1ff;padding:6px}
+.timeline{border-left:1px solid var(--line);padding-left:14px;position:relative}
+.tl-dot{position:absolute;left:-5px;top:5px;width:9px;height:9px;border-radius:50%;background:var(--ink3)}
+.tl-dot.hot{background:var(--holo);animation:breath 1.6s infinite}
+.metric{border:1px solid var(--line);border-radius:10px;background:var(--card);padding:12px}
+.metric .v{font-size:20px;font-weight:800;margin-top:3px}
+.progress{height:6px;border-radius:3px;background:var(--bg700);overflow:hidden}
+.progress i{display:block;height:100%;background:linear-gradient(90deg,var(--holo),var(--gold))}
+.avatar-b{border-radius:8px;border:1px solid var(--line);background:var(--bg700);width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--ink2);flex:none}
+.avatar-r{border-radius:50%;border:1px solid rgba(233,181,88,.6);background:rgba(233,181,88,.1);width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--goldhi);flex:none}
+.diff-old{color:var(--alert);text-decoration:line-through}
+.diff-new{color:var(--go)}
+.seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;font-size:11px}
+.seg button{padding:3px 10px;color:var(--ink3)}
+.seg button.cur{background:rgba(233,181,88,.15);color:var(--gold)}
+</style>
+</head>
+<body>
+<div class="starfield"></div><div class="starpoints"></div>
+
+<!-- ===== DEMO NAV（演示专用条 · 逐项标注生产真实路由，生产路由表见 apps/web/src/App.tsx） ===== -->
+<nav class="demonav" id="demonav">
+  <span class="tag">DEMO NAV · 真实路由标注</span>
+  <a href="#p0" data-v="p0"><b>经营剧场</b><i>/</i></a>
+  <a href="#floor" data-v="floor"><b>等距职场</b><i>/（职场视图）</i></a>
+  <a href="#p1" data-v="p1"><b>主甲板</b><i>/p1</i></a>
+  <a href="#p2" data-v="p2"><b>任务舱</b><i>/p2/T-102</i></a>
+  <a href="#p3" data-v="p3"><b>掌上战报</b><i>/p3</i></a>
+  <a href="#p4" data-v="p4"><b>决断队列</b><i>/p4</i></a>
+  <a href="#p5" data-v="p5"><b>围栏</b><i>/p5</i></a>
+  <a href="#p6" data-v="p6"><b>装备库</b><i>/p6</i></a>
+  <a href="#p8" data-v="p8"><b>船员名册</b><i>/p8</i></a>
+  <a href="#p9" data-v="p9"><b>守夜战队</b><i>/p9</i></a>
+  <a href="#p21" data-v="p21"><b>董事长视图</b><i>/p21</i></a>
+  <a href="#p22" data-v="p22"><b>服务前台</b><i>/p22</i></a>
+</nav>
+
+<!-- ==================== 剧场模式（#p0 / #floor，镜像 pages/p0/P0.tsx + Floor.tsx） ==================== -->
+<div id="theaterMode" class="view" style="position:relative;z-index:1;max-width:1380px;margin:14px auto 0">
+  <div class="theater">
+    <canvas class="stars-cv" id="starsCv"></canvas>
+    <!-- 顶栏（镜像 P0 极简顶栏） -->
+    <header class="thead">
+      <span class="logo"><span class="diamond"></span><span class="word">WorkLoom</span></span>
+      <span class="tiny" style="font-size:12px">经营剧场 · 公司CEO</span>
+      <span style="flex:1"></span>
+      <span id="p0msg" class="tiny" style="color:var(--go)"></span>
+      <div class="seg">
+        <button id="segFloor" onclick="switchTheater('floor')">职场</button>
+        <button id="segStage" onclick="switchTheater('stage')">舞台</button>
+      </div>
+      <span class="chip gold" id="modeChip">试用期</span>
+      <a class="hlink" href="#p1">工作台</a>
+      <a class="hlink gold" href="#p21">董事长视图</a>
+    </header>
+    <div class="simbanner" style="position:relative;z-index:5">演示数据模拟态（种子：云栖酒店 / MEM-001）· 接入真实数据请走落地向导</div>
+
+    <!-- 舞台视图：织元体 + 卫星群 -->
+    <main class="stage" id="stageView">
+      <div style="position:relative;width:560px;height:300px">
+        <div class="holo-box" style="position:absolute;left:50%;top:8px;transform:translateX(-50%)">
+          <div class="ring r0"></div><div class="ring r1"></div><div class="ring r2"></div>
+          <svg viewBox="0 0 120 160" style="position:absolute;inset:0;margin:auto;width:128px;height:160px">
+            <defs>
+              <radialGradient id="core" cx="50%" cy="42%" r="55%">
+                <stop offset="0%" stop-color="#ffbe6a" stop-opacity="0.95"/>
+                <stop offset="60%" stop-color="#c8842a" stop-opacity="0.35"/>
+                <stop offset="100%" stop-color="#c8842a" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
+            <ellipse cx="60" cy="26" rx="14" ry="16" fill="none" stroke="#ffbe6a" stroke-opacity="0.85" stroke-width="1.4"/>
+            <path d="M42 52 Q60 42 78 52 L86 108 Q60 122 34 108 Z" fill="none" stroke="#ffbe6a" stroke-opacity="0.7" stroke-width="1.4"/>
+            <ellipse cx="60" cy="72" rx="17" ry="22" fill="url(#core)" class="holo-core"/>
+            <line x1="34" y1="0" x2="86" y2="0" stroke="#ffbe6a" stroke-opacity="0.5" stroke-width="2" class="holo-scan"/>
+          </svg>
+          <div class="holo-base"></div>
+        </div>
+        <div id="sats"></div>
+      </div>
+      <!-- 语音气泡 + 聊天 + L4 请示卡 -->
+      <div style="width:100%;max-width:660px;margin-top:6px;display:flex;flex-direction:column;gap:8px">
+        <div class="bubble"><span id="speech"></span><span id="cursor" style="color:var(--gold)">▌</span></div>
+        <div id="chatlog" style="display:flex;flex-direction:column;gap:6px"></div>
+        <div class="askcard" id="l4card">
+          <div style="font-size:11px;letter-spacing:.2em;color:var(--warn)">请您决策 · <span id="l4count">1</span> 件</div>
+          <div class="askinner" id="l4inner">
+            <div class="small"><b>差评应急回复（携程 2 分评价）</b><span class="tiny" style="margin-left:8px">评分 2 · 渠道 携程 · 命中 R6 差评必审</span></div>
+            <div class="tiny" style="margin-top:4px;color:var(--holo)">CEO 意见：回复符合品牌致歉结构，未承诺档案外补偿，建议批准。</div>
+            <div style="margin-top:8px;display:flex;gap:8px">
+              <button class="btn go" onclick="decideL4('approve')">✓ 批准</button>
+              <button class="btn warn" onclick="decideL4('reject')">✕ 驳回</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- 职场视图：等距 2.5D（镜像 Floor.tsx，场景数据 bundles/hotel/floor-scene.json） -->
+    <main class="stage" id="floorView" style="justify-content:flex-start">
+      <div style="width:100%;max-width:860px">
+        <div class="tiny" style="display:flex;gap:8px;padding:0 4px;margin-bottom:4px;font-size:11px">
+          <span style="color:var(--holo)">云栖酒店 · 前厅</span><span>·</span>
+          <span>3 工作中</span><span>·</span>
+          <span style="color:var(--warn)">1 请您定</span><span>·</span>
+          <span>3 待命</span>
+          <span style="flex:1"></span><span>点员工看绩效 · 点举手者原地裁决</span>
+        </div>
+        <canvas id="floorCv"></canvas>
+      </div>
+      <div style="width:100%;max-width:660px;margin-top:8px">
+        <div class="bubble"><span id="speech2"></span></div>
+      </div>
+    </main>
+
+    <!-- 实况字幕条（镜像 P0 ticker：动作经 display.ts actionText 中文化） -->
+    <div class="ticker" style="position:relative;z-index:5"><div class="in" id="tickerIn"></div></div>
+    <!-- 聊天框（镜像 P0：三快捷 + 三模式输入） -->
+    <div style="position:relative;z-index:5;border-top:1px solid var(--line);background:rgba(12,20,50,.8);padding:12px">
+      <div style="max-width:660px;margin:0 auto;display:flex;align-items:center;gap:8px">
+        <button class="chipbtn" onclick="sendChat('今日怎么样')">今日怎么样</button>
+        <button class="chipbtn" onclick="sendChat('批一下请示')">批一下请示</button>
+        <button class="chipbtn" onclick="sendChat('昨夜夜班汇报')">昨夜夜班汇报</button>
+        <input class="chatinput" id="chatInput" placeholder="像跟 公司CEO 说话一样输入……（问询 / 安排任务 / 逐步商量）" onkeydown="if(event.key==='Enter')sendChat(this.value)">
+        <button class="sendbtn" onclick="sendChat(document.getElementById('chatInput').value)">发送</button>
+      </div>
+    </div>
+    <!-- 开门礼遮罩（镜像 P0 仪式：光核→光环→全员就位→报到词） -->
+    <div class="ceremony" id="ceremony">
+      <div style="text-align:center">
+        <div class="core"></div>
+        <div id="cerL1" style="font-size:14px;letter-spacing:.3em;color:var(--gold);opacity:0;transition:opacity .7s">团队全员就位</div>
+        <div id="cerL2" style="margin-top:8px;font-size:12px;color:var(--ink3);opacity:0;transition:opacity .7s">向您报到，董事长</div>
+        <button class="btn" style="margin-top:18px" onclick="endCeremony()">跳过仪式</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 舰桥模式（#p1…#p22，镜像 shell/Bridge.tsx 三栏） ==================== -->
+<div id="bridgeMode" class="view">
+<div class="bridgewrap">
+  <div class="bridge">
+    <span class="tick tl"></span><span class="tick tr"></span><span class="tick bl"></span><span class="tick br"></span>
+    <!-- 顶栏（镜像 Bridge .abar） -->
+    <header class="abar">
+      <div class="logo"><span class="diamond"></span><span class="word">WorkLoom</span></div>
+      <span class="ws">企业 Agent IM · <b>云栖酒店</b></span>
+      <span style="flex:1"></span>
+      <a class="hlink" href="#p22">◉ 服务前台</a>
+      <a class="hlink gold" href="#p21">董事长视图</a>
+      <button class="nightpill" onclick="toast('已跳转：守夜战队频道（路由 /p9）');location.hash='#p9'"><span class="dot"></span>夜班 · 已就绪 22:00 出征</button>
+      <button class="brake" id="brakeBtn" onclick="armBrake()">紧急制动</button>
+    </header>
+    <div class="simbanner">演示数据模拟态（种子：云栖酒店 / MEM-001）· 接入真实数据请走落地向导</div>
+
+    <!-- ============ #p1 主甲板（镜像 pages/p1/P1.tsx，路由 /p1） ============ -->
+    <div class="view" id="v-p1">
+      <div class="cols">
+        <aside class="col-l">
+          <div class="colhead">会话 · THREADS</div>
+          <div class="litem" style="border-color:rgba(69,224,255,.35);background:rgba(69,224,255,.05)" onclick="location.hash='#p9'">
+            <div class="rowbet"><span style="font-size:11px;color:var(--holo)">▣ 守夜战队频道</span><span style="width:7px;height:7px;border-radius:50%;background:var(--ink3);display:inline-flex"></span></div>
+            <div class="small" style="margin-top:2px">夜班班组群 → P9</div>
+          </div>
+          <div class="litem" style="border-color:var(--gline);background:rgba(233,181,88,.05)" onclick="location.hash='#p3'">
+            <div style="font-size:11px;color:var(--gold)">▣ 昨夜战报</div>
+            <div class="small" style="margin-top:2px">✓9 ◆3 ▲2</div>
+          </div>
+          <div class="litem" style="border-color:rgba(255,190,106,.4);background:rgba(255,190,106,.05)" onclick="location.hash='#p4'">
+            <div class="rowbet"><span style="font-size:11px;color:var(--warn)">待办 · 审批请求</span><span class="chip warn">2</span></div>
+            <div class="small" style="margin-top:2px">决断队列 → P4</div>
+          </div>
+          <div class="colhead" style="margin-top:12px">任务线程 · ≤10 并发</div>
+          <div class="litem" onclick="location.hash='#p2'">
+            <div class="rowbet"><span class="mono tiny">T-101</span><span class="tiny"><span style="color:var(--go)">●</span> 6/6</span></div>
+            <div class="small" style="margin-top:3px">周五旺季调价（大床房/双床房）</div>
+            <div class="tiny" style="margin-top:2px">主线任务 · 已完成</div>
+          </div>
+          <div class="litem" onclick="location.hash='#p2'">
+            <div class="rowbet"><span class="mono tiny">T-102</span><span class="tiny"><span style="color:var(--warn)">●</span> 3/5</span></div>
+            <div class="small" style="margin-top:3px">差评应急回复（携程 2 分评价）</div>
+            <div class="tiny" style="margin-top:2px">主线任务 · 待审查</div>
+          </div>
+          <div class="litem" onclick="location.hash='#p2'">
+            <div class="rowbet"><span class="mono tiny">T-103</span><span class="tiny"><span style="color:var(--holo)">●</span> 1/4</span></div>
+            <div class="small" style="margin-top:3px">飞猪渠道新客首图发布</div>
+            <div class="tiny" style="margin-top:2px">委托执行 · 进行中</div>
+          </div>
+        </aside>
+        <main class="col-c">
+          <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px">
+            <span class="h1">主甲板 · 舰桥</span><span class="sub">P1 · MAIN DECK</span>
+          </div>
+          <div class="tiny" style="border-left:2px solid var(--gline);padding-left:10px;margin-bottom:12px">
+            08:30 · 云栖酒店 · 王店长 已上线（演示身份 MEM-001）
+          </div>
+          <!-- 交接班卡（P1E3：三计数与 P3 强一致） -->
+          <div class="handoff" style="margin-bottom:12px">
+            <div class="rowbet">
+              <span class="h2" style="color:var(--goldhi)">◐ 夜班交接班</span>
+              <span class="tiny">战报 08:30 送达 · 围栏快照 hotel-baseline/v1</span>
+            </div>
+            <div class="c3">
+              <span><span class="n" style="color:var(--go)">✓ 9</span> <span class="tiny">已完成</span></span>
+              <span><span class="n" style="color:var(--warn)">◆ 3</span> <span class="tiny">待跟进</span></span>
+              <span><span class="n" style="color:var(--alert)">▲ 2</span> <span class="tiny">需人工</span></span>
+              <span><span class="n orb" style="color:var(--holo)">96<span style="font-size:11px;color:var(--ink3)">/118</span></span> <span class="tiny">积分消耗/预估</span></span>
+            </div>
+          </div>
+          <!-- KPI 投影（一店一档 history_curve：2026-08 vs 2026-07） -->
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px">
+            <div class="kpi"><div class="tiny">OCC 入住率</div><div class="v">78%</div><div class="d down">▼ 6.0% · 截至 月末档案</div><div class="ringbg"></div></div>
+            <div class="kpi"><div class="tiny">ADR 平均房价</div><div class="v">¥496</div><div class="d down">▼ 3.1% · 截至 月末档案</div><div class="ringbg"></div></div>
+            <div class="kpi"><div class="tiny">REVPAR</div><div class="v">¥387</div><div class="d down">▼ 8.9% · 截至 月末档案</div><div class="ringbg"></div></div>
+            <div class="kpi"><div class="tiny">巡检正常项</div><div class="v orb">6/8</div><div class="d" style="color:var(--ink3)">最近 07:00 · 截至 月末档案</div><div class="ringbg"></div></div>
+          </div>
+          <!-- 巡检雷达（P1E4） -->
+          <div class="radar p0" style="margin-bottom:8px">
+            <div class="rowbet">
+              <span><span class="chip alert">高危</span> <b class="small">美团出现 2 分差评：「空调异响整夜未眠」</b></span>
+              <button class="btn gold" onclick="toast('已派单：差评应急回复线程已建立（接 inspection.dispatch）')">⚡ 一键派单</button>
+            </div>
+            <div class="tiny" style="margin-top:4px">来源 评价 · 事件 <span class="mono">···9902</span> · 同事件幂等 · 按严重度排序</div>
+          </div>
+          <div class="radar" style="margin-bottom:12px">
+            <div class="rowbet">
+              <span><span class="chip warn">中危</span> <b class="small">飞猪渠道房态同步延迟 12 分钟（亲子房）</b></span>
+              <button class="btn" onclick="toast('已派单：房态同步核查线程已建立')">⚡ 一键派单</button>
+            </div>
+            <div class="tiny" style="margin-top:4px">来源 渠道 · 事件 <span class="mono">···9903</span></div>
+          </div>
+          <!-- Agent 行动消息（最近线程摘要） -->
+          <div class="card cardpad" style="margin-bottom:12px">
+            <div class="rowbet">
+              <span class="tiny"><b style="color:var(--holo)">agt-content-agent</b> · 委托执行 · 事件 <span class="mono">T-103</span></span>
+              <span class="chip warn">未核实</span>
+            </div>
+            <div class="small" style="margin-top:6px">飞猪渠道新客首图发布（进度 1/4）——首图已出稿待审，新渠道首发必审（R3）。</div>
+          </div>
+          <!-- 快捷目标（P1E7 酒店 6 条） -->
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px" id="quickGoals">
+            <button class="btn" onclick="quickGoal('调价建议')">⚡ 调价建议</button>
+            <button class="btn" onclick="quickGoal('回复评价')">⚡ 回复评价</button>
+            <button class="btn" onclick="quickGoal('经营复盘')">⚡ 经营复盘</button>
+            <button class="btn" onclick="quickGoal('更新首图')">⚡ 更新首图</button>
+            <button class="btn" onclick="quickGoal('对账说明')">⚡ 对账说明</button>
+            <button class="btn" onclick="quickGoal('差评审批')">⚡ 差评审批</button>
+          </div>
+          <!-- 航线设定台（P1E1） -->
+          <div style="display:flex;gap:8px;align-items:center">
+            <span class="chip holo">云栖酒店</span><span class="chip">阶段：stable</span>
+            <input style="flex:1" id="dispatchIn" placeholder="设定航线：@ Agent 或说出目标（含糊指令将反问澄清，不建任务）" onkeydown="if(event.key==='Enter')dispatchGoal()">
+            <button class="btn goldgrad" onclick="dispatchGoal()">启航</button>
+          </div>
+        </main>
+        <aside class="col-r">
+          <div class="colhead">上下文 · CONTEXT</div>
+          <div class="card cardpad" style="margin-bottom:10px">
+            <div style="font-size:11px;font-weight:700;color:var(--holo);margin-bottom:6px">一店一档</div>
+            <div style="display:flex;flex-wrap:wrap;gap:5px">
+              <span class="chip holo">云栖酒店</span><span class="chip holo">杭州</span><span class="chip holo">86 间</span><span class="chip holo">四钻</span><span class="chip holo">阶段：stable</span>
+            </div>
+          </div>
+          <div class="card cardpad" style="margin-bottom:10px">
+            <div style="font-size:11px;font-weight:700;color:var(--holo);margin-bottom:6px">守夜战队</div>
+            <button class="nightpill" onclick="location.hash='#p9'"><span class="dot"></span>夜班 · 已就绪 22:00 出征</button>
+            <div class="mono tiny" style="margin-top:6px">围栏快照 hotel-baseline/v1</div>
+          </div>
+          <div class="card cardpad" style="margin-bottom:10px">
+            <div style="font-size:11px;font-weight:700;color:var(--holo);margin-bottom:6px">在线成员 · 10</div>
+            <div style="display:flex;flex-direction:column;gap:6px;font-size:12px">
+              <div style="display:flex;gap:8px;align-items:center"><span class="avatar-r">王</span><span class="small">王店长</span><span class="mono tiny">经营者</span></div>
+              <div style="display:flex;gap:8px;align-items:center"><span class="avatar-r">陈</span><span class="small">陈经理</span><span class="mono tiny">经理</span></div>
+              <div style="display:flex;gap:8px;align-items:center"><span class="avatar-r">李</span><span class="small">李前台</span><span class="mono tiny">只读成员</span></div>
+              <div style="display:flex;gap:8px;align-items:center"><span class="avatar-b">调</span><span class="small">调价Agent</span><span class="mono tiny">v2.3</span><span style="margin-left:auto;width:7px;height:7px;border-radius:50%;background:var(--go)"></span></div>
+              <div style="display:flex;gap:8px;align-items:center"><span class="avatar-b">评</span><span class="small">评价Agent</span><span class="mono tiny">v1.8</span><span style="margin-left:auto;width:7px;height:7px;border-radius:50%;background:var(--go)"></span></div>
+              <div style="display:flex;gap:8px;align-items:center"><span class="avatar-b">账</span><span class="small">对账Agent</span><span class="mono tiny">v2.0</span><span style="margin-left:auto;width:7px;height:7px;border-radius:50%;background:var(--go)"></span></div>
+              <div style="display:flex;gap:8px;align-items:center"><span class="avatar-b">容</span><span class="small">内容Agent</span><span class="mono tiny">v1.5</span><span style="margin-left:auto;width:7px;height:7px;border-radius:50%;background:var(--go)"></span></div>
+            </div>
+          </div>
+          <div class="card cardpad">
+            <div style="font-size:11px;font-weight:700;color:var(--holo);margin-bottom:4px">渠道巡检</div>
+            <div class="orb" style="font-size:22px;font-weight:700">6/8</div>
+            <div class="tiny">正常项/总数 · 最近 07:00</div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ============ #p2 任务舱（镜像 pages/p2/P2.tsx，路由 /p2/T-102） ============ -->
+    <div class="view" id="v-p2">
+      <div class="cols">
+        <aside class="col-l">
+          <div class="colhead">会话 · THREADS</div>
+          <div class="litem"><div class="rowbet"><span class="mono tiny">T-101</span><span class="tiny" style="color:var(--go)">6/6</span></div><div class="small" style="margin-top:3px">周五旺季调价（大床房/双床房）</div></div>
+          <div class="litem" style="border-color:var(--gline)"><div class="rowbet"><span class="mono tiny">T-102</span><span class="tiny" style="color:var(--warn)">3/5</span></div><div class="small" style="margin-top:3px">差评应急回复（携程 2 分评价）</div></div>
+          <div class="litem"><div class="rowbet"><span class="mono tiny">T-103</span><span class="tiny" style="color:var(--holo)">1/4</span></div><div class="small" style="margin-top:3px">飞猪渠道新客首图发布</div></div>
+        </aside>
+        <main class="col-c">
+          <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px">
+            <span class="h1">任务舱 · 主线执行</span><span class="sub">P2 · 路由 /p2/T-102 · 主线任务</span>
+          </div>
+          <div class="tiny" style="border-left:2px solid var(--gline);padding-left:10px;margin-bottom:12px">线程 T-102 · 差评应急回复（携程 2 分评价）· 事件流按时间升序投影</div>
+          <div style="display:flex;flex-direction:column;gap:10px" id="p2flow">
+            <div class="card cardpad">
+              <div class="rowbet"><span class="tiny"><b style="color:var(--holo)">评价Agent v1.8</b> · 回复评论 · 事件 <span class="mono">···8852</span></span><span class="chip go">已同步</span></div>
+              <div class="small" style="margin-top:6px">已读取差评原文与档案品牌规范，核对 forbidden 清单（不承诺档案外补偿）。</div>
+              <div class="tiny" style="margin-top:4px">依据：品牌规范致歉结构 · 记忆引用「差评回复结构」 · 命中规则 R6 差评必审（hotel-baseline/v1）</div>
+            </div>
+            <div class="card cardpad">
+              <div class="rowbet"><span class="tiny"><b style="color:var(--holo)">评价Agent v1.8</b> · 回复评论（草稿） · 事件 <span class="mono">···8853</span></span><span class="chip warn">待审查</span></div>
+              <div class="small" style="margin-top:6px">草稿：「非常抱歉给您带来不好的体验，我们已核实空调异响问题并安排检修，今夜已完成同楼层复检。期待您再次入住时给予我们改进的机会。」</div>
+            </div>
+            <!-- 审批卡内联（ApprovalCardMsg：diff + 命中规则 + 三手势） -->
+            <div class="askcard" id="p2ask">
+              <div style="font-size:11px;letter-spacing:.2em;color:var(--warn)">待您裁决 · 人工复核（R6 差评必审 · hotel-baseline/v1）</div>
+              <div class="askinner">
+                <div class="small"><b>发布差评回复到携程</b> <span class="tiny mono">apr ···8853</span></div>
+                <div class="tiny" style="margin-top:4px">影响面：对外可见回复 ×1 · 回执位：发布成功后回写快照 · 有效期 24h</div>
+                <div class="trigest" style="margin-top:8px">
+                  <button class="btn go" onclick="decideP2(this,'approve')">✓ 采纳</button>
+                  <button class="btn holo" onclick="decideP2(this,'edit')">✎ 编辑后采纳</button>
+                  <button class="btn warn" onclick="decideP2(this,'reject')">✕ 驳回</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:14px">
+            <input style="flex:1" placeholder="追问或补充指令（只读成员不显示此栏）" onkeydown="if(event.key==='Enter'){toast('已追发指令到线程 T-102');this.value=''}">
+            <button class="btn gold" onclick="toast('已追发指令到线程 T-102')">发送</button>
+          </div>
+        </main>
+        <aside class="col-r">
+          <div class="colhead">THREAD INSPECTOR</div>
+          <div class="card cardpad" style="margin-bottom:10px">
+            <div style="font-size:11px;font-weight:700;color:var(--holo);margin-bottom:6px">进度</div>
+            <div class="orb" style="font-size:20px;font-weight:700">3/5</div>
+            <div class="progress" style="margin-top:6px"><i style="width:60%"></i></div>
+          </div>
+          <div class="card cardpad" style="margin-bottom:10px">
+            <div style="font-size:11px;font-weight:700;color:var(--holo);margin-bottom:6px">参与成员</div>
+            <div class="small">评价Agent <span class="mono tiny">v1.8</span></div>
+            <div class="small" style="margin-top:4px">王店长 <span class="mono tiny">MEM-001 · 审批人</span></div>
+          </div>
+          <div class="card cardpad" style="margin-bottom:10px">
+            <div style="font-size:11px;font-weight:700;color:var(--holo);margin-bottom:6px">计量</div>
+            <div class="tiny">模型档 标准档 · 窗口 高峰 · 积分 3<br>降级链 未触发</div>
+          </div>
+          <div class="card cardpad">
+            <div style="font-size:11px;font-weight:700;color:var(--holo);margin-bottom:6px">围栏判定</div>
+            <div class="tiny">R6 差评必审 → <span style="color:var(--warn)">人工复核</span><br>版本 hotel-baseline/v1 · ≤5s 轮询</div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ============ #p3 掌上战报（镜像 pages/p3/P3.tsx，路由 /p3；375px 内容区嵌映） ============ -->
+    <div class="view" id="v-p3">
+      <div class="cols">
+        <aside class="col-l">
+          <div class="colhead">会话 · THREADS</div>
+          <div class="litem" style="border-color:var(--gline);background:rgba(233,181,88,.05)"><div style="font-size:11px;color:var(--gold)">▣ 昨夜战报</div><div class="small" style="margin-top:2px">✓9 ◆3 ▲2 · 08:30 送达</div></div>
+          <div class="litem" onclick="location.hash='#p9'"><div class="small">守夜战队频道 → P9</div></div>
+        </aside>
+        <main class="col-c" style="display:flex;justify-content:center">
+          <div style="width:375px;flex:none">
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:10px">
+              <span class="h1" style="font-size:17px">掌上战报</span><span class="sub">P3 · 路由 /p3 · 移动监督者视角</span>
+            </div>
+            <!-- 三栏计数头（P3E1，与 P1 交接班卡强一致） -->
+            <div class="handoff" style="margin-bottom:10px;padding:10px">
+              <div class="rowbet"><span class="small" style="color:var(--goldhi);font-weight:700">◐ 昨夜班组战报</span><span class="tiny">08:30</span></div>
+              <div class="c3" style="gap:16px">
+                <span><span class="n" style="color:var(--go);font-size:17px">✓9</span><br><span class="tiny">已完成</span></span>
+                <span><span class="n" style="color:var(--warn);font-size:17px">◆3</span><br><span class="tiny">待跟进</span></span>
+                <span><span class="n" style="color:var(--alert);font-size:17px">▲2</span><br><span class="tiny">需人工</span></span>
+              </div>
+            </div>
+            <!-- 审批卡逐条（单条 ≤2 步） -->
+            <div class="card cardpad" style="margin-bottom:8px" id="p3a1">
+              <div class="small"><b>差评回复发布</b> <span class="chip warn">待裁决</span></div>
+              <div class="tiny" style="margin-top:3px">携程 2 分评价 · R6 差评必审 · 权重 1/2/3 三手势</div>
+              <div class="trigest" style="margin-top:7px">
+                <button class="btn go" style="padding:3px 9px;font-size:11px" onclick="p3decide('p3a1','采纳')">✓ 采纳</button>
+                <button class="btn holo" style="padding:3px 9px;font-size:11px" onclick="p3decide('p3a1','编辑后采纳')">✎ 编辑</button>
+                <button class="btn warn" style="padding:3px 9px;font-size:11px" onclick="p3decide('p3a1','驳回')">✕ 驳回</button>
+              </div>
+            </div>
+            <div class="card cardpad" style="margin-bottom:8px" id="p3a2">
+              <div class="small"><b>大额退款 ¥860</b> <span class="chip warn">待裁决</span></div>
+              <div class="tiny" style="margin-top:3px">到店无房协商全额退款 · R4 退款 ≥¥500 必审</div>
+              <div class="trigest" style="margin-top:7px">
+                <button class="btn go" style="padding:3px 9px;font-size:11px" onclick="p3decide('p3a2','采纳')">✓ 采纳</button>
+                <button class="btn holo" style="padding:3px 9px;font-size:11px" onclick="p3decide('p3a2','编辑后采纳')">✎ 编辑</button>
+                <button class="btn warn" style="padding:3px 9px;font-size:11px" onclick="p3decide('p3a2','驳回')">✕ 驳回</button>
+              </div>
+            </div>
+            <!-- 求援卡 -->
+            <div class="card cardpad" style="margin-bottom:10px;border-color:rgba(255,84,112,.45)">
+              <div class="small"><b style="color:var(--alert)">▲ 求援：担保订单异常</b></div>
+              <div class="tiny" style="margin-top:3px">R5 担保异常需介入——夜间不确定不执行，已挂起等您派单。</div>
+              <button class="btn gold" style="margin-top:7px;padding:3px 10px;font-size:11px" onclick="toast('已派单：值班经理介入担保异常核查')">⚡ 一键派单</button>
+            </div>
+            <!-- 底部双键 -->
+            <div style="display:flex;gap:8px">
+              <button class="btn go" style="flex:1" onclick="toast('批量采纳：仅低风险项 1 条（人工复核/硬阻断不进批量，已二次确认）')">批量采纳低风险</button>
+              <button class="btn alert" style="flex:1" onclick="armBrake()">紧急制动</button>
+            </div>
+          </div>
+        </main>
+        <aside class="col-r">
+          <div class="colhead">上下文 · CONTEXT</div>
+          <div class="card cardpad" style="margin-bottom:10px">
+            <div style="font-size:11px;font-weight:700;color:var(--holo);margin-bottom:6px">数据一致性</div>
+            <div class="tiny">三计数与 P1 交接班卡同一 stats 数据源（F4.4）；驳回必填原因 ≤200 字；高危项无超时放行。</div>
+          </div>
+          <div class="card cardpad">
+            <div style="font-size:11px;font-weight:700;color:var(--holo);margin-bottom:6px">围栏快照</div>
+            <div class="mono tiny">hotel-baseline/v1</div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ============ #p4 决断队列（镜像 pages/p4/P4.tsx，路由 /p4） ============ -->
+    <div class="view" id="v-p4">
+      <div class="cols">
+        <aside class="col-l">
+          <div class="colhead">决断队列 · INBOX</div>
+          <div class="litem" style="border-color:var(--gline)" onclick="p4sel(0)"><div class="rowbet"><span class="chip warn">待裁决</span><span class="mono tiny">···8853</span></div><div class="small" style="margin-top:3px">差评回复发布（携程 2 分）</div></div>
+          <div class="litem" onclick="p4sel(1)"><div class="rowbet"><span class="chip warn">待裁决</span><span class="mono tiny">···8857</span></div><div class="small" style="margin-top:3px">大额退款 ¥860（到店无房）</div></div>
+          <div class="litem" onclick="p4sel(2)"><div class="rowbet"><span class="chip go">已批准</span><span class="mono tiny">···8842</span></div><div class="small" style="margin-top:3px">差评回复发布（美团 3 分）</div></div>
+        </aside>
+        <main class="col-c">
+          <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px">
+            <span class="h1">决断队列</span><span class="sub">P4 · 路由 /p4 · 统一审查面板</span>
+          </div>
+          <div id="p4detail"></div>
+        </main>
+        <aside class="col-r">
+          <div class="colhead">分级 · TRIAGE</div>
+          <div class="card cardpad" style="margin-bottom:10px">
+            <div class="tiny" style="line-height:2">
+              高危 → 双人审批<br>越围栏 人工复核 → 必审<br>其余 → 逐步审<br>批量仅低风险（二次确认）
+            </div>
+          </div>
+          <div class="card cardpad">
+            <div style="font-size:11px;font-weight:700;color:var(--holo);margin-bottom:6px">手势统计（今日）</div>
+            <div class="tiny">采纳 5 · 编辑后采纳 1 · 驳回 1<br>驳回原因已进偏好模式</div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ============ #p5 围栏（镜像 pages/p5/P5.tsx，路由 /p5） ============ -->
+    <div class="view" id="v-p5">
+      <div class="cols">
+        <aside class="col-l">
+          <div class="colhead">版本历史 · VERSIONS</div>
+          <div class="litem" style="border-color:var(--gline)"><div class="rowbet"><span class="small">hotel-baseline/v1</span><span class="chip go">运行中</span></div><div class="tiny" style="margin-top:2px">出厂基线 · 锁 · 集团强制 · 只可加严</div></div>
+          <div class="litem"><div class="rowbet"><span class="small">生效范围</span></div><div class="tiny" style="margin-top:2px">本工作区全部写类动作 100% 过围栏</div></div>
+        </aside>
+        <main class="col-c">
+          <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px">
+            <span class="h1">航道管制台</span><span class="sub">P5 · 路由 /p5 · 规则围栏</span>
+          </div>
+          <div class="card" style="margin-bottom:14px;overflow:hidden">
+            <table class="grid">
+              <thead><tr><th>规则</th><th>名称</th><th>级别</th><th>条件</th><th>来源</th><th>30 天触发</th></tr></thead>
+              <tbody id="fenceRows"></tbody>
+            </table>
+          </div>
+          <div class="card cardpad" style="margin-bottom:12px">
+            <div style="font-size:12px;font-weight:700;color:var(--holo);margin-bottom:6px">＋ 自然语言新增群规</div>
+            <div style="display:flex;gap:8px">
+              <input style="flex:1" id="ruleIn" placeholder="如：周末大床房涨幅不超过 5%" >
+              <button class="btn gold" onclick="dryRun()">转写并模拟航行</button>
+            </div>
+            <div class="tiny" style="margin-top:6px">转写草稿 → 结构化预览 → dry-run → 审批；未确认不生效。</div>
+          </div>
+          <div class="card cardpad" id="dryBox" style="display:none">
+            <div style="font-size:12px;font-weight:700;color:var(--warn);margin-bottom:6px">模拟航行报告（回放最近 10 条事件）</div>
+            <div class="tiny" style="line-height:2">将拦截 1 条：···8851 调整房价 +9.2%（超 5% 上限）<br>将影响 调价Agent 的自动放行路径<br><span style="color:var(--alert)">影响面可控</span> · <a href="#p4" style="color:var(--gold)">提交审批 →</a></div>
+          </div>
+        </main>
+        <aside class="col-r">
+          <div class="colhead">判定语义 · SEMANTICS</div>
+          <div class="card cardpad">
+            <div class="tiny" style="line-height:2">
+              硬阻断 优先于 人工复核 优先于 自动放行<br>写类动作无命中 → 按默认 人工复核<br>求值异常 → 按 硬阻断（宁可错杀）<br>基线规则只可收紧不可放宽（单调守卫）
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ============ #p6 装备库（镜像 pages/p6/P6.tsx，路由 /p6） ============ -->
+    <div class="view" id="v-p6">
+      <div class="cols">
+        <aside class="col-l">
+          <div class="colhead">装备库 · SKILLS</div>
+          <div class="litem"><div class="small">官方套件 ×3</div><div class="tiny">随 Bundle 分发 · 金边</div></div>
+          <div class="litem"><div class="small">团队技能 ×1</div><div class="tiny">本工作区自建 · 银边</div></div>
+          <div class="litem"><div class="small">行业共享 ×1</div><div class="tiny">已脱敏 · 铜边</div></div>
+        </aside>
+        <main class="col-c">
+          <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px">
+            <span class="h1">技能装备库</span><span class="sub">P6 · 路由 /p6 · Agent 能力商店</span>
+            <span style="flex:1"></span>
+            <button class="btn goldgrad" onclick="toast('打造新装备：三要素向导（触发/步骤/边界），「不能做什么」自动转围栏声明')">✦ 打造新装备</button>
+          </div>
+          <!-- 意识系统建议横幅（P6E1） -->
+          <div class="handoff" style="margin-bottom:14px">
+            <div class="rowbet">
+              <span class="small"><b style="color:var(--goldhi)">意识系统建议</b>：「每周一经营复盘」本周已手动执行 3 次，建议固化为定时技能</span>
+              <span style="display:flex;gap:6px">
+                <button class="btn go" style="padding:3px 10px;font-size:11px" onclick="toast('已固化：生成触发器「每周一 08:00」（确认前不产生任何自动化）')">一键固化</button>
+                <button class="btn" style="padding:3px 10px;font-size:11px" onclick="toast('已生成技能草稿 → 三要素向导')">生成草稿</button>
+                <button class="btn" style="padding:3px 10px;font-size:11px" onclick="toast('已驳回，该建议降权')">驳回</button>
+              </span>
+            </div>
+          </div>
+          <div class="sub" style="margin-bottom:8px">官方套件 · 金边传说</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px" id="skillOfficial"></div>
+          <div class="sub" style="margin-bottom:8px">团队技能 · 银边</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
+            <div class="card cardpad" style="border-color:rgba(185,198,232,.4)">
+              <div class="rowbet"><b class="small">周一经营复盘</b><span class="chip">v1.2.0</span></div>
+              <div class="tiny" style="margin-top:5px">每周一 08:00 自动汇总上周经营：入住率/RevPAR/差评闭环/调价采纳率，产出复盘报告草稿。</div>
+              <div class="rowbet" style="margin-top:8px"><span class="chip go">已安装</span><span class="tiny">陈经理 安装</span></div>
+            </div>
+          </div>
+          <div class="sub" style="margin-bottom:8px">行业共享 · 铜边（已脱敏 ✓）</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+            <div class="card cardpad" style="border-color:rgba(200,132,66,.45)">
+              <div class="rowbet"><b class="small">旺季满房冲刺包</b><span class="chip">v2.1.0</span></div>
+              <div class="tiny" style="margin-top:5px">华东酒店联盟共享：竞对盯价 + 满房溢价节奏 + 差评快反 SOP。</div>
+              <div class="tiny" style="margin-top:4px">326 店在用 · 采纳率公开 · 绑定 R1/R2</div>
+              <div class="rowbet" style="margin-top:8px"><span class="chip warn">待安装</span><button class="btn gold" style="padding:2px 10px;font-size:11px" onclick="toast('已安装「旺季满房冲刺包」（围栏绑定 R1/R2 随安装生效）')">安装</button></div>
+            </div>
+          </div>
+        </main>
+        <aside class="col-r">
+          <div class="colhead">三要素 · FORGE</div>
+          <div class="card cardpad"><div class="tiny" style="line-height:2">触发（何时用）<br>步骤（怎么做）<br>边界（什么不做）→ 自动转围栏声明<br>卸载即撤销围栏绑定</div></div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ============ #p8 船员名册（镜像 pages/p8/P8.tsx，路由 /p8） ============ -->
+    <div class="view" id="v-p8">
+      <div class="cols">
+        <aside class="col-l">
+          <div class="colhead">名册 · ROSTER</div>
+          <div class="litem"><div class="small">人类成员 ×3</div><div class="tiny">三端权限一致</div></div>
+          <div class="litem"><div class="small">Agent 成员 ×7</div><div class="tiny">人机混编 · 一等公民</div></div>
+          <button class="btn gold" style="width:100%;margin-top:6px" onclick="toast('加装 preset → 舰船换装坞 P7（行业 Bundle 分发）')">＋ 加装 preset</button>
+        </aside>
+        <main class="col-c">
+          <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px">
+            <span class="h1">船员名册</span><span class="sub">P8 · 路由 /p8 · 人机混编通讯录</span>
+          </div>
+          <div class="sub" style="margin-bottom:8px">人类成员</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
+            <div class="card cardpad"><div style="display:flex;gap:10px;align-items:center"><span class="avatar-r">王</span><div><b class="small">王店长</b><div class="tiny">MEM-001 · 经营者</div></div></div><div class="tiny" style="margin-top:8px">近 24h 有事件留痕 · 在线（事件推导，不伪造在线态）</div></div>
+            <div class="card cardpad"><div style="display:flex;gap:10px;align-items:center"><span class="avatar-r">陈</span><div><b class="small">陈经理</b><div class="tiny">MEM-002 · 经理</div></div></div><div class="tiny" style="margin-top:8px">近 24h 有事件留痕 · 在线</div></div>
+            <div class="card cardpad"><div style="display:flex;gap:10px;align-items:center"><span class="avatar-r">李</span><div><b class="small">李前台</b><div class="tiny">MEM-003 · 只读成员</div></div></div><div class="tiny" style="margin-top:8px">只读权限 · 隐藏全部写入口</div></div>
+          </div>
+          <div class="sub" style="margin-bottom:8px">Agent 成员（点卡看档案）</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px" id="agentCards"></div>
+        </main>
+        <aside class="col-r">
+          <div class="colhead">工时口径 · L6.3</div>
+          <div class="card cardpad"><div class="tiny" style="line-height:2">30 天工时 = 动作数 / 采纳率 / 积分 · 峰谷占比，全部事件库聚合投影；夜班窗口 22:00–08:00 内夜班 preset 自动上线 · 青脉冲；只读 preset 标绿无写工具。</div></div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ============ #p9 守夜战队（镜像 pages/p9/P9.tsx，路由 /p9） ============ -->
+    <div class="view" id="v-p9">
+      <div class="cols">
+        <aside class="col-l">
+          <div class="colhead">夜班班组 · ON DUTY</div>
+          <div id="nightCrew"></div>
+        </aside>
+        <main class="col-c">
+          <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px">
+            <span class="h1">守夜战队频道</span><span class="sub">P9 · 路由 /p9 · AI–AI 协作现场</span>
+            <span style="flex:1"></span>
+            <button class="btn alert" id="p9brake" onclick="armBrake()">一键暂停（二次确认）</button>
+          </div>
+          <div class="tiny" style="border-left:2px solid rgba(69,224,255,.4);padding-left:10px;margin-bottom:12px">夜班窗口 22:00–08:00 · 每条带 #E 编号与回执位 · 夜班动作 100% 过围栏，无例外通道</div>
+          <div style="display:flex;flex-direction:column;gap:10px" id="p9flow"></div>
+        </main>
+        <aside class="col-r">
+          <div class="colhead">班组状态 · SHIFT</div>
+          <div class="card cardpad" style="margin-bottom:10px">
+            <div class="rowbet"><span class="small">昨夜班次</span><span class="chip go">战报已生成</span></div>
+            <div class="tiny" style="margin-top:6px">候选 14 项 · ✓9 ◆3 ▲2<br>积分 96/118 · 峰谷计量 夜间档</div>
+          </div>
+          <div class="card cardpad" style="margin-bottom:10px">
+            <div style="font-size:11px;font-weight:700;color:var(--holo);margin-bottom:6px">围栏快照</div>
+            <div class="mono tiny">hotel-baseline/v1（可回溯当晚版本）</div>
+          </div>
+          <div class="card cardpad" style="margin-bottom:10px">
+            <div style="font-size:11px;font-weight:700;color:var(--holo);margin-bottom:6px">触发器 ×6</div>
+            <div class="tiny" style="line-height:2" id="triggerList"></div>
+          </div>
+          <div class="card cardpad">
+            <div style="font-size:11px;font-weight:700;color:var(--holo);margin-bottom:6px">交接班预告</div>
+            <div class="tiny">每天 08:30 生成夜班战报 → 掌上战报 P3</div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ============ #p21 董事长视图（镜像 pages/p21/P21.tsx，路由 /p21） ============ -->
+    <div class="view" id="v-p21">
+      <div class="cols">
+        <aside class="col-l">
+          <div class="colhead">董事长视图 · CHAIRMAN</div>
+          <div class="litem"><div class="small">治理状态</div><div class="tiny">宪章与授权</div></div>
+          <div class="litem"><div class="small">简报流</div><div class="tiny">晨报 / 节拍</div></div>
+          <div class="litem"><div class="small">待审分层</div><div class="tiny">L2 / L3 / L4</div></div>
+          <div class="litem"><div class="small">成绩单</div><div class="tiny">命中率回测</div></div>
+        </aside>
+        <main class="col-c">
+          <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px">
+            <span class="h1">董事长视图</span><span class="sub">P21 · 路由 /p21 · 数字CEO 治理</span>
+          </div>
+          <div class="card cardpad" style="margin-bottom:12px">
+            <div class="sub" style="margin-bottom:8px">治理状态</div>
+            <div class="rowbet">
+              <span class="chip gold" style="font-size:12px;padding:3px 10px">试用期（边界降一档）</span>
+              <span class="tiny">签署人 王店长 MEM-001 · 9 天前 · 试用剩余 5 天</span>
+            </div>
+            <div class="tiny" style="margin-top:8px;line-height:1.9">自主域：调价带宽 0.85–1.15 · 采购上限 ¥5000 · 活动上限 ¥2000；升级线：修改保底价 / 单月让利超限 / 围栏放宽 / 新渠道上线 / 对外承诺 / 宪章变更。熔断器：14 天窗口 OCC 低于 70% 自动收紧。</div>
+            <div style="margin-top:10px;display:flex;gap:8px">
+              <button class="btn gold" onclick="toast('深度授权六步向导：披露 → 条款 → 边界 → 熔断 → 签署 → 留痕（不可篡改）')">深度授权向导</button>
+              <button class="btn alert" onclick="confirmRevoke()">一键撤回授权</button>
+            </div>
+          </div>
+          <div class="card cardpad" style="margin-bottom:12px">
+            <div class="sub" style="margin-bottom:8px">简报流 · CEO 晨报（每天 08:30）</div>
+            <div class="small" style="line-height:1.9">董事长，早报已备：昨夜班组完成 14 项作业（评论/巡检/对账各线正常），1 件差评处置请您拍板；本周 OCC 与 RevPAR 趋势见节拍控制台。试用期边界降一档执行中。</div>
+            <div class="tiny" style="margin-top:6px">事件 <span class="mono">···8999</span> · 公司CEO · 回执已同步</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+            <div class="card cardpad">
+              <div class="sub" style="margin-bottom:8px">待审分层</div>
+              <div class="tiny" style="line-height:2.1">L2 公司CEO 裁决 <b class="small">3</b> 件<br>L3 集团CEO <b class="small">0</b> 件<br><b style="color:var(--gold)">L4 请示董事长 1 件</b></div>
+              <button class="btn gold" style="margin-top:8px" onclick="location.hash='#p0'">去剧场裁决 →</button>
+            </div>
+            <div class="card cardpad">
+              <div class="sub" style="margin-bottom:8px">成绩单（命中率回测）</div>
+              <div class="tiny" style="line-height:2.1">裁决 12 件 · 采纳 10 · 驳回 2<br>节拍命中率 <b style="color:var(--go)">86%</b><br>自治积分消耗 环比 <span class="down">▼ 12%</span></div>
+            </div>
+          </div>
+          <div class="card cardpad">
+            <div class="sub" style="margin-bottom:8px">节拍手动触发</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              <button class="btn" onclick="toast('已触发节拍：晨报（留痕）')">晨报</button>
+              <button class="btn" onclick="toast('已触发节拍：L2 裁决（留痕）')">L2 裁决</button>
+              <button class="btn" onclick="toast('已触发节拍：偏差扫描（留痕）')">偏差扫描</button>
+              <button class="btn" onclick="toast('已触发节拍：熔断巡检（留痕）')">熔断巡检</button>
+              <button class="btn" onclick="toast('已触发节拍：命中率回测（留痕）')">命中率回测</button>
+              <button class="btn" onclick="toast('已触发节拍：绩效评议（留痕）')">绩效评议</button>
+              <button class="btn" onclick="toast('已触发节拍：董事会包（留痕）')">董事会包</button>
+              <button class="btn" onclick="toast('已触发节拍：扩编扫描（留痕）')">扩编扫描</button>
+              <button class="btn" onclick="toast('已触发节拍：周经营会（留痕）')">周经营会</button>
+            </div>
+          </div>
+        </main>
+        <aside class="col-r">
+          <div class="colhead">授权宪章 · CHARTER</div>
+          <div class="card cardpad"><div class="tiny" style="line-height:2">条款：自主调价 / 自主采购 / 自主对外回复 / 试用降档规则 / AI 非法律责任主体·授权人承担经营决策责任。<br><br>披露版本 risk-v1 · 影子期 3 天 · 试用期 7 天</div></div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ============ #p22 服务前台（镜像 pages/p22/P22.tsx，路由 /p22） ============ -->
+    <div class="view" id="v-p22">
+      <div class="cols">
+        <aside class="col-l">
+          <div class="colhead">服务前台 · SERVICE DESK</div>
+          <div class="litem" id="p22tab-kb" style="border-color:var(--gline);background:rgba(233,181,88,.06)" onclick="p22tab('kb')"><div class="small">▤ 知识中台</div><div class="tiny">集合 3 · 文档 13 · 待审 1</div></div>
+          <div class="litem" id="p22tab-tk" onclick="p22tab('tk')"><div class="small">▦ 工单台</div><div class="tiny">在列 8 · SLA 超时 1</div></div>
+          <div class="litem" id="p22tab-st" onclick="p22tab('st')"><div class="small">▥ 服务报表</div><div class="tiny">会话 6 · 问答 8</div></div>
+          <button class="btn" style="width:100%;margin-top:8px" onclick="location.hash='#p1'">← 返回主甲板</button>
+        </aside>
+        <main class="col-c">
+          <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px">
+            <span class="h1">服务前台</span><span class="sub">P22 · 路由 /p22 · 知识中台与工单台 · B 端管理</span>
+          </div>
+          <!-- C 端入口卡 -->
+          <div class="card cardpad" style="border-color:var(--gline);margin-bottom:14px;display:flex;gap:14px;align-items:center">
+            <svg class="qr" viewBox="-1 -1 14 14" aria-label="二维码占位"><path id="qrPath" fill="#0a1230"/></svg>
+            <div style="flex:1">
+              <b class="small">◉ C 端服务前台入口</b>
+              <div class="tiny" style="margin-top:3px">小程序级 H5：<span class="mono" style="color:var(--holo)">/app/c ↗</span> —— 知识问答（带引用、不臆造）· 订单/会员查询 · 工单流转与结果推送</div>
+              <div style="display:flex;gap:6px;margin-top:7px">
+                <span class="chip go">H5 已就绪</span><span class="chip">微信小程序 · 待配置</span><span class="chip">支付宝 · 待配置</span>
+              </div>
+            </div>
+            <button class="btn goldgrad" onclick="toast('打开 C 端服务前台（/app/c）')">打开 C 端 ↗</button>
+          </div>
+          <div style="display:flex;gap:8px;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:14px">
+            <button class="tabbtn cur" id="tb-kb" onclick="p22tab('kb')">▤ 知识库</button>
+            <button class="tabbtn" id="tb-tk" onclick="p22tab('tk')">▦ 工单台</button>
+            <button class="tabbtn" id="tb-st" onclick="p22tab('st')">▥ 服务报表</button>
+          </div>
+
+          <!-- 知识库区块 -->
+          <div id="p22-kb">
+            <div class="small" style="font-weight:700;margin-bottom:8px">知识集合（3）</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px" id="colChips">
+              <button class="btn holo" style="padding:3px 10px;font-size:12px" onclick="colFilter('',this)">全部</button>
+              <button class="btn" style="padding:3px 10px;font-size:12px" onclick="colFilter('faq',this)" title="十大类 385 条住客高频问题与标准答案（AI 服务前台核心知识源）">住客常见问答 · 10 文档 385 块</button>
+              <button class="btn" style="padding:3px 10px;font-size:12px" onclick="colFilter('cat',this)" title="送物清单、餐饮、康体 SPA 等服务与价格">商品与服务目录 · 3 文档</button>
+              <button class="btn" style="padding:3px 10px;font-size:12px" onclick="colFilter('site',this)" title="官网抓取来源">官网源 · 每天 03:00 抓取</button>
+            </div>
+            <div class="small" style="font-weight:700;margin-bottom:8px">文档（<span id="docCount">13</span>）</div>
+            <div class="card" style="margin-bottom:14px;overflow:hidden">
+              <table class="grid">
+                <thead><tr><th>标题</th><th>来源</th><th>版本</th><th>状态</th><th>切块数</th><th></th></tr></thead>
+                <tbody id="docRows"></tbody>
+              </table>
+            </div>
+            <!-- 待审区 -->
+            <div class="small" style="font-weight:700;margin-bottom:8px">待审区（待审核 · 1）</div>
+            <div class="card cardpad" style="border-color:rgba(255,190,106,.35);margin-bottom:14px" id="pendDoc">
+              <div style="display:flex;align-items:center;gap:12px">
+                <span style="font-size:16px">▧</span>
+                <div style="flex:1">
+                  <div class="small">云栖酒店住客服务须知 <span class="mono tiny">v2</span></div>
+                  <div class="tiny">手工录入 · 提交于 今天 09:12</div>
+                </div>
+                <button class="btn go" onclick="approveDoc()">✓ 批准生效</button>
+              </div>
+              <div class="tiny" style="margin-top:6px">批准即发布：文档状态/五元事件/approvals 审批行三写同一 COMMIT（围栏动作「发布知识文档」，审批台可见）。</div>
+            </div>
+            <!-- 官网源 + 试检索 -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div class="card cardpad">
+                <div style="font-size:12px;font-weight:700;color:var(--holo);margin-bottom:8px">◎ 官网源（登记 / 立即抓取 / 检查更新）</div>
+                <div style="display:flex;gap:8px">
+                  <input style="flex:1" id="siteIn" value="https://www.yunqi-hotel.example" readonly>
+                  <button class="btn gold" onclick="toast('抓取源已登记：···site（指纹 fp-a91c）')">登记</button>
+                </div>
+                <div style="display:flex;gap:8px;margin-top:8px">
+                  <button class="btn holo" onclick="toast('抓取完成：结构化条目入知识库（LLM 结构化正常）')">⚡ 立即抓取</button>
+                  <button class="btn" onclick="toast('指纹比对：官网暂无更新')">◎ 检查更新</button>
+                </div>
+                <div class="tiny" style="margin-top:8px">调度 每天 03:00 · 状态 <span style="color:var(--go)">运行中</span></div>
+              </div>
+              <div class="card cardpad">
+                <div style="font-size:12px;font-weight:700;color:var(--holo);margin-bottom:8px">◎ 试检索（混合检索投影）</div>
+                <div style="display:flex;gap:8px">
+                  <input style="flex:1" id="qIn" value="早餐在哪里吃" onkeydown="if(event.key==='Enter')doSearch()">
+                  <button class="btn goldgrad" onclick="doSearch()">检索</button>
+                </div>
+                <div id="hits" style="margin-top:8px;display:flex;flex-direction:column;gap:6px"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 工单台区块 -->
+          <div id="p22-tk" style="display:none">
+            <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px">
+              <span class="small" style="font-weight:700">状态</span>
+              <button class="btn holo" style="padding:2px 9px;font-size:11px" onclick="tkFilter('',this)">全部</button>
+              <button class="btn" style="padding:2px 9px;font-size:11px" onclick="tkFilter('已受理',this)">已受理</button>
+              <button class="btn" style="padding:2px 9px;font-size:11px" onclick="tkFilter('已分派',this)">已分派</button>
+              <button class="btn" style="padding:2px 9px;font-size:11px" onclick="tkFilter('处理中',this)">处理中</button>
+              <button class="btn" style="padding:2px 9px;font-size:11px" onclick="tkFilter('已完成',this)">已完成</button>
+              <button class="btn" style="padding:2px 9px;font-size:11px" onclick="tkFilter('已关闭',this)">已关闭</button>
+              <span style="color:var(--line);margin:0 6px">|</span>
+              <span class="small" style="font-weight:700">部门</span>
+              <button class="btn" style="padding:2px 9px;font-size:11px" onclick="toast('已按部门过滤')">客服部</button>
+              <button class="btn" style="padding:2px 9px;font-size:11px" onclick="toast('已按部门过滤')">工程部</button>
+              <button class="btn" style="padding:2px 9px;font-size:11px" onclick="toast('已按部门过滤')">客房部</button>
+              <button class="btn" style="padding:2px 9px;font-size:11px" onclick="toast('已按部门过滤')">前厅部</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px" id="tkList"></div>
+          </div>
+
+          <!-- 服务报表区块 -->
+          <div id="p22-st" style="display:none">
+            <div class="small" style="font-weight:700;margin-bottom:10px">今日运营总览（2026-08-25 · 会话/工单聚合投影）</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px">
+              <div class="metric"><div class="tiny">今日会话</div><div class="v" style="color:var(--holo)">6</div></div>
+              <div class="metric"><div class="tiny">问答量</div><div class="v" style="color:var(--holo)">8</div></div>
+              <div class="metric"><div class="tiny">平均置信度</div><div class="v">93%</div><div class="tiny" style="margin-top:2px">高置信</div></div>
+              <div class="metric"><div class="tiny">有据率（带引用回答）</div><div class="v" style="color:var(--go)">100%</div></div>
+              <div class="metric"><div class="tiny">平均首答延迟</div><div class="v">25ms</div></div>
+              <div class="metric"><div class="tiny">今日工单</div><div class="v">8</div></div>
+              <div class="metric"><div class="tiny">工单完结率</div><div class="v" style="color:var(--go)">38%</div></div>
+              <div class="metric"><div class="tiny">SLA 超时</div><div class="v" style="color:var(--alert)">1</div><div class="tiny" style="margin-top:2px">需立即介入</div></div>
+              <div class="metric"><div class="tiny">满意度均分</div><div class="v">5</div><div class="tiny" style="margin-top:2px">C 端办结评价</div></div>
+            </div>
+            <!-- 今日会话 ×6（种子运行态：多客群全链路） -->
+            <div class="small" style="font-weight:700;margin-bottom:8px">今日会话（6 · 住客/会员多客群）</div>
+            <div class="card" style="margin-bottom:14px;overflow:hidden">
+              <table class="grid">
+                <thead><tr><th>住客</th><th>客群/会员</th><th>渠道</th><th>主题</th><th>意图</th><th>置信度</th><th>状态</th></tr></thead>
+                <tbody>
+                  <tr><td>张伟</td><td class="tiny">金卡 M-GOLD-10086</td><td class="tiny">微信小程序</td><td>退房时间咨询（金卡可延至 14:00）+ 早餐</td><td class="tiny">知识问答</td><td class="orb" style="color:var(--holo)">95%</td><td><span class="chip holo">进行中</span></td></tr>
+                  <tr><td>住客小李</td><td class="tiny">游客</td><td class="tiny">H5</td><td>8306 空调报修 → 转维修工单</td><td class="tiny">服务请求</td><td class="orb" style="color:var(--holo)">91%</td><td><span class="chip holo">进行中</span></td></tr>
+                  <tr><td>李女士</td><td class="tiny">金卡 M-GOLD-31520</td><td class="tiny">微信小程序</td><td>早餐儿童收费 + WiFi 密码</td><td class="tiny">知识问答</td><td class="orb" style="color:var(--holo)">96%</td><td><span class="chip holo">进行中</span></td></tr>
+                  <tr><td>王总</td><td class="tiny">白金卡 M-PLAT-20888</td><td class="tiny">微信小程序</td><td>送矿泉水×2 + 牙具到 2508 → 送物工单</td><td class="tiny">服务请求</td><td class="orb" style="color:var(--holo)">93%</td><td><span class="chip holo">进行中</span></td></tr>
+                  <tr><td>Mr. Smith</td><td class="tiny">外籍游客</td><td class="tiny">H5</td><td>英文报修：1832 房空调不制冷 → 加急工单</td><td class="tiny">服务请求</td><td class="orb" style="color:var(--holo)">90%</td><td><span class="chip holo">进行中</span></td></tr>
+                  <tr><td>张先生</td><td class="tiny">游客</td><td class="tiny">支付宝</td><td>萧山机场交通方案与费用</td><td class="tiny">知识问答</td><td class="orb" style="color:var(--holo)">92%</td><td><span class="chip holo">进行中</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <!-- 通知 ×8（推送箱：已送达投影） -->
+            <div class="small" style="font-weight:700;margin-bottom:8px">通知推送箱（8 · 模拟通道）</div>
+            <div class="card" style="margin-bottom:14px;overflow:hidden">
+              <table class="grid">
+                <thead><tr><th>编号</th><th>住客</th><th>内容</th><th>状态</th></tr></thead>
+                <tbody>
+                  <tr><td class="mono tiny">···001</td><td>住客小李</td><td class="tiny">维修工单「8306 空调不制冷」已受理，工程部王师傅处理中</td><td><span class="chip go">已送达</span></td></tr>
+                  <tr><td class="mono tiny">···002</td><td>住客小李</td><td class="tiny">投诉工单「隔壁房间深夜噪音扰民」已办结：已沟通提醒并赠果盘致歉</td><td><span class="chip go">已送达</span></td></tr>
+                  <tr><td class="mono tiny">···003</td><td>张伟</td><td class="tiny">送物工单「送两瓶矿泉水到 1208」已受理，客房部将尽快送达</td><td><span class="chip go">已送达</span></td></tr>
+                  <tr><td class="mono tiny">···004</td><td>王总</td><td class="tiny">送物工单「送矿泉水×2 + 牙刷套装到 2508」已办结：机器人送达并电话确认</td><td><span class="chip go">已送达</span></td></tr>
+                  <tr><td class="mono tiny">···005</td><td>Mr. Smith</td><td class="tiny">维修工单「1832 房空调不制冷」已受理（加急），工程部王师傅处理中</td><td><span class="chip go">已送达</span></td></tr>
+                  <tr><td class="mono tiny">···006</td><td>李女士</td><td class="tiny">送物工单「儿童餐椅 + 温奶器送到 1208」已受理，客房部将尽快送达</td><td><span class="chip go">已送达</span></td></tr>
+                  <tr><td class="mono tiny">···007</td><td>张先生</td><td class="tiny">维修工单「2021 房 WiFi 频繁掉线」受理超时已升级加急，值班经理介入督办</td><td><span class="chip go">已送达</span></td></tr>
+                  <tr><td class="mono tiny">···008</td><td>王总</td><td class="tiny">送机预约已完成，行程单已推送至微信</td><td><span class="chip go">已送达</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <!-- 评测指标卡（金标集） -->
+            <div class="card cardpad" style="border-color:var(--gline);margin-bottom:14px">
+              <div class="sub" style="margin-bottom:8px">金标评测 · v2.0-faq385（385 问回归）</div>
+              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+                <div class="metric"><div class="tiny">忠实度</div><div class="v" style="color:var(--go)">100%</div></div>
+                <div class="metric"><div class="tiny">答案相关性</div><div class="v" style="color:var(--go)">100%</div></div>
+                <div class="metric"><div class="tiny">有据率</div><div class="v" style="color:var(--go)">100%</div></div>
+                <div class="metric"><div class="tiny">安全合规</div><div class="v" style="color:var(--go)">100%</div></div>
+              </div>
+              <div class="tiny" style="margin-top:8px">p95 首答延迟 <b style="color:var(--holo)">39ms</b> · 满意度 <b style="color:var(--gold)">5.0</b> · 语料 住客常见问答 385 块全量回归</div>
+            </div>
+            <div class="card cardpad">
+              <div style="font-size:12px;font-weight:700;color:var(--holo);margin-bottom:8px">解读</div>
+              <div class="tiny" style="line-height:2.1">
+                <span style="color:var(--go)">· 有据率 100% 达标——回答基本带知识引用，不臆造。</span><br>
+                <span style="color:var(--alert)">· SLA 超时 1 单——请到工单台优先处理超时工单（···007 已升级加急，值班经理介入督办）。</span><br>
+                · 今日工单 8 单，完结率 38%，满意度均分 5。<br>
+                · 平均首答延迟 25ms（会话消息投影）。
+              </div>
+            </div>
+          </div>
+        </main>
+        <aside class="col-r">
+          <div class="colhead">数据口径 · GOVERNANCE</div>
+          <div class="card cardpad" style="margin-bottom:10px"><div class="tiny" style="line-height:1.9">全部数据来自 service 路由；写操作落五元事件，批准生效联动 approvals 审批台。</div></div>
+          <div class="card cardpad" style="margin-bottom:10px"><div class="tiny" style="margin-bottom:2px">待审知识</div><b class="orb" style="font-size:16px;color:var(--warn)">1</b> <span class="tiny">篇（待审核）</span></div>
+          <div class="card cardpad" style="margin-bottom:10px"><div class="tiny" style="margin-bottom:2px">SLA 超时</div><b class="orb" style="font-size:16px;color:var(--alert)">1</b> <span class="tiny">单</span></div>
+          <div class="card cardpad"><div class="tiny" style="margin-bottom:2px">工单状态机</div><div class="tiny" style="line-height:1.9">新建 → 已分派 → 处理中 → 已完成/已关闭；非法跃迁拒绝。</div></div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- 桥内实况条（LiveTicker 口径：动作全部经 display.ts 中文化） -->
+    <div class="ticker"><div class="in" id="tickerIn2"></div></div>
+  </div>
+</div>
+</div>
+
+<!-- 星环悬浮球（演示快捷导航 · 非生产组件，仅作视图直达） -->
+<div class="orb-menu" id="orbMenu">
+  <div class="t">星环 · DEMO 快捷（真实路由）</div>
+  <a href="#p0">经营剧场 <i>/</i></a>
+  <a href="#floor">等距职场 <i>/</i></a>
+  <a href="#p1">主甲板 <i>/p1</i></a>
+  <a href="#p4">决断队列 <i>/p4</i></a>
+  <a href="#p9">守夜战队 <i>/p9</i></a>
+  <a href="#p21">董事长视图 <i>/p21</i></a>
+  <a href="#p22">服务前台 <i>/p22</i></a>
+</div>
+<div class="orb-ball" id="orbBall" title="星环快捷导航" onclick="document.getElementById('orbMenu').classList.toggle('on')">✦</div>
+
+<!-- 员工绩效卡弹层（镜像 P0 绩效卡） -->
+<div class="mask" id="perfMask" onclick="if(event.target===this)this.classList.remove('on')">
+  <div class="modal">
+    <div style="font-size:14px;font-weight:700" id="perfName">—</div>
+    <div class="tiny" style="margin-top:2px" id="perfKey">—</div>
+    <div class="small" style="margin-top:8px">绩效态：<b id="perfGrade">正常</b></div>
+    <a href="#p8" class="btn holo" style="display:flex;justify-content:center;margin-top:12px" onclick="document.getElementById('perfMask').classList.remove('on')">去名册看全部（工作台 P8）</a>
+    <button class="btn" style="width:100%;margin-top:8px" onclick="document.getElementById('perfMask').classList.remove('on')">关闭</button>
+  </div>
+</div>
+<!-- 职场请示卡弹层（镜像 P0 askPick 弹层） -->
+<div class="mask" id="askMask" onclick="if(event.target===this)this.classList.remove('on')">
+  <div class="modal amber">
+    <div style="font-size:11px;letter-spacing:.2em;color:var(--warn)">请您决策 · 董事长级</div>
+    <div style="font-size:14px;font-weight:700;margin-top:4px">评价Agent</div>
+    <div class="small" style="margin-top:4px">差评回复发布请示：携程 2 分评价（R6 差评必审）</div>
+    <div class="mono tiny" style="margin-top:4px">apr ···8853</div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn go" style="flex:1" onclick="decideFloor('approve')">✓ 批准</button>
+      <button class="btn warn" style="flex:1" onclick="decideFloor('reject')">✕ 驳回</button>
+    </div>
+    <button class="btn" style="width:100%;margin-top:8px" onclick="document.getElementById('askMask').classList.remove('on')">稍后</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ================= 数据（全部镜像 seeds / bundles 真实口径） ================= */
+const AGENTS = [
+  {key:"pricing-agent",   name:"调价Agent", v:"v2.3", night:true,  ro:false, grade:"表扬", desc:"收益管理师。涨幅 ≤8% 自动，越线挂起。", fences:["R1","R2"], acts:42, adopt:"91%"},
+  {key:"review-agent-x",  name:"评价Agent", v:"v1.8", night:true,  ro:false, grade:"关注", desc:"公关专员。差评（≤3 分）必审挂起。", fences:["R6"], acts:28, adopt:"86%"},
+  {key:"reconcile-agent", name:"对账Agent", v:"v2.0", night:true,  ro:false, grade:"正常", desc:"司库。夜间对账三轮比对；大额退款必审。", fences:["R4","R5"], acts:19, adopt:"95%"},
+  {key:"inspection-agent",name:"巡检Agent", v:"v1.2", night:true,  ro:true,  grade:"正常", desc:"斥候。每天 07:00 只读巡检，异常分级推送。", fences:[], acts:14, adopt:"100%"},
+  {key:"competitor-agent",name:"竞对Agent", v:"v1.1", night:true,  ro:true,  grade:"正常", desc:"侦察兵。竞对采集，频次自律 ≥3s。", fences:[], acts:22, adopt:"—"},
+  {key:"content-agent",   name:"内容Agent", v:"v1.5", night:false, ro:false, grade:"表扬", desc:"文书。首图/详情页生产发布；新渠道首发必审。", fences:["R3"], acts:16, adopt:"88%"},
+  {key:"desktop-agent",   name:"桌面Agent", v:"v0.9", night:false, ro:false, grade:"辅导", desc:"机甲师。桌面 GUI 兜底；高危动作逐次授权。", fences:[], acts:3, adopt:"67%"},
+];
+const SATS = [
+  {name:"调价Agent", grade:"表扬"},{name:"评价Agent", grade:"关注"},{name:"对账Agent", grade:"正常"},
+  {name:"巡检Agent", grade:"正常"},{name:"竞对Agent", grade:"正常"},{name:"内容Agent", grade:"表扬"},{name:"桌面Agent", grade:"辅导"},
+];
+const TICKER = [
+  ["调整房价","调价Agent"],["夜班记录","对账Agent"],["生成夜班战报","系统"],["CEO 晨报","公司CEO"],
+  ["创建工单","服务台Agent"],["检索知识库","服务台Agent"],["回复评论","评价Agent"],["触发定时任务","系统"],
+  ["CEO 裁决","王店长"],["办结工单","王师傅"],["巡检正常项 6/8","巡检Agent"],["推进工单","配送机器人·小云"],
+];
+const BRIEF = "董事长，早报已备：昨夜班组完成 14 项作业（评论/巡检/对账各线正常），1 件差评处置请您拍板；本周 OCC 与 RevPAR 趋势见节拍控制台。试用期边界降一档执行中。";
+/* 围栏 R1–R6（bundles/hotel/fences/hotel-baseline.yml；级别经 display.ts FENCE_LEVEL_TEXT 中文化） */
+const FENCES = [
+  ["R1","房价单日涨幅自动上限","自动放行","涨幅 ≤8% 自动执行","基线 · 锁",37,"go"],
+  ["R2","保底价熔断","硬阻断","低于 ¥380 命中即熔断+告警","基线 · 锁",2,"alert"],
+  ["R3","新渠道首次改价/发布必审","人工复核","新渠道首改必审","基线 · 锁",5,"warn"],
+  ["R4","大额退款必审","人工复核","退款 ≥¥500 必审","基线 · 锁",3,"warn"],
+  ["R5","担保订单异常需介入","硬阻断","不确定不执行，只写「需介入」","基线 · 锁",1,"alert"],
+  ["R6","差评必审","人工复核","差评 ≤3 分必审","基线 · 锁",9,"warn"],
+];
+const TRIGGERS = [
+  ["每日 07:00 只读巡检","每天 07:00"],["夜班 22:00 战队出征","每天 22:00"],
+  ["公司CEO 晨报 08:30","每天 08:30"],["公司CEO 裁决巡检","7 */2 * * *"],
+  ["公司CEO 目标偏差扫描","15 */4 * * *"],["公司CEO 自治熔断巡检","每天 23:45"],
+];
+/* 知识库文档（bundles/hotel/service-front 全量预置口径：FAQ 10 文档 385 块 + 目录 3 文档） */
+const DOCS = [
+  ["住客常见问答·餐饮美食","手工录入",1,"生效中",44,"faq"],["住客常见问答·网络与设施","手工录入",1,"生效中",38,"faq"],
+  ["住客常见问答·交通位置","手工录入",1,"生效中",44,"faq"],["住客常见问答·酒店特色与服务","手工录入",1,"生效中",38,"faq"],
+  ["住客常见问答·周边攻略","手工录入",1,"生效中",40,"faq"],["住客常见问答·入住与退房","手工录入",1,"生效中",40,"faq"],
+  ["住客常见问答·客房设施与用品","手工录入",1,"生效中",38,"faq"],["住客常见问答·送物服务","手工录入",1,"生效中",32,"faq"],
+  ["住客常见问答·维修报修","手工录入",1,"生效中",30,"faq"],["住客常见问答·会员与账务","手工录入",1,"生效中",41,"faq"],
+  ["商品与服务目录","手工录入",1,"生效中",4,"cat"],["送物服务全目录（46 种）","手工录入",1,"生效中",4,"cat"],
+  ["维修报修指引（56 项）","手工录入",1,"生效中",5,"cat"],
+];
+/* 工单 ×8（种子运行态：状态/优先级/部门/处理人均真实；状态经 TICKET_STATUS_TEXT 中文化） */
+const TICKETS = [
+  {id:"···001", st:"处理中", kind:"维修报修", pri:"加急",  title:"8306 空调不制冷", dept:"工程部", who:"王师傅", sla:"今天 14:00", overdue:false, timeline:[["创建工单","住客 · 住客小李","用户对话中建单"],["分派工单","AI 员工 · 服务台Agent","智能分派 → 工程部"],["推进工单","员工 · 王师傅","已接单，携带工具前往 8306"]]},
+  {id:"···002", st:"已分派", kind:"送物服务", pri:"",     title:"送两瓶矿泉水到 1208", dept:"客房部", who:"", sla:"今天 14:00", overdue:false, timeline:[["创建工单","住客 · 张伟","服务台自助提交"],["分派工单","AI 员工 · 服务台Agent","智能分派 → 客房部"]]},
+  {id:"···003", st:"已完成", kind:"投诉建议", pri:"加急",  title:"隔壁房间深夜噪音扰民", dept:"值班经理", who:"刘经理", sla:"—", overdue:false, rate:5, timeline:[["创建工单","住客 · 住客小李","投诉类必建单"],["办结工单","员工 · 刘经理","已沟通提醒并赠果盘致歉"],["工单满意度评价","住客 · 住客小李","满意度 5 星"]]},
+  {id:"···004", st:"已完成", kind:"送物服务", pri:"",     title:"送矿泉水×2 + 牙刷套装到 2508", dept:"客房部", who:"配送机器人·小云", sla:"—", overdue:false, rate:5, timeline:[["创建工单","住客 · 王总","对话中确认送物"],["办结工单","员工 · 配送机器人·小云","已送达 2508 并电话确认"]]},
+  {id:"···005", st:"处理中", kind:"维修报修", pri:"加急",  title:"1832 房空调不制冷", dept:"工程部", who:"王师傅", sla:"今天 13:30", overdue:false, timeline:[["创建工单","住客 · Mr. Smith","对话中建单（加急）"],["推进工单","员工 · 王师傅","已携检测设备前往 1832"]]},
+  {id:"···006", st:"已分派", kind:"送物服务", pri:"",     title:"儿童餐椅 + 温奶器送到 1208", dept:"客房部", who:"", sla:"今天 15:00", overdue:false, timeline:[["创建工单","住客 · 李女士","服务台自助提交"],["分派工单","AI 员工 · 服务台Agent","智能分派 → 客房部"]]},
+  {id:"···007", st:"已受理", kind:"维修报修", pri:"",     title:"2021 房 WiFi 频繁掉线", dept:"", who:"", sla:"已超时", overdue:true, timeline:[["创建工单","住客 · 张先生","支付宝小程序提交"],["工单超时升级","系统","受理超时已升级为加急，值班经理介入督办"]]},
+  {id:"···008", st:"已完成", kind:"其他需求", pri:"加急",  title:"预约 08-26 06:30 送机（萧山 T3，7 座商务）", dept:"前厅部", who:"礼宾-小周", sla:"—", overdue:false, rate:5, timeline:[["创建工单","住客 · 王总","电话登记转入"],["办结工单","员工 · 礼宾-小周","送机完成，行程单已推送"]]},
+];
+const P4_ITEMS = [
+  {st:"待裁决", chip:"warn", title:"差评回复发布（携程 2 分）", id:"···8853", rule:"R6 差评必审 · hotel-baseline/v1",
+   before:"（尚未发布）", after:"非常抱歉给您带来不好的体验，我们已核实空调异响问题并安排检修……",
+   why:"依据事件 ···8852 · 引用记忆「差评回复结构」 · 标准档 1 积分 · 影响面：对外可见回复 ×1 · 回执位：发布成功后回写快照"},
+  {st:"待裁决", chip:"warn", title:"大额退款 ¥860（到店无房）", id:"···8857", rule:"R4 大额退款必审 · hotel-baseline/v1",
+   before:"订单 ¥860 在住", after:"全额退款 ¥860（协商一致）",
+   why:"依据：客人到店无房，协商全额退款 · 影响面：资金流出 ¥860 · 回执位：渠道退款回单"},
+  {st:"已批准", chip:"go", title:"差评回复发布（美团 3 分）", id:"···8842", rule:"R6 差评必审 · hotel-baseline/v1",
+   before:"（尚未发布）", after:"致歉 + 已采取措施 + 改进承诺（无档案外补偿）",
+   why:"裁决人 王店长 MEM-001 · 手势 采纳（权重 1）· 快照已归档"},
+];
+
+/* ================= 基础 ================= */
+const $ = (id)=>document.getElementById(id);
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.style.display="block"; clearTimeout(t._x); t._x=setTimeout(()=>t.style.display="none",2600); }
+
+/* ================= 视图路由（hash 直达） ================= */
+const THEATER = new Set(["p0","floor"]);
+function route(){
+  let h=(location.hash||"#p0").slice(1);
+  if(!document.getElementById("v-"+h)&&!THEATER.has(h)) h="p0";
+  document.querySelectorAll(".demonav a").forEach(a=>a.classList.toggle("cur",a.dataset.v===h));
+  if(THEATER.has(h)){
+    $("theaterMode").classList.add("on"); $("bridgeMode").classList.remove("on");
+    switchTheater(h==="floor"?"floor":"stage",true);
+  }else{
+    $("bridgeMode").classList.add("on"); $("theaterMode").classList.remove("on");
+    document.querySelectorAll("#bridgeMode .view").forEach(v=>v.classList.remove("on"));
+    const el=$("v-"+h); if(el) el.classList.add("on");
+  }
+  window.scrollTo(0,0);
+}
+window.addEventListener("hashchange",route);
+
+/* ================= 剧场：星野 / 卫星 / 打字机 / 开门礼 ================= */
+function stars(){
+  const cv=$("starsCv"),ctx=cv.getContext("2d");
+  const box=cv.parentElement; cv.width=box.clientWidth; cv.height=box.clientHeight;
+  const ss=Array.from({length:110},()=>({x:Math.random()*cv.width,y:Math.random()*cv.height,r:Math.random()*1.4+.3,s:Math.random()*.25+.05,tw:Math.random()*6.28}));
+  (function tick(){
+    ctx.clearRect(0,0,cv.width,cv.height);
+    for(const st of ss){ st.y-=st.s; st.tw+=.03; if(st.y<-4){st.y=cv.height+4;st.x=Math.random()*cv.width;}
+      ctx.fillStyle=`rgba(160,190,255,${.25+.35*(.5+.5*Math.sin(st.tw))})`;
+      ctx.beginPath();ctx.arc(st.x,st.y,st.r,0,6.29);ctx.fill(); }
+    requestAnimationFrame(tick);
+  })();
+}
+const GRADE_COLOR={"表扬":"#6adf8a","辅导":"#ff8a8a","关注":"#ffbe6a","正常":"#8ad8ff"};
+function buildSats(){
+  const box=$("sats"); box.innerHTML="";
+  SATS.forEach((a,i)=>{
+    const b=document.createElement("button"); b.className="sat";
+    b.innerHTML=`<span class="pt" style="background:${GRADE_COLOR[a.grade]};box-shadow:0 0 10px ${GRADE_COLOR[a.grade]};animation-duration:${2.4+(i%4)*.5}s"></span><span class="nm">${a.name} · ${a.grade}</span>`;
+    b.onclick=()=>showPerf(a); box.appendChild(b); b._i=i;
+  });
+  const t0=Date.now();
+  (function loop(){
+    const t=(Date.now()-t0)/1000;
+    [...box.children].forEach((b)=>{
+      const i=b._i, ang=(i/SATS.length)*Math.PI*2+t*.07*(i%2?1:-.7);
+      const rx=200+(i%3)*34, ry=74+(i%3)*12;
+      b.style.left=`calc(50% + ${Math.cos(ang)*rx}px)`;
+      b.style.top=`calc(46% + ${Math.sin(ang)*ry}px)`;
+    });
+    requestAnimationFrame(loop);
+  })();
+}
+function showPerf(a){
+  $("perfName").textContent=a.name; $("perfKey").textContent="岗位："+(AGENTS.find(x=>x.name===a.name)||{}).desc||"";
+  const g=$("perfGrade"); g.textContent=a.grade; g.style.color=GRADE_COLOR[a.grade];
+  $("perfMask").classList.add("on");
+}
+function typewrite(el,text,cb){
+  el.textContent=""; let n=0;
+  const id=setInterval(()=>{ el.textContent=text.slice(0,++n); if(n>=text.length){clearInterval(id);cb&&cb();} },18);
+}
+function sendChat(text){
+  text=(text||"").trim(); if(!text) return;
+  const log=$("chatlog");
+  log.insertAdjacentHTML("beforeend",`<div class="chatmsg me">${text.replace(/</g,"&lt;")}</div>`);
+  $("chatInput").value="";
+  let reply;
+  if(/批|请示/.test(text)) reply="有 1 件 L4 请示待您拍板：差评回复发布（携程 2 分）。您可以在上方请示卡直接批准或驳回。";
+  else if(/夜班|汇报/.test(text)) reply="昨夜班组完成 14 项作业：✓9 已完成、◆3 待跟进、▲2 需人工。明细已生成夜班战报，请到 P3 查阅。";
+  else if(text.length<6) reply="能再说得具体一点吗？比如目标、房型与时间——含糊指令我不会直接建任务。";
+  else if(/怎么|如何|吗|？|\?/.test(text)) reply="（问询）本周 OCC 78%、ADR ¥496、RevPAR ¥387，环比小幅回落；飞猪房态同步有 12 分钟延迟，建议优先处理。";
+  else reply="收到，已立项执行（线程 T-104）。进展我会主动汇报；高风险步骤会先请您确认再动手。";
+  setTimeout(()=>{ log.insertAdjacentHTML("beforeend",`<div class="chatmsg ceo">${reply}</div>`); },420);
+}
+function decideL4(g){
+  $("l4inner").innerHTML=`<div class="small" style="color:${g==="approve"?"var(--go)":"var(--warn)"}">${g==="approve"?"✓ 已批准":"✕ 已驳回"}，全链留痕（审批台 P4 可见）</div>`;
+  $("l4count").textContent="0";
+  toast(g==="approve"?"已批准，全链留痕":"已驳回，全链留痕");
+  $("modeChip").textContent="试用期";
+}
+function decideFloor(g){
+  $("askMask").classList.remove("on");
+  toast(g==="approve"?"已批准，全链留痕":"已驳回，全链留痕");
+  decideL4(g);
+}
+/* 开门礼 */
+function ceremony(){
+  if(location.search.indexOf("shot=1")>=0){const c=$("ceremony");c.style.display="none";return;}
+  const c=$("ceremony");
+  setTimeout(()=>c.classList.add("s2"),700);
+  setTimeout(()=>{$("cerL1").style.opacity=1;},1400);
+  setTimeout(()=>{$("cerL2").style.opacity=1;},2100);
+  setTimeout(()=>{endCeremony();},2900);
+}
+function endCeremony(){ const c=$("ceremony"); c.style.opacity=0; c.style.pointerEvents="none"; setTimeout(()=>c.style.display="none",750); }
+/* 职场/舞台切换 */
+function switchTheater(v,silent){
+  const floor=v==="floor";
+  $("floorView").style.display=floor?"flex":"none";
+  $("stageView").style.display=floor?"none":"flex";
+  $("segFloor").classList.toggle("cur",floor); $("segStage").classList.toggle("cur",!floor);
+  if(floor&&!silent) drawFloorOnce=true;
+  if(floor) initFloor();
+}
+/* ================= 等距职场（镜像 Floor.tsx 渲染模型，场景 floor-scene.json） ================= */
+const SCENE={name:"云栖酒店 · 前厅",theme:{floorA:"#3a3026",floorB:"#241d16",wall:"#5a4a36",accent:"#ffd98a"},grid:{w:8,h:8},
+ stations:[{id:"st-1",x:3.6,y:2.2,kind:"counter"},{id:"st-2",x:4.8,y:2.6,kind:"counter"},{id:"st-3",x:1.6,y:2.6,kind:"desk"},{id:"st-4",x:6.2,y:2.0,kind:"desk"},{id:"st-5",x:2.2,y:4.6,kind:"desk"},{id:"st-6",x:5.4,y:4.4,kind:"monitor"},{id:"st-7",x:6.4,y:5.4,kind:"bench"},{id:"st-8",x:3.4,y:5.6,kind:"desk"}],
+ props:[{kind:"board",x:.8,y:1,label:"房态看板"},{kind:"luggage",x:7,y:1.2,label:"行李车"},{kind:"plant",x:.8,y:6.8},{kind:"plant",x:7.2,y:6.6},{kind:"sofa",x:1.5,y:6.2,label:"大堂吧"},{kind:"coffee",x:2.5,y:6.6}],
+ ceoDesk:{x:4.2,y:.6},lounge:{x:1.7,y:6.3},entrance:{x:7.4,y:7.2}};
+const FLOOR_AGENTS=[
+ {name:"调价Agent",state:"working",st:"st-3",thread:"T-101 周五旺季调价"},
+ {name:"评价Agent",state:"asking",st:"st-4",thread:"差评回复发布请示"},
+ {name:"对账Agent",state:"working",st:"st-5",thread:"夜间对账三轮比对"},
+ {name:"内容Agent",state:"working",st:"st-8",thread:"T-103 飞猪首图"},
+ {name:"巡检Agent",state:"idle",st:"st-6",thread:""},
+ {name:"竞对Agent",state:"idle",st:null,thread:""},
+ {name:"桌面Agent",state:"idle",st:null,thread:""},
+];
+const SKIN2={working:["#6adf8a","#2a8a4a"],asking:["#8ad8ff","#3a9ec8"],idle:["#9a9aa8","#5a5a68"]};
+let floorInit=false, drawFloorOnce=false, hitboxes=[];
+function hash(s){let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0;return Math.abs(h);}
+function rr(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function initFloor(){
+  const cv=$("floorCv"),ctx=cv.getContext("2d");
+  const actors=new Map();
+  function targetOf(a){
+    const st=SCENE.stations.find(s=>s.id===a.st);
+    const jx=((hash(a.name)%5)-2)*.16, jy=((hash(a.name)%3)-1)*.18;
+    if(a.state==="asking")return{x:SCENE.ceoDesk.x+.1+jx,y:SCENE.ceoDesk.y+1.1+jy};
+    if(a.state==="idle")return st?{x:st.x+jx*1.4,y:st.y+.55+jy}:{x:SCENE.lounge.x+(hash(a.name)%10)/14-.35,y:SCENE.lounge.y+(hash(a.name)%6)/12-.25};
+    return st?{x:st.x+jx,y:st.y+jy*.5}:{x:SCENE.lounge.x+jx*2,y:SCENE.lounge.y+jy*2};
+  }
+  function frame(){
+    const W=cv.offsetWidth,H=cv.offsetHeight,dpr=Math.min(2,window.devicePixelRatio||1);
+    if(cv.width!==W*dpr){cv.width=W*dpr;cv.height=H*dpr;}
+    ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);
+    const gw=SCENE.grid.w,gh=SCENE.grid.h;
+    const tileW=Math.min((W*.92*2)/(gw+gh),(H*.78*4)/(gw+gh)),tileH=tileW/2,cx=W/2,cy=H*.08;
+    const iso=(x,y)=>({sx:cx+(x-y)*tileW/2,sy:cy+(x+y)*tileH/2});
+    const now=performance.now()/1000;
+    const p0=iso(0,0),p1=iso(gw,0),p2=iso(gw,gh),p3=iso(0,gh);
+    const g=ctx.createLinearGradient(p0.sx,p0.sy,p2.sx,p2.sy);g.addColorStop(0,SCENE.theme.floorA);g.addColorStop(1,SCENE.theme.floorB);
+    ctx.beginPath();ctx.moveTo(p0.sx,p0.sy);ctx.lineTo(p1.sx,p1.sy);ctx.lineTo(p2.sx,p2.sy);ctx.lineTo(p3.sx,p3.sy);ctx.closePath();ctx.fillStyle=g;ctx.fill();
+    ctx.strokeStyle=SCENE.theme.wall;ctx.lineWidth=2;ctx.stroke();
+    ctx.strokeStyle="rgba(255,255,255,.05)";ctx.lineWidth=1;
+    for(let i=1;i<gw;i++){const a=iso(i,0),b=iso(i,gh);ctx.beginPath();ctx.moveTo(a.sx,a.sy);ctx.lineTo(b.sx,b.sy);ctx.stroke();}
+    for(let j=1;j<gh;j++){const a=iso(0,j),b=iso(gw,j);ctx.beginPath();ctx.moveTo(a.sx,a.sy);ctx.lineTo(b.sx,b.sy);ctx.stroke();}
+    for(const st of SCENE.stations){
+      const{sx,sy}=iso(st.x,st.y);
+      if(st.kind==="counter"){ctx.fillStyle="#4a3a28";rr(ctx,sx-22,sy-12,44,14,3);ctx.fill();ctx.fillStyle="#6a5638";rr(ctx,sx-22,sy-14,44,5,2);ctx.fill();ctx.fillStyle="#101018";rr(ctx,sx-8,sy-22,16,10,1.5);ctx.fill();ctx.fillStyle="#45e0ff";ctx.globalAlpha=.6;ctx.fillRect(sx-6,sy-20,12,2);ctx.globalAlpha=1;}
+      else if(st.kind==="bench"){ctx.fillStyle="#3a5a6a";rr(ctx,sx-16,sy-8,32,10,4);ctx.fill();}
+      else if(st.kind==="monitor"){ctx.fillStyle="#101018";rr(ctx,sx-14,sy-26,28,18,2);ctx.fill();ctx.fillStyle="#6adf8a";ctx.globalAlpha=.7;ctx.fillRect(sx-10,sy-22,8,2);ctx.fillRect(sx-10,sy-18,14,2);ctx.globalAlpha=1;}
+      else{ctx.fillStyle="#38384c";rr(ctx,sx-16,sy-8,32,10,2);ctx.fill();ctx.fillStyle="#101018";rr(ctx,sx-6,sy-20,14,10,1.5);ctx.fill();ctx.fillStyle="#45e0ff";ctx.globalAlpha=.55;ctx.fillRect(sx-4,sy-18,10,2);ctx.fillRect(sx-4,sy-15,6,2);ctx.globalAlpha=1;}
+    }
+    for(const pr of SCENE.props){
+      const{sx,sy}=iso(pr.x,pr.y);
+      if(pr.kind==="plant"){ctx.fillStyle="#2a5a3a";ctx.beginPath();ctx.ellipse(sx,sy-6,7,9,0,0,6.29);ctx.fill();ctx.fillStyle="#6a4a2a";ctx.fillRect(sx-4,sy,8,5);}
+      else if(pr.kind==="sofa"){ctx.fillStyle="#3a5a6a";rr(ctx,sx-14,sy-8,28,12,4);ctx.fill();}
+      else if(pr.kind==="coffee"){ctx.fillStyle="#8a8a9a";rr(ctx,sx-5,sy-12,10,14,2);ctx.fill();ctx.fillStyle="#c8a24a";ctx.fillRect(sx-3,sy-10,6,3);}
+      else if(pr.kind==="luggage"){ctx.fillStyle="#7a5a3a";rr(ctx,sx-8,sy-8,16,10,3);ctx.fill();}
+      else if(pr.kind==="board"){ctx.fillStyle="#26303a";rr(ctx,sx-18,sy-20,36,18,2);ctx.fill();ctx.fillStyle="#6adf8a";for(let i=0;i<4;i++)ctx.fillRect(sx-14+i*8,sy-16,5,3);ctx.fillStyle="#ffbe6a";ctx.fillRect(sx-14,sy-10,5,3);}
+      if(pr.label){ctx.fillStyle="#9a9aa8";ctx.font="8px sans-serif";ctx.textAlign="center";ctx.fillText(pr.label,sx,sy+12);}
+    }
+    /* CEO 指挥台 */
+    const cd=iso(SCENE.ceoDesk.x,SCENE.ceoDesk.y);
+    ctx.beginPath();ctx.ellipse(cd.sx,cd.sy,tileW*.55,tileH*.55,0,0,6.29);ctx.fillStyle="#3a2f1a";ctx.fill();ctx.strokeStyle="#c8a24a";ctx.lineWidth=1.5;ctx.stroke();
+    const pulse=.7+.3*Math.sin(now*2);
+    const glow=ctx.createRadialGradient(cd.sx,cd.sy-18,2,cd.sx,cd.sy-18,26*pulse);
+    glow.addColorStop(0,"rgba(255,217,138,.85)");glow.addColorStop(1,"rgba(255,217,138,0)");
+    ctx.fillStyle=glow;ctx.beginPath();ctx.arc(cd.sx,cd.sy-18,26*pulse,0,6.29);ctx.fill();
+    ctx.strokeStyle="#ffd98a";ctx.lineWidth=1.4;ctx.beginPath();ctx.ellipse(cd.sx,cd.sy-20,6,9,0,0,6.29);ctx.stroke();
+    ctx.fillStyle="#ffd98a";ctx.font="bold 9px sans-serif";ctx.textAlign="center";ctx.fillText("公司CEO",cd.sx,cd.sy+14);
+    /* 员工 */
+    hitboxes=[];
+    const sorted=[...FLOOR_AGENTS].sort((a,b)=>{const ta=targetOf(a),tb=targetOf(b);return ta.x+ta.y-(tb.x+tb.y);});
+    for(const a of sorted){
+      let rt=actors.get(a.name);const tg=targetOf(a);
+      if(!rt){const shot=location.search.indexOf('shot=1')>=0;rt={x:shot?tg.x:SCENE.entrance.x,y:shot?tg.y:SCENE.entrance.y,ph:Math.random()*6.28};actors.set(a.name,rt);}
+      rt.x+=(tg.x-rt.x)*.05;rt.y+=(tg.y-rt.y)*.05;rt.ph+=.08;
+      const{sx,sy}=iso(rt.x,rt.y);
+      const walking=Math.abs(tg.x-rt.x)+Math.abs(tg.y-rt.y)>.08;
+      const[head,body]=SKIN2[a.state]||SKIN2.idle;
+      const bob=walking?Math.abs(Math.sin(rt.ph*2))*2:a.state==="idle"?Math.sin(now+rt.ph)*.8:0;
+      const y0=sy-bob;
+      ctx.fillStyle="rgba(0,0,0,.3)";ctx.beginPath();ctx.ellipse(sx,sy+2,8,3,0,0,6.29);ctx.fill();
+      ctx.fillStyle=body;rr(ctx,sx-5,y0-16,10,14,3);ctx.fill();
+      ctx.fillStyle=head;ctx.beginPath();ctx.arc(sx,y0-21,6,0,6.29);ctx.fill();
+      ctx.strokeStyle=head;ctx.lineWidth=2;ctx.lineCap="round";
+      if(a.state==="asking"){ctx.beginPath();ctx.moveTo(sx+4,y0-13);ctx.lineTo(sx+10,y0-26);ctx.stroke();}
+      else if(a.state==="working"){
+        const tap=Math.sin(now*10+rt.ph)*1.6;
+        ctx.beginPath();ctx.moveTo(sx+4,y0-12);ctx.lineTo(sx+9,y0-8+tap);ctx.stroke();
+        ctx.fillStyle="#101018";rr(ctx,sx+8,y0-16,12,9,1.5);ctx.fill();
+        ctx.fillStyle="#45e0ff";ctx.globalAlpha=.5+.5*Math.abs(Math.sin(now*3+rt.ph));
+        ctx.fillRect(sx+10,y0-14,8,1.5);ctx.fillRect(sx+10,y0-11,5,1.5);ctx.globalAlpha=1;
+      }
+      /* 名牌 */
+      ctx.font="8.5px sans-serif";ctx.textAlign="center";
+      const lw=ctx.measureText(a.name).width+10;
+      ctx.fillStyle="rgba(10,10,18,.72)";rr(ctx,sx-lw/2,sy+6,lw,12,6);ctx.fill();
+      ctx.fillStyle="#e8e8f0";ctx.fillText(a.name,sx,sy+15);
+      if(a.state==="asking"){
+        /* 请示气泡 + 聚光灯 */
+        const txt="请您定（董事长级）";
+        ctx.font="bold 9px sans-serif";const bw=ctx.measureText(txt).width+12;
+        ctx.fillStyle="rgba(20,20,32,.88)";rr(ctx,sx-bw/2,sy-55,bw,15,7);ctx.fill();
+        ctx.strokeStyle="#ffbe6a";ctx.lineWidth=1;rr(ctx,sx-bw/2,sy-55,bw,15,7);ctx.stroke();
+        ctx.fillStyle="#ffbe6a";ctx.fillText(txt,sx,sy-43);
+        const sp=ctx.createRadialGradient(sx,sy,2,sx,sy,30);
+        sp.addColorStop(0,"rgba(255,190,106,.28)");sp.addColorStop(1,"rgba(255,190,106,0)");
+        ctx.fillStyle=sp;ctx.beginPath();ctx.ellipse(sx,sy,30,14,0,0,6.29);ctx.fill();
+      }else if(a.state==="working"&&a.thread){
+        ctx.fillStyle="#6adf8a";ctx.font="8px sans-serif";
+        ctx.fillText("▮".repeat(1+(Math.floor(now*2+rt.ph)%3)),sx,sy-38);
+      }
+      hitboxes.push({a,sx,sy:sy-14});
+    }
+    requestAnimationFrame(frame);
+  }
+  if(!floorInit){
+    floorInit=true;
+    cv.addEventListener("click",(e)=>{
+      const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+      for(let i=hitboxes.length-1;i>=0;i--){
+        const h=hitboxes[i];
+        if((mx-h.sx)**2+(my-h.sy)**2<16*16*2.2){
+          if(h.a.state==="asking"){$("askMask").classList.add("on");}
+          else{const ag=AGENTS.find(x=>x.name===h.a.name)||{grade:"正常",desc:""};showPerf({name:h.a.name,grade:ag.grade});}
+          return;
+        }
+      }
+    });
+  }
+  frame();
+}
+/* ================= 顶栏制动（镜像 EmergencyBrake 二次确认） ================= */
+function armBrake(){
+  const b=$("brakeBtn");
+  if(b.dataset.arm){ b.classList.remove("arm"); b.textContent="紧急制动"; delete b.dataset.arm;
+    toast("⚠ 夜班已制动（全端 ≤60s 生效，留痕）"); return; }
+  b.dataset.arm="1"; b.classList.add("arm"); b.textContent="⚠ 确认制动（全端 ≤60s 生效）";
+  toast("再次点击确认制动 · 制动永远严肃可用");
+  setTimeout(()=>{ if(b.dataset.arm){b.classList.remove("arm");b.textContent="紧急制动";delete b.dataset.arm;} },4000);
+}
+/* ================= P1 派遣 ================= */
+function quickGoal(label){ toast("已启航：「"+label+"」→ 对应 Agent 线程已建立，完成后态见列表顶部"); }
+function dispatchGoal(){
+  const v=$("dispatchIn").value.trim();
+  if(!v) return;
+  if(v.length<6){ toast("航线待确认（未建任务）：请补充目标房型与时间"); }
+  else{ toast("已立项执行：新线程已置顶（进度 0/4 青呼吸）"); $("dispatchIn").value=""; }
+}
+/* ================= P2 / P3 裁决 ================= */
+function decideP2(btn,g){
+  const txt=g==="approve"?"✓ 已采纳，全链留痕":g==="edit"?"✎ 已进入编辑态（编辑后采纳，权重 2）":"✕ 已驳回（原因必填 ≤200 字）";
+  $("p2ask").innerHTML=`<div class="small" style="padding:10px;color:${g==="reject"?"var(--warn)":"var(--go)"}">${txt}</div>`;
+  toast(txt);
+}
+function p3decide(id,g){
+  const el=$(id);
+  el.innerHTML=`<div class="small" style="color:${g==="驳回"?"var(--warn)":"var(--go)"}">${g==="驳回"?"✕ 已驳回":"✓ 已"+g}，写回审批台</div>`;
+  toast(g+"已写回（权重留痕）");
+}
+/* ================= P4 ================= */
+function p4sel(i){
+  const it=P4_ITEMS[i];
+  $("p4detail").innerHTML=`
+  <div class="card cardpad" style="${it.st==="待裁决"?"border-color:rgba(255,190,106,.4)":""}">
+    <div class="rowbet"><span class="chip ${it.chip}">${it.st}</span><span class="mono tiny">apr ${it.id}</span></div>
+    <div class="h2" style="margin-top:8px">${it.title}</div>
+    <div class="tiny" style="margin-top:3px">命中规则：${it.rule}</div>
+    <div class="card cardpad" style="margin-top:10px;background:var(--bg800)">
+      <div class="tiny" style="margin-bottom:6px">diff 对照（前删线 / 后高亮）</div>
+      <div class="small diff-old">− ${it.before}</div>
+      <div class="small diff-new" style="margin-top:4px">＋ ${it.after}</div>
+    </div>
+    <div class="tiny" style="margin-top:10px;line-height:1.9">为什么这样改：${it.why}</div>
+    ${it.st==="待裁决"?`<div class="trigest" style="margin-top:12px">
+      <button class="btn go" onclick="p4decide(${i},'采纳')">✓ 采纳</button>
+      <button class="btn holo" onclick="p4decide(${i},'编辑后采纳')">✎ 编辑后采纳</button>
+      <button class="btn warn" onclick="p4decide(${i},'驳回')">✕ 驳回</button>
+    </div>`:`<div class="tiny" style="margin-top:12px;color:var(--go)">✓ 已批准 · 王店长 MEM-001 · 快照已归档</div>`}
+  </div>`;
+}
+function p4decide(i,g){ P4_ITEMS[i].st=g==="驳回"?"已驳回":g==="采纳"?"已批准":"已改派"; P4_ITEMS[i].chip=g==="驳回"?"warn":"go"; p4sel(i); toast(g+"已写回（三手势留痕）"); }
+/* ================= P5 ================= */
+function renderFences(){
+  const lvColor={go:"var(--go)",warn:"var(--warn)",alert:"var(--alert)"};
+  $("fenceRows").innerHTML=FENCES.map(f=>`
+    <tr><td class="mono">${f[0]}</td><td>${f[1]}</td>
+    <td><span class="fencepill" style="color:${lvColor[f[6]]}"><span class="d" style="background:${lvColor[f[6]]}"></span>${f[2]}</span></td>
+    <td class="tiny">${f[3]}</td><td class="tiny">${f[4]}</td><td class="orb" style="color:var(--holo)">${f[5]}</td></tr>`).join("");
+}
+function dryRun(){
+  if(!$("ruleIn").value.trim()){ toast("请先输入群规描述"); return; }
+  $("dryBox").style.display="block"; toast("dry-run 完成：回放最近 10 条事件");
+}
+/* ================= P6 / P8 / P9 渲染 ================= */
+function renderSkills(){
+  const data=[
+    ["收益管理专家","酒店调价方法论官方套件：竞对对标、房态联动、涨幅纪律与保底价红线。","R1 / R2","调价Agent"],
+    ["差评危机公关","评价回复方法论官方套件：差评分级、回复结构、补偿口径边界。","R6","评价Agent"],
+    ["渠道对账师","订单/结算对账方法论官方套件：逐笔核验、差异分级、担保异常需介入。","R4 / R5","对账Agent"],
+  ];
+  $("skillOfficial").innerHTML=data.map(s=>`
+    <div class="card cardpad" style="border-color:var(--gline)">
+      <div class="rowbet"><b class="small">${s[0]}</b><span class="chip gold">官方</span></div>
+      <div class="tiny" style="margin-top:5px">${s[1]}</div>
+      <div class="tiny" style="margin-top:4px">绑定围栏 ${s[2]} · 卸载即撤销</div>
+      <div class="rowbet" style="margin-top:8px"><span class="chip go">已安装</span><button class="btn" style="padding:2px 10px;font-size:11px" onclick="toast('已装给：${s[3]}（名册 P8 可见）')">已装给谁</button></div>
+    </div>`).join("");
+}
+function renderAgents(){
+  $("agentCards").innerHTML=AGENTS.map(a=>`
+    <div class="card cardpad" style="cursor:pointer" onclick="showPerf({name:'${a.name}',grade:'${a.grade}'})">
+      <div style="display:flex;gap:10px;align-items:center">
+        <span class="avatar-b">${a.name.slice(0,1)}</span>
+        <div style="min-width:0"><b class="small">${a.name}</b> <span class="mono tiny">${a.v}</span>
+          <div class="tiny" style="margin-top:2px">${a.ro?'<span class="chip go">只读 · 无写工具</span>':''}${a.night?'<span class="chip holo">夜班 22:00–08:00</span>':''}${a.key==="desktop-agent"?'<span class="chip alert">高危 · 逐次授权</span>':''}</div>
+        </div>
+      </div>
+      <div class="tiny" style="margin-top:7px">${a.desc}</div>
+      <div class="tiny" style="margin-top:5px">${a.fences.length?("围栏绑定 "+a.fences.join(" / ")):"无围栏绑定"} · 30 天动作 ${a.acts} · 采纳率 ${a.adopt}</div>
+    </div>`).join("");
+}
+function renderNight(){
+  const crew=AGENTS.filter(a=>a.night);
+  $("nightCrew").innerHTML=crew.map(a=>`
+    <div class="litem"><div class="rowbet"><span class="small">${a.name}</span><span style="width:7px;height:7px;border-radius:50%;background:var(--holo);box-shadow:0 0 6px var(--holo)"></span></div>
+    <div class="tiny" style="margin-top:2px">${a.v} · 在线（夜班窗口）</div></div>`).join("");
+  const flow=[
+    ["调价Agent v2.3","调整房价","雅致大床房 ¥458 → ¥472（+3.1%，R1 自动放行）","已同步","go","···8861"],
+    ["竞对Agent v1.1","竞对采集","西湖云舍同房型 ¥489（频次自律 ≥3s）","已同步","go","···8864"],
+    ["对账Agent v2.0","夜班记录","订单流水 × 渠道结算 × 担保核验三轮比对一致（差异 0）","已同步","go","···8870"],
+    ["评价Agent v1.8","回复评论","差评草稿已挂起：评分 2 · R6 差评必审","待审查","warn","···8853"],
+    ["系统","生成夜班战报","候选 14 项：✓9 ◆3 ▲2 · 积分 96/118","已送达","holo","···8900"],
+  ];
+  $("p9flow").innerHTML=flow.map(m=>`
+    <div class="card cardpad" ${m[4]==="warn"?'style="border-color:rgba(255,190,106,.4)"':""}>
+      <div class="rowbet"><span class="tiny"><b style="color:var(--holo)">${m[0]}</b> · ${m[1]} · 事件 <span class="mono">${m[5]}</span></span><span class="chip ${m[4]}">${m[3]}</span></div>
+      <div class="small" style="margin-top:5px">${m[2]}</div>
+      ${m[4]==="warn"?'<div class="tiny" style="margin-top:4px;color:var(--warn)">越围栏项「未生效 · 待审批」→ 决断队列 P4</div>':""}
+    </div>`).join("")+`
+    <div class="card cardpad" style="border-color:rgba(255,84,112,.45)">
+      <div class="small"><b style="color:var(--alert)">需介入：担保订单异常（R5 硬阻断 · 不确定不执行）</b></div>
+      <div class="tiny" style="margin-top:4px">只写「需介入」事件，夜间不做任何资金动作。</div>
+      <button class="btn gold" style="margin-top:8px;padding:3px 10px;font-size:11px" onclick="toast('已派单：值班经理介入担保异常核查')">⚡ 一键派单</button>
+    </div>`;
+  $("triggerList").innerHTML=TRIGGERS.map(t=>`${t[0]} <span class="mono" style="color:var(--holo)">${t[1]}</span>`).join("<br>");
+}
+/* ================= P22 ================= */
+function renderDocs(filter){
+  const rows=DOCS.filter(d=>!filter||d[5]===filter);
+  $("docCount").textContent=rows.length;
+  $("docRows").innerHTML=rows.map(d=>`
+    <tr><td>${d[0]}</td><td class="tiny">${d[1]}</td><td class="mono tiny">v${d[2]}</td>
+    <td><span class="chip go">${d[3]}</span></td><td class="orb" style="color:var(--holo)">${d[4]}</td>
+    <td style="text-align:right"><button class="btn" style="padding:2px 9px;font-size:10px" onclick="toast('文档详情：检索索引内容预览 + 生效中/已停用切换')">详情</button></td></tr>`).join("");
+}
+function colFilter(f,btn){
+  document.querySelectorAll("#colChips .btn").forEach(b=>b.classList.remove("holo"));
+  btn.classList.add("holo"); renderDocs(f);
+}
+function doSearch(){
+  const q=$("qIn").value.trim()||"早餐在哪里吃";
+  const hits=[
+    {t:"住客常见问答·餐饮美食",h:"早餐在哪里用餐？",c:"早餐在酒店一层云栖餐厅用餐，提供中西式自助餐，含热菜、面点、粥品、水果、现磨咖啡等约60款餐品。",s:"0.87"},
+    {t:"住客常见问答·餐饮美食",h:"早餐几点开始、到几点结束？",c:"早餐供应时间为每日07:00-10:30，周末及法定节假日延长至11:00收餐，位于酒店一层云栖餐厅。",s:"0.82"},
+    {t:"商品与服务目录",h:"餐饮",c:"中西自助早餐 68 元/位（住店会员免费）；云栖轩中餐厅 11:00-21:00；客房送餐至 23:00。",s:"0.71"},
+  ];
+  $("hits").innerHTML=`<div class="tiny">「${q.replace(/</g,"&lt;")}」命中 ${hits.length} 块（相关度 0..1 归一化）</div>`+hits.map(h=>`
+    <div style="border:1px solid var(--line);border-radius:6px;background:rgba(16,26,61,.6);padding:7px 9px">
+      <div class="rowbet tiny"><span style="color:var(--ink2)">${h.t} · ${h.h}</span><span class="orb" style="color:var(--holo)">${h.s}</span></div>
+      <div class="tiny" style="margin-top:3px;line-height:1.7">${h.c}</div>
+    </div>`).join("");
+}
+function approveDoc(){
+  $("pendDoc").innerHTML=`<div class="small" style="color:var(--go)">✓ 「云栖酒店住客服务须知」v2 已批准生效——文档状态/五元事件/approvals 审批行三写同一 COMMIT（事件 ···9021，围栏动作「发布知识文档」，审批台可见）</div>`;
+  toast("批准生效，已联动审批台");
+}
+function tkChip(st){
+  const cls=st==="已完成"?"go":st==="处理中"?"holo":st==="已分派"?"gold":"";
+  return `<span class="chip ${cls}">${st}</span>`;
+}
+function renderTickets(filter){
+  const rows=TICKETS.filter(t=>!filter||t.st===filter);
+  $("tkList").innerHTML=rows.map((t,i)=>`
+    <div class="card cardpad" style="${t.overdue?"border-color:rgba(255,84,112,.5)":""}">
+      <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+        <span class="mono tiny">${t.id}</span>
+        <span data-st="${t.st}">${tkChip(t.st)}</span>
+        <span class="chip">${t.kind}</span>
+        ${t.pri?`<span class="chip alert">${t.pri}</span>`:""}
+        ${t.overdue?'<span class="chip alert" style="background:rgba(255,84,112,.08)">SLA 超时</span>':""}
+        <span style="flex:1"></span>
+        <button class="btn" style="padding:2px 9px;font-size:10px" onclick="tkTimeline(${TICKETS.indexOf(t)})">时间线</button>
+        ${t.st==="已受理"?`<button class="btn gold" style="padding:2px 9px;font-size:10px" onclick="tkAssign(${TICKETS.indexOf(t)})">分派</button>`:""}
+        ${t.st==="已分派"?`<button class="btn holo" style="padding:2px 9px;font-size:10px" onclick="tkStart(${TICKETS.indexOf(t)})">▶ 开始处理</button>`:""}
+        ${(t.st==="处理中"||t.st==="已分派")?`<button class="btn go" style="padding:2px 9px;font-size:10px" onclick="tkDone(${TICKETS.indexOf(t)})">✓ 办结</button>`:""}
+      </div>
+      <div class="small" style="margin-top:6px">${t.title}</div>
+      <div class="tiny" style="margin-top:4px">${t.dept?("部门 "+t.dept):"未分派"}${t.who?(" · 处理人 "+t.who):""} · SLA ${t.sla}${t.rate?(" · 满意度 "+t.rate+" 分"):""}</div>
+    </div>`).join("");
+}
+function tkFilter(f,btn){
+  document.querySelectorAll("#p22-tk .btn").forEach(b=>b.classList.remove("holo"));
+  if(btn)btn.classList.add("holo");
+  renderTickets(f);
+}
+function tkAssign(i){ TICKETS[i].st="已分派"; TICKETS[i].dept="工程部"; renderTickets(); toast("工单 "+TICKETS[i].id+" 已分派 工程部"); }
+function tkStart(i){ TICKETS[i].st="处理中"; renderTickets(); toast("工单 "+TICKETS[i].id+" 开始处理（已分派 → 处理中 状态机断言）"); }
+function tkDone(i){ TICKETS[i].st="已完成"; renderTickets(); toast("工单 "+TICKETS[i].id+" 已办结——结果已推送通知 C 端（模拟发送）"); }
+function tkTimeline(i){
+  const t=TICKETS[i];
+  const html=t.timeline.map((e,j)=>`
+    <div class="timeline" style="padding-bottom:12px">
+      <span class="tl-dot ${j===t.timeline.length-1?"hot":""}"></span>
+      <div class="small"><b style="color:var(--holo)">${e[0]}</b> <span class="tiny">${e[1]}</span></div>
+      <div class="tiny" style="margin-top:2px">${e[2]}</div>
+    </div>`).join("");
+  $("perfName").textContent="工单时间线 · "+t.id;
+  $("perfKey").textContent=t.title+" · "+t.kind;
+  $("perfGrade").textContent=t.st;
+  document.querySelector("#perfMask .modal").insertAdjacentHTML("beforeend",`<div id="tlBox" style="margin-top:10px;max-height:300px;overflow:auto">${html}</div>`);
+  $("perfMask").classList.add("on");
+  const mask=$("perfMask");
+  const cleanup=()=>{const b=$("tlBox");if(b)b.remove();mask.removeEventListener("click",cleanup);};
+  mask.addEventListener("click",cleanup);
+}
+function p22tab(t){
+  $("p22-kb").style.display=t==="kb"?"block":"none";
+  $("p22-tk").style.display=t==="tk"?"block":"none";
+  $("p22-st").style.display=t==="st"?"block":"none";
+  ["kb","tk","st"].forEach(k=>{
+    $("tb-"+k).classList.toggle("cur",k===t);
+    $("p22tab-"+k).style.borderColor=k===t?"var(--gline)":"";
+    $("p22tab-"+k).style.background=k===t?"rgba(233,181,88,.06)":"";
+  });
+}
+/* ================= P21 撤回 ================= */
+function confirmRevoke(){
+  toast("二次确认：撤回后数字CEO 进入「仅汇报」态（留痕，可随时重新授权）");
+  $("modeChip")&&( $("modeChip").textContent="仅汇报" );
+}
+/* ================= 二维码占位（镜像 P22 QrPlaceholder） ================= */
+function qr(){
+  const cells=[];
+  for(let y=0;y<12;y++)for(let x=0;x<12;x++){
+    const f=(x<4&&y<4)||(x>7&&y<4)||(x<4&&y>7);
+    const on=f?(x%3!==1||y%3!==1):(x*7+y*13)%5<2;
+    if(on)cells.push(`M${x} ${y}h1v1h-1z`);
+  }
+  $("qrPath").setAttribute("d",cells.join(""));
+}
+/* ================= 实况字幕 ================= */
+function renderTicker(){
+  const html=TICKER.concat(TICKER).map(e=>`<span><b>${e[0]}</b> · ${e[1]}</span>`).join("");
+  $("tickerIn").innerHTML=html; $("tickerIn2").innerHTML=html;
+}
+/* ================= 启动 ================= */
+stars(); buildSats(); renderTicker(); renderFences(); renderSkills(); renderAgents(); renderNight();
+renderDocs(""); renderTickets(""); p4sel(0); doSearch(); qr();
+if(location.search.indexOf("tab=stats")>=0) p22tab("st");
+typewrite($("speech"),BRIEF); $("speech2").textContent=BRIEF;
+route(); ceremony();</script>
+</body>
+</html>
