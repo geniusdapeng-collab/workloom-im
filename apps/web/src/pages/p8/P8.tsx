@@ -6,7 +6,7 @@
  *    30 天工时=动作数/采纳率/积分 · 峰谷占比 G9，全部事件库聚合投影 L6.3；
  *    夜班窗口 22:00–08:00 内 night_shift preset 自动上线·青脉冲（M4）；
  *    只读 preset 标绿无写工具（L9.1）；加载校验失败标红+原因（F2.10 错误态））
- *  - 加装 preset（P8E3 → P7 舰船换装坞，§2.3 行业 Bundle 分发；非管理员无入口 E2.6 隐藏非置灰）
+ *  - 加装 preset（P8E3 → P7 装配中心，§2.3 行业 Bundle 分发；非管理员无入口 E2.6 隐藏非置灰）
  *  - 成员档案 p8_agent（P8E1 点击进档案）：身份与归属（Agent ID/版本 who.version 归因必需/工作区/来源 Bundle）/
  *    航道许可围栏授权（P8E1·F2.10 声明对账，悬空标红）/技能包（→P6）/运行约束/
  *    30 天战绩（动作/采纳率/被驳回/积分·峰谷，驳回原因进偏好模式 F1.7）/
@@ -15,7 +15,7 @@
  * 状态变体：p8 默认 / p8_agent 档案态；加载=成员卡骨架屏（G10）；空态=仅官方 preset 引导（§2.2）；
  *          权限态=非管理员隐藏「加装/派遣」入口（E2.6）；错误态=preset 校验失败卡片标红（F2.10）
  * 数据：roster.list / roster.profile（PRD P8-⑤：成员+preset 注册表投影 + 工时聚合 + who.id 事件流投影；本页无直接写入）
- * 轮询口径（D6）：团队成员 10s，档案事件流 15s
+ * 轮询口径（D6）：名册 10s，档案事件流 15s
  */
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
@@ -250,16 +250,16 @@ function RosterHome() {
   const agents = data?.agents ?? [];
   const onlineAgents = agents.filter((a) => a.online).length;
 
-  /* 左栏：团队成员导航 + 在线概览 */
+  /* 左栏：名册导航 + 在线概览 */
   const left = (
     <>
-      <div className="mb-2 px-1 text-[11px] tracking-[.2em] text-ink3">团队成员 · ROSTER</div>
+      <div className="mb-2 px-1 text-[11px] tracking-[.2em] text-ink3">名册 · ROSTER</div>
       <div className="mb-1.5 rounded-lg border border-line bg-card px-3 py-2.5">
-        <div className="text-caption font-bold text-ink">人类船员 · {humans.length}</div>
+        <div className="text-caption font-bold text-ink">人类成员 · {humans.length}</div>
         <div className="mt-0.5 text-micro text-ink3">{humans.filter((h) => h.online).length} 人在线（近 24h 留痕）</div>
       </div>
       <div className="mb-1.5 rounded-lg border border-line bg-card px-3 py-2.5">
-        <div className="text-caption font-bold text-ink">Agent 船员 · {agents.length} preset</div>
+        <div className="text-caption font-bold text-ink">Agent 成员 · {agents.length} preset</div>
         <div className="mt-0.5 text-micro text-ink3">
           workloom-hotel 装配 · {data?.nightWindow.open ? `夜班窗口内 ${onlineAgents} 名在线` : "夜班窗口外 · 待命"}
         </div>
@@ -302,7 +302,7 @@ function RosterHome() {
         {failed && (
           <div className="mb-3">
             <BannerAlert level="warn" actionLabel="重试" onAction={() => void load()}>
-              团队成员数据加载失败（连接中断·重连中，不伪造数据）——点击重试
+              名册数据加载失败（连接中断·重连中，不伪造数据）——点击重试
             </BannerAlert>
           </div>
         )}
@@ -314,19 +314,19 @@ function RosterHome() {
           <EmptyState
             icon="👥"
             title="新工作区暂无成员卡片"
-            hint="仅行业 Bundle 官方 preset 可用——从 P7 舰船换装坞装配后此处点亮"
-            actionLabel={canManage ? "＋ 加装船员 preset" : undefined}
+            hint="仅行业 Bundle 官方 preset 可用——从 P7 装配中心装配后此处点亮"
+            actionLabel={canManage ? "＋ 加装成员 preset" : undefined}
             onAction={canManage ? () => nav("/p7") : undefined}
           />
         ) : (
           <>
-            <div className="mb-2 text-[11px] tracking-[.2em] text-ink3">人类船员 · {humans.length}</div>
+            <div className="mb-2 text-[11px] tracking-[.2em] text-ink3">人类成员 · {humans.length}</div>
             <div className="mb-5 grid grid-cols-3 gap-3">
               {humans.map((h) => <HumanCard key={h.memberNo} h={h} />)}
             </div>
 
             <div className="mb-2 text-[11px] tracking-[.2em] text-ink3">
-              Agent 船员 · {agents.length} preset（workloom-hotel 装配）· 夜班窗口 {data?.nightWindow.range} 自动上线
+              Agent 成员 · {agents.length} preset（workloom-hotel 装配）· 夜班窗口 {data?.nightWindow.range} 自动上线
             </div>
             <div className="grid grid-cols-3 gap-3">
               {agents.map((a) => <AgentCard key={a.id} a={a} onOpen={(id) => nav(`/p8/agent/${encodeURIComponent(id)}`)} />)}
@@ -340,7 +340,7 @@ function RosterHome() {
                   onClick={() => nav("/p7")}
                   className="cursor-pointer rounded-lg gold-grad px-4 py-2 text-caption font-black text-ongold"
                 >
-                  ＋ 加装船员 preset（→P7 舰船换装坞 §2.3）
+                  ＋ 加装成员 preset（→P7 装配中心 §2.3）
                 </button>
                 <span className="text-micro text-ink3">未声明 fence_bindings 的 Agent 系统级禁写（F2.10）</span>
               </div>
@@ -397,7 +397,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
       if (r.kind === "clarify") {
         setBanner({ level: "warn", text: `意图含糊，未建任务（F3.2）：${r.question}` });
       } else {
-        nav(`/p2/${encodeURIComponent(r.threadId)}`); // 建单成功 → P2 任务中心
+        nav(`/p2/${encodeURIComponent(r.threadId)}`); // 建单成功 → P2 任务页
       }
     } finally {
       setSending(false);
@@ -409,7 +409,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
   /* 左栏：船员列表（点击切换档案） */
   const left = (
     <>
-      <div className="mb-2 px-1 text-[11px] tracking-[.2em] text-ink3">Agent 船员 · AGENTS</div>
+      <div className="mb-2 px-1 text-[11px] tracking-[.2em] text-ink3">Agent 成员 · AGENTS</div>
       {roster.map((a) => (
         <button
           key={a.id}
@@ -431,7 +431,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
         onClick={() => nav("/p8")}
         className="mt-2 w-full cursor-pointer rounded-lg border border-line bg-bg800/50 px-3 py-1.5 text-caption text-ink3 hover:border-gline"
       >
-        ← 返回团队成员
+        ← 返回名册
       </button>
     </>
   );
@@ -468,7 +468,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
         {!ready ? (
           <><SkeletonBlock lines={2} h={40} /><SkeletonBlock lines={8} /></>
         ) : !p ? (
-          <EmptyState icon="🛰" title="船员不存在或已离舰" hint="返回团队成员选择其他船员" actionLabel="← 返回团队成员" onAction={() => nav("/p8")} />
+          <EmptyState icon="🛰" title="船员不存在或已离舰" hint="返回名册选择其他船员" actionLabel="← 返回名册" onAction={() => nav("/p8")} />
         ) : (
           <>
             <div className="mb-3 flex items-baseline gap-3">
@@ -591,7 +591,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
                       onClick={() => void dispatch()}
                       className="mt-2 cursor-pointer rounded-lg gold-grad px-4 py-2 text-caption font-black text-ongold disabled:opacity-40"
                     >
-                      💬 发消息 · 派遣任务（→P2 任务中心 F3.1）
+                      💬 发消息 · 派遣任务（→P2 任务页 F3.1）
                     </button>
                   </div>
                 )}
@@ -632,7 +632,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
   );
 }
 
-/** P8 入口：/p8 团队成员；/p8/agent/:agentId 档案态（p8_agent） */
+/** P8 入口：/p8 名册；/p8/agent/:agentId 档案态（p8_agent） */
 export default function P8() {
   const { agentId } = useParams<{ agentId: string }>();
   return agentId ? <AgentProfilePage agentId={agentId} /> : <RosterHome />;

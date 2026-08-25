@@ -2665,16 +2665,32 @@ h2("融合·LLM 降级链：死端配置被拒 → mock 兜底应答不断链", 
   RC("裁决节拍幂等：连跑两次不重复裁决、不重复事件", async () => {
     const arc = await getArchive();
     try {
-      await qApp(
-        `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, snapshot, tier)
-         VALUES ($1,$2,$3,$4,'inapp','pending',$5,'l2_captain') ON CONFLICT (event_id, channel) DO NOTHING`,
-        [`apr-r12-${SFX}`, scope.tenantId, scope.workspaceId, `E-apr-r12-${SFX}`, JSON.stringify({ action: "price.adjust", params: { price: 480 }, base_price: 458 })]);
-      const r1 = await runQueueBeat(app, scope);
-      const evCount = await countEvents("ceo.decision");
-      const r2 = await runQueueBeat(app, scope);
-      eq(r2.decided, 0, "二次节拍零裁决（pending 已清空）");
-      eq(await countEvents("ceo.decision"), evCount, "二次节拍零新事件");
-      assert(r1.decided >= 1, "首次节拍有裁决");
+      // 队列隔离（D32 修复）：节拍每轮处理 ≤20 条 l2_captain 待批——历史用例遗留的待批会被
+      // r1/r2 分批消化（escalate 也发 ceo.decision 事件但不计入 decided），造成计数假失败；
+      // 先快照并暂cancel 本区存量 l2_captain 待批，finally 恢复，保证队列里只有本用例插入的一条
+      const leftovers = await qApp<{ approval_id: string }>(
+        `UPDATE approvals SET status='rejected' WHERE workspace_id=$1 AND status='pending' AND tier='l2_captain' RETURNING approval_id`,
+        [scope.workspaceId],
+      );
+      try {
+        await qApp(
+          `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, snapshot, tier)
+           VALUES ($1,$2,$3,$4,'inapp','pending',$5,'l2_captain') ON CONFLICT (event_id, channel) DO NOTHING`,
+          [`apr-r12-${SFX}`, scope.tenantId, scope.workspaceId, `E-apr-r12-${SFX}`, JSON.stringify({ action: "price.adjust", params: { price: 480 }, base_price: 458 })]);
+        const r1 = await runQueueBeat(app, scope);
+        const evCount = await countEvents("ceo.decision");
+        const r2 = await runQueueBeat(app, scope);
+        eq(r2.decided, 0, "二次节拍零裁决（pending 已清空）");
+        eq(await countEvents("ceo.decision"), evCount, "二次节拍零新事件");
+        assert(r1.decided >= 1, "首次节拍有裁决");
+      } finally {
+        if (leftovers.rowCount) {
+          await qApp(
+            `UPDATE approvals SET status='pending' WHERE workspace_id=$1 AND approval_id = ANY($2::text[])`,
+            [scope.workspaceId, leftovers.rows.map((x) => x.approval_id)],
+          );
+        }
+      }
     } finally {
       await restoreArchive(arc);
       await qApp(`DELETE FROM approvals WHERE approval_id=$1`, [`apr-r12-${SFX}`]);
@@ -2740,6 +2756,12 @@ h2("融合·LLM 降级链：死端配置被拒 → mock 兜底应答不断链", 
   RC("成绩单精确性：2 裁决+1 简报+1 熔断后计数精确匹配", async () => {
     const arc = await getArchive();
     try {
+      // 队列隔离（同 R-11，D32）：历史遗留 l2_captain 待批会被节拍一并裁决，污染计数
+      const leftovers = await qApp<{ approval_id: string }>(
+        `UPDATE approvals SET status='rejected' WHERE workspace_id=$1 AND status='pending' AND tier='l2_captain' RETURNING approval_id`,
+        [scope.workspaceId],
+      );
+      try {
       const before = await buildScorecard(app, scope);
       await qApp(
         `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, snapshot, tier)
@@ -2761,9 +2783,14 @@ h2("融合·LLM 降级链：死端配置被拒 → mock 兜底应答不断链", 
       eq(after.decisions, before.decisions + 2, "裁决 +2");
       eq(after.briefings, before.briefings + 1, "简报 +1");
       eq(after.breakerTrips, before.breakerTrips + 1, "熔断 +1");
+      } finally {
+        if (leftovers.rowCount) {
+          await qApp(`UPDATE approvals SET status='pending' WHERE workspace_id=$1 AND approval_id = ANY($2::text[])`, [scope.workspaceId, leftovers.rows.map((x) => x.approval_id)]);
+        }
+        await qApp(`DELETE FROM approvals WHERE approval_id IN ($1,$2)`, [`apr-r17a-${SFX}`, `apr-r17b-${SFX}`]);
+      }
     } finally {
       await restoreArchive(arc);
-      await qApp(`DELETE FROM approvals WHERE approval_id IN ($1,$2)`, [`apr-r17a-${SFX}`, `apr-r17b-${SFX}`]);
     }
   });
 
