@@ -6,7 +6,7 @@
  *    30 天工时=动作数/采纳率/积分 · 峰谷占比 G9，全部事件库聚合投影 L6.3；
  *    夜班窗口 22:00–08:00 内 night_shift preset 自动上线·青脉冲（M4）；
  *    只读 preset 标绿无写工具（L9.1）；加载校验失败标红+原因（F2.10 错误态））
- *  - 加装 preset（P8E3 → P7 装配中心，§2.3 行业 Bundle 分发；非管理员无入口 E2.6 隐藏非置灰）
+ *  - 加装员工（P8E3 → P7 装配中心，§2.3 行业 Bundle 分发；非管理员无入口 E2.6 隐藏非置灰）
  *  - 成员档案 p8_agent（P8E1 点击进档案）：身份与归属（Agent ID/版本 who.version 归因必需/工作区/来源 Bundle）/
  *    航道许可围栏授权（P8E1·F2.10 声明对账，悬空标红）/技能包（→P6）/运行约束/
  *    30 天战绩（动作/采纳率/被驳回/积分·峰谷，驳回原因进偏好模式 F1.7）/
@@ -314,7 +314,7 @@ function RosterHome() {
           <EmptyState
             icon="👥"
             title="新工作区暂无成员卡片"
-            hint="仅行业 Bundle 官方 preset 可用——从 P7 装配中心装配后此处点亮"
+            hint="仅行业官方员工包可用——从 P7 装配中心装配后此处点亮"
             actionLabel={canManage ? "＋ 加装成员 preset" : undefined}
             onAction={canManage ? () => nav("/p7") : undefined}
           />
@@ -332,7 +332,7 @@ function RosterHome() {
               {agents.map((a) => <AgentCard key={a.id} a={a} onOpen={(id) => nav(`/p8/agent/${encodeURIComponent(id)}`)} />)}
             </div>
 
-            {/* P8E3 加装 preset（→P7 装配台；E2.6 非管理员隐藏） */}
+            {/* P8E3 加装员工（→P7 装配台；E2.6 非管理员隐藏） */}
             {canManage && (
               <div className="mt-4 flex items-center gap-3">
                 <button
