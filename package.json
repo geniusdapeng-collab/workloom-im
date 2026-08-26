@@ -26,7 +26,11 @@
     "suite": "TOOL_UNVERIFIED_RATE=0 tsx --env-file=.env scripts/suite.ts",
     "release:gate": "tsx --env-file=.env scripts/release-gate.ts",
     "agent:tour": "bash scripts/agent-tour.sh",
-    "preview:all": "bash scripts/preview-all.sh"
+    "preview:all": "bash scripts/preview-all.sh",
+    "capabilities": "node scripts/generate-capabilities.mjs",
+    "capabilities:check": "node scripts/generate-capabilities.mjs --check",
+    "capabilities:pptx": "python3 scripts/build-capability-pptx.py",
+    "postinstall": "node scripts/postinstall-note.js || true"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -40,5 +44,6 @@
     "typescript": "^5.9.0",
     "vitest": "^3.2.0",
     "yaml": "2.9.0"
-  }
+  },
+  "description": "WorkLoom IM · 企业级 Agent IM 底座（智能班组 + 围栏 + 人审 + 夜班）"
 }
