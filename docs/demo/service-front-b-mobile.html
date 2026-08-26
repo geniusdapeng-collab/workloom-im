@@ -8,7 +8,7 @@
 /* ===== 设计令牌：tokens.css 逐值（深空底 #fff0f4 + 暗金 #ff2442 + 全息青细线） ===== */
 :root{
   --bg950:#fff5f7; --bg900:#ffffff; --bg800:#fff0f4; --bg700:#ffe4ec;
-  --gold:#ff2442; --gold2:#ff7a9e; --goldhi:#ffc2d4; --ongold:#ffffff;
+  --gold:#ff2442; --gold2:#ff7a9e; --goldhi:#d4002a; --ongold:#ffffff;
   --holo:#4d96ff; --holo2:#6ec6ff;
   --go:#22c88a; --warn:#ffaa33; --alert:#ff4d6d;
   --ink:#33262b; --ink2:#8a757d; --ink3:#b9a9b0;
@@ -36,7 +36,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 
 /* ===== 手机壳（P3 §4.2 真机框镜像：375px · 44px 圆角） ===== */
 .phone{width:375px;margin:10px auto 30px;border-radius:44px;border:1px solid var(--line);background:var(--bg900);box-shadow:0 30px 80px rgba(0,0,0,.6);overflow:hidden}
-.phone-notch{display:flex;justify-content:center;border-bottom:1px solid var(--line);background:rgba(4,6,15,.8);padding:8px 0}
+.phone-notch{display:flex;justify-content:center;border-bottom:1px solid var(--line);background:rgba(255,255,255,.96);padding:8px 0}
 .phone-notch span{width:64px;height:6px;border-radius:99px;background:var(--bg700)}
 .body{padding:14px;display:flex;flex-direction:column;gap:12px;min-height:640px;padding-bottom:8px}
 
@@ -58,7 +58,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 .chip-gold{border-color:var(--gline);color:var(--goldhi)}
 .chip-line{border-color:var(--line);color:var(--ink3)}
 .chip-alert{border-color:rgba(255,84,112,.4);color:var(--alert)}
-.count-btn{border-radius:12px;border:1px solid var(--line);background:rgba(10,18,48,.6);padding:10px 8px;text-align:center}
+.count-btn{border-radius:12px;border:1px solid var(--line);background:rgba(255,240,244,.9);padding:10px 8px;text-align:center}
 .count-btn.on{border-color:var(--gline);background:rgba(233,181,88,.08)}
 .count-btn .n{font-family:"Orbitron","JetBrains Mono",monospace;font-size:28px;font-weight:700}
 .count-btn .l{margin-top:2px;font-size:10px;color:var(--ink2)}
@@ -318,7 +318,7 @@ function doSearch(){
   else if(q.includes("送物")||q.includes("矿泉"))hits=[["商品与服务目录 · 免费送物清单","矿泉水（每日 2 瓶免费）、牙刷套装、梳子等。",0.91]];
   const box=document.getElementById("hits");
   if(!hits){box.innerHTML=`<div style="font-size:10px;color:var(--warn)">无命中——可考虑补充知识文档</div>`;return;}
-  box.innerHTML=hits.map(h=>`<div class="fadein" style="border-radius:8px;border:1px solid var(--line);background:rgba(10,18,48,.6);padding:8px;margin-bottom:6px">
+  box.innerHTML=hits.map(h=>`<div class="fadein" style="border-radius:8px;border:1px solid var(--line);background:rgba(255,240,244,.9);padding:8px;margin-bottom:6px">
     <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:var(--ink2)">${h[0]}</span><span class="orb" style="color:var(--holo)">${h[2].toFixed(2)}</span></div>
     <div style="margin-top:2px;font-size:10px;line-height:1.6;color:var(--ink3)">${h[1]}</div></div>`).join("");
 }
