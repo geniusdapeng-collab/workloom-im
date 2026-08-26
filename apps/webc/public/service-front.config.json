@@ -8,22 +8,92 @@
   },
   "welcomeText": "您好，欢迎来到{brand}。我是 AI 服务前台{agent}，可以帮您查订单、叫送物、报维修，也可以解答{brand}服务问题。",
   "quickReplies": [
-    { "label": "查订单", "sendText": "帮我查一下我的订单" },
-    { "label": "送物服务", "serviceKind": "delivery" },
-    { "label": "维修报修", "serviceKind": "repair" },
-    { "label": "常见问题", "sendText": "早餐几点开始？停车和退房怎么安排？" }
+    {
+      "label": "查订单",
+      "sendText": "帮我查一下我的订单"
+    },
+    {
+      "label": "送物服务",
+      "serviceKind": "delivery"
+    },
+    {
+      "label": "维修报修",
+      "serviceKind": "repair"
+    },
+    {
+      "label": "常见问题",
+      "sendText": "早餐几点开始？停车和退房怎么安排？"
+    }
   ],
   "serviceEntries": [
-    { "kind": "delivery", "title": "送物服务", "desc": "毛巾 / 水 / 牙具等送到房间", "icon": "送", "sla": "约 15 分钟内送达", "titlePlaceholder": "例如：补充两瓶矿泉水" },
-    { "kind": "repair", "title": "维修报修", "desc": "设施故障一键报修", "icon": "修", "sla": "约 30 分钟内上门", "titlePlaceholder": "例如：空调制冷效果差" },
-    { "kind": "complaint", "title": "投诉建议", "desc": "您的意见让我们更好", "icon": "诉", "sla": "值班经理 2 小时内回复", "titlePlaceholder": "请描述您的意见" },
-    { "kind": "other", "title": "其他需求", "desc": "更多个性化服务", "icon": "他", "sla": "服务专员 30 分钟内响应", "titlePlaceholder": "请描述您的需求" }
+    {
+      "kind": "delivery",
+      "title": "送物服务",
+      "desc": "毛巾 / 水 / 牙具等送到房间",
+      "icon": "送",
+      "sla": "约 15 分钟内送达",
+      "titlePlaceholder": "例如：补充两瓶矿泉水"
+    },
+    {
+      "kind": "repair",
+      "title": "维修报修",
+      "desc": "设施故障一键报修",
+      "icon": "修",
+      "sla": "约 30 分钟内上门",
+      "titlePlaceholder": "例如：空调制冷效果差"
+    },
+    {
+      "kind": "complaint",
+      "title": "投诉建议",
+      "desc": "您的意见让我们更好",
+      "icon": "诉",
+      "sla": "值班经理 2 小时内回复",
+      "titlePlaceholder": "请描述您的意见"
+    },
+    {
+      "kind": "other",
+      "title": "其他需求",
+      "desc": "更多个性化服务",
+      "icon": "他",
+      "sla": "服务专员 30 分钟内响应",
+      "titlePlaceholder": "请描述您的需求"
+    }
   ],
   "memberLevels": {
-    "金卡会员": { "label": "金卡会员" },
-    "银卡会员": { "label": "银卡会员" },
-    "游客": { "label": "游客" }
+    "金卡会员": {
+      "label": "金卡会员"
+    },
+    "银卡会员": {
+      "label": "银卡会员"
+    },
+    "游客": {
+      "label": "游客"
+    }
   },
-  "enableTabs": ["chat", "service", "tickets", "messages", "me"],
-  "supportPhone": "400-800-1234"
+  "enableTabs": [
+    "chat",
+    "service",
+    "tickets",
+    "messages",
+    "me"
+  ],
+  "supportPhone": "400-800-1234",
+  "demoHistory": [
+    {
+      "role": "user",
+      "text": "你好，我订的房含早餐吗？另外航班比较晚，想延迟退房到下午两点"
+    },
+    {
+      "role": "ai",
+      "text": "您好！您预订的高级大床房含双早（6:30-10:30，周末到 11:00）。延迟退房已为您申请到 14:00，不额外收费，房卡届时自动延效。如需送机叫车也可以随时叫我～"
+    },
+    {
+      "role": "user",
+      "text": "太好了。对了，孩子 1.2 米，早餐收费吗？"
+    },
+    {
+      "role": "ai",
+      "text": "1.2 米以下儿童早餐免费，1.2-1.4 米半价 ¥34。已为您的房间备注儿童洗漱用品，15 分钟内送到 1208 房。"
+    }
+  ]
 }
