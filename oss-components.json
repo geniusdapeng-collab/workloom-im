@@ -60,7 +60,7 @@
       "name": "vite",
       "repo": "https://github.com/vitejs/vite",
       "channel": "npm",
-      "current": "7.3.6",
+      "current": "8.2.2",
       "cadence": "weekly",
       "gate": "standard",
       "scope": "apps/web, apps/webc",
