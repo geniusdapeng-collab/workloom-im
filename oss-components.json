@@ -180,7 +180,7 @@
       "name": "typescript",
       "repo": "https://github.com/microsoft/TypeScript",
       "channel": "npm",
-      "current": "5.9.x",
+      "current": "7.0.2",
       "cadence": "monthly",
       "gate": "smoke",
       "scope": "全仓",
