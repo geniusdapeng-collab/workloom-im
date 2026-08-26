@@ -55,7 +55,7 @@ export const SOURCE_KIND_TEXT: Record<string, string> = {
 
 // —— 审批域 ——
 export const APPROVAL_STATUS_TEXT: Record<string, string> = {
-  pending: "待裁决",
+  pending: "待审批",
   approved: "已批准",
   rejected: "已驳回",
   edited: "已改派",
@@ -137,7 +137,7 @@ export const ACTION_TEXT: Record<string, string> = {
   "kb.crawl": "抓取官网建库",
   // CEO
   "ceo.briefing": "CEO 晨报",
-  "captain.decision": "CEO 裁决",
+  "captain.decision": "CEO 决策",
   "captain.grant": "签署授权宪章",
   "captain.transit": "宪章状态流转",
 };

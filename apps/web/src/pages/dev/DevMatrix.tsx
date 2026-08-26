@@ -198,7 +198,7 @@ export default function DevMatrix() {
               <EquipSlot label="空槽" />
               <EquipSlot label="装配失败" failed />
             </div>
-            <EquipCard name="收益管理专家" rarity="official" desc="调价方法论官方套件（R1/R2 绑定）" installs={3} />
+            <EquipCard name="收益管理专家" rarity="official" desc="调价方法论官方技能（R1/R2 绑定）" installs={3} />
           </div>
         </Cell>
       </Section>

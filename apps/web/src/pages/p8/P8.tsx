@@ -84,7 +84,7 @@ const ROLE_LABEL: Record<string, string> = {
   channel: "渠道",
 };
 const ROLE_SCOPE: Record<string, string> = {
-  owner: "紧急制动 · 航道立法 · 船员任免（规则手册 §3.1 舰长三权）",
+  owner: "紧急制动 · 规则制定 · 成员任免（规则手册 §3.1 CEO 三权）",
   manager: "跨店继承与审计 · 审批",
   readonly: "只读视图 · 无写入口（E2.6）",
   group: "集团视角",
@@ -253,7 +253,7 @@ function RosterHome() {
   /* 左栏：名册导航 + 在线概览 */
   const left = (
     <>
-      <div className="mb-2 px-1 text-[11px] tracking-[.2em] text-ink3">名册 · ROSTER</div>
+      <div className="mb-2 px-1 text-[11px] tracking-[.2em] text-ink3">团队成员 · ROSTER</div>
       <div className="mb-1.5 rounded-lg border border-line bg-card px-3 py-2.5">
         <div className="text-caption font-bold text-ink">人类成员 · {humans.length}</div>
         <div className="mt-0.5 text-micro text-ink3">{humans.filter((h) => h.online).length} 人在线（近 24h 留痕）</div>
@@ -302,7 +302,7 @@ function RosterHome() {
         {failed && (
           <div className="mb-3">
             <BannerAlert level="warn" actionLabel="重试" onAction={() => void load()}>
-              名册数据加载失败（连接中断·重连中，不伪造数据）——点击重试
+              团队成员数据加载失败（连接中断·重连中，不伪造数据）——点击重试
             </BannerAlert>
           </div>
         )}
@@ -431,7 +431,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
         onClick={() => nav("/p8")}
         className="mt-2 w-full cursor-pointer rounded-lg border border-line bg-bg800/50 px-3 py-1.5 text-caption text-ink3 hover:border-gline"
       >
-        ← 返回名册
+        ← 返回团队成员
       </button>
     </>
   );
@@ -468,12 +468,12 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
         {!ready ? (
           <><SkeletonBlock lines={2} h={40} /><SkeletonBlock lines={8} /></>
         ) : !p ? (
-          <EmptyState icon="🛰" title="船员不存在或已离舰" hint="返回名册选择其他船员" actionLabel="← 返回名册" onAction={() => nav("/p8")} />
+          <EmptyState icon="🛰" title="成员不存在或已停用" hint="返回团队成员选择其他成员" actionLabel="← 返回团队成员" onAction={() => nav("/p8")} />
         ) : (
           <>
             <div className="mb-3 flex items-baseline gap-3">
               <h2 className="text-h1 font-black tracking-wider">
-                船员档案 · {p.agent.name}
+                成员档案 · {p.agent.name}
                 <span className="ml-2 font-mono text-body font-normal text-holo">{p.agent.version}</span>
               </h2>
               <span className="text-[11px] tracking-[.2em] text-ink3">P8E1 · F2.10/F1.7</span>
@@ -492,7 +492,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
               </div>
             )}
 
-            {/* 上排三卡：身份与归属 / 航道许可 / 技能包 */}
+            {/* 上排三卡：身份与归属 / 规则许可 / 技能包 */}
             <div className="grid grid-cols-3 gap-3.5">
               <div className="rounded-msg border border-line bg-card p-3.5">
                 <div className="mb-2 text-caption font-bold text-holo">身份与归属</div>
@@ -509,7 +509,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
               </div>
 
               <div className="rounded-msg border border-line bg-card p-3.5">
-                <div className="mb-2 text-caption font-bold text-holo">航道许可 · 围栏授权（F2.10）</div>
+                <div className="mb-2 text-caption font-bold text-holo">规则许可 · 围栏授权（F2.10）</div>
                 {p.fences.length === 0 ? (
                   <div className="text-caption text-ink3">未声明 fence_bindings——系统级禁写，仅只读动作可达</div>
                 ) : (

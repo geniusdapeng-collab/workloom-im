@@ -6,43 +6,43 @@
 <title>WorkLoom IM · 云栖酒店 · 全系统高保真 Demo（移动）</title>
 <style>
 :root{
-  --bg950:#050a1a; --bg900:#0a1230; --bg800:#101a3d; --bg700:#16224a;
-  --panel:#0c1432; --card:#0e1736;
-  --line:rgba(120,180,255,.16); --gline:rgba(233,181,88,.38);
-  --gold:#e9b558; --goldhi:#ffd98a; --ongold:#2a1f08;
-  --holo:#45e0ff; --go:#6adf8a; --warn:#ffbe6a; --alert:#ff5470;
-  --ink:#eef3ff; --ink2:#b9c6e8; --ink3:#7280a8;
+  --bg950:#fff5f7; --bg900:#ffffff; --bg800:#fff0f4; --bg700:#ffe4ec;
+  --panel:#fff0f4; --card:#ffffff;
+  --line:rgba(255,36,66,.16); --gline:rgba(255,36,66,.38);
+  --gold:#ff2442; --goldhi:#d4002a; --ongold:#ffffff;
+  --holo:#4d96ff; --go:#22c88a; --warn:#ffaa33; --alert:#ff4d6d;
+  --ink:#33262b; --ink2:#8a757d; --ink3:#b9a9b0;
 }
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#02040c;font:14px/1.6 "PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);display:flex;justify-content:center;padding:18px 0}
+body{background:#fff5f7;font:14px/1.6 "PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);display:flex;justify-content:center;padding:18px 0}
 button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 input{font:inherit;color:var(--ink);background:var(--bg900);border:1px solid var(--line);border-radius:8px;padding:8px 12px;outline:none}
 .mono{font-family:ui-monospace,Menlo,monospace}
 /* 手机壳（390px 内容区） */
-.phone{width:390px;border-radius:44px;border:2px solid #2a2f4a;background:#070b1c;overflow:hidden;box-shadow:0 30px 90px rgba(0,0,0,.7),0 0 0 8px #11142a;position:relative}
-.notch{height:26px;display:flex;align-items:center;justify-content:center;background:#070b1c}
+.phone{width:390px;border-radius:44px;border:2px solid #e5dce0;background:#fff5f7;overflow:hidden;box-shadow:0 30px 90px rgba(51,38,43,.25),0 0 0 8px #ffe4ec;position:relative}
+.notch{height:26px;display:flex;align-items:center;justify-content:center;background:#fff5f7}
 .notch i{width:110px;height:18px;border-radius:9px;background:#000;border:1px solid #1a1e33}
 .screen{height:760px;overflow-y:auto;position:relative;
   background:
-   radial-gradient(60% 40% at 18% 4%, rgba(36,27,77,.55), transparent 70%),
-   radial-gradient(60% 45% at 50% 110%, rgba(36,27,77,.45), transparent 70%),
-   linear-gradient(#0a1230,#050a1a);}
+   radial-gradient(60% 40% at 18% 4%, rgba(255,224,236,.85), transparent 70%),
+   radial-gradient(60% 45% at 50% 110%, rgba(255,224,236,.7), transparent 70%),
+   linear-gradient(#ffffff,#fff5f7);}
 .screen::-webkit-scrollbar{width:0}
 /* 顶栏（镜像移动端极简 chrome） */
-.mbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:8px;padding:8px 14px;background:rgba(5,10,26,.92);border-bottom:1px solid var(--line);backdrop-filter:blur(6px)}
+.mbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:8px;padding:8px 14px;background:rgba(255,255,255,.96);border-bottom:1px solid var(--line);backdrop-filter:blur(6px)}
 .logo{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:900}
-.logo .diamond{width:11px;height:11px;transform:rotate(45deg);border-radius:2px;background:linear-gradient(135deg,#ffd98a,#c8842a);box-shadow:0 0 10px rgba(255,160,60,.6)}
+.logo .diamond{width:11px;height:11px;transform:rotate(45deg);border-radius:2px;background:linear-gradient(135deg,#d4002a,#d4002a);box-shadow:0 0 10px rgba(255,170,51,.6)}
 .logo .word{background:linear-gradient(to right,#fff6e3,var(--gold));-webkit-background-clip:text;background-clip:text;color:transparent}
 .mbar .ws{font-size:10px;color:var(--ink3)}
-.nightpill{display:inline-flex;align-items:center;gap:4px;border:1px solid rgba(69,224,255,.4);background:rgba(69,224,255,.07);border-radius:999px;padding:2px 8px;font-size:9px;color:var(--holo)}
+.nightpill{display:inline-flex;align-items:center;gap:4px;border:1px solid rgba(77,150,255,.4);background:rgba(77,150,255,.07);border-radius:999px;padding:2px 8px;font-size:9px;color:var(--holo)}
 .nightpill .dot{width:5px;height:5px;border-radius:50%;background:var(--holo);box-shadow:0 0 6px var(--holo);animation:breath 1.6s infinite}
 @keyframes breath{50%{opacity:.35}}
 /* 底部 Tab（拇指区 §4.2） */
-.tabbar{position:sticky;bottom:0;z-index:20;display:flex;background:rgba(5,10,26,.95);border-top:1px solid var(--line);backdrop-filter:blur(6px)}
+.tabbar{position:sticky;bottom:0;z-index:20;display:flex;background:rgba(255,255,255,.96);border-top:1px solid var(--line);backdrop-filter:blur(6px)}
 .tabbar button{flex:1;padding:8px 0 10px;font-size:10px;color:var(--ink3);display:flex;flex-direction:column;align-items:center;gap:2px}
 .tabbar button .ic{font-size:16px}
 .tabbar button.cur{color:var(--gold)}
-.tabbar button.cur .ic{filter:drop-shadow(0 0 6px rgba(233,181,88,.6))}
+.tabbar button.cur .ic{filter:drop-shadow(0 0 6px rgba(255,36,66,.6))}
 /* 通用 */
 .page{display:none;padding:14px 14px 20px;min-height:640px}
 .page.on{display:block}
@@ -50,47 +50,47 @@ input{font:inherit;color:var(--ink);background:var(--bg900);border:1px solid var
 .cardpad{padding:12px}
 .chip{display:inline-block;border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-size:9px;color:var(--ink3)}
 .chip.go{border-color:rgba(106,223,138,.4);color:var(--go)}
-.chip.warn{border-color:rgba(255,190,106,.4);color:var(--warn)}
-.chip.holo{border-color:rgba(69,224,255,.4);color:var(--holo)}
+.chip.warn{border-color:rgba(255,170,51,.4);color:var(--warn)}
+.chip.holo{border-color:rgba(77,150,255,.4);color:var(--holo)}
 .chip.gold{border-color:var(--gline);color:var(--goldhi)}
-.chip.alert{border-color:rgba(255,84,112,.5);color:var(--alert)}
+.chip.alert{border-color:rgba(255,77,109,.5);color:var(--alert)}
 .btn{border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--ink2)}
 .btn.go{border-color:rgba(106,223,138,.5);color:var(--go)}
-.btn.warn{border-color:rgba(255,190,106,.5);color:var(--warn)}
-.btn.holo{border-color:rgba(69,224,255,.4);color:var(--holo)}
+.btn.warn{border-color:rgba(255,170,51,.5);color:var(--warn)}
+.btn.holo{border-color:rgba(77,150,255,.4);color:var(--holo)}
 .btn.gold{border-color:var(--gline);color:var(--goldhi);font-weight:700}
-.btn.alert{border-color:rgba(255,84,112,.5);color:var(--alert)}
-.btn.goldgrad{background:linear-gradient(135deg,#ffd98a,#d9a144);color:var(--ongold);font-weight:700;border:none}
+.btn.alert{border-color:rgba(255,77,109,.5);color:var(--alert)}
+.btn.goldgrad{background:linear-gradient(135deg,#d4002a,#ff7a9e);color:var(--ongold);font-weight:700;border:none}
 .h1{font-size:17px;font-weight:900}
 .sub{font-size:9px;letter-spacing:.18em;color:var(--ink3)}
 .small{font-size:12px;color:var(--ink2)}
 .tiny{font-size:10px;color:var(--ink3)}
 .rowbet{display:flex;align-items:center;justify-content:space-between}
-.handoff{border:1px solid var(--gline);border-radius:12px;background:linear-gradient(135deg,rgba(233,181,88,.08),transparent);padding:11px}
-.askcard{border:1px solid rgba(255,190,106,.4);border-radius:12px;background:rgba(255,190,106,.05);padding:11px}
+.handoff{border:1px solid var(--gline);border-radius:12px;background:linear-gradient(135deg,rgba(255,36,66,.08),transparent);padding:11px}
+.askcard{border:1px solid rgba(255,170,51,.4);border-radius:12px;background:rgba(255,170,51,.05);padding:11px}
 .metric{border:1px solid var(--line);border-radius:10px;background:var(--card);padding:10px}
 .metric .v{font-size:17px;font-weight:800;margin-top:2px}
-/* 剧场页 */
+/* 经营主页页 */
 .theater-hero{position:relative;height:240px;display:flex;align-items:center;justify-content:center}
 .core-wrap{position:relative;width:130px;height:130px}
-.ring{position:absolute;border-radius:50%;border:1px solid rgba(200,132,42,.4);transform:rotateX(68deg)}
+.ring{position:absolute;border-radius:50%;border:1px solid rgba(255,36,66,.4);transform:rotateX(68deg)}
 .ring.r0{inset:0;animation:spin 9s linear infinite}
-.ring.r1{inset:12px;border-color:rgba(200,132,42,.25);animation:spin 7s linear infinite reverse}
-.ring.r2{inset:24px;border-color:rgba(200,132,42,.15);animation:spin 5s linear infinite}
+.ring.r1{inset:12px;border-color:rgba(255,36,66,.25);animation:spin 7s linear infinite reverse}
+.ring.r2{inset:24px;border-color:rgba(255,36,66,.15);animation:spin 5s linear infinite}
 @keyframes spin{to{transform:rotateX(68deg) rotate(360deg)}}
 .core{position:absolute;left:50%;top:50%;width:34px;height:34px;transform:translate(-50%,-50%);border-radius:50%;
-  background:radial-gradient(circle at 40% 35%,#ffe9b8,#c8842a 75%);box-shadow:0 0 30px rgba(233,181,88,.8),0 0 80px rgba(233,181,88,.3);animation:corep 2.4s infinite}
+  background:radial-gradient(circle at 40% 35%,#ffe9b8,#d4002a 75%);box-shadow:0 0 30px rgba(255,36,66,.8),0 0 80px rgba(255,36,66,.3);animation:corep 2.4s infinite}
 @keyframes corep{50%{opacity:.6}}
 .satdot{position:absolute;width:8px;height:8px;border-radius:50%;animation:breath 2.4s infinite}
-.ticker{border:1px solid var(--line);border-radius:8px;background:rgba(12,20,50,.6);overflow:hidden;padding:5px 0;margin-top:10px}
+.ticker{border:1px solid var(--line);border-radius:8px;background:rgba(255,240,244,.9);overflow:hidden;padding:5px 0;margin-top:10px}
 .ticker .in{display:inline-flex;gap:22px;white-space:nowrap;font-size:10px;color:var(--ink3);animation:tick 26s linear infinite;padding-left:12px}
 .ticker b{color:var(--ink2)}
 @keyframes tick{to{transform:translateX(-50%)}}
-.bubble{border:1px solid var(--gline);border-radius:12px;background:rgba(14,23,54,.9);padding:10px;font-size:12px;line-height:1.7;margin-top:10px}
+.bubble{border:1px solid var(--gline);border-radius:12px;background:rgba(255,255,255,.92);padding:10px;font-size:12px;line-height:1.7;margin-top:10px}
 /* toast */
 #toast{position:absolute;left:50%;bottom:70px;transform:translateX(-50%);z-index:50;display:none;width:320px;text-align:center;
-  border:1px solid var(--gline);background:#0c1432f5;border-radius:10px;padding:9px 12px;font-size:12px;color:var(--goldhi)}
-.demotag{position:sticky;top:0;z-index:30;text-align:center;font-size:9px;letter-spacing:.16em;color:var(--gold);background:#080d22f0;padding:3px;border-bottom:1px solid var(--gline)}
+  border:1px solid var(--gline);background:#fff0f4f5;border-radius:10px;padding:9px 12px;font-size:12px;color:var(--goldhi)}
+.demotag{position:sticky;top:0;z-index:30;text-align:center;font-size:9px;letter-spacing:.16em;color:var(--gold);background:#fffffff2;padding:3px;border-bottom:1px solid var(--gline)}
 </style>
 </head>
 <body>
@@ -102,13 +102,13 @@ input{font:inherit;color:var(--ink);background:var(--bg900);border:1px solid var
       <span class="logo"><span class="diamond"></span><span class="word">WorkLoom</span></span>
       <span class="ws">云栖酒店</span>
       <span style="flex:1"></span>
-      <button class="nightpill" onclick="toast('夜班 · 已就绪 22:00 出征 → 守夜战队（/p9）')"><span class="dot"></span>夜班 已就绪</button>
+      <button class="nightpill" onclick="toast('夜班 · 已就绪 22:00 出征 → 夜班团队（/p9）')"><span class="dot"></span>夜班 已就绪</button>
     </div>
 
-    <!-- ========== Tab 1 剧场（P0 精简：CEO 光核 + 卫星点阵 + 实况一行） ========== -->
+    <!-- ========== Tab 1 经营主页（P0 精简：CEO 光核 + 卫星点阵 + 实况一行） ========== -->
     <div class="page on" id="pg-stage">
       <div class="rowbet">
-        <span class="h1">经营剧场</span>
+        <span class="h1">经营主页</span>
         <span class="sub">路由 / · P0 精简</span>
       </div>
       <div class="theater-hero">
@@ -136,11 +136,11 @@ input{font:inherit;color:var(--ink);background:var(--bg900);border:1px solid var
       </div>
     </div>
 
-    <!-- ========== Tab 2 战报（P3 镜像） ========== -->
+    <!-- ========== Tab 2 日报（P3 镜像） ========== -->
     <div class="page" id="pg-report">
-      <div class="rowbet"><span class="h1">掌上战报</span><span class="sub">路由 /p3 · P3 镜像</span></div>
+      <div class="rowbet"><span class="h1">掌上日报</span><span class="sub">路由 /p3 · P3 镜像</span></div>
       <div class="handoff" style="margin-top:10px">
-        <div class="rowbet"><span class="small" style="color:var(--goldhi);font-weight:700">◐ 昨夜班组战报</span><span class="tiny">08:30 送达</span></div>
+        <div class="rowbet"><span class="small" style="color:var(--goldhi);font-weight:700">◐ 昨夜班组日报</span><span class="tiny">08:30 送达</span></div>
         <div style="display:flex;gap:18px;margin-top:8px">
           <span><b style="font-size:17px;color:var(--go)">✓9</b><br><span class="tiny">已完成</span></span>
           <span><b style="font-size:17px;color:var(--warn)">◆3</b><br><span class="tiny">待跟进</span></span>
@@ -149,9 +149,9 @@ input{font:inherit;color:var(--ink);background:var(--bg900);border:1px solid var
         </div>
         <div class="tiny" style="margin-top:6px">围栏快照 hotel-baseline/v1 · 三计数与 P1 交接班卡强一致</div>
       </div>
-      <div class="sub" style="margin:12px 0 6px">待您裁决（单条 ≤2 步 · 三手势权重 1/2/3）</div>
+      <div class="sub" style="margin:12px 0 6px">待您审批（单条 ≤2 步 · 三手势权重 1/2/3）</div>
       <div class="card cardpad" style="margin-bottom:8px" id="m-a1">
-        <div class="rowbet"><b class="small">差评回复发布</b><span class="chip warn">待裁决</span></div>
+        <div class="rowbet"><b class="small">差评回复发布</b><span class="chip warn">待审批</span></div>
         <div class="tiny" style="margin-top:3px">携程 2 分评价 · R6 差评必审</div>
         <div style="display:flex;gap:6px;margin-top:7px">
           <button class="btn go" style="flex:1;padding:4px" onclick="mGest('m-a1','采纳')">✓ 采纳</button>
@@ -160,7 +160,7 @@ input{font:inherit;color:var(--ink);background:var(--bg900);border:1px solid var
         </div>
       </div>
       <div class="card cardpad" style="margin-bottom:8px" id="m-a2">
-        <div class="rowbet"><b class="small">大额退款 ¥860</b><span class="chip warn">待裁决</span></div>
+        <div class="rowbet"><b class="small">大额退款 ¥860</b><span class="chip warn">待审批</span></div>
         <div class="tiny" style="margin-top:3px">到店无房协商全额退款 · R4 必审</div>
         <div style="display:flex;gap:6px;margin-top:7px">
           <button class="btn go" style="flex:1;padding:4px" onclick="mGest('m-a2','采纳')">✓ 采纳</button>
@@ -168,7 +168,7 @@ input{font:inherit;color:var(--ink);background:var(--bg900);border:1px solid var
           <button class="btn warn" style="flex:1;padding:4px" onclick="mGest('m-a2','驳回')">✕ 驳回</button>
         </div>
       </div>
-      <div class="card cardpad" style="border-color:rgba(255,84,112,.45)">
+      <div class="card cardpad" style="border-color:rgba(255,77,109,.45)">
         <b class="small" style="color:var(--alert)">▲ 求援：担保订单异常</b>
         <div class="tiny" style="margin-top:3px">R5 需介入——夜间不确定不执行，已挂起。</div>
         <button class="btn gold" style="margin-top:7px;padding:4px 10px;font-size:11px" onclick="toast('已派单：值班经理介入担保异常核查')">⚡ 一键派单</button>
@@ -181,7 +181,7 @@ input{font:inherit;color:var(--ink);background:var(--bg900);border:1px solid var
 
     <!-- ========== Tab 3 审批（P4 镜像 · 三手势） ========== -->
     <div class="page" id="pg-appr">
-      <div class="rowbet"><span class="h1">决断队列</span><span class="sub">路由 /p4 · P4 镜像</span></div>
+      <div class="rowbet"><span class="h1">审批队列</span><span class="sub">路由 /p4 · P4 镜像</span></div>
       <div class="tiny" style="margin-top:6px">队列 = approvals 统一投影 · 高危双人 / 越围栏必审 / 其余逐步审</div>
       <div id="mqueue" style="margin-top:10px;display:flex;flex-direction:column;gap:8px"></div>
     </div>
@@ -190,7 +190,7 @@ input{font:inherit;color:var(--ink);background:var(--bg900);border:1px solid var
     <div class="page" id="pg-svc">
       <div class="rowbet"><span class="h1">服务前台</span><span class="sub">路由 /p22 · P22 镜像</span></div>
       <!-- SLA 预警 -->
-      <div class="card cardpad" style="border-color:rgba(255,84,112,.5);margin-top:10px">
+      <div class="card cardpad" style="border-color:rgba(255,77,109,.5);margin-top:10px">
         <b class="small" style="color:var(--alert)">⚠ SLA 超时 1 单</b>
         <div class="tiny" style="margin-top:2px">工单 ···007「2021 房 WiFi 频繁掉线」受理超时已升级加急，值班经理介入督办。</div>
       </div>
@@ -215,7 +215,7 @@ input{font:inherit;color:var(--ink);background:var(--bg900);border:1px solid var
           <button class="btn go" style="flex:1;padding:4px" onclick="mTk('m-t2','已完成','结果已推送通知 C 端')">✓ 办结</button>
         </div>
       </div>
-      <div class="card cardpad" style="border-color:rgba(255,84,112,.5)" id="m-t7">
+      <div class="card cardpad" style="border-color:rgba(255,77,109,.5)" id="m-t7">
         <div class="rowbet"><span class="mono tiny">···007</span><span><span class="chip">已受理</span> <span class="chip alert">SLA 超时</span></span></div>
         <div class="small" style="margin-top:4px">2021 房 WiFi 频繁掉线 <span class="chip">维修报修</span></div>
         <div class="tiny" style="margin-top:2px">未分派 · 已升级加急</div>
@@ -238,19 +238,19 @@ input{font:inherit;color:var(--ink);background:var(--bg900);border:1px solid var
     <div class="page" id="pg-me">
       <div class="rowbet"><span class="h1">我的</span><span class="sub">MEM-001 · 经营者</span></div>
       <div class="card cardpad" style="margin-top:10px;display:flex;gap:10px;align-items:center">
-        <span style="width:40px;height:40px;border-radius:50%;border:1px solid rgba(233,181,88,.6);background:rgba(233,181,88,.1);display:flex;align-items:center;justify-content:center;color:var(--goldhi)">王</span>
+        <span style="width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,36,66,.6);background:rgba(255,36,66,.1);display:flex;align-items:center;justify-content:center;color:var(--goldhi)">王</span>
         <div><b class="small">王店长</b><div class="tiny">MEM-001 · 云栖酒店 · 经营者</div></div>
       </div>
       <div class="card cardpad" style="margin-top:10px">
         <div class="small" style="font-weight:700;color:var(--holo)">夜班状态</div>
         <div class="rowbet" style="margin-top:6px">
           <span class="nightpill"><span class="dot"></span>夜班 · 已就绪 22:00 出征</span>
-          <span class="chip go">昨夜战报已生成</span>
+          <span class="chip go">昨夜日报已生成</span>
         </div>
-        <div class="tiny" style="margin-top:6px">窗口 22:00–08:00 · 战报 每天 08:30 · 围栏快照 hotel-baseline/v1</div>
+        <div class="tiny" style="margin-top:6px">窗口 22:00–08:00 · 日报 每天 08:30 · 围栏快照 hotel-baseline/v1</div>
       </div>
       <div class="card cardpad" style="margin-top:10px">
-        <div class="small" style="font-weight:700;color:var(--holo)">守夜班组（5 名在线）</div>
+        <div class="small" style="font-weight:700;color:var(--holo)">夜班班组（5 名在线）</div>
         <div class="tiny" style="margin-top:6px;line-height:2">
           调价Agent v2.3 · 评价Agent v1.8 · 对账Agent v2.0 · 巡检Agent v1.2（只读）· 竞对Agent v1.1（只读）
         </div>
@@ -265,8 +265,8 @@ input{font:inherit;color:var(--ink);background:var(--bg900);border:1px solid var
 
     <!-- 底部 Tab -->
     <div class="tabbar">
-      <button class="cur" data-pg="pg-stage" onclick="mTab(this)"><span class="ic" style="color:var(--gold);font-weight:900">剧</span>剧场</button>
-      <button data-pg="pg-report" onclick="mTab(this)"><span class="ic" style="color:var(--holo);font-weight:900">战</span>战报</button>
+      <button class="cur" data-pg="pg-stage" onclick="mTab(this)"><span class="ic" style="color:var(--gold);font-weight:900">主</span>经营主页</button>
+      <button data-pg="pg-report" onclick="mTab(this)"><span class="ic" style="color:var(--holo);font-weight:900">报</span>日报</button>
       <button data-pg="pg-appr" onclick="mTab(this)"><span class="ic" style="color:var(--warn);font-weight:900">审</span>审批</button>
       <button data-pg="pg-svc" onclick="mTab(this)"><span class="ic" style="color:var(--goldhi);font-weight:900">服</span>服务前台</button>
       <button data-pg="pg-me" onclick="mTab(this)"><span class="ic" style="color:var(--ink2);font-weight:900">我</span>我的</button>
@@ -285,15 +285,15 @@ function mTab(btn){
   $(btn.dataset.pg).classList.add("on");
   $("screen").scrollTop=0;
 }
-/* 剧场：卫星点阵（7 Agent 真实名单绩效色） */
-const SATS=[["调价Agent","#6adf8a"],["评价Agent","#ffbe6a"],["对账Agent","#8ad8ff"],["巡检Agent","#8ad8ff"],["竞对Agent","#8ad8ff"],["内容Agent","#6adf8a"],["桌面Agent","#ff8a8a"]];
+/* 经营主页：卫星点阵（7 Agent 真实名单绩效色） */
+const SATS=[["调价Agent","#22c88a"],["评价Agent","#ffaa33"],["对账Agent","#6ec6ff"],["巡检Agent","#6ec6ff"],["竞对Agent","#6ec6ff"],["内容Agent","#22c88a"],["桌面Agent","#ff4d6d"]];
 (function(){
   const f=$("satfield");
   SATS.forEach((s,i)=>{
     const d=document.createElement("span");d.className="satdot";d.title=s[0];
     d.style.background=s[1];d.style.boxShadow=`0 0 8px ${s[1]}`;d.style.animationDuration=(2+i*.3)+"s";
     f.appendChild(d);d._i=i;
-    d.onclick=()=>toast(s[0]+" · 绩效态正常 · 去名册 P8 看全部");
+    d.onclick=()=>toast(s[0]+" · 绩效态正常 · 去团队成员 P8 看全部");
   });
   const t0=Date.now();
   (function loop(){
@@ -307,7 +307,7 @@ const SATS=[["调价Agent","#6adf8a"],["评价Agent","#ffbe6a"],["对账Agent","
   })();
 })();
 /* 实况一行（动作经 display.ts 中文化） */
-const TICK=[["调整房价","调价Agent"],["生成夜班战报","系统"],["CEO 晨报","公司CEO"],["创建工单","服务台Agent"],["办结工单","王师傅"],["检索知识库","服务台Agent"]];
+const TICK=[["调整房价","调价Agent"],["生成夜班日报","系统"],["CEO 晨报","公司CEO"],["创建工单","服务台Agent"],["办结工单","王师傅"],["检索知识库","服务台Agent"]];
 $("mticker").innerHTML=TICK.concat(TICK).map(e=>`<span><b>${e[0]}</b> · ${e[1]}</span>`).join("");
 function mDecide(g){
   $("m-l4").innerHTML=`<div class="small" style="color:${g==="approve"?"var(--go)":"var(--warn)"}">${g==="approve"?"✓ 已批准":"✕ 已驳回"}，全链留痕（审批台 P4 可见）</div>`;
@@ -325,18 +325,18 @@ function mBrake(){
 }
 /* 审批队列（P4 镜像） */
 const QUEUE=[
-  {st:"待裁决",chip:"warn",t:"差评回复发布（携程 2 分）",id:"···8853",rule:"R6 差评必审 · hotel-baseline/v1",diff:["（尚未发布）","致歉＋已核实＋改进承诺（无档案外补偿）"]},
-  {st:"待裁决",chip:"warn",t:"大额退款 ¥860（到店无房）",id:"···8857",rule:"R4 退款 ≥¥500 必审",diff:["订单 ¥860 在住","全额退款 ¥860（协商一致）"]},
+  {st:"待审批",chip:"warn",t:"差评回复发布（携程 2 分）",id:"···8853",rule:"R6 差评必审 · hotel-baseline/v1",diff:["（尚未发布）","致歉＋已核实＋改进承诺（无档案外补偿）"]},
+  {st:"待审批",chip:"warn",t:"大额退款 ¥860（到店无房）",id:"···8857",rule:"R4 退款 ≥¥500 必审",diff:["订单 ¥860 在住","全额退款 ¥860（协商一致）"]},
   {st:"已批准",chip:"go",t:"差评回复发布（美团 3 分）",id:"···8842",rule:"R6 差评必审 · 王店长已采纳",diff:["（尚未发布）","致歉结构回复 · 快照已归档"]},
 ];
 function renderQueue(){
   $("mqueue").innerHTML=QUEUE.map((q,i)=>`
-    <div class="card cardpad" style="${q.st==="待裁决"?"border-color:rgba(255,190,106,.4)":""}">
+    <div class="card cardpad" style="${q.st==="待审批"?"border-color:rgba(255,170,51,.4)":""}">
       <div class="rowbet"><span class="chip ${q.chip}">${q.st}</span><span class="mono tiny">apr ${q.id}</span></div>
       <b class="small" style="display:inline-flex;margin-top:5px">${q.t}</b>
       <div class="tiny" style="margin-top:2px">${q.rule}</div>
       <div class="tiny" style="margin-top:5px"><span style="color:var(--alert);text-decoration:line-through">− ${q.diff[0]}</span><br><span style="color:var(--go)">＋ ${q.diff[1]}</span></div>
-      ${q.st==="待裁决"?`<div style="display:flex;gap:6px;margin-top:8px">
+      ${q.st==="待审批"?`<div style="display:flex;gap:6px;margin-top:8px">
         <button class="btn go" style="flex:1;padding:4px" onclick="qGest(${i},'采纳')">✓ 采纳</button>
         <button class="btn holo" style="flex:1;padding:4px" onclick="qGest(${i},'编辑后采纳')">✎ 编辑后采纳</button>
         <button class="btn warn" style="flex:1;padding:4px" onclick="qGest(${i},'驳回')">✕ 驳回</button>
@@ -348,11 +348,11 @@ function qGest(i,g){QUEUE[i].st=g==="驳回"?"已驳回":g==="采纳"?"已批准
 function mSearch(){
   const q=$("mq").value.trim()||"早餐在哪里吃";
   $("mhits").innerHTML=`<div class="tiny">「${q.replace(/</g,"&lt;")}」命中 2 块</div>
-    <div style="border:1px solid var(--line);border-radius:8px;padding:8px;background:rgba(16,26,61,.6)">
+    <div style="border:1px solid var(--line);border-radius:8px;padding:8px;background:rgba(255,240,244,.9)">
       <div class="rowbet tiny"><span style="color:var(--ink2)">住客常见问答·餐饮美食 · 早餐在哪里用餐？</span><b style="color:var(--holo)">0.87</b></div>
       <div class="tiny" style="margin-top:3px">早餐在酒店一层云栖餐厅用餐，中西式自助约 60 款餐品。</div>
     </div>
-    <div style="border:1px solid var(--line);border-radius:8px;padding:8px;background:rgba(16,26,61,.6)">
+    <div style="border:1px solid var(--line);border-radius:8px;padding:8px;background:rgba(255,240,244,.9)">
       <div class="rowbet tiny"><span style="color:var(--ink2)">住客常见问答·餐饮美食 · 早餐几点开始？</span><b style="color:var(--holo)">0.82</b></div>
       <div class="tiny" style="margin-top:3px">每日 07:00-10:30，周末延至 11:00，一层云栖餐厅。</div>
     </div>`;
