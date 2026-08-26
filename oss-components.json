@@ -10,7 +10,7 @@
       "name": "@deepseek-ai/dsh",
       "repo": "https://github.com/deepseek-ai/harness",
       "channel": "npm",
-      "current": "0.1.1-rc.1",
+      "current": "0.1.1-rc.2",
       "cadence": "weekly",
       "gate": "runtime-gate",
       "scope": "packages/runtime/dsh-gate",
