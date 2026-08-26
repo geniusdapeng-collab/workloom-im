@@ -44,7 +44,7 @@
     "concurrently": "^9.1.0",
     "tsx": "^4.23.12",
     "typescript": "^5.9.0",
-    "vitest": "^3.2.0",
+    "vitest": "^4.1.11",
     "yaml": "2.9.0"
   },
   "description": "WorkLoom IM · 企业级 Agent IM 底座（智能班组 + 围栏 + 人审 + 夜班）"

@@ -170,7 +170,7 @@
       "name": "vitest",
       "repo": "https://github.com/vitest-dev/vitest",
       "channel": "npm",
-      "current": "3.x",
+      "current": "4.1.11",
       "cadence": "monthly",
       "gate": "standard",
       "scope": "root, packages/base",
