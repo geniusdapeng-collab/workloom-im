@@ -23,7 +23,7 @@
 所有桌面交互统一走一个入口：
 
 ```bash
-python3 /root/.codebuddy/skills/computer-use/scripts/computer_tool.py '<action_json>'
+pnpm computer '<action_json>'   # 仓内首选入口（等价于 python3 packages/base/computer-use/toolkit/computer_tool.py）
 ```
 
 ---
