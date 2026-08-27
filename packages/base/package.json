@@ -19,6 +19,7 @@
     "./service-channels": "./service-channels/index.ts",
     "./tenancy": "./tenancy/index.ts",
     "./wizard": "./wizard/index.ts",
+    "./computer-use": "./computer-use/index.ts",
     "./captain": {
       "types": "./captain/index.ts",
       "default": "./captain/index.ts"
