@@ -1,7 +1,7 @@
 {
  "repo": "workloom-im",
  "description": "WorkLoom IM · 企业级 Agent IM 底座（智能班组 + 围栏 + 人审 + 夜班）",
- "generatedAt": "2026-08-27T00:58:20.500Z",
+ "generatedAt": "2026-08-27T01:23:53.458Z",
  "demoPages": [
   "service-front-b-mobile.html",
   "service-front-b-pc.html",
@@ -115,6 +115,11 @@
    "icon": "✅",
    "title": "验证与质量（工程纪律）",
    "items": [
+    {
+     "name": "一键安装（bootstrap）",
+     "how": "`pnpm setup`",
+     "desc": "克隆后一条命令装好全部能力：环境/依赖/PG/迁移种子/桌面栈，幂等"
+    },
     {
      "name": "主测试套件",
      "how": "`pnpm suite`",
