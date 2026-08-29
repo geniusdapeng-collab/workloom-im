@@ -23,7 +23,8 @@
     "./captain": {
       "types": "./captain/index.ts",
       "default": "./captain/index.ts"
-    }
+    },
+    "./audit-core": "./audit-core/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
