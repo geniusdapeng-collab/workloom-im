@@ -551,7 +551,7 @@ export default function P22() {
             <input
               value={siteUrl}
               onChange={(e) => setSiteUrl(e.target.value)}
-              placeholder="https://hotel.example.com"
+              placeholder="https://www.example.com"
               className="flex-1 rounded-md border border-line bg-bg900 px-2.5 py-1.5 text-body text-ink outline-none focus:border-holo/50"
             />
             <button

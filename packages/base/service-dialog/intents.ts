@@ -7,8 +7,8 @@
  * M8 规则口径（server 层 dialog 复用同一张表 ruleBasedIntent，禁止两份规则漂移）：
  *  优先级 complaint > biz_query > service_request > kb_qa；
  *  疑问句（含「几点/时间/吗/呢/怎么/如何/什么时候」）优先 kb_qa 不建单
- *   （如「送站巴士几点发」——含服务词「送」但表疑问 → kb_qa）；
- *  明示报修词（修/修一下/坏了/故障/维修）直连 service_request（如「空调坏了帮我修一下」）。
+ *   （如「配送车辆几点发」——含服务词「送」但表疑问 → kb_qa）；
+ *  明示报修词（修/修一下/坏了/故障/维修）直连 service_request（如「设备坏了帮我修一下」）。
  */
 
 export type Intent = "chat" | "kb_qa" | "biz_query" | "service_request" | "complaint";
@@ -23,17 +23,17 @@ export interface IntentLlm {
 /** 疑问句标记：含其一即视为「问问题」而非「下指令」（优先级高于一般服务词、低于明示报修词） */
 const QUESTION_MARKERS = ["几点", "时间", "什么时候", "吗", "呢", "怎么", "如何", "多久", "多长时间", "多少", "多少钱", "哪里", "哪儿", "收费", "免费"];
 
-/** 明示报修/故障词：直连 service_request（疑问句也不拦——「空调怎么修」仍需上门） */
-const REPAIR_KEYWORDS = ["维修", "修一下", "坏了", "故障", "报修", "漏水", "不制冷", "不制热"];
+/** 明示报修/故障词：直连 service_request（疑问句也不拦——「设备怎么修」仍需上门） */
+const REPAIR_KEYWORDS = ["维修", "修一下", "坏了", "故障", "报修", "漏水", "不制冷", "不运转"];
 
 /** 规则表（complaint > biz_query > service_request > kb_qa；service_request 只收「指令型」服务词） */
 const RULES = {
   complaint: ["投诉", "差评", "不满意", "太吵", "卫生差", "态度差", "举报", "维权", "退款理由"],
-  // 价格/会员类仅在有明确「我的账户/房间预订」语境时才走业务查询，
-  // 否则「面膜多少钱」「会员吃早餐要钱吗」应走知识库（M8 评测校准：R04/A16/A20）
-  biz_query: ["我的订单", "订单", "房费", "账单", "积分", "余额", "发票记录", "押金", "房价", "房型", "大床房", "双床房", "套房", "标间", "订房", "预订", "我的会员", "会员卡", "我的积分", "我的余额"],
-  service_request: ["送", "拿", "加一", "打扫", "换床单", "开发票", "续住", "多要", "再来一份", "修"],
-  kb_qa: ["几点", "时间", "政策", "早餐", "wifi", "WiFi", "WIFI", "停车", "健身房", "泳池", "退房", "入住", "怎么", "如何", "可以带", "收费吗", "免费吗"],
+  // 价格/会员类仅在有明确「我的账户/我的订单」语境时才走业务查询，
+  // 否则「面膜多少钱」「会员优惠要钱吗」应走知识库（M8 评测校准：R04/A16/A20）
+  biz_query: ["我的订单", "订单", "费用", "账单", "积分", "余额", "发票记录", "售价", "我的会员", "会员卡", "我的积分", "我的余额"],
+  service_request: ["送", "拿", "加一", "清洁", "更换", "开发票", "续费", "多要", "再来一份", "修"],
+  kb_qa: ["几点", "时间", "政策", "营业", "会员", "优惠", "怎么", "如何", "可以带", "收费吗", "免费吗"],
 } as const;
 
 function hit(text: string, keywords: readonly string[]): boolean {
@@ -44,7 +44,7 @@ function hit(text: string, keywords: readonly string[]): boolean {
 export function ruleBasedIntent(text: string): Intent | null {
   if (hit(text, RULES.complaint)) return "complaint";
   if (hit(text, RULES.biz_query)) return "biz_query";
-  // 疑问句优先 kb_qa：「送站巴士几点发」「报修多久能来人」类问句不建单（含价格/时效疑问词）
+  // 疑问句优先 kb_qa：「配送车辆几点发」「报修多久能来人」类问句不建单（含价格/时效疑问词）
   if (hit(text, QUESTION_MARKERS)) return "kb_qa";
   // 明示报修词：直连建单（「修/修一下/坏了/故障」指令型，疑问句已在上方分流）
   if (hit(text, REPAIR_KEYWORDS)) return "service_request";

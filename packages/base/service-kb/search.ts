@@ -23,10 +23,10 @@ export interface KbSearchHit {
 const STOPCHARS = new Set([..."什么怎几多哪吗呢了的要是可有在把被让请帮我你他她它们这那和与或就不都也很还又再各每谁为啥啊呀吧嘛哦嗯办证想能够"]);
 /** 子串同义词扩展：口语词 → KB 规范词（小体量 FAQ 库的确定性桥接） */
 const SYNONYMS: Array<[string, string]> = [
-  ["早饭", "早餐"], ["网", "wifi"], ["无线", "wifi"], ["上网", "wifi"], ["网络", "wifi"],
+  ["会员", "会员卡"], ["优惠", "折扣"], ["配送", "送货"], ["开票", "发票"], ["退换", "售后"],
 ];
 /** 弱词表：单独命中不构成「区分度证据」的泛用词 */
-const WEAK_TOKENS = new Set(["时间", "免费", "收费", "可以", "服务", "房间", "酒店", "半天", "一份", "一瓶", "东西", "地方", "怎么", "如何", "一下", "价格", "多少钱", "客房", "住客", "客人", "前台", "工作", "两张", "一张", "几位", "一些"]);
+const WEAK_TOKENS = new Set(["时间", "免费", "收费", "可以", "服务", "商品", "店铺", "半天", "一份", "一瓶", "东西", "地方", "怎么", "如何", "一下", "价格", "多少钱", "订单", "买家", "顾客", "客服", "工作", "两张", "一张", "几位", "一些"]);
 
 export function tokenizeQuery(query: string): string[] {
   const tokens = new Set<string>();
@@ -64,7 +64,7 @@ export function scoreChunkFallback(
   let headHits = 0;
   for (const t of tokens) {
     if (hay.includes(t)) matched += 1;
-    if (head.includes(t) && !WEAK_TOKENS.has(t)) headHits += 1; // 弱词命中标题不构成主题信号（「收费」不该点亮「收费送物」）
+    if (head.includes(t) && !WEAK_TOKENS.has(t)) headHits += 1; // 弱词命中标题不构成主题信号（「收费」不该点亮「收费配送」）
   }
   if (matched === 0) return 0;
   const coverage = matched / tokens.length;

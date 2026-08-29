@@ -4,7 +4,7 @@
  *  - 中栏 MessageFlow：系统分隔线 → 交接班卡（P1E3，三计数与 P3 强一致 F4.4）→ KPI 投影（门店档案 history_curve 真实数据）
  *    → 巡检雷达推送（P1E4，一键派单接 inspection.dispatch；无异常显「昨夜一切正常」）
  *  - 右栏：档案 chips / 夜班班组状态卡 / 在线成员人机混编（P1E6）/ 渠道巡检状态
- *  - 底部：航线设定台（P1E1，Enter/启航→threads.dispatch；含糊→反问不建任务 F3.2）+ 快捷目标（P1E7，F3.5 酒店 6 条）
+ *  - 底部：航线设定台（P1E1，Enter/启航→threads.dispatch；含糊→反问不建任务 F3.2）+ 快捷目标（P1E7，F3.5 内置 6 条）
  * 状态变体：p1 默认 / p1_loading 骨架屏 / p1_empty 空态 / p1_community 社区版权限（隐藏夜班+Quest 快捷目标，F7.2/L2.2 隐藏非置灰）
  * 轮询：线程/夜班 5s，其余 10s（F3.4/D6）
  * 演示走查：?demo=p1_loading|p1_empty|p1_community 强制状态态（仅演示，数据接线不变）
@@ -41,12 +41,12 @@ interface ArchiveShape {
 }
 interface ProfileResp { archive: ArchiveShape; stage: string | null; name: string }
 
-/** 酒店 6 快捷目标（F3.5 原文：调价建议/回复评价/经营复盘/更新首图/对账说明/差评审批；行业 Bundle 预置） */
+/** 内置 6 快捷目标（F3.5 原文：调价建议/回复评价/经营复盘/更新首图/对账说明/差评审批；行业 Bundle 预置可覆盖） */
 const QUICK_GOALS = [
-  { label: "调价建议", text: "给出明天大床房的调价建议", preset: "pricing-agent" },
+  { label: "调价建议", text: "给出明天主打品的价格建议", preset: "pricing-agent" },
   { label: "回复评价", text: "起草最新差评的回复", preset: "review-agent" },
-  { label: "经营复盘", text: "本周经营复盘（入住率/均价/RevPAR）", preset: "reconcile-agent" },
-  { label: "更新首图", text: "检查并更新飞猪渠道首图", preset: "content-agent" },
+  { label: "经营复盘", text: "本周经营复盘（客流/均价/营收）", preset: "reconcile-agent" },
+  { label: "更新首图", text: "检查并更新各渠道首图", preset: "content-agent" },
   { label: "对账说明", text: "昨夜对账差异说明", preset: "reconcile-agent" },
   { label: "差评审批", text: "汇总待审批的差评回复", preset: "review-agent" },
 ];
@@ -304,7 +304,7 @@ export default function P1() {
           <div className="flex-1 space-y-3.5">
             <SystemDivider
               time={new Date().toTimeString().slice(0, 5)}
-              summary={`云栖酒店 · ${me?.identity.name ?? ""} 已上线（演示身份 MEM-001）`}
+              summary={`${profile?.name ?? "演示工作区"} · ${me?.identity.name ?? ""} 已上线（演示身份）`}
             />
 
             {/* P1E3 交接班卡（夜班未启用 → 空态「去配置」F4.8） */}
@@ -403,7 +403,7 @@ export default function P1() {
           <DispatchBar
             state={dispatchState}
             value={draft}
-            chips={[profile?.archive?.property?.name ?? "云栖酒店", `阶段：${profile?.stage ?? "—"}`]}
+            chips={[profile?.archive?.property?.name ?? profile?.name ?? "演示工作区", `阶段：${profile?.stage ?? "—"}`]}
             onCancelRoute={() => setDispatchState(draft ? "typing" : "empty")}
             onChange={(v) => { setDraft(v); setDispatchState(v ? "typing" : "empty"); }}
             onSubmit={() => void dispatch(draft)}

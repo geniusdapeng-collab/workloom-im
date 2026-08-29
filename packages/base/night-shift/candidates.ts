@@ -5,7 +5,7 @@
  *
  * 首版扫描源（演示口径）：
  *  - 待审批积压（review 队列 pending 数 → 夜班可推进项）
- *  - 夜班型 preset 覆盖的例行任务模板（调价复核/差评跟进/夜间对账——酒店 6 快捷目标子集 F3.5）
+ *  - 夜班型 preset 覆盖的例行任务模板（调价复核/差评跟进/夜间对账——快捷目标子集 F3.5）
  * 预估积分 = Mock 计量口径 × 谷时折扣（F4.6/G9）
  */
 import type pg from "pg";
@@ -24,7 +24,7 @@ export interface CandidateItem {
   presetKey: string;
 }
 
-/** 夜班例行任务模板（酒店版；营销版结构同构后补——D2） */
+/** 夜班例行任务模板（通用版；行业包结构同构后补——D2） */
 export const NIGHT_TASK_TEMPLATES: CandidateItem[] = [
   { id: "nt-reconcile", name: "夜间对账（订单×渠道×担保三轮）", type: "对账", estCredits: 12, fenceSummary: "R4 退款≥¥500必审 / R5 担保异常需介入", presetKey: "reconcile-agent" },
   { id: "nt-review", name: "差评跟进（起草回复，必审挂起）", type: "评价", estCredits: 8, fenceSummary: "R6 差评≤3分必审", presetKey: "review-agent" },

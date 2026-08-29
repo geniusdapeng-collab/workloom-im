@@ -497,7 +497,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
               <div className="rounded-msg border border-line bg-card p-3.5">
                 <div className="mb-2 text-caption font-bold text-holo">身份与归属</div>
                 <div className="space-y-1.5 text-caption">
-                  <div className="flex justify-between"><span className="text-ink3">Agent ID</span><span className="font-mono text-holo">{p.agent.id}</span></div>
+                  <div className="flex justify-between"><span className="text-ink3">员工编号</span><span className="font-mono text-holo">{p.agent.id}</span></div>
                   <div className="flex justify-between"><span className="text-ink3">版本（who.version 归因）</span><span className="font-mono text-ink2">{p.agent.version}</span></div>
                   <div className="flex justify-between"><span className="text-ink3">工作区</span><span className="text-ink2">{p.workspaceName}</span></div>
                   <div className="flex justify-between"><span className="text-ink3">来源 Bundle</span><span className="text-ink2">{p.bundle}</span></div>

@@ -31,9 +31,15 @@ export const trpc = createTRPCClient<AppRouter>({
   ],
 });
 
-/** 演示身份自动登录（种子成员；演示工作区 yunqi-hotel） */
-export async function ensureDemoLogin(memberNo = "MEM-001"): Promise<void> {
+/**
+ * 演示身份自动登录（演示/开发便利；生产部署用真实登录替代）。
+ * 工作区与成员均可经 VITE_DEMO_WORKSPACE / VITE_DEMO_MEMBER 覆盖——
+ * 不写死在调用侧，客户自建工作区（非种子库默认工作区）时演示登录仍可用。
+ */
+const DEMO_WORKSPACE = (import.meta.env.VITE_DEMO_WORKSPACE as string | undefined) ?? "yunqi-hotel";
+const DEMO_MEMBER = (import.meta.env.VITE_DEMO_MEMBER as string | undefined) ?? "MEM-001";
+export async function ensureDemoLogin(memberNo = DEMO_MEMBER): Promise<void> {
   if (getToken()) return;
-  const r = await trpc.auth.loginAs.mutate({ workspaceSlug: "yunqi-hotel", memberNo });
+  const r = await trpc.auth.loginAs.mutate({ workspaceSlug: DEMO_WORKSPACE, memberNo });
   setToken(r.token);
 }

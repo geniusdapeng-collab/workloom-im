@@ -137,28 +137,28 @@ async function activeRules(): Promise<RuntimeRule[]> {
 /* ================= A · 意图路由（三模式 + clarify，34 条） ================= */
 const a = C("A");
 for (const [text, mode] of [
-  ["请问上周 OCC 多少？", "ask"], ["查一下昨天的入住率", "ask"], ["统计本月差评分布", "ask"],
-  ["什么是保底价？", "ask"], ["为什么周末房价高？", "ask"], ["哪家渠道评分最低？", "ask"],
-  ["今天天气怎么样？", "ask"], ["现在满房了吗？", "ask"], ["问一下夜班跑完了吗", "ask"], ["房价是多少", "ask"],
+  ["请问上周营收多少？", "ask"], ["查一下昨天的订单量", "ask"], ["统计本月差评分布", "ask"],
+  ["什么是毛利红线？", "ask"], ["为什么周末售价高？", "ask"], ["哪家渠道评分最低？", "ask"],
+  ["今天天气怎么样？", "ask"], ["现在缺货了吗？", "ask"], ["问一下夜班跑完了吗", "ask"], ["售价是多少", "ask"],
 ] as const) a(`ask 句式「${text.slice(0, 12)}」→ ask`, () => eq(ruleBasedRoute(text).mode, mode, "路由"));
 for (const text of ["逐步生成三版文案，每一步给我审", "一步步来，先草稿给我看", "我们商量着调价", "先采集再让我确认每一步", "每一步都要我点头", "先出个初稿给我看再定"]) {
   a(`agent 句式「${text.slice(0, 10)}」→ agent`, () => eq(ruleBasedRoute(text).mode, "agent", "路由"));
 }
-for (const text of ["把周五雅致大床房调价 5%", "回复携程那条 2 分差评", "今晚夜班跑一遍对账", "把竞对价格拉一遍", "生成下周小红书文案", "把 812 房间关房", "退款给订单 1001", "调价到 ¥468", "帮我把差评都回了", "跑一轮巡检"]) {
+for (const text of ["把周五主打款调价 5%", "回复那条 2 分差评", "今晚夜班跑一遍对账", "把竞对价格拉一遍", "生成下周促销文案", "把 812 批次下架", "退款给订单 1001", "调价到 ¥468", "帮我把差评都回了", "跑一轮巡检"]) {
   a(`quest 句式「${text.slice(0, 10)}」→ quest`, () => eq(ruleBasedRoute(text).mode, "quest", "路由"));
 }
 for (const text of ["帮我看看", "看看", "在吗？", "你好", "怎么处理？", "怎么样了？", "嗯", "？？？"]) {
   a(`含糊「${text}」→ clarify 反问`, () => eq(ruleBasedRoute(text).kind, "clarify", "含糊应反问"));
 }
 a("空字符串 → clarify", () => eq(ruleBasedRoute("").kind, "clarify", "空输入"));
-a("500 字长指令不炸", () => { const r = ruleBasedRoute("把周五雅致大床房调价 5%".repeat(50)); assert(r.kind === "routed", "长文本应可路由"); });
+a("500 字长指令不炸", () => { const r = ruleBasedRoute("把周五主打款调价 5%".repeat(50)); assert(r.kind === "routed", "长文本应可路由"); });
 a("LLM 分类器正常 JSON", async () => {
   const c = new LlmIntentClassifier(async () => '{"mode":"ask","rationale":"查询"}');
   eq((await routeIntent("随便", c)).via, "llm", "LLM 路由");
 });
 a("LLM 输出垃圾 → 规则兜底", async () => {
   const c = new LlmIntentClassifier(async () => "我不是 JSON");
-  eq((await routeIntent("请问 OCC", c)).via, "rule", "垃圾回落");
+  eq((await routeIntent("请问营收", c)).via, "rule", "垃圾回落");
 });
 a("LLM 输出 markdown 包裹 JSON 可解析", async () => {
   const c = new LlmIntentClassifier(async () => '```json\n{"mode":"quest","rationale":"x"}\n```');
@@ -166,7 +166,7 @@ a("LLM 输出 markdown 包裹 JSON 可解析", async () => {
 });
 a("LLM 输出越权 mode → 规则兜底", async () => {
   const c = new LlmIntentClassifier(async () => '{"mode":"hack","rationale":"x"}');
-  eq((await routeIntent("请问 OCC", c)).via, "rule", "白名单外回落");
+  eq((await routeIntent("请问营收", c)).via, "rule", "白名单外回落");
 });
 a("提示词注入不劫持分类（分隔符内为数据）", async () => {
   let promptSeen = "";
@@ -184,7 +184,7 @@ const b = C("B");
 for (const action of ["price.adjust", "order.refund", "review.reply", "content.draft", "content.publish", "refund.apply", "desktop.gui", "trigger.create"]) {
   b(`写动作前缀「${action}」识别`, () => assert(isWriteAction(action), `${action} 应为写类`));
 }
-for (const action of ["order.list", "review.list", "pms.price.read", "inspection.scan", "competitor.fetch"]) {
+for (const action of ["order.list", "review.list", "biz.price.read", "inspection.scan", "competitor.fetch"]) {
   b(`读动作「${action}」识别`, () => assert(!isWriteAction(action), `${action} 应为读类`));
 }
 b("registerWriteActions 注册新写动作生效", async () => {
@@ -763,7 +763,7 @@ e("expire 竞态：过期瞬间 decide 与 sweep 并发，终态恰其一", asyn
 const f = C("F");
 f("合法入站消息落事件 + 成员映射", async () => {
   await qApp(`UPDATE members SET im_openids = im_openids || $2::jsonb WHERE workspace_id=$1 AND member_no='MEM-001'`, [scope.workspaceId, JSON.stringify({ dingtalk: `ou_boss_${SFX}` })]);
-  const r = await ingestInbound(app, gw, scope, { channel: "dingtalk", channelMsgId: `m-${SFX}-1`, conversationId: `cv-${SFX}`, kind: "direct", senderOpenId: `ou_boss_${SFX}`, text: "今晚满房吗" });
+  const r = await ingestInbound(app, gw, scope, { channel: "dingtalk", channelMsgId: `m-${SFX}-1`, conversationId: `cv-${SFX}`, kind: "direct", senderOpenId: `ou_boss_${SFX}`, text: "今晚营业吗" });
   eq(r.identity, "member", "成员识别");
   eq(r.memberNo, "MEM-001", "映射正确");
 });
@@ -1425,7 +1425,7 @@ j("巡检扫描正常快照 → ok", async () => {
 });
 j("探针失败重试后写 inspect.run.failed（不静默）", async () => {
   const boom = (() => { throw new Error("探针爆炸"); }) as never;
-  const r = await runInspectionScan(app, gw, scope, { snapshot: { channels: [], rooms: [], reviews: [] }, retries: 1, probes: { channel_price: boom, room_state: boom, review: boom, violation: boom } });
+  const r = await runInspectionScan(app, gw, scope, { snapshot: { channels: [], rooms: [], reviews: [] }, retries: 1, probes: { channel_price: boom, state_sync: boom, review: boom, violation: boom } });
   eq(r.ok, false, "失败上报");
   assert(r.failedEventId?.match(/^E-\d+$/), "告警事件");
 });
@@ -1584,7 +1584,7 @@ m("unicode 控制字符文本落库", async () => {
   assert(r.eventId, "控制符落库");
 });
 m("emoji/多字节文本落库", async () => {
-  const r = await gatewayAppend(gw, agentCtx(), { ...draftOf("order.list"), decision: { action: "order.list", after: { note: "酒店🏨满房🎉" } } });
+  const r = await gatewayAppend(gw, agentCtx(), { ...draftOf("order.list"), decision: { action: "order.list", after: { note: "门店🎉特惠🎉" } } });
   assert(r.eventId, "emoji 落库");
 });
 m("深嵌套 params（100 层）落库", async () => {
@@ -1741,14 +1741,14 @@ n("压测：审批批量 50 建 50 批", async () => {
 const o = C("O");
 
 o("晨间问数：口语化提问路由 ask + NL 检索可达", async () => {
-  const r = ruleBasedRoute("请问上周 OCC 多少？");
+  const r = ruleBasedRoute("请问上周营收多少？");
   eq(r.mode, "ask", "问数路由 ask");
   const nl = await nlSearchEvents(app, scope, "上周的调价记录", new MockNlTranslator());
   assert(nl.page !== undefined || nl.degraded, "NL 检索可达（正常或降级）");
 });
 o("晨会派单：一句话调价任务跑通到 completed", async () => {
   const tid = await mkThread();
-  const r = await runQuest(app, gw, scope, { threadId: tid, goal: "把周五雅致大床房调价 5%", presetKey: "pricing-agent" });
+  const r = await runQuest(app, gw, scope, { threadId: tid, goal: "把周五主打款调价 5%", presetKey: "pricing-agent" });
   eq(r.status, "completed", "调价任务完成");
   const row = await qApp<{ status: string }>(`SELECT status FROM threads WHERE id=$1`, [tid]);
   eq(row.rows[0]!.status, "completed", "线程状态同步");
@@ -1809,7 +1809,7 @@ o("夜班应急：店长一键熔断再恢复", async () => {
   eq(r1.rows[0]!.status, "running", "夜班恢复运行");
 });
 o("IM 下指令：钉钉文本进事件库且可路由为任务", async () => {
-  const text = `把周五雅致大床房调价 5%（店长指令 ${SFX}）`;
+  const text = `把周五主打款调价 5%（店长指令 ${SFX}）`;
   const r = await ingestInbound(app, gw, scope, { channel: "dingtalk", channelMsgId: `m-${SFX}-boss-cmd`, conversationId: `cv-${SFX}`, kind: "direct", senderOpenId: `ou_boss_${SFX}`, text });
   assert(r.eventId, "指令落库");
   eq(ruleBasedRoute(text).mode, "quest", "指令路由为任务");
@@ -2033,7 +2033,7 @@ q("写风暴：200 事件分批并发后链完整", async () => {
   for (const row of rows.rows) { eq(row.prev_hash, prev, "风暴后接龙"); prev = row.hash; }
 });
 q("IM 巨报文（100KB 文本）按明确口径处理不炸", async () => {
-  const bigText = "房态同步报文".repeat(15000); // ≈100KB+
+  const bigText = "状态同步报文".repeat(15000); // ≈100KB+
   let ok = false, rejected = false;
   try {
     const r = await ingestInbound(app, gw, scope, { channel: "dingtalk", channelMsgId: `m-${SFX}-huge`, conversationId: `cv-${SFX}`, kind: "direct", senderOpenId: `ou_h_${SFX}`, text: bigText });
@@ -2642,10 +2642,10 @@ h2("融合·LLM 降级链：死端配置被拒 → mock 兜底应答不断链", 
       await setCharter(chActive);
       await qApp(`INSERT INTO threads (id, tenant_id, workspace_id, title, mode, status, created_by) VALUES ($1,$2,$3,$4,'quest','running','MEM-001') ON CONFLICT (id) DO NOTHING`, [tid, scope.tenantId, scope.workspaceId, "R11 调价 quest"]);
       const plan510 = async () => JSON.stringify([
-        { action: "pms.price.read", objectType: "room_price", tool: "pms.price.read", params: { room_type: "RT-DLX-KING" }, label: "读取当前房价" },
-        { action: "price.adjust", objectType: "room_price", tool: "pms.price.write", params: { room_type: "RT-DLX-KING", price: 510 }, label: "LLM 规划：调价至 ¥510" },
+        { action: "biz.price.read", objectType: "room_price", tool: "biz.price.read", params: { object_id: "OBJ-DLX-01" }, label: "读取当前价格" },
+        { action: "price.adjust", objectType: "room_price", tool: "biz.price.write", params: { object_id: "OBJ-DLX-01", price: 510 }, label: "LLM 规划：调价至 ¥510" },
       ]);
-      const r1 = await runQuest(app, gw, scope, { threadId: tid, goal: "把周五雅致大床房调价到 510", presetKey: "pricing-agent", llmCall: plan510 });
+      const r1 = await runQuest(app, gw, scope, { threadId: tid, goal: "把周五主打款调价到 510", presetKey: "pricing-agent", llmCall: plan510 });
       eq(r1.status, "pending_review", "R1 越线挂起（11.35%>8%）");
       const apr = (await qApp<{ tier: string }>(`SELECT tier FROM approvals WHERE approval_id=$1`, [r1.pendingApprovalId!])).rows[0]!;
       eq(apr.tier, "l2_captain", "带内（11.35%<15%）路由 L2");
@@ -2653,7 +2653,7 @@ h2("融合·LLM 降级链：死端配置被拒 → mock 兜底应答不断链", 
       assert(q.decided >= 1, "CEO 裁决批准");
       const st = (await qApp<{ status: string }>(`SELECT status FROM approvals WHERE approval_id=$1`, [r1.pendingApprovalId!])).rows[0]!;
       eq(st.status, "approved", "审批已批准");
-      const r2 = await runQuest(app, gw, scope, { threadId: tid, goal: "把周五雅致大床房调价到 510", presetKey: "pricing-agent", llmCall: plan510 });
+      const r2 = await runQuest(app, gw, scope, { threadId: tid, goal: "把周五主打款调价到 510", presetKey: "pricing-agent", llmCall: plan510 });
       eq(r2.status, "completed", "批准后续跑 completed（恢复闭环）");
     } finally {
       await restoreArchive(arc);
@@ -2733,7 +2733,7 @@ h2("融合·LLM 降级链：死端配置被拒 → mock 兜底应答不断链", 
   RC("简报双轨：LLM stub → via=llm；模型异常 → via=rule 兜底（推理管道验证）", async () => {
     const arc = await getArchive();
     try {
-      const ok = await runBriefingBeat(app, scope, "daily", { llmCall: async () => "【stub】昨日 OCC 86%，无请示。" });
+      const ok = await runBriefingBeat(app, scope, "daily", { llmCall: async () => "【stub】昨日营收达标，无请示。" });
       eq(ok.via, "llm", "stub 合成 via=llm");
       const boom = await runBriefingBeat(app, scope, "daily", { llmCall: async () => { throw new Error("model down"); } });
       eq(boom.via, "rule", "异常兜底 via=rule（不静默）");

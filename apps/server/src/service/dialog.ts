@@ -81,7 +81,7 @@ export function tierOfScore(score: number | undefined): ConfidenceTier {
   return "low";
 }
 
-export const MEDIUM_HINT = "以上回答可能不完全准确，仅供参考；如需确认可联系前台。";
+export const MEDIUM_HINT = "以上回答可能不完全准确，仅供参考；如需确认可联系客服。";
 export const LOW_REFUSAL = "抱歉，这个问题我暂时无法准确回答，不敢随意编造。已为您准备好工单草稿，确认后转人工跟进；您也可以换个说法再问我。";
 
 async function ensureConversation(input: {
@@ -185,7 +185,7 @@ export async function handleMessage(input: {
       };
     } else if (top) {
       // top-2 合并：次命中与首命中共享非弱词 token 且自身 ≥0.45 时并入（跨块事实，如「早餐多少钱」）
-      const WEAK = new Set(["时间", "免费", "收费", "可以", "服务", "房间", "酒店", "半天", "一份", "一瓶", "东西", "地方", "怎么", "如何", "一下", "价格", "多少钱", "客房", "住客", "客人", "前台", "工作", "两张", "一张", "几位", "一些"]);
+      const WEAK = new Set(["时间", "免费", "收费", "可以", "服务", "商品", "店铺", "半天", "一份", "一瓶", "东西", "地方", "怎么", "如何", "一下", "价格", "多少钱", "订单", "买家", "顾客", "客服", "工作", "两张", "一张", "几位", "一些"]);
       const norm = (t: string) => t.toLowerCase().replace(/(?<=[a-z0-9])-(?=[a-z0-9])/g, "");
       const topHay = norm(`${top.heading}\n${top.content}`);
       const topTokens = new Set(topHay.match(/[a-z0-9]+|[\u4e00-\u9fff]{2}/g) ?? []);
@@ -203,7 +203,7 @@ export async function handleMessage(input: {
       if (llm) {
         try {
           answer = await llm(
-            `你是酒店前台客服。仅依据以下资料回答客人问题，不要编造资料之外的信息，回答控制在 80 字内。\n客人：${input.text}\n资料：${blocks.map((h) => h.content.slice(0, 400)).join("\n---\n")}`,
+            `你是智能客服。仅依据以下资料回答顾客问题，不要编造资料之外的信息，回答控制在 80 字内。\n顾客：${input.text}\n资料：${blocks.map((h) => h.content.slice(0, 400)).join("\n---\n")}`,
           );
         } catch (err) {
           console.warn("[service-c] kb_qa 组答 LLM 失败，使用确定性拼装答案：", err instanceof Error ? err.message : err);

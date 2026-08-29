@@ -10,6 +10,8 @@ import {
 import { routeTier, decideForCaptain } from "./router.js";
 import { buildMemo, composeBriefing, type BriefFacts } from "./briefing.js";
 
+/** 默认自治上限（断言一律动态引用，不绑死具体数值——默认值行业化调整时测试不破） */
+const CAP = defaultCharter().autonomy.procurement_cap;
 const granted = () => transition(defaultCharter(), {
   kind: "grant",
   grant: {
@@ -63,11 +65,11 @@ describe("试用期降档 overlay（§12.1）", () => {
   it("trial 态三上限减半、价格带向 1 收窄一半；active 态原样", () => {
     const t = transition(granted(), { kind: "advance" });
     const eff = effectiveAutonomy(t);
-    expect(eff.procurement_cap).toBe(2500);
+    expect(eff.procurement_cap).toBe(Math.floor(CAP / 2));
     expect(eff.price_band[0]).toBeCloseTo(0.925, 3);
     expect(eff.price_band[1]).toBeCloseTo(1.075, 3);
     const a = transition(transition(t, { kind: "expire" }), { kind: "keep_long" });
-    expect(effectiveAutonomy(a).procurement_cap).toBe(5000);
+    expect(effectiveAutonomy(a).procurement_cap).toBe(CAP);
   });
 });
 
@@ -84,10 +86,10 @@ describe("五级审批路由（方案 §三）", () => {
   });
 
   it("金额超自治上限 → L4；试用降档后上限同步收紧", () => {
-    expect(routeTier(active, { action: "procurement.create", params: {}, amountCtx: { amount: 6000 } })).toBe("l4_chairman");
-    expect(routeTier(active, { action: "procurement.create", params: {}, amountCtx: { amount: 3000 } })).toBe("l2_captain");
+    expect(routeTier(active, { action: "procurement.create", params: {}, amountCtx: { amount: CAP + 1000 } })).toBe("l4_chairman");
+    expect(routeTier(active, { action: "procurement.create", params: {}, amountCtx: { amount: Math.floor(CAP * 0.6) } })).toBe("l2_captain");
     const trial = transition(granted(), { kind: "advance" });
-    expect(routeTier(trial, { action: "procurement.create", params: {}, amountCtx: { amount: 3000 } })).toBe("l4_chairman"); // 降档后 2500 上限
+    expect(routeTier(trial, { action: "procurement.create", params: {}, amountCtx: { amount: Math.floor(CAP * 0.6) } })).toBe("l4_chairman"); // 降档后 CAP/2 上限
   });
 });
 
@@ -104,8 +106,8 @@ describe("公司CEO 裁决策略（router.decideForCaptain）", () => {
   });
 
   it("金额 70% 内 approve / 70-100% escalate", () => {
-    expect(decideForCaptain(c, { ...base, action: "procurement.create", amountCtx: { amount: 2000 } }).kind).toBe("approve");
-    expect(decideForCaptain(c, { ...base, action: "procurement.create", amountCtx: { amount: 4000 } }).kind).toBe("escalate");
+    expect(decideForCaptain(c, { ...base, action: "procurement.create", amountCtx: { amount: Math.floor(CAP * 0.4) } }).kind).toBe("approve");
+    expect(decideForCaptain(c, { ...base, action: "procurement.create", amountCtx: { amount: Math.floor(CAP * 0.8) } }).kind).toBe("escalate");
   });
 });
 
@@ -116,7 +118,7 @@ describe("自治熔断（方案 §六）", () => {
     expect(v.tripped).toBe(true);
     expect(v.metric).toBe("occ");
     const t = tightenAutonomy(c);
-    expect(t.autonomy.procurement_cap).toBe(2500);
+    expect(t.autonomy.procurement_cap).toBe(Math.floor(CAP / 2));
     expect(t.circuit_breaker.tightened).toBe(true);
     expect(evalCircuitBreaker(t, { occ: 0.62 }).alreadyTightened).toBe(true);
   });
@@ -159,9 +161,9 @@ describe("边界与细节（二轮深测补充）", () => {
   });
 
   it("shadow 不降档（降档仅 trial）；suspended 不降档", () => {
-    expect(effectiveAutonomy(granted()).procurement_cap).toBe(5000);
+    expect(effectiveAutonomy(granted()).procurement_cap).toBe(CAP);
     const susp = transition(transition(granted(), { kind: "advance" }), { kind: "expire" });
-    expect(effectiveAutonomy(susp).procurement_cap).toBe(5000);
+    expect(effectiveAutonomy(susp).procurement_cap).toBe(CAP);
   });
 
   it("tightenAutonomy 保留授权记录与升级清单（熔断不改治理链）", () => {

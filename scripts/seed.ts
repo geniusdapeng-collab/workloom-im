@@ -219,10 +219,10 @@ function yunqiArchive(): Record<string, unknown> {
         { channel: "携程", price: 458, parity: true, status: "online" },
         { channel: "飞猪", price: 438, parity: false, status: "online" },
       ],
-      roomStates: [
-        { roomType: "大床房", synced: true },
-        { roomType: "双床房", synced: true },
-        { roomType: "亲子房", synced: false },
+      stateUnits: [
+        { unit: "大床房", synced: true },
+        { unit: "双床房", synced: true },
+        { unit: "亲子房", synced: false },
       ],
       reviews: [
         { id: "rv-ctrip-9901", channel: "携程", score: 5 },

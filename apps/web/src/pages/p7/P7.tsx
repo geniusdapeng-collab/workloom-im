@@ -50,7 +50,7 @@ export default function P7() {
   const [wizardErr, setWizardErr] = useState("");
   const [draft, setDraft] = useState({
     slug: "", displayName: "", version: "0.1.0", changelog: "",
-    fenceRef: "hotel-baseline/v1", ownerMemberNo: "MEM-001",
+    fenceRef: "hotel-baseline/v1", ownerMemberNo: "", // 打开向导时以当前登录身份填充
   });
 
   const load = useCallback(async (silent = false, slug?: string | null) => {
@@ -58,13 +58,14 @@ export default function P7() {
     try {
       await ensureDemoLogin();
       const [meR, mem, st] = await Promise.all([
-        trpc.members.me.query() as Promise<{ identity: { role: string } }>,
+        trpc.members.me.query() as Promise<{ identity: { role: string; memberNo?: string } }>,
         trpc.members.list.query() as Promise<MemberRow[]>,
         trpc.bundles.status.query(slug ? { slug } : {}) as Promise<StatusResp>,
       ]);
       setRole(meR.identity.role);
       setMembers(mem);
       setData(st);
+      if (meR.identity.memberNo) setDraft((d) => (d.ownerMemberNo ? d : { ...d, ownerMemberNo: meR.identity.memberNo! }));
       if (!slug) setSelectedSlug(st.selected?.slug ?? st.activeSlug);
     } catch (e) {
       setBanner({ level: "alert", text: `装配投影加载失败：${e instanceof Error ? e.message : String(e)}` });
@@ -124,7 +125,7 @@ export default function P7() {
       const r = await trpc.bundles.createDraft.mutate(draft) as { eventId: string; slug: string };
       setWizardOpen(false);
       setBanner({ level: "info", text: `行业草稿「${draft.displayName}」已创建（草稿态不进分发 §2.3，留痕 ${r.eventId}）——填充五槽后过校验即可激活` });
-      setDraft({ slug: "", displayName: "", version: "0.1.0", changelog: "", fenceRef: "hotel-baseline/v1", ownerMemberNo: "MEM-001" });
+      setDraft({ slug: "", displayName: "", version: "0.1.0", changelog: "", fenceRef: "hotel-baseline/v1", ownerMemberNo: "" });
       await load(true, r.slug);
       setSelectedSlug(r.slug);
     } catch (e) {
