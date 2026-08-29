@@ -97,6 +97,8 @@ WorkLoom 的答案是：**大模型是蒸汽机，企业 Agent IM 是织机。**
 | `packages/base/{fence-engine,review-console,im-channels,night-shift,inspection,skills,tenancy,bundles,model-router}` | 九域能力：围栏判定 / 审批流 / IM 通道 / 夜班调度 / 巡检 / 技能市场 / 多租户与演示 JWT / 行业 Bundle / 模型路由 |
 
 > **夜班（night-shift）元定义**：夜班锚的从来不是「AI 的工作时间」——AI 本来就 24 小时全勤——而是**「人的离线时间」**。它是**人类免打扰时段的系统运行模式**，底座内置四层实质：① **触达上免打扰**——非 P0 不叫人，全部聚合为清晨决策包（什么事配得上叫醒人，由系统先把关）；② **权限上自降级**——夜间仅白名单动作自治、高危审批超时升级而非自动放行，人不在线时系统自己把权力收小；③ **业务高峰窗口由行业 Bundle 定义**——酒店=守夜接待与无人店断点、电商=欧美日间跨时区、社媒=流量晚高峰排期；④ **成本上是洼地**——批量任务在谷时算力窗口执行（费率 ≤20%）。一句话：**夜班服务的不是「夜晚」，是「人的离线」。**
+
+> **客户旅程模式（先体检，再托管）**：底座为行业落地定义标准旅程——新客户从「质检模式（Audit-Only）」起步：只读接入数据源 → **快照快扫**（15–30 分钟当场出《快速体检报告》，由 `@workloom/audit-core` 引擎 + 行业分析器算出真实发现）→ 持续体检（1–2 周）→ 影子模式（3 天）→ 正式托管。围栏纪律：体检期一切写操作物理 block（行业包 audit-only patch），检项由行业 Bundle 定义。
 | `packages/runtime` | dsh seam 适配：意图路由（Ask/Agent/Quest 三模式）、Quest 循环（replay 断点续跑）、装配 |
 | `packages/{shared,db}` | 五元 zod schema / 手写 SQL 迁移（DDL 事实源） |
 | `apps/{server,web,site,desktop}` | Hono+tRPC 服务 / 舰桥前端 / 官网 / Mac 桌面包 |
