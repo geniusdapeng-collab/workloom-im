@@ -70,6 +70,7 @@
 | 包 | 能力 | 关键点 |
 |---|---|---|
 | `fence-engine` | 围栏 DSL 执行引擎（事前裁决） | 支持列表字面量/`in`/`contains`/`contains_any`；缺失路径比较语境宽容 |
+| `audit-core` | 质检检测引擎通用内核（行业无关） | 软时间预算/缺源降级不阻塞/分析器异常留痕/统一编号/TopN 年化归一排序/估算三档口径；行业包只提供快照类型与分析器 |
 | `captain` | L2 编排（ASK/QUEST 规划与派发） | QUEST 内容域五步拆解模板 |
 | `night-shift` | 夜班自动运行（离线任务推进） | ensureReady 幂等 |
 | `model-router` | 模型路由（离线确定性模型/mock 可跑） | `TOOL_UNVERIFIED_RATE=0` 关闭扰动 |
