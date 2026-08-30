@@ -84,9 +84,10 @@ export function routedLlmCall(deps: {
 /* ---------- 向后兼容：无场景旧接口（等价于 scene=generic 的无 sink 轻量路径） ---------- */
 
 let cached: LlmCall | null | undefined;
+let cachedScene = "generic";
 
-export function llmCall(): LlmCall | undefined {
-  if (cached !== undefined) return cached ?? undefined;
+export function llmCall(scene = "generic"): LlmCall | undefined {
+  if (cached !== undefined && cachedScene === scene) return cached ?? undefined;
   try {
     if ((process.env.LLM_PROVIDER ?? "mock") === "mock") {
       cached = null;
@@ -94,11 +95,12 @@ export function llmCall(): LlmCall | undefined {
     }
     // 旧路径仍可用但已标注：新代码一律用 routedLlmCall(scene)（计量/路由纪律）
     const providers = pool();
+    cachedScene = scene;
     cached = async (prompt: string) => {
       const { routeSmart: rs } = await import("@workloom/base/model-router");
       const traces: unknown[] = [];
       const r = await rs(
-        { action: "generic", scene: "generic", messages: [{ role: "user", content: prompt }] },
+        { action: scene, scene, messages: [{ role: "user", content: prompt }] },
         providers,
         {
           recordModelTrace: async (t) => { traces.push(t); },

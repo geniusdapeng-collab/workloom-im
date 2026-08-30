@@ -22,7 +22,7 @@ scenes:
   # —— 低频重度（旗舰档，质量红线） ——
   ceo-deep-analysis: { tier: L3, noDowngrade: true }                    # 六步深度管线（多方案+红队对抗）
   hr-replacement:    { tier: L3, noDowngrade: true }                    # 汰换诊断书
-  incident-rootcause:{ tier: L3, noDowngrade: true }                    # 断点根因闭环
+  incident-rootcause: { tier: L3, noDowngrade: true }                    # 断点根因闭环
   fast-scan-report:  { tier: L3, noDowngrade: true, billTo: platform }  # 售前体检报告：效果拉满，平台承担成本
 plans:
   lite:     { defaultShift: -1 }   # 智享版：整体压一档（L0/L1 为主，月度赠送额度小）
