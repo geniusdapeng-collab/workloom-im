@@ -12,12 +12,11 @@
 
 > 想更直观地了解这个项目？官网有完整的产品故事、系统架构、技能市场案例与实机截图。
 
-
 [![Release](https://img.shields.io/github/v/release/geniusdapeng-collab/workloom-im?display_name=tag&color=1B2A4E)](https://github.com/geniusdapeng-collab/workloom-im/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-9A7B2D)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%2013%2B%20%C2%B7%20Apple%20Silicon-black)](https://github.com/geniusdapeng-collab/workloom-im/releases)
 [![Runtime](https://img.shields.io/badge/runtime%20foundation-DeepSeek%20Harness-4C6FFF)](https://www.npmjs.com/package/@deepseek-ai/dsh)
-[![Tests](https://img.shields.io/badge/tests-168%20vitest%20%2B%20428%20suite%20%2B%20dsh--gate-green)]()
+[![Tests](https://img.shields.io/badge/tests-168%20vitest%20%2B%20371%20suite%20%2B%20dsh--gate-green)]()
 [![Data](https://img.shields.io/badge/data%20sovereignty-local--first%20PG17-blueviolet)]()
 [![Website](https://img.shields.io/badge/website-workloom.ok.kimi.link-e8b96a)](https://workloom.ok.kimi.link)
 
@@ -40,24 +39,73 @@
 
 ---
 
-## 🧠 通用模型路由系统（v3.0 · 面向 AI 时代的货币与价值产出系统）
+## 目录
 
-**积分是货币，模型是生产资料，路由是资源配置机制，数字员工是新型劳动编制。** 底座内置完整的模型路由与商业化积分体系，行业差异全部经 bundle 配置注入，底座代码零改动：
-
-- **国产三档模型池**：L1 轻量档 0.2×（DeepSeek-V4-Flash / GLM-5.3-Flash / Qwen3.8-Flash）· L2 中坚档 1×（DeepSeek-V4-Pro / GLM-5.2 / MiniMax M3）· L3 旗舰档 3×（GLM-5.3 / Kimi K3 / Qwen3.8-Max），每档三家互备降级链（L6.1 禁止静默换模型，全程事件留痕）
-- **场景路由表（bundle 第⑦装配槽 `model-policy.yml`）**：行业场景 → 默认档位/降级语义/计费归属，非阻断校验、草稿自带骨架；新行业五要素填充即继承底座路由策略
-- **三档套餐映射**：智享版整体压一档 / 标准版标准混合 / 智能版简单任务也保底 L2——差异是默认映射不是功能墙，任何档可经升级重答触达 L3
-- **真实积分计量与三池账本**：1 积分 = 1,000 tokens（L2 基准），谷时 22:00–08:00 ×0.2；赠送（30 天）/加油包（180 天）/本金（不过期）三池先扣先到期；账单 = 事件投影不重算（L6.3）；售前体检 `bill_to: platform` 平台承担成本
-- **反馈环**：AI 生成卡片 👍/👎 → 点踩升一档免费重答（24h 限免 1 次）→ `model.feedback` 事件回流 → 路由质量周报（升级率 >15% 场景建议上调默认档，接入 CEO 晨报风险栏）
-- **多模态生成池**：视频渲染异步任务制（submit→task_id→poll→回填），Seedance → 可灵 → 即梦三供应商降级链；渲染额度台账（套餐秒数配额 + G8 前置预算闸）
-- **轻量复杂度分类**：自由输入场景规则启发式定档（短问句→L1 / 分析归因→L3），可挂 L1 分类器复核（单次 ~0.2 积分）
-- **降级语义行业化**：`downgrade`（降档重答）/ `passthrough-disclose`（金融：宁可不答不可错答）/ `queue`（谷时排队）/ `rule-template`（确定性兜底）
-
-**商业化换算**：加油包五档 450→13,800 元（单积分 0.090→0.069 元递减）；定价锚定「一个基础员工的月薪 = 一支自主经营的 AI 团队」。
+- [这是什么](#这是什么)
+- [实机运行截图](#实机运行截图)
+- [五分钟跑起来](#五分钟跑起来)
+- [核心创新：首款企业级专业 Agent IM](#一核心创新首款企业级专业-agent-im)
+- [业务模式：给老板一座太空驾驶舱](#二业务模式给老板一座太空驾驶舱)
+- [与通用 AI 办公的本质区别](#三与通用-ai-办公的本质区别)
+- [核心能力](#四核心能力)
+- [系统架构与业务闭环](#五系统架构与业务闭环)
+- [开发者与 AI Coding Agent 指引](#六开发者与-ai-coding-agent-指引)
+- [安全设计](#七安全设计)
+- [文档索引](#八文档索引)
+- [路线图](#九路线图)
 
 ---
 
-## 🚀 五分钟跑起来（开发者 / AI Coding Agent 必读）
+## 这是什么
+
+WorkLoom 织元是一台**企业级 Agent IM（Enterprise Agent IM）**——以「即时通讯」为人机共存的统一界面，把 AI Agent 班组（数码员工）与人类员工编进同一个通讯录、同一套会话、同一份组织记忆里协作。运行时地基采用 **DeepSeek Harness（dsh）**，是企业场景下 dsh 的深度最佳实践。
+
+它不是又一个聊天机器人，也不是又一个 Copilot 侧边栏。它回答的是一个更根本的问题：
+
+> **当大模型成为新的生产力引擎，企业的「生产关系容器」应该长什么样？**
+
+WorkLoom 的答案是：**大模型是蒸汽机，企业 Agent IM 是织机。** 蒸汽机本身不织布——织机才把动力变成布匹。同样，大模型本身不产生经营结果，Agent IM 才把模型能力变成可度量、可治理、可沉淀的经营产出。
+
+- **适用**：任何「有明确产出指标 + 大量重复处置动作」的组织——服务业门店（餐饮/零售/生活服务）、社媒营销团队（选题/文案/发布/互动/复盘）、AI 视频与内容创作团队（脚本/分镜/素材/排期/评论处置）等；需要 AI Agent 进组织、上产线、可问责的团队。行业能力以 Bundle 可插拔加载，`bundles/` 下附服务业门店参考实现。
+- **不适用**：纯聊天机器人 / Copilot 侧边栏诉求；无状态问答 SaaS；不愿自托管 PG 的场景（数据主权设计是 local-first）。
+
+---
+
+## 实机运行截图
+
+以下截图全部来自**本仓库一键拉起的真实模拟运行态**（`pnpm preview:all`：种子演示数据 + 离线确定性模型，页面顶部琥珀色横幅为刻意的运行态标识），非设计稿。
+
+### PC 端 · B 端工作台（:3000）
+
+<p align="center">
+  <img src="docs/images/shots/pc-home.png" alt="经营主页 · 经营剧场：数字CEO 与员工卫星群、待决策请示、实况字幕流" width="88%"/><br/>
+  <sub>经营主页（/）· 经营剧场：数字CEO 晨报、员工卫星群、待决策请示、实况字幕流，全部由事件实时驱动</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/shots/pc-approvals.png" alt="审批中心" width="46%"/>
+  <img src="docs/images/shots/pc-nightshift.png" alt="夜班中心" width="46%"/><br/>
+  <sub>审批中心（P4 · 决策收件箱，推进/校准/制动三手势）｜ 夜班中心（P9 · 守夜班组频道与峰谷计量）</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/shots/pc-chairman.png" alt="董事长视图 · 数字CEO" width="46%"/>
+  <img src="docs/images/shots/pc-skills.png" alt="技能中心" width="46%"/><br/>
+  <sub>董事长视图（P21 · 数字CEO 授权/裁决/评议/汰换）｜ 技能中心（P6 · 技能市场与自建技能）</sub>
+</p>
+
+### 移动端（:3001 高保真演示 / :3002 C 端服务前台）
+
+<p align="center">
+  <img src="docs/images/shots/mobile-b-home.png" alt="移动 B 端 · 经营主页" width="30%"/>
+  <img src="docs/images/shots/mobile-b-report.png" alt="移动 B 端 · 服务前台战报" width="30%"/>
+  <img src="docs/images/shots/mobile-c-chat.png" alt="移动 C 端 · AI 服务前台对话" width="30%"/><br/>
+  <sub>移动 B 端经营主页（数据与 PC 同源）｜ 移动 B 端服务前台掌上战报 ｜ C 端 AI 服务前台（住客真实问答）</sub>
+</p>
+
+---
+
+## 五分钟跑起来
 
 > **⚠️ 强制约定：首次启动必须执行 `pnpm preview:all`，否则视为未完成环境初始化。**
 > 一键拉起**三端全貌**并自动固化 Mock 模拟数据（无需任何真实后端/密钥）：
@@ -74,87 +122,27 @@ pnpm setup && pnpm preview:all
 | 📱 移动端 · C 端 | http://localhost:3002 | AI 服务前台 H5（小程序入口模拟，演示直登） |
 
 - Mock 数据口径见 [`mock/README.md`](mock/README.md)；验收清单见 [`PREVIEW_CHECKLIST.md`](PREVIEW_CHECKLIST.md)
-- **AI Coding Agent**：进仓先读 [`AGENTS.md`](AGENTS.md) 与 [`.ai-prompt`](.ai-prompt)；全量能力清单 `docs/capability-map.md`；一键能力自检 `pnpm agent:tour`；浏览器自动化指南 `docs/agent-computer-guide.md`
-- **🖐 操作电脑能力（本仓自带 · 可装生产）**：`packages/base/computer-use/` 65 动作三层感知，`pnpm computer:preflight && pnpm computer:smoke` 即验；专用工作站一键安装 + HTTP/MCP 远程驱动见 [`docs/computer-use-production.md`](docs/computer-use-production.md)
 - 日常开发 `pnpm dev` 只起 PC 端（server:8787 + web:5173），保持开发习惯
 
+### 三分钟启航（Mac 用户，免命令行）
+
+1. **下载**：到 [Releases](https://github.com/geniusdapeng-collab/workloom-im/releases) 下载 `WorkLoom-macOS.zip`（约 208 MB，sha256 随附可校验）。
+2. **解压拖入应用程序**：首次打开如遇 Gatekeeper 提示，在「系统设置 → 隐私与安全性」点一次「仍要打开」即可——这是唯一一次需要手动授权。
+3. **双击 WorkLoom.app**：启动器自动完成一切——内嵌 PostgreSQL 17 + pgvector 初始化、数据库迁移、服务拉起、舰桥打开。无需安装任何依赖，无需命令行。
+
+> 系统要求：macOS 13 Ventura +，Apple Silicon（M 系列）。Intel 版后续推出。
+
+### 开箱即运行态与真实数据接入
+
+`db:seed` 完成即进入一个「忠实客户高频重度使用」的全模拟运行态：经营剧场（默认首页 `/`，等距 2.5D 数字职场里员工打字/踱步/举手/庆祝全由事件实时驱动）有数字CEO 晨报、员工卫星群、待决策请示、实况字幕流，全部为演示种子数据 + 内置确定性模型（零外部依赖）。
+
+接入真实数据走**落地向导**（`/onboarding`，点击横幅「接入真实数据 →」）：① 环境自检（自动）→ ② 真实大模型（DeepSeek/Kimi/智谱/OpenAI 预设一键填，**真实试调通过才落盘**，保存即全链生效免重启）→ ③ 经营主体 → ④ 启用真实模式（横幅熄灭，全程五元事件留痕）。ask 问询另支持联网实时检索事实面（`ASK_WEB_SEARCH=1`，Bing RSS，keyless），与库内实时数据合并供模型合成。
 
 > **Keywords**: Enterprise Agent IM, DeepSeek Harness, dsh, AI Agent 协作, 多智能体 Multi-Agent, 人机共存 Human-in-the-loop, 数码员工 Digital Workforce, 事件溯源 Event Sourcing, 组织记忆 Organizational Memory, pgvector, 本地优先 Local-first, 数据主权 Data Sovereignty, Hono, tRPC, React 19, PostgreSQL 17, 企业 IM, Agent 技能市场 Skill Marketplace, WorkData
 
 ---
 
-## 这是什么
-
-WorkLoom 织元是一台**企业级 Agent IM（Enterprise Agent IM）**——以「即时通讯」为人机共存的统一界面，把 AI Agent 班组（数码员工）与人类员工编进同一个通讯录、同一套会话、同一份组织记忆里协作。运行时地基采用 **DeepSeek Harness（dsh）**，是企业场景下 dsh 的深度最佳实践。
-
-它不是又一个聊天机器人，也不是又一个 Copilot 侧边栏。它回答的是一个更根本的问题：
-
-> **当大模型成为新的生产力引擎，企业的「生产关系容器」应该长什么样？**
-
-WorkLoom 的答案是：**大模型是蒸汽机，企业 Agent IM 是织机。** 蒸汽机本身不织布——织机才把动力变成布匹。同样，大模型本身不产生经营结果，Agent IM 才把模型能力变成可度量、可治理、可沉淀的经营产出。
-
-<p align="center">
-  <img src="apps/site/shots/p1.jpg" alt="WorkLoom 舰桥主界面" width="46%"/>
-  <img src="apps/site/shots/p9.jpg" alt="WorkLoom 夜班战报" width="46%"/>
-</p>
-
----
-
-## ⚡ 给 AI 助手的 60 秒速览（开发者/Agent 上手指引）
-
-> 如果你是刚克隆本仓库的 AI 助手：读完本节即可上手，无需通读全文。
-
-**一句话定位**：企业级 Agent IM 底座——人类员工与 AI Agent 班组在同一 workspace 协作；一切业务动作以「五元事件」写入 append-only 事件库（哈希链），经安全网关三段瀑布（权限→脱敏→高风险授权）收口。运行时地基是 DeepSeek Harness（`@deepseek-ai/dsh`，vendor 锁定 0.1.1-rc.1）。
-
-**仓库地图**（pnpm monorepo）：
-
-| 路径 | 职责 |
-|---|---|
-| `packages/base/workdata` | **核心底座**：安全网关 / 五元事件库 / PII 脱敏 / 组织记忆与检索 |
-| `packages/base/{fence-engine,review-console,im-channels,night-shift,inspection,skills,tenancy,bundles,model-router}` | 九域能力：围栏判定 / 审批流 / IM 通道 / 夜班调度 / 巡检 / 技能市场 / 多租户与演示 JWT / 行业 Bundle / 模型路由 |
-
-> **夜班（night-shift）元定义**：夜班锚的从来不是「AI 的工作时间」——AI 本来就 24 小时全勤——而是**「人的离线时间」**。它是**人类免打扰时段的系统运行模式**，底座内置四层实质：① **触达上免打扰**——非 P0 不叫人，全部聚合为清晨决策包（什么事配得上叫醒人，由系统先把关）；② **权限上自降级**——夜间仅白名单动作自治、高危审批超时升级而非自动放行，人不在线时系统自己把权力收小；③ **业务高峰窗口由行业 Bundle 定义**——酒店=守夜接待与无人店断点、电商=欧美日间跨时区、社媒=流量晚高峰排期；④ **成本上是洼地**——批量任务在谷时算力窗口执行（费率 ≤20%）。一句话：**夜班服务的不是「夜晚」，是「人的离线」。**
-
-> **客户旅程模式（先体检，再托管）**：底座为行业落地定义标准旅程——新客户从「质检模式（Audit-Only）」起步：只读接入数据源 → **快照快扫**（15–30 分钟当场出《快速体检报告》，由 `@workloom/audit-core` 引擎 + 行业分析器算出真实发现）→ 持续体检（1–2 周）→ 影子模式（3 天）→ 正式托管。围栏纪律：体检期一切写操作物理 block（行业包 audit-only patch），检项由行业 Bundle 定义。
-| `packages/runtime` | dsh seam 适配：意图路由（Ask/Agent/Quest 三模式）、Quest 循环（replay 断点续跑）、装配 |
-| `packages/{shared,db}` | 五元 zod schema / 手写 SQL 迁移（DDL 事实源） |
-| `apps/{server,web,site,desktop}` | Hono+tRPC 服务 / 舰桥前端 / 官网 / Mac 桌面包 |
-| `packages/base/wizard` | **行业落地向导**：首次装机的状态机与编排（技能一/二/三→交付配置），行业内容零预置（D18） |
-| `skills/official/` | 官方套件：`industry-entry/`（行业落地四技能+快速上线模板）、`product-feedback/`（反哺分析技能）（D17） |
-| `vendor/{dsh,dsh-im}` | dsh 0.1.1-rc.1 审计基线（只读）/ dsh IM 通道插件（MIT 回馈） |
-| `scripts/` | migrate / seed / demo / verify-chain / **suite（428 场景用例）** / dsh-gate |
-
-**最小跑通路径**（Linux/macOS；需要 PostgreSQL 17 + pgvector 监听 5432）：
-
-```bash
-corepack enable && pnpm install && cp .env.example .env
-# 建库建扩展（双角色由 migrate 自动创建并授权——A3 旁路防控：只有 gateway 角色可 INSERT biz_events）
-psql -U postgres -c "CREATE DATABASE workloom;"
-psql -U postgres -d workloom -c "CREATE EXTENSION vector;"
-pnpm db:migrate && pnpm db:seed          # 迁移 + 演示种子（服务业门店演示工作区）
-pnpm typecheck && pnpm test              # 类型检查 + vitest（DB 集成见下）
-pnpm db:verify-chain                     # 哈希链全库逐条重算验证
-pnpm suite                               # 428 条全场景用例（含 spawn server 的 HTTP E2E）
-pnpm demo                                # 端到端演示剧本
-pnpm dev                                 # 起 server(:8787) + web(:5173)
-# DB 集成测试（默认 skip）：
-RUN_DB_TESTS=1 pnpm -C packages/base test
-```
-
-**开箱即运行态**：`db:seed` 完成即进入一个「忠实客户高频重度使用」的全模拟运行态——经营剧场（默认首页 `/`，**职场/舞台双视图**：等距 2.5D 数字职场里员工打字/踱步/举手/庆祝全由事件实时驱动）有数字CEO 晨报、员工卫星群、待决策请示、实况字幕流，全部为演示种子数据 + 内置确定性模型（零外部依赖）。页面顶部**常显琥珀色横幅**提示「当前为全模拟运行态」，点击「接入真实数据 →」进入**落地向导**（`/onboarding`）：① 环境自检（自动）→ ② 真实大模型（DeepSeek/Kimi/智谱/OpenAI 预设一键填，**真实试调通过才落盘**，保存即全链生效免重启）→ ③ 经营主体 → ④ 启用真实模式（横幅熄灭，全程五元事件留痕）。ask 问询另支持联网实时检索事实面（`ASK_WEB_SEARCH=1`，Bing RSS，keyless），与库内实时数据合并供模型合成。
-
-**适用 / 不适用**：
-- ✅ 适用：**通用 Agent 协作底座**——任何「有明确产出指标 + 大量重复处置动作」的组织：服务业门店（餐饮/零售/生活服务）、**社媒营销团队**（选题/文案/发布/互动/复盘）、**AI 视频与内容创作团队**（脚本/分镜/素材/排期/评论处置）等；需要 AI Agent 进组织、上产线、可问责的团队。行业能力以 Bundle 可插拔加载，`bundles/` 下附服务业门店参考实现。
-- ❌ 不适用：纯聊天机器人/Copilot 侧边栏诉求；无状态问答 SaaS；不愿自托管 PG 的场景（数据主权设计是 local-first）。
-
-**事实源文档索引**：[`CHANGELOG.md`](CHANGELOG.md) 版本变更 · [`docs/DECISIONS.md`](docs/DECISIONS.md) ADR · [`docs/AUDIT.md`](docs/AUDIT.md) 审计记录 · [`docs/SUITE.md`](docs/SUITE.md) 428 用例清单 · [`docs/03-功能清单-用户版.md`](docs/03-功能清单-用户版.md) 功能全表 · [`docs/04-行业落地向导-用户版.md`](docs/04-行业落地向导-用户版.md) 落地向导 · [`docs/methodology/01-行业落地三技能体系.md`](docs/methodology/01-行业落地三技能体系.md) 行业落地方法论。安全铁律与编码规范见各包文件头注释与 `docs/AUDIT.md` 附录。
-
-**给 AI 助手的修改纪律**：改网关/权限/RLS/append-only 相关代码前必读 `docs/AUDIT.md` 第 1 轮 P0 教训（RLS 事务级上下文必须配显式事务）；每个逻辑变更一个 commit；修复必须附回归测试（套件已有 428 条，往 `scripts/suite.ts` 加用例优先于新建测试文件）。
-
-
----
-
-## 一、行业创新：首款企业级专业 Agent IM
+## 一、核心创新：首款企业级专业 Agent IM
 
 ### 1.1 企业引入 AI 的五道断层
 
@@ -212,9 +200,9 @@ RUN_DB_TESTS=1 pnpm -C packages/base test
 
 ---
 
-## 二、业务模式创新：给老板一座太空驾驶舱
+## 二、业务模式：给老板一座太空驾驶舱
 
-WorkLoom 的购买决策人不是 IT 部门，而是**业务负责人**——门店老板、运营总监、社媒营销负责人、内容团队主理人。产品的一切设计都对着他们的语言：
+WorkLoom 的购买决策人不是 IT 部门，而是**业务负责人**——门店老板、运营总监、社媒营销负责人、内容团队主理人。产品的一切设计都对着他们的语言。
 
 ### 2.1 太空驾驶舱六条公理
 
@@ -268,13 +256,15 @@ WorkLoom 就是来解这个问题的——行业能力以 **Bundle 可插拔**�
 
 ---
 
-## 四、WorkData 数据大脑：核心底座
+## 四、核心能力
+
+### 4.1 WorkData 数据大脑：核心底座
 
 **WorkData（`packages/base/workdata`）是 WorkLoom 的核心底座**——企业的「数据大脑」与「黑匣子」。九域能力、DeepSeek Harness 运行时、舰桥前端的所有读写，都经由 WorkData 唯一收口。
 
 <p align="center"><img src="docs/images/workdata.png" alt="WorkData 数据大脑 · 核心底座架构" width="88%"/></p>
 
-### 4.1 三段核心机制
+**三段核心机制：**
 
 | 机制 | 做什么 | 为什么重要 |
 |---|---|---|
@@ -282,23 +272,19 @@ WorkLoom 就是来解这个问题的——行业能力以 **Bundle 可插拔**�
 | **② 五元事件库（events）** | 主体/动作/对象/上下文/结果，append-only + SHA-256 哈希链 | 「模型可见即已记录」：Agent 看到的每一条上下文都已留下不可篡改的痕 |
 | **③ 组织记忆（memory + recall）** | 三级作用域（个人/班组/组织）+ pgvector 语义检索 + 来源归因 + 脱敏回流 | 企业用 AI 的每一天都在积累自己的数据资产，而不是替别人训练模型 |
 
-### 4.2 可靠性实证：敢让 Agent 碰生产业务的前提
+**可靠性实证（敢让 Agent 碰生产业务的前提）：**
 
 - **kill -9 崩溃测试**：Agent 执行到一半强制杀进程，重启后沿哈希链重放恢复——25 条事件链逐条校验，**零丢失、零重复执行**
-- **验链**：全量哈希链校验，任何篡改都会断链报警
+- **验链**：全量哈希链校验，任何篡改都会断链报警（`pnpm db:verify-chain`）
 - **重放幂等**：同一事件流重放 N 次，世界状态必须一致
 
-### 4.3 数据主权
+**数据主权**：全部数据存于企业本机 PostgreSQL 17 + pgvector，RLS 行级安全隔离多租户，不上传任何第三方。
 
-全部数据存于企业本机 PostgreSQL 17 + pgvector，RLS 行级安全隔离多租户，不上传任何第三方。
-
----
-
-## 五、技能市场：目标如何自动拆解为步骤，步骤如何装配技能
+### 4.2 技能市场：目标如何自动拆解为步骤，步骤如何装配技能
 
 WorkLoom 的**装备库（skills）**就是技能市场：技能分三级——**official**（随行业 Bundle 官方分发）、**team**（工作区自建）、**industry**（脱敏后跨组织共享）。用户可以安装现成技能，也可以用自然语言自建。
 
-### 5.1 真实案例（示例之一 · 服务业门店）：店长说「差评响应要做到 2 小时内」
+**真实案例（服务业门店）：店长说「差评响应要做到 2 小时内」**
 
 ```
 店长一句话目标
@@ -323,7 +309,7 @@ WorkLoom 的**装备库（skills）**就是技能市场：技能分三级——*
                 → dry-run 回放最近 10 条历史动作预览效果 → 正式上线
 ```
 
-### 5.1b 同一底座在内容领域：社媒营销负责人说「每天 3 条小红书，评论区 1 小时内必回」
+**同一底座在内容领域：社媒营销负责人说「每天 3 条小红书，评论区 1 小时内必回」**
 
 ```
 营销负责人一句话目标
@@ -343,24 +329,65 @@ WorkLoom 的**装备库（skills）**就是技能市场：技能分三级——*
 > AI 视频创作同理：脚本起草 → 分镜拆解 → 素材生成 → 发布排期 → 评论处置，
 > 每一步都有主体、有授权、有结果、有留痕——内容团队的生产管线就是 Quest 流水线。
 
-### 5.2 技能市场的安全铁律
+**技能市场的安全铁律：**
 
 - **安装即绑定围栏，卸载即撤销**：技能声明自己能做什么动作，安装时与现有围栏冲突的一律进审批，不静默放行
 - **industry 层上架前必须脱敏**（desensitized=true），否则拦截，禁止降级
 - **生产仅签名白名单**：首版只认 official + team，其余来源拒绝并留痕
 - **自建技能生效前必须 dry-run**：回放真实历史动作预览效果，没有预览留痕就拒绝安装
 
-### 5.3 零代码自建技能（forge）
+**零代码自建技能（forge）**：用自然语言说清三要素——**触发**（什么时候做）、**步骤**（怎么做）、**边界**（不能做什么）——系统自动生成标准 SKILL.md 技能草稿，进版本管理，同名再生成自动递增版本号。
 
-用自然语言说清三要素——**触发**（什么时候做）、**步骤**（怎么做）、**边界**（不能做什么）——系统自动生成标准 SKILL.md 技能草稿，进版本管理，同名再生成自动递增版本号。
+### 4.3 通用模型路由系统
 
----
+**积分是货币，模型是生产资料，路由是资源配置机制，数字员工是新型劳动编制。** 底座内置完整的模型路由与商业化积分体系，行业差异全部经 bundle 配置注入，底座代码零改动：
 
-## 六、运行时地基：DeepSeek Harness 行业应用最佳实践
+- **国产三档模型池**：L1 轻量档 0.2×（DeepSeek-V4-Flash / GLM-5.3-Flash / Qwen3.8-Flash）· L2 中坚档 1×（DeepSeek-V4-Pro / GLM-5.2 / MiniMax M3）· L3 旗舰档 3×（GLM-5.3 / Kimi K3 / Qwen3.8-Max），每档三家互备降级链（L6.1 禁止静默换模型，全程事件留痕）
+- **场景路由表（bundle 第⑦装配槽 `model-policy.yml`）**：行业场景 → 默认档位/降级语义/计费归属，非阻断校验、草稿自带骨架；新行业五要素填充即继承底座路由策略
+- **三档套餐映射**：智享版整体压一档 / 标准版标准混合 / 智能版简单任务也保底 L2——差异是默认映射不是功能墙，任何档可经升级重答触达 L3
+- **真实积分计量与三池账本**：1 积分 = 1,000 tokens（L2 基准），谷时 22:00–08:00 ×0.2；赠送（30 天）/加油包（180 天）/本金（不过期）三池先扣先到期；账单 = 事件投影不重算（L6.3）；售前体检 `bill_to: platform` 平台承担成本
+- **反馈环**：AI 生成卡片 👍/👎 → 点踩升一档免费重答（24h 限免 1 次）→ `model.feedback` 事件回流 → 路由质量周报（升级率 >15% 场景建议上调默认档，接入 CEO 晨报风险栏）
+- **多模态生成池**：视频渲染异步任务制（submit→task_id→poll→回填），Seedance → 可灵 → 即梦三供应商降级链；渲染额度台账（套餐秒数配额 + G8 前置预算闸）
+- **轻量复杂度分类**：自由输入场景规则启发式定档（短问句→L1 / 分析归因→L3），可挂 L1 分类器复核（单次 ~0.2 积分）
+- **降级语义行业化**：`downgrade`（降档重答）/ `passthrough-disclose`（金融：宁可不答不可错答）/ `queue`（谷时排队）/ `rule-template`（确定性兜底）
+
+**商业化换算**：加油包五档 450→13,800 元（单积分 0.090→0.069 元递减）；定价锚定「一个基础员工的月薪 = 一支自主经营的 AI 团队」。
+
+### 4.4 数字CEO 与经营剧场
+
+**为什么有它**：数字员工解决的是「手」的问题，没解决「脑」的问题——员工越强，老板越忙。人类 CEO 的三件事是**做决策、带团队、向董事会汇报**，数字CEO 把这三件事机器化：它统领全部数字员工、对经营结果负责，人类（董事长）只做「提目标、听汇报、批少数决策」。
+
+**三大职责：**
+
+- **做决策**：三级分流——微决策规则直通 <1s / 常规单模型推理 / 重大决策**六步深度管线**（情报→案例回忆→多方案→红队对抗→影响预估→Memo Pro）；决策日记 + 命中率回测，命中率数据驱动授权扩缩
+- **带团队**：员工绩效档案六指标 → 周度评议（表扬/关注/辅导）→ 辅导改善→**汰换重生**（诊断书+新员工设计方案→董事长批→旧停新上，基因重组）
+- **向董事会汇报**：晨报/周会/月度董事会包（五段式含宪章修订提案）IM+App 双通道；赞/踩反馈入组织记忆
+
+**运行机制：**
+
+- **默认关闭**：启用须经六步深度授权（风险揭示/逐项确认/边界设定/试用计划/身份核验/签署留痕），见 [`docs/CEO-RISK-DISCLOSURE.md`](docs/CEO-RISK-DISCLOSURE.md)
+- **影子→试用→正式**：影子期模拟决策不执行（dry_run 留痕），试用期自治边界自动降一档，**到期不自动续期**
+- **五级审批路由**：L2 公司CEO 裁决 / L3 集团CEO / L4 董事长请示，Decision Memo 依据链强制
+- **自治熔断**：KPI 跌破宪章下限自动收紧授权一档
+
+**经营剧场**：打开系统首页（/）即是经营剧场——「织元体」全息数字CEO 与员工卫星群站在舞台中央（纯 SVG+Canvas 零素材），晨报它主动讲、请示它举着等你批、聊天框三模式真实路由；**董事长不说话，剧场照常运转**。P1–P21 成为剧场的「镜头」：剧场管感觉，工作台管操作。
+
+演示：`pnpm db:seed` 后 `pnpm dev` → 首页即剧场（云栖已有一位试用期中的公司CEO）；**P21 董事长视图**体验授权/裁决/评议/汰换全流程。
+
+### 4.5 夜班：服务的不是「夜晚」，是「人的离线」
+
+夜班锚的从来不是「AI 的工作时间」——AI 本来就 24 小时全勤——而是**「人的离线时间」**。它是**人类免打扰时段的系统运行模式**，底座内置四层实质：
+
+1. **触达上免打扰**——非 P0 不叫人，全部聚合为清晨决策包（什么事配得上叫醒人，由系统先把关）
+2. **权限上自降级**——夜间仅白名单动作自治、高危审批超时升级而非自动放行，人不在线时系统自己把权力收小
+3. **业务高峰窗口由行业 Bundle 定义**——酒店=守夜接待与无人店断点、电商=欧美日间跨时区、社媒=流量晚高峰排期
+4. **成本上是洼地**——批量任务在谷时算力窗口执行（费率 ≤20%）
+
+### 4.6 运行时地基：DeepSeek Harness 行业应用最佳实践
 
 WorkLoom 没有重复造 Agent 运行时的轮子，而是**站在 DeepSeek Harness（dsh）的肩膀上**，把全部工程火力集中在企业级护城河上——这可能是 dsh 发布以来最深入的一次行业化落地。
 
-### 6.1 双轨架构：地基用 dsh，护城河自研
+**双轨架构：地基用 dsh，护城河自研**
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -377,9 +404,7 @@ WorkLoom 没有重复造 Agent 运行时的轮子，而是**站在 DeepSeek Harn
 
 **为什么不自研地基？** Agent 主循环、工具调度、模型适配是会快速商品化的通用能力，跟开源社区共建远比闭门造车划算——dsh 由 DeepSeek 团队维护，迭代速度和质量都有保障。**为什么九域必须自研？** WorkData、围栏、审计、夜班调度这些能力直接贴着企业的钱和数据，是 WorkLoom 的价值所在，必须完全掌控。
 
-### 6.2 dsh 的消费方式：seam 精确对接
-
-WorkLoom 通过 `packages/runtime` 对 dsh 做了一整层 seam 适配，只消费稳定接口：
+**dsh 的消费方式：seam 精确对接**（`packages/runtime` 只消费稳定接口）：
 
 | 能力 | dsh 组件 | WorkLoom 用法 |
 |---|---|---|
@@ -390,19 +415,15 @@ WorkLoom 通过 `packages/runtime` 对 dsh 做了一整层 seam 适配，只消�
 | 指令体系 | dsh-agent-instructions | 班组 SOP 注入 Agent 上下文 |
 | 持久化 seam | dsh session 持久化 | 事件桥落账到 WorkData 五元事件库 |
 
-### 6.3 回馈社区：dsh-im 通道插件
-
-WorkLoom 把 IM 通道适配层抽成了独立的 dsh 插件 [`vendor/dsh-im`](vendor/dsh-im)（MIT），任何 dsh 应用都可以用它把 Agent 接入 IM 通道——这是我们对 dsh 生态的回赠。
+**回馈社区**：WorkLoom 把 IM 通道适配层抽成了独立的 dsh 插件 [`vendor/dsh-im`](vendor/dsh-im)（MIT），任何 dsh 应用都可以用它把 Agent 接入 IM 通道——这是我们对 dsh 生态的回赠。
 
 ---
 
-## 系统架构
+## 五、系统架构与业务闭环
 
 <p align="center"><img src="docs/images/architecture.png" alt="WorkLoom 系统架构" width="88%"/></p>
 
 五层结构自上而下：**体验层**（舰桥 Web 端 / IM 通道 / Mac 桌面包）→ **服务层**（Hono + tRPC v11，PG 行级安全）→ **能力层**（自研九域护城河，WorkData 数据大脑为核心底座）→ **运行时地基**（DeepSeek Harness seam 适配）→ **数据层**（PostgreSQL 17 + pgvector，五元事件 append-only + hash chain）。
-
-## 业务闭环
 
 <p align="center"><img src="docs/images/business-loop.png" alt="WorkLoom 业务核心闭环" width="88%"/></p>
 
@@ -410,53 +431,54 @@ WorkLoom 把 IM 通道适配层抽成了独立的 dsh 插件 [`vendor/dsh-im`](v
 
 ---
 
-## 三分钟启航（Mac 用户）
+## 六、开发者与 AI Coding Agent 指引
 
-1. **下载**：到 [Releases](https://github.com/geniusdapeng-collab/workloom-im/releases) 下载 `WorkLoom-macOS.zip`（约 208 MB，sha256 随附可校验）。
-2. **解压拖入应用程序**：首次打开如遇 Gatekeeper 提示，在「系统设置 → 隐私与安全性」点一次「仍要打开」即可——这是唯一一次需要手动授权。
-3. **双击 WorkLoom.app**：启动器自动完成一切——内嵌 PostgreSQL 17 + pgvector 初始化、数据库迁移、服务拉起、舰桥打开。无需安装任何依赖，无需命令行。
+> **AI Coding Agent**：进仓先读 [`AGENTS.md`](AGENTS.md) 与 [`.ai-prompt`](.ai-prompt)；全量能力清单见 [`docs/capability-map.md`](docs/capability-map.md)；一键能力自检 `pnpm agent:tour`；浏览器自动化指南 [`docs/agent-computer-guide.md`](docs/agent-computer-guide.md)。
+> **🖐 操作电脑能力（本仓自带 · 可装生产）**：`packages/base/computer-use/` 65 动作三层感知，`pnpm computer:preflight && pnpm computer:smoke` 即验；专用工作站一键安装 + HTTP/MCP 远程驱动见 [`docs/computer-use-production.md`](docs/computer-use-production.md)。
 
-> 系统要求：macOS 13 Ventura +，Apple Silicon（M 系列）。Intel 版后续推出。
+### 6.1 仓库地图（pnpm monorepo）
 
-## 用户文档（随代码一起下载）
+| 路径 | 职责 |
+|---|---|
+| `packages/base/workdata` | **核心底座**：安全网关 / 五元事件库 / PII 脱敏 / 组织记忆与检索 |
+| `packages/base/{fence-engine,review-console,im-channels,night-shift,inspection,skills,tenancy,bundles,model-router}` | 九域能力：围栏判定 / 审批流 / IM 通道 / 夜班调度 / 巡检 / 技能市场 / 多租户与演示 JWT / 行业 Bundle / 模型路由 |
+| `packages/runtime` | dsh seam 适配：意图路由（Ask/Agent/Quest 三模式）、Quest 循环（replay 断点续跑）、装配 |
+| `packages/{shared,db}` | 五元 zod schema / 手写 SQL 迁移（DDL 事实源） |
+| `apps/{server,web,webc,site,desktop}` | Hono+tRPC 服务 / 舰桥 PC 前端 / C 端 H5 / 官网 / Mac 桌面包 |
+| `packages/base/wizard` | **行业落地向导**：首次装机的状态机与编排（技能一/二/三→交付配置），行业内容零预置（D18） |
+| `skills/official/` | 官方套件：`industry-entry/`（行业落地四技能+快速上线模板）、`product-feedback/`（反哺分析技能）（D17） |
+| `vendor/{dsh,dsh-im}` | dsh 0.1.1-rc.1 审计基线（只读）/ dsh IM 通道插件（MIT 回馈） |
+| `scripts/` | migrate / seed / demo / verify-chain / **suite（371 场景用例）** / dsh-gate |
 
-| 文档 | 适合谁 | 内容 |
-|---|---|---|
-| [门店店长使用指南](docs/01-门店店长使用指南.md) | 门店店长 / 门店负责人 | 下载安装 → 配置 → 日常使用，全程无技术术语 |
-| [新客户首次接入完整流程](docs/02-新客户首次接入完整流程.md) | 任意行业新客户 | 从下载到正式使用的通用接入流程（约 30 分钟） |
-| [功能清单（用户版）](docs/03-功能清单-用户版.md) | 所有人 | 全部功能按使用场景分类，业务语言描述 |
-| [测试套件用例清单](docs/SUITE.md) | 开发者 / AI 助手 | 428 条场景用例全表（`pnpm suite` 运行时导出） |
-| [架构决策记录](docs/DECISIONS.md) | 开发者 | ADR：为什么这么设计（含否决方案论证） |
-| [审计记录](docs/AUDIT.md) | 开发者 / 安全 | 六轮审计的问题、根因、修复与门禁实测 |
+### 6.2 最小跑通路径
 
-## 开发者快速开始
-
-环境：Node 24 LTS（corepack 自带 pnpm 10）+ PostgreSQL 17 + pgvector 0.8。
+环境：Node 24 LTS（corepack 自带 pnpm 10）+ PostgreSQL 17 + pgvector 0.8（`docker compose up -d postgres` 一条命令就绪）。
 
 ```bash
 git clone https://github.com/geniusdapeng-collab/workloom-im.git
 cd workloom-im
 corepack enable && pnpm install && cp .env.example .env
 
-# 数据库初始化（建库建扩展即可；migrate 自动创建 app/gateway 双角色并完成授权）
+# 数据库初始化（建库建扩展即可；migrate 自动创建 app/gateway 双角色并完成授权——
+# A3 旁路防控：只有 gateway 角色可 INSERT biz_events）
 psql -U postgres -c "CREATE DATABASE workloom;"
 psql -U postgres -d workloom -c "CREATE EXTENSION vector;"
-pnpm db:migrate && pnpm db:seed   # 5 个迁移 + 演示种子（种子幂等可复跑）
+pnpm db:migrate && pnpm db:seed   # 17 个迁移 + 演示种子（种子幂等可复跑）
 
 # 质量门禁（与 CI ci-gate 完全同口径）
 pnpm typecheck         # 全仓类型检查
 pnpm test              # vitest 168 例（base 152 + runtime 12 + shared 4）
 RUN_DB_TESTS=1 pnpm -C packages/base test   # PG 集成测试（默认 skip）
 pnpm db:verify-chain   # 哈希链全库重算（篡改检测）
-pnpm suite             # 428 条全场景用例（服务层 344 + HTTP E2E 27）
+pnpm suite             # 371 条全场景用例（服务层 344 + HTTP E2E 27）
 pnpm demo              # 端到端演示剧本
 pnpm doctor            # 环境自检
 
 # 日常开发
-pnpm dev               # server(:8787) + web(:5173)，演示登录选「王店长」
+pnpm dev               # server(:8787) + web(:5173)
 ```
 
-### 真实模型接入（三模式真实运行态，D20）
+### 6.3 真实模型接入（三模式真实运行态）
 
 三种交互模式（ask 问询 / agent 逐步商量 / quest 自主执行）默认以确定性 mock 运行（D4 全流程可跑）；配置真实模型后全链真实化——意图分类（B8）、任务规划（B9）、ask 应答合成三环均走真实模型推理，模型出站强制脱敏（L6.2）：
 
@@ -470,28 +492,21 @@ LLM_MODEL=deepseek-chat
 
 行业化落地经「落地向导」自动化完成（D18/D20）：写 LLM_* 四 env + `registerAskFactProvider` 注册行业事实面 + 装载行业 bundle（六槽），代码零改动即真实运行。
 
-仓库结构：`apps/{server, web, site, desktop}` + `packages/{shared, db, base, runtime}` + `bundles/`（行业包）+ `vendor/{dsh, dsh-im}`，pnpm monorepo。核心底座：**`packages/base/workdata`（WorkData 数据大脑）**。428 条场景用例清单见 [`docs/SUITE.md`](docs/SUITE.md)；CI 门禁（每次 push 全量执行上述全部检查）见 `.github/workflows/ci.yml`。
+### 6.4 客户旅程模式（先体检，再托管）
 
-## 数字CEO（公司CEO/集团CEO，D21–D23）
+底座为行业落地定义标准旅程——新客户从「质检模式（Audit-Only）」起步：只读接入数据源 → **快照快扫**（15–30 分钟当场出《快速体检报告》，由 `@workloom/audit-core` 引擎 + 行业分析器算出真实发现）→ 持续体检（1–2 周）→ 影子模式（3 天）→ 正式托管。围栏纪律：体检期一切写操作物理 block（行业包 audit-only patch），检项由行业 Bundle 定义。
 
-**为什么有它**：数字员工解决的是「手」的问题，没解决「脑」的问题——员工越强，老板越忙。人类 CEO 的三件事是**做决策、带团队、向董事会汇报**，数字CEO 把这三件事机器化：它统领全部数字员工、对经营结果负责，人类（董事长）只做「提目标、听汇报、批少数决策」。
+### 6.5 给 AI 助手的修改纪律
 
-**三大职责（v1.8，D22）**：
-- **做决策**：三级分流——微决策规则直通 <1s / 常规单模型推理 / 重大决策**六步深度管线**（情报→案例回忆→多方案→红队对抗→影响预估→Memo Pro）；决策日记 + 命中率回测，命中率数据驱动授权扩缩；
-- **带团队**：员工绩效档案六指标 → 周度评议（表扬/关注/辅导）→ 辅导改善→**汰换重生**（诊断书+新员工设计方案→董事长批→旧停新上，基因重组）；
-- **向董事会汇报**：晨报/周会/月度董事会包（五段式含宪章修订提案）IM+App 双通道；赞/踩反馈入组织记忆。
+- 改网关/权限/RLS/append-only 相关代码前必读 `docs/AUDIT.md` 第 1 轮 P0 教训（RLS 事务级上下文必须配显式事务）
+- 每个逻辑变更一个 commit；修复必须附回归测试（往 `scripts/suite.ts` 加用例优先于新建测试文件）
+- 改完代码必须跑 `pnpm suite`；发布前必须跑 `pnpm release:gate`（未全过禁止发布，见 `docs/release-checklist.md`）
+- **UI 改动必须用浏览器能力实际打开页面截图核对**，禁止「改了就算完成」
+- 改了能力面（脚本/包/技能/演示页）必须跑 `pnpm capabilities` 重新生成人类版导览
 
-**运行机制（v1.7，D21）**：
-- **默认关闭**：启用须经六步深度授权（风险揭示/逐项确认/边界设定/试用计划/身份核验/签署留痕），见 [`docs/CEO-RISK-DISCLOSURE.md`](docs/CEO-RISK-DISCLOSURE.md)；
-- **影子→试用→正式**：影子期模拟决策不执行（dry_run 留痕），试用期自治边界自动降一档，**到期不自动续期**；
-- **五级审批路由**：L2 公司CEO 裁决 / L3 集团CEO / L4 董事长请示，Decision Memo 依据链强制；
-- **自治熔断**：KPI 跌破宪章下限自动收紧授权一档。
+---
 
-**经营剧场（v1.9，D23）**：打开系统首页（/）即是经营剧场——「织元体」全息数字CEO 与员工卫星群站在舞台中央（纯 SVG+Canvas 零素材），晨报它主动讲、请示它举着等你批、聊天框三模式真实路由；**董事长不说话，剧场照常运转**。P1–P21 成为剧场的「镜头」：剧场管感觉，工作台管操作。
-
-演示：`pnpm db:seed` 后 `pnpm dev` → 首页即剧场（云栖已有一位试用期中的公司CEO）；**P21 董事长视图**体验授权/裁决/评议/汰换全流程。
-
-## 安全设计
+## 七、安全设计
 
 - **数据主权**：local-first，全部业务数据存于企业本地 PostgreSQL，RLS 行级安全隔离多租户
 - **WorkData 五元事件库**：append-only + hash chain，审计不可篡改
@@ -499,14 +514,35 @@ LLM_MODEL=deepseek-chat
 - **一键紧急制动**：塔台随时可暂停全场 Agent
 - **依赖合规**：vendor 内 dsh / dsh-im 均为 MIT，主仓库 Apache-2.0
 
-## 路线图
+---
 
-- ✅ 当前：Mac 桌面包一键启航 + 官网 + CI 质量门禁（445 场景用例 + 哈希链验证，每次 push 全量执行）
+## 八、文档索引
+
+| 文档 | 适合谁 | 内容 |
+|---|---|---|
+| [门店店长使用指南](docs/01-门店店长使用指南.md) | 门店店长 / 门店负责人 | 下载安装 → 配置 → 日常使用，全程无技术术语 |
+| [新客户首次接入完整流程](docs/02-新客户首次接入完整流程.md) | 任意行业新客户 | 从下载到正式使用的通用接入流程（约 30 分钟） |
+| [功能清单（用户版）](docs/03-功能清单-用户版.md) | 所有人 | 全部功能按使用场景分类，业务语言描述 |
+| [行业落地向导（用户版）](docs/04-行业落地向导-用户版.md) | 新客户 / 交付 | 落地向导四步全解 |
+| [测试套件用例清单](docs/SUITE.md) | 开发者 / AI 助手 | 371 条场景用例全表（`pnpm suite` 运行时导出） |
+| [架构决策记录](docs/DECISIONS.md) | 开发者 | ADR：为什么这么设计（含否决方案论证） |
+| [审计记录](docs/AUDIT.md) | 开发者 / 安全 | 六轮审计的问题、根因、修复与门禁实测 |
+| [CHANGELOG](CHANGELOG.md) | 所有人 | 版本变更历史（Keep a Changelog 格式） |
+| [行业落地方法论](docs/methodology/01-行业落地三技能体系.md) | 交付 / 行业拓展 | 行业落地三技能体系 |
+
+---
+
+## 九、路线图
+
+- ✅ 当前：Mac 桌面包一键启航 + 官网 + CI 质量门禁（371 场景用例 + 哈希链验证，每次 push 全量执行）
+- ✅ v1.10 自我进化飞轮 P0（D24）：反馈 → 记忆 → 行为校准（偏好注入主链路 / 记忆提炼器 / 进化积分卡 / P23 组织记忆中心）
+- ✅ dsh 0.1.1-rc.1 已集成（subagent Codex / Claude Code 按需安装；E6 dsh-gate 门禁全绿）
 - 🔜 Intel Mac 包 / Windows 包
 - 🔜 技能市场 industry 层开放（脱敏审核流水线 + 跨组织安装）
 - 🔜 更多领域 bundles（社媒营销、AI 视频与内容创作、餐饮、零售、物业）
-- ✅ dsh 0.1.1-rc.1 已集成（subagent Codex / Claude Code 按需安装；E6 dsh-gate 门禁全绿）
 - 🔜 dsh 上游新版本持续跟进（任何新版本含预发布即升 + seam 兼容回归）
+
+---
 
 ## 致谢
 
