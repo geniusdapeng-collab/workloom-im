@@ -28,6 +28,7 @@ import {
   type NightPillState,
 } from "../../components/hud";
 import { THREAD_MODE_TEXT, dictText } from "../../lib/display";
+import { CreditsPanel } from "../../components/CreditsPanel";
 
 /* ---------- 类型（与 server router 对齐） ---------- */
 interface ThreadRow {
@@ -285,6 +286,12 @@ export default function P1() {
             P1 · OVERVIEW{isCommunity ? " · 社区版" : ""}{demo ? ` · demo=${demo}` : ""}
           </span>
         </div>
+
+        {/* v3.0 积分账本（三池余额 + 加油包；P1 商业化产品化） */}
+        <details className="mb-3 rounded-lg border border-line/60 bg-white/[0.02] px-3 py-2">
+          <summary className="cursor-pointer text-caption text-ink3">💎 积分账本与加油包（三池余额 / 消耗流水）</summary>
+          <div className="pt-2"><CreditsPanel /></div>
+        </details>
 
         {error && (
           <div className="mb-3">
