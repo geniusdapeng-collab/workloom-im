@@ -24,7 +24,8 @@
       "types": "./captain/index.ts",
       "default": "./captain/index.ts"
     },
-    "./audit-core": "./audit-core/index.ts"
+    "./audit-core": "./audit-core/index.ts",
+    "./evolve": "./evolve/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
