@@ -10,7 +10,7 @@
 | 类别 | 疑似数 | 真问题 | 判定 |
 |---|---|---|---|
 | A 环境配置 | 91 | **1** | P22 官网源 placeholder 写死 `hotel.example.com`（P2）；其余为 CI 连接串、本地开发脚本默认值（有 env 兜底）、第三方官方端点（微信/LLM 预设/镜像源）、oss-components.json 开源清单、dsh-gate 本机地址——标准实践，豁免 |
-| B 身份演示 | 17 | **3** | trpc.ts 演示登录写死 slug+MEM-001（P1）、P7 行业草稿写死 MEM-001（P1）、P1 主甲板写死「云栖酒店 · 演示身份 MEM-001」（P1）；demo.ts/release-gate/eval 为演示与冒烟脚本（白名单豁免） |
+| B 身份演示 | 17 | **3** | trpc.ts 演示登录写死 slug+MEM-001（P1）、P7 行业草稿写死 MEM-001（P1）、P1 经营主页写死「云栖酒店 · 演示身份 MEM-001」（P1）；demo.ts/release-gate/eval 为演示与冒烟脚本（白名单豁免） |
 | C 密钥凭据 | 0 | 0 | 全仓无明文密钥（JWT_SECRET 走部署方配置；套件内 sk-e2e-dummy 为桩假值） |
 | D 行业泄漏 | 24 | **8** | 底座酒店残留：inspection 检项/探针、service-dialog 意图词表与应答、service-kb 同义词与弱词表、service-ticket 部门路由、runtime 剧本工具（pms.\*/云栖/竞对酒店）、runtime 内容正则（小红书/抖音）、runtime 动作词（关房/开房）、server 客服 prompt（酒店前台）；另有 9 处注释行业词（P1 中性化） |
 | E 规则外溢 | 6 | 0 | charter.ts 默认值 5000/2000 **基座不改**（基座行业无关，行业化由行业包 seed 覆盖；测试已动态化防回归）；E8.3 驳回校准 ×2 为有注释依据的产品逻辑常量（豁免） |
