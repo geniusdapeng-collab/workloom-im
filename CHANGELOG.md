@@ -2,6 +2,30 @@
 
 本文件记录 WorkLoom IM 底座的变更历史。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [1.12.0] - 2026-09-02 · 技能保鲜环 P1：自动同步 + 上行回流 + 官方运营台（闭环合拢）
+
+> 承接 1.11.0（P0 下行通道）：本版本让机制完整转起来——客户端**夜班窗口自动同步**（客户零操作）、
+> 通栏通知触达；客户优秀技能经 **D19 四条红线**回流官方，消化流水线（聚类/六信号评分/双人复核）
+> 官方化后再分发，保鲜环双向闭环合拢。
+
+### 新增
+
+- **夜班窗口自动同步（机制即自动，客户零操作）**：`skill-ops/autosync.ts` + server 启动挂载——60s 评估节拍，夜班窗口（22:00→08:30 Asia/Shanghai，纯函数判定不依赖容器 TZ）内且距上次自动同步 ≥20h 才执行；pg advisory xact lock 多副本安全；事件归因 **system:night-shift**（谁干的一眼可辨）；工作区级 `auto_sync` 总开关（迁移 0019，默认开，客户可关=治理主权）；未配置 registry/密钥 = 整体禁用。
+- **技能更新通栏（`SkillDistBanner.tsx`，挂载 P0 经营主页 + Bridge 工作台，与 SimBanner 同位）**：近 24h 静默装载 → 青条「夜班已自动更新 N 个技能」（可跳 P6，当日可关闭）；L2 待审批 → 琥珀条引导 P4 拍板。数据源 `skillOps.status` 新增 recentLoaded/pendingCount/autoSync。
+- **上行回流（D19 四条红线全机制化）**：`reflux_opt_in` 默认关（迁移 0020）→ 未开启拒发；**预览即所发**（preview 与 send 同函数构造 payload）；PII 脱敏管道（maskText 打码 + 敏感凭据词拒发——脱敏不是橡皮擦）；发送行为 `skill.reflux.sent` 留痕 + outbox 落库（未配端点 queued 待重试）。**六信号使用摘要在客户侧本地计算**（采用率/完成率/好评率/审批通过率/返工率/稳定性，权重 25/20/15/15/15/10，样本 <20 稀疏降权 ×0.5）——官方拿不到客户本地信号，数据主权不越界。
+- **官方运营台（`SKILL_OPS_MODE=official` 部署启用）**：HTTP 端点 `GET /skill-dist/manifest.json`（签名分发服务）+ `POST /skill-ops/reflux`（HMAC 验签接收，幂等）；tRPC `skillOps.console.*`（非官方部署 403）——inbox 聚类排序（cluster_key 归一化）→ 双人复核（两名不同成员 approve，执行人须为复核成员之一，D15-② 同构）→ 官方化（origin=customer-reflux 入官方技能库）→ `buildManifest` 签名构建 → 客户端拉取，闭环合拢。健康看板 consoleHealth。
+- **tRPC**：`skills.skillOps.reflux.*`（optIn/setOptIn/preview/send）+ `skills.skillOps.console.*`（health/inbox/review/officialize/buildManifest）；`skillOps.setPolicy` 扩展 autoSync 参数。
+
+### 修复（自审发现的红线漏洞）
+
+- **L2 分发审批 tier 缺省漏洞**：approvals.tier 缺省 `l2_captain` 会让数字CEO队列节拍自动裁决分发审批（绕过「L2 永不静默」红线）——显式指定 `l4_chairman`（权限面扩张=董事长级人审，围栏放宽同层），新增测试断言钉死。
+- **套件 R-26 交叉污染加固**：历史遗留 pending L2 审批（套件跨轮泄漏）抬高全局积压计数致健康场景误判——用例改为「泊车冻结（l3_fleet）+ finally 恢复」，并补覆盖员工的失败清理（失败残留曾污染 H-33 哨兵口径）。
+
+### 门禁验证
+
+- ✅ typecheck 全绿 · vitest 550（skill-ops 28 例：P0 19 + 自动同步 4 + 回流/闭环 5）· suite **459/459**（新增 Y 域 3 例：夜班自动同步归因 / 回流红线 / 官方化闭环）· release:gate 9/9 · capabilities 同步 ✓
+- ✅ 闭环演练：客户实例产出技能 → opt-in 回流（脱敏+留痕）→ 官方验签接收 → 双人复核 → 官方化 → buildManifest 签名 → 客户端拉取装载，全链路事件可回放
+
 ## [1.11.0] - 2026-09-02 · 技能保鲜环 P0：下行分发通道（官方运营台 → 客户实例）
 
 > 立项依据：《WorkLoom 技能保鲜环 · 产品方案 v0.2》——把「能力保鲜」从运维动作变成产品机制：
