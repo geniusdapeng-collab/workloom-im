@@ -73,7 +73,7 @@ pnpm install && pnpm preview:all
 |---|---|---|
 | **高保真演示页 ×6** | 糖果色，含手机壳容器 | http://localhost:3001 |
 | **官网静态站** | 对外产品故事 | apps/site/index.html |
-| **自带技能 ×3** | industry-entry / product-feedback / release-gate | skills/official/ |
+| **自带技能 ×4** | component-integration / industry-entry / product-feedback / release-gate | skills/official/ |
 | **能力导览 PPT** | 路演/汇报直接用 | docs/capability-tour.pptx |
 | **Mock 数据体系** | 种子 + 离线模型 + 演示直登，开箱即用 | mock/README.md |
 

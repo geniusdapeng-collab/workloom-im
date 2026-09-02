@@ -1,7 +1,7 @@
 {
  "repo": "workloom-im",
  "description": "WorkLoom IM · 企业级 Agent IM 底座（智能班组 + 围栏 + 人审 + 夜班）",
- "generatedAt": "2026-09-02T06:38:58.657Z",
+ "generatedAt": "2026-09-02T08:37:45.193Z",
  "demoPages": [
   "service-front-b-mobile.html",
   "service-front-b-pc.html",
@@ -167,9 +167,9 @@
      "desc": "对外产品故事"
     },
     {
-     "name": "自带技能 ×3",
+     "name": "自带技能 ×4",
      "how": "skills/official/",
-     "desc": "industry-entry / product-feedback / release-gate"
+     "desc": "component-integration / industry-entry / product-feedback / release-gate"
     },
     {
      "name": "能力导览 PPT",
