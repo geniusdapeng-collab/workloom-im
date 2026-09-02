@@ -366,6 +366,16 @@
       "gate": "standard",
       "scope": "skills/registry/browser-act（执行面技能，L2 审批安装）",
       "notes": "MIT；freemium 云依赖（stealth>5/代理/打码付费）——适配纪律：proxyMode=custom-only、凭据客户本机、出站 api.browseract.com 全声明过三段瀑布；集成评估与适配见 skills/official/component-integration"
+    },
+    {
+      "name": "scrapling",
+      "repo": "https://github.com/D4Vinci/Scrapling",
+      "channel": "github",
+      "current": "选型入库（技能市场执行面技能）",
+      "cadence": "weekly",
+      "gate": "standard",
+      "scope": "skills/registry/scrapling-collector",
+      "notes": "BSD-3-Clause；纯本地零出站；经 skill:forge 集成"
     }
   ]
 }
