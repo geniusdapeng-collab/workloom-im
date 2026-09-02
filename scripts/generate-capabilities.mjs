@@ -59,6 +59,7 @@ if (basePkgs.includes("computer-use")) groups.push({
 
 const engine = [
   ["fence-engine", "围栏 DSL 引擎", "事前裁决：支持 in/contains_any 列表语义"],
+  ["skill-ops", "技能保鲜环（下行分发）", "官方技能一键投放：五道预检 + L0/L1 静默/L2 审批 + 一键回滚 + 全事件留痕"],
   ["captain", "L2 编排（ASK/QUEST）", "一句话目标自动拆解多步骤并派发"],
   ["night-shift", "夜班自动运行", "离线任务推进，次日晨报"],
   ["model-router", "模型路由", "离线确定性模型，无密钥可跑"],

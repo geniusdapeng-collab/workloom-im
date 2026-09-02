@@ -1,7 +1,7 @@
 # workloom-im · 能力导览（人类版）
 
 > WorkLoom IM · 企业级 Agent IM 底座（智能班组 + 围栏 + 人审 + 夜班）
-> 本文件由 `node scripts/generate-capabilities.mjs` 从代码事实**自动生成**（2026-08-31），
+> 本文件由 `node scripts/generate-capabilities.mjs` 从代码事实**自动生成**（2026-09-02），
 > 请勿手改——能力变更后重跑生成器即可。Agent 版机器清单见 docs/capability-map.md。
 
 ## 🚀 5 分钟体验路径
@@ -18,7 +18,7 @@ pnpm install && pnpm preview:all
 
 无需任何真实后端或密钥：Mock 数据（种子 + 离线确定性模型 + 演示直登）已固化，详见 mock/README.md。
 
-## 📦 能力总览（26 项）
+## 📦 能力总览（27 项）
 
 ### 🖥 三端应用（开箱即看）
 
@@ -46,6 +46,7 @@ pnpm install && pnpm preview:all
 | 能力 | 一句话 | 怎么体验 |
 |---|---|---|
 | **围栏 DSL 引擎** | 事前裁决：支持 in/contains_any 列表语义 | 见 docs/capability-map.md L3 |
+| **技能保鲜环（下行分发）** | 官方技能一键投放：五道预检 + L0/L1 静默/L2 审批 + 一键回滚 + 全事件留痕 | 见 docs/capability-map.md L3 |
 | **L2 编排（ASK/QUEST）** | 一句话目标自动拆解多步骤并派发 | 见 docs/capability-map.md L3 |
 | **夜班自动运行** | 离线任务推进，次日晨报 | 见 docs/capability-map.md L3 |
 | **模型路由** | 离线确定性模型，无密钥可跑 | 见 docs/capability-map.md L3 |

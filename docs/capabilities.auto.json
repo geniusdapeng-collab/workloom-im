@@ -1,7 +1,7 @@
 {
  "repo": "workloom-im",
  "description": "WorkLoom IM · 企业级 Agent IM 底座（智能班组 + 围栏 + 人审 + 夜班）",
- "generatedAt": "2026-08-31T10:07:10.579Z",
+ "generatedAt": "2026-09-02T03:30:59.873Z",
  "demoPages": [
   "service-front-b-mobile.html",
   "service-front-b-pc.html",
@@ -68,6 +68,11 @@
      "name": "围栏 DSL 引擎",
      "how": "见 docs/capability-map.md L3",
      "desc": "事前裁决：支持 in/contains_any 列表语义"
+    },
+    {
+     "name": "技能保鲜环（下行分发）",
+     "how": "见 docs/capability-map.md L3",
+     "desc": "官方技能一键投放：五道预检 + L0/L1 静默/L2 审批 + 一键回滚 + 全事件留痕"
     },
     {
      "name": "L2 编排（ASK/QUEST）",

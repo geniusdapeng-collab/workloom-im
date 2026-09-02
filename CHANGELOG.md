@@ -2,6 +2,30 @@
 
 本文件记录 WorkLoom IM 底座的变更历史。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [1.11.0] - 2026-09-02 · 技能保鲜环 P0：下行分发通道（官方运营台 → 客户实例）
+
+> 立项依据：《WorkLoom 技能保鲜环 · 产品方案 v0.2》——把「能力保鲜」从运维动作变成产品机制：
+> 官方收录/自研技能经治理流水线一键投放至客户实例，客户始终使用业界最领先的技能。
+> 三条红线：执行面升级永不自动（L2 走审批）/ staging 五道预检不过不装载 / 一切技能操作皆事件。
+
+### 新增
+
+- **skill-ops 底座包（`packages/base/skill-ops/`）**：下行分发全链路——
+  - **schema 扩展**：技能在 D17「内容资产」之上扩展分发元数据（`skills.dist_meta` JSONB，zod 为类型事实源）：类别（knowledge / tool-execution）· 来源（official-authored / oss-curated / customer-reflux）· 技能级依赖 · 工具白名单 · 出站域清单 · 建议围栏参数 · License/来源仓 · 签名。`credentials` 字段永不出现（凭据只存客户本机）。
+  - **staging 五道预检**：① 官方签名核验（HMAC-SHA256，canonical 定序载荷，时序安全比较）② schema + 依赖形态/可达性 ③ 脱敏扫描（复用 D15-① 同款扫描器）④ 注入对抗（复用 D15-③）⑤ 工具白名单/出站域/围栏绑定 diff 定级。任一门不过即 rejected 留档，不降级不跳过。
+  - **L0/L1/L2 分级引擎**：知识型首装 L0（默认静默）；内容升级零权限 diff L1（默认静默，可全局改「提示后升级」）；执行面技能或权限面扩张（新增工具/出站域/围栏绑定）L2——**永不静默**，自动生成审批提案（审批卡片直达手机），审批未过服务端拒绝装载。纯收缩不算扩张（收紧是安全方向，L1 留痕）。
+  - **客户端接收器**：manifest 拉取（`SKILL_DIST_REGISTRY_URL` 注入，fetcher 可替换）→ 定向匹配（只按标签：workspaces.industry 已装配 Bundle + `SKILL_DIST_EDITION` 版本档，官方不读客户库）→ 同版本幂等跳过 → 热装载（技能库 upsert + 已装技能 installed_version/围栏快照同步跟进）。新技能仅入技能库——「安装即绑定围栏」仍走 installSkill 原流程（E8.1 冲突检测不旁路）。未配置 registry/签名密钥 = 分发功能整体禁用（不降级为跳过验签）。
+  - **回滚栈语义**：装载前必落快照（旧 skills 行 + 旧 install 行），rollback 即消费快照恢复上一版本，连续回滚逐级回溯至首装前（移除）；回滚本身留痕。
+  - **静默策略**（工作区级）：silent（默认）/ prompt 全局开关，仅作用于 L0/L1 内容面；策略变更留痕。
+- **tRPC**：`skills.skillOps.*`（status / syncNow / setPolicy / loadStaging / rollback），写操作 readonly 服务端 403（E2.6 同口径）。
+- **迁移 0018**：`skills.dist_meta` 列 + `skill_dist_staging` / `skill_dist_snapshots` / `skill_dist_policy` / `skill_dist_state` 四表（全量 RLS 工作区隔离 + 双角色 GRANT）。
+- **事件动作**：`skill.dist.sync` / `staged` / `loaded` / `approved_loaded` / `pending_approval` / `rejected` / `rollback` / `policy`——全部进 biz_events 哈希链。
+
+### 门禁验证
+
+- ✅ typecheck 全绿 · vitest 541（base 含 RUN_DB_TESTS=1 全量，新增 skill-ops 19 例：纯函数 12 + PG 集成 7）· suite 456/456（新增 Y 域 11 例：DB 7 + HTTP E2E 4）· capabilities 同步 ✓
+- ✅ 演练覆盖：L0 静默装载 / L1 升级快照跟进 / L2 审批门禁（未批准拒绝→批准后装载）/ PII 拦截 / prompt 策略 / 回滚栈 / 定向跳过 / 同版本幂等 / 未配置禁用
+
 ## [1.10.0] - 2026-08-31 · 自我进化飞轮 P0（D24）：反馈 → 记忆 → 行为校准
 
 > 立项依据：《WorkLoom 自我进化方案 v0.1》+ 双行业（酒店 / AI 短视频营销）反向验证 v0.2——
