@@ -19,12 +19,12 @@ export function NavBar({ entries = NAV_ENTRIES }: { entries?: NavEntry[] }) {
   return (
     <nav
       aria-label="主导航"
-      className="flex items-center gap-1 overflow-x-auto border-t border-line/60 bg-bg950/85 px-3 py-1.5 backdrop-blur-md"
+      className="flex items-center gap-0.5 overflow-x-auto border-t border-line/60 bg-bg950/85 px-2.5 py-1 backdrop-blur-md"
     >
       {groups.map(([g, list], gi) => (
         <div key={g} className="flex items-center gap-1">
           {gi > 0 && <span className="mx-1.5 h-3 w-px bg-line" aria-hidden />}
-          <span className="mr-0.5 select-none text-[10px] tracking-[.18em] text-ink3/80">{g}</span>
+          <span className="mr-0.5 select-none text-[9px] tracking-[.12em] text-ink3/70">{g}</span>
           {list.map((e) => {
             const active = pathname === e.path || (e.path !== "/" && pathname.startsWith(e.path));
             return (
@@ -32,7 +32,7 @@ export function NavBar({ entries = NAV_ENTRIES }: { entries?: NavEntry[] }) {
                 key={e.path}
                 href={e.path}
                 aria-current={active ? "page" : undefined}
-                className={`relative whitespace-nowrap rounded px-2.5 py-1 text-[12px] no-underline transition-colors ${
+                className={`relative whitespace-nowrap rounded px-2 py-0.5 text-[11.5px] no-underline transition-colors ${
                   active
                     ? "bg-card font-semibold text-gold shadow-[inset_0_-2px_0_0_var(--color-gold)]"
                     : "text-ink2 hover:bg-card/60 hover:text-ink"
