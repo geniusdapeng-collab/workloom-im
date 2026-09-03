@@ -265,7 +265,7 @@ input{font:inherit;color:var(--ink);background:var(--bg900);border:1px solid var
       <div class="card cardpad" style="margin-top:10px">
         <div class="small" style="font-weight:700;color:var(--holo)">夜班班组（5 名在线）</div>
         <div class="tiny" style="margin-top:6px;line-height:2">
-          调价Agent v2.3 · 评价Agent v1.8 · 对账Agent v2.0 · 巡检Agent v1.2（只读）· 竞对Agent v1.1（只读）
+          收益定价官 v2.3 · 口碑公关官 v1.8 · 财务司库官 v2.0 · 品质巡检官 v1.2（只读）· 市场侦察官 v1.1（只读）
         </div>
       </div>
       <div class="card cardpad" style="margin-top:10px">
@@ -282,7 +282,7 @@ input{font:inherit;color:var(--ink);background:var(--bg900);border:1px solid var
       <div class="rowbet"><span class="h1">Ask · AI 助手对话</span><span class="sub">全局常驻 · ⌘K 唤起</span></div>
       <div id="askMsgs" style="margin-top:12px">
 <div class="am-hb"><div>有新增差评吗</div></div>
-<div class="am-am"><div><div class="mh"><b>AI 助手</b><span class="am-tag ok">✓ 已生效</span></div><div class="ac">AI 助手 · 应答</div><div class="bd">有，1 件新增：携程 2 分差评「空调半夜异响」已 26 小时未回复（R19 SLA 已升级店长）。评价Agent 已生成四段式回复草稿，待您审批（R6 差评必审）。</div></div></div>
+<div class="am-am"><div><div class="mh"><b>AI 助手</b><span class="am-tag ok">✓ 已生效</span></div><div class="ac">AI 助手 · 应答</div><div class="bd">有，1 件新增：携程 2 分差评「空调半夜异响」已 26 小时未回复（R19 SLA 已升级店长）。口碑公关官 已生成四段式回复草稿，待您审批（R6 差评必审）。</div></div></div>
 <div class="am-hb"><div>汇总本周差评给我</div></div>
 <div class="am-am"><div><div class="mh"><b>公司CEO</b><span class="am-tag amber">⚠ 未核实</span></div><div class="ac">公司CEO 已接单</div><div class="bd">明确任务已自动立项（quest），进展我会主动汇报。</div><div class="am-quest"><b style="color:var(--goldhi)">quest 立项卡 · 本周差评汇总</b><div style="font-family:ui-monospace,monospace;font-size:10px;color:var(--ink3);margin-top:3px">排队中 · →任务中心跟进</div></div></div></div>
       </div>
@@ -320,7 +320,7 @@ function mTab(btn){
   $("screen").scrollTop=0;
 }
 /* 经营主页：卫星点阵（7 Agent 真实名单绩效色） */
-const SATS=[["调价Agent","#22c88a"],["评价Agent","#ffaa33"],["对账Agent","#6ec6ff"],["巡检Agent","#6ec6ff"],["竞对Agent","#6ec6ff"],["内容Agent","#22c88a"],["桌面Agent","#ff4d6d"]];
+const SATS=[["收益定价官","#22c88a"],["口碑公关官","#ffaa33"],["财务司库官","#6ec6ff"],["品质巡检官","#6ec6ff"],["市场侦察官","#6ec6ff"],["内容主笔官","#22c88a"],["数字执行官","#ff4d6d"]];
 (function(){
   const f=$("satfield");
   SATS.forEach((s,i)=>{
@@ -341,7 +341,7 @@ const SATS=[["调价Agent","#22c88a"],["评价Agent","#ffaa33"],["对账Agent","
   })();
 })();
 /* 实况一行（动作经 display.ts 中文化） */
-const TICK=[["调整房价","调价Agent"],["生成夜班日报","系统"],["CEO 晨报","公司CEO"],["创建工单","服务台Agent"],["办结工单","王师傅"],["检索知识库","服务台Agent"]];
+const TICK=[["调整房价","收益定价官"],["生成夜班日报","系统"],["CEO 晨报","公司CEO"],["创建工单","服务台官"],["办结工单","王师傅"],["检索知识库","服务台官"]];
 $("mticker").innerHTML=TICK.concat(TICK).map(e=>`<span><b>${e[0]}</b> · ${e[1]}</span>`).join("");
 function mDecide(g){
   $("m-l4").innerHTML=`<div class="small" style="color:${g==="approve"?"var(--go)":"var(--warn)"}">${g==="approve"?"✓ 已批准":"✕ 已驳回"}，全链留痕（审批台 P4 可见）</div>`;
