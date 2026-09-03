@@ -54,6 +54,20 @@ pnpm preview:all     # 一键拉起三端 + Mock 数据固化（无需真实后�
 
 **未完成 preview:all 视为环境初始化未完成。** 验收清单：`PREVIEW_CHECKLIST.md`；Mock 口径：`mock/README.md`。
 
+### 1.1 要"完整客户端"体验（不走浏览器）？用桌面模式
+
+用户/客户明确要求**桌面客户端窗口**（无浏览器地址栏/标签页）时：
+
+```bash
+pnpm app            # 一条命令：环境检查 → server → web 生产包 → Electron 原生窗口
+pnpm app --dev      # 开发姿态（vite HMR）
+pnpm app --smoke    # 冒烟验证（CI/无头环境；有显示时真实拉窗验证渲染）
+```
+
+- 首次 pnpm install 后 Electron 二进制若未下载（pnpm 跳过 postinstall），`pnpm app` 会**自动补下载**（npmmirror 镜像），无需人工干预；
+- 未初始化环境（缺 .env）会明确指引先 `pnpm setup`；关窗即收拢全部服务，不留残留进程；
+- **不要只起 `pnpm -C apps/web dev` 就交付**——web 端有环境守门员（BackendGate）会渲染引导页，但正确交付是 `pnpm app` 或 `pnpm preview:all`。
+
 ## 2. 一键能力巡游（强烈建议进仓第一件事）
 
 ```bash
