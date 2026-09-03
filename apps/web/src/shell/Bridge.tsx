@@ -14,7 +14,6 @@ import { SkillDistBanner } from "../components/SkillDistBanner";
 import { useAskRailPadding } from "../lib/useAskRail";
 import { COMMON_STATUS_TEXT, dictText } from "../lib/display";
 import { PlanSwitcher } from "./PlanSwitcher";
-import { NavBar } from "./NavBar";
 
 /** 星野背景（氛围层；永不遮挡信息、不影响 G10 首屏口径——§7 动效纪律） */
 function StarField() {
@@ -91,12 +90,6 @@ export function Bridge({
 
           {/* 顶栏（原型 V4.0 .abar chrome 条） */}
           <header className="flex items-center gap-3.5 border-b border-line bg-bg950/90 px-4.5 py-2.5 backdrop-blur-md">
-            <div className="flex items-center gap-2.5 text-[15px] font-black tracking-wider">
-              <span className="inline-block h-4 w-4 rotate-45 rounded gold-grad shadow-[0_0_14px_rgba(255,160,60,.6)]" />
-              <span className="bg-gradient-to-r from-gold to-gold2 bg-clip-text text-transparent">
-                WorkLoom
-              </span>
-            </div>
             <span className="text-xs text-ink3">
               企业 Agent IM · <b className="font-semibold text-ink2">云栖酒店</b>
             </span>
@@ -108,8 +101,6 @@ export function Bridge({
             {!community && <EmergencyBrake />}
           </header>
 
-          {/* 常驻导航条（桌面客户端范式：看得见、点得到，不收二级入口） */}
-          <NavBar />
 
           {/* 模拟数据横幅（D24：模拟态/mock 模型常显，引导落地向导接入真实数据） */}
           <SimBanner />
