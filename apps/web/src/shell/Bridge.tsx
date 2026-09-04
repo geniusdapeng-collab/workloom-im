@@ -91,7 +91,7 @@ export function Bridge({
           {/* 顶栏（原型 V4.0 .abar chrome 条） */}
           <header className="flex items-center gap-3.5 border-b border-line bg-bg950/90 px-4.5 py-2.5 backdrop-blur-md">
             <span className="text-xs text-ink3">
-              企业 Agent IM · <b className="font-semibold text-ink2">云栖酒店</b>
+              企业数字员工 IM · <b className="font-semibold text-ink2">云栖酒店</b>
             </span>
             <span className="flex-1" />
             <PlanSwitcher onPlan={setPlan} />
