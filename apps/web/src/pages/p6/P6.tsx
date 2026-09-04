@@ -36,7 +36,7 @@ interface Suggestion {
 const RARITY = {
   official: { border: "border-gold/60", tag: "传说 · 官方", cls: "text-gold", icon: "✦" },
   team: { border: "border-[#C0C8E8]/50", tag: "精良 · 团队", cls: "text-[#C0C8E8]", icon: "✧" },
-  industry: { border: "border-[#CD8B5A]/50", tag: "共享 · 行业", cls: "text-[#CD8B5A]", icon: "❖" },
+  industry: { border: "border-[#a8b2be]/50", tag: "共享 · 行业", cls: "text-[#a8b2be]", icon: "❖" },
 } as const;
 
 /** 展示名（官方技能 description 首句为中文名，如「收益管理专家。…」；团队/行业直接用 name） */
