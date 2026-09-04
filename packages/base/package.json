@@ -26,7 +26,8 @@
       "default": "./captain/index.ts"
     },
     "./audit-core": "./audit-core/index.ts",
-    "./evolve": "./evolve/index.ts"
+    "./evolve": "./evolve/index.ts",
+    "./eval-core": "./eval-core/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
