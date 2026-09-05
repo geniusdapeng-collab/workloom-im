@@ -23,6 +23,7 @@ import { VoiceEngine } from "../../voice/VoiceEngine";
 import { AudioEngine } from "../../audio/AudioEngine";
 import { useAmbience } from "../../audio/ambience";
 import { AudioSettings } from "../../components/AudioSettings";
+import { ValueCounters } from "../../components/ValueCounters";
 import { useTheaterDiff } from "../../lib/theaterDiff";
 import { personaOf } from "../../lib/naming";
 
@@ -368,6 +369,7 @@ export default function P0() {
         <span className={`rounded border px-2 py-0.5 text-[11px] ${tone === "amber" ? "border-amber-500/60 text-amber-600" : tone === "gold" ? "border-gline text-gold" : "border-line text-ink3"}`}>
           {MODE_TEXT[data?.mode ?? ""] ?? "…"}
         </span>
+        <ValueCounters />
         <AudioSettings />
         <a href="/p1" className="rounded border border-line px-2 py-0.5 text-[11px] text-ink2 no-underline hover:border-gline">工作台</a>
         <a href="/p21" className="rounded border border-gline px-2 py-0.5 text-[11px] text-gold no-underline">董事长视图</a>
