@@ -40,7 +40,12 @@ export const VOICE_PRESETS: Record<string, { pitch: number; rate: number; female
   "review-agent": { pitch: 1.2, rate: 1.0, female: true },
   "desktop-agent": { pitch: 1.0, rate: 1.1 },
   // —— AI 产品经理团队 ——
-  "pm-staff-officer": { pitch: 0.9, rate: 0.92 },
+  "chief-pm": { pitch: 0.9, rate: 0.92 },
+  "model-scout": { pitch: 1.0, rate: 1.0 },
+  "eval-master": { pitch: 0.95, rate: 0.95 },
+  "prompt-curator": { pitch: 1.0, rate: 1.0 },
+  "red-teamer": { pitch: 0.9, rate: 1.0 },
+  "knowledge-curator": { pitch: 1.05, rate: 0.95, female: true },
   "requirement-analyst": { pitch: 1.0, rate: 1.0 },
   "competitor-scout": { pitch: 1.1, rate: 1.05 },
   "data-insight": { pitch: 0.95, rate: 0.95 },

@@ -1,5 +1,5 @@
 {
-  "name": "AI 产品经理职场",
+  "name": "AI 产品经理职场（产品经理负责制）",
   "zones": [
     {
       "id": "command",
@@ -9,7 +9,7 @@
         0.6
       ],
       "roles": [
-        "pm-staff-officer"
+        "chief-pm"
       ]
     },
     {
@@ -22,7 +22,8 @@
       "decor": "radar-screen",
       "roles": [
         "competitor-scout",
-        "industry-radar"
+        "industry-radar",
+        "model-scout"
       ]
     },
     {
@@ -72,6 +73,43 @@
       "decor": "gate",
       "roles": [
         "release-guardian"
+      ]
+    },
+    {
+      "id": "eval-lab",
+      "label": "评测实验室",
+      "pos": [
+        3.6,
+        1.2
+      ],
+      "decor": "big-screen",
+      "roles": [
+        "eval-master",
+        "prompt-curator"
+      ]
+    },
+    {
+      "id": "redteam-corner",
+      "label": "红队角",
+      "pos": [
+        -3.6,
+        1.4
+      ],
+      "decor": "gate",
+      "roles": [
+        "red-teamer"
+      ]
+    },
+    {
+      "id": "library",
+      "label": "知识书房",
+      "pos": [
+        0,
+        3.4
+      ],
+      "decor": "desk",
+      "roles": [
+        "knowledge-curator"
       ]
     }
   ]

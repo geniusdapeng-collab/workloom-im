@@ -2,8 +2,8 @@
  * seed-aipm · AI 产品经理行业示例包种子（方案 V4 §12/P0）
  * 用法：DATABASE_URL=... tsx scripts/seed-aipm.ts
  * 内容：demo 租户 / 「织元产品部」工作区（is_example=true）/ 3 人类成员 /
- *      ai-pm 8 preset 实例 / R-PM1-7 基线围栏 / 8 技能安装 /
- *      业务种子（需求池/竞档/指标/反馈/文档进知识库）/ 审批样例 / 晨报 /
+ *      ai-pm 14 preset 实例（产品总监领队，V3 产品经理负责制）/ R-PM1-14 基线围栏 / 20 技能安装 /
+ *      业务种子（需求池/竞档/指标/反馈/文档/评测中心/prompt版本库/失败案例库进知识库）/ 审批样例 / 晨报 /
  *      夜班编排 / bundle_installs 装配台账登记（一键清空依据）
  */
 import { readFileSync, readdirSync } from "node:fs";
@@ -96,7 +96,7 @@ async function main(): Promise<void> {
        JSON.stringify({ description: p.description, night_shift: p.night_shift, high_risk: p.high_risk, tools: p.tools, prompt: p.prompt })],
     );
   }
-  console.log(`✓ Agent 实例 ×${presets.length}（AI 产品经理团队 8 员）`);
+  console.log(`✓ Agent 实例 ×${presets.length}（产品总监领队的 AI 产品研发团队）`);
 
   for (const r of fences) {
     await q(
@@ -141,6 +141,16 @@ async function main(): Promise<void> {
     { name: "产出档案", desc: "PRD/报告/发布说明", file: "documents.json",
       items: (d) => (d as { documents: Array<Record<string, unknown>> }).documents,
       titleOf: (x) => `${x.title}` },
+    // —— V3 新增：模型侧资产种子 ——
+    { name: "评测中心", desc: "eval 集与回归跑分台账", file: "eval-sets.json",
+      items: (d) => (d as { eval_sets: Array<Record<string, unknown>> }).eval_sets,
+      titleOf: (x) => `${x.id} ${x.name}（${x.cases}案例）` },
+    { name: "prompt版本库", desc: "生产 prompt 版本与回归记录", file: "prompts.json",
+      items: (d) => (d as { prompts: Array<Record<string, unknown>> }).prompts,
+      titleOf: (x) => `${x.id} ${x.name}（当前 ${x.current_version}）` },
+    { name: "失败案例库", desc: "badcase 回流与归因", file: "badcases.json",
+      items: (d) => (d as { badcases: Array<Record<string, unknown>> }).badcases,
+      titleOf: (x) => `${x.id} ${x.summary}` },
   ];
   for (const col of colDefs) {
     const colId = `kc-${WS_ID}-${col.name}`;

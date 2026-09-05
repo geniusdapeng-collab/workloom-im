@@ -1,0 +1,21 @@
+{
+ "prompts": [
+  {
+   "id": "P-export",
+   "name": "导出摘要系统 prompt",
+   "current_version": "v15",
+   "versions": [
+    { "version": "v14", "hash": "a91f…", "changed_by": "doc-writer", "reason": "语气统一", "regression": { "pass_rate": 0.917, "verdict": "pass" }, "status": "superseded" },
+    { "version": "v15", "hash": "c77b…", "changed_by": "prompt-curator", "reason": "修复长文本截断 + 结构化输出约束", "regression": { "pass_rate": 0.944, "verdict": "pass_with_notes", "regressed_cases": ["C-011"] }, "status": "active", "approved_by": "MEM-002" }
+   ]
+  },
+  {
+   "id": "P-reply",
+   "name": "用户反馈回复 prompt",
+   "current_version": "v8",
+   "versions": [
+    { "version": "v8", "hash": "e220…", "changed_by": "user-listener", "reason": "差评安抚话术升级", "regression": { "pass_rate": 0.962, "verdict": "pass" }, "status": "active", "approved_by": "MEM-002" }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,50 @@
+{
+ "eval_sets": [
+  {
+   "id": "ES-001",
+   "name": "反馈情绪周报·验收 eval 集",
+   "version": "v1.2",
+   "linked_requirement": "REQ-1018",
+   "cases": 36,
+   "categories": { "core": 22, "edge": 10, "adversarial": 4 },
+   "scoring": { "deterministic": 28, "judge": 8 },
+   "last_run": { "eval_run_id": "ER-2026-0904-01", "pass_rate": 0.944, "cost_credits": 182, "window": "谷时" },
+   "judge_calibration": { "agreement": 0.89, "calibrated_at": "2026-09-01" },
+   "status": "active"
+  },
+  {
+   "id": "ES-002",
+   "name": "导出格式兼容·验收 eval 集",
+   "version": "v1.0",
+   "linked_requirement": "REQ-1042",
+   "cases": 32,
+   "categories": { "core": 20, "edge": 9, "adversarial": 3 },
+   "scoring": { "deterministic": 26, "judge": 6 },
+   "last_run": { "eval_run_id": "ER-2026-0903-02", "pass_rate": 0.906, "cost_credits": 165, "window": "谷时" },
+   "judge_calibration": { "agreement": 0.91, "calibrated_at": "2026-09-01" },
+   "status": "active"
+  }
+ ],
+ "eval_runs": [
+  {
+   "id": "ER-2026-0904-01",
+   "eval_set": "ES-001",
+   "trigger": "prompt v15 变更回归",
+   "pass_rate": 0.944,
+   "baseline_pass_rate": 0.917,
+   "regressed_cases": ["C-011（长文本截断）"],
+   "verdict": "pass_with_notes",
+   "ran_at": "2026-09-04 23:40"
+  },
+  {
+   "id": "ER-2026-0903-02",
+   "eval_set": "ES-002",
+   "trigger": "例行夜跑（抽样子集）",
+   "pass_rate": 0.906,
+   "baseline_pass_rate": 0.906,
+   "regressed_cases": [],
+   "verdict": "pass",
+   "ran_at": "2026-09-03 23:20"
+  }
+ ]
+}

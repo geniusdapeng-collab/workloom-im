@@ -1,14 +1,14 @@
 {
   "name": "@workloom/ai-pm",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "workloom": {
     "industry": "ai-pm",
-    "displayName": "WorkLoom · AI 产品经理版（示例 Bundle）",
-    "description": "AI 产品经理行业示例包：9 个数字员工 preset（含开发总指挥）+ 基线围栏 + 12 个技能（含开发闭环四技能）+ 楼层场景 + 运行态种子数据 + 行业考题（方案 V4 §7-§12 + 开发场域）",
+    "displayName": "WorkLoom · AI 产品经理版（产品经理负责制示例 Bundle）",
+    "description": "AI 产品经理行业示例包 V3：产品总监领队的 14 个数字员工（产品经理负责制研发机制）+ 14 条基线围栏（含 default_level 兜底）+ 20 个技能（eval即PRD/模型选型/微调跟踪/学习飞轮/红队）+ 评测实验室与红队角楼层场景 + 运行态种子数据 + 36 道行业考题（含 16 道 AI 领域专项）",
     "example": true,
     "provides": {
       "presets": [
-        "presets/pm-staff-officer.yml",
+        "presets/chief-pm.yml",
         "presets/requirement-analyst.yml",
         "presets/competitor-scout.yml",
         "presets/data-insight.yml",
@@ -16,7 +16,12 @@
         "presets/doc-writer.yml",
         "presets/industry-radar.yml",
         "presets/release-guardian.yml",
-        "presets/dev-orchestrator.yml"
+        "presets/dev-orchestrator.yml",
+        "presets/model-scout.yml",
+        "presets/eval-master.yml",
+        "presets/prompt-curator.yml",
+        "presets/red-teamer.yml",
+        "presets/knowledge-curator.yml"
       ],
       "fences": [
         "fences/ai-pm-baseline.yml"
@@ -33,7 +38,15 @@
         "skills/dev-dispatch/SKILL.md",
         "skills/session-watch/SKILL.md",
         "skills/changeset-harvest/SKILL.md",
-        "skills/release-cut/SKILL.md"
+        "skills/release-cut/SKILL.md",
+        "skills/eval-forge/SKILL.md",
+        "skills/badcase-harvest/SKILL.md",
+        "skills/prompt-regression/SKILL.md",
+        "skills/model-scout/SKILL.md",
+        "skills/finetune-tracker/SKILL.md",
+        "skills/kb-fresh/SKILL.md",
+        "skills/learning-digest/SKILL.md",
+        "skills/redteam-scan/SKILL.md"
       ],
       "schemas": [
         "schemas/objects.json",
@@ -55,7 +68,10 @@
         "seeds/documents.json",
         "seeds/approvals.json",
         "seeds/night-jobs.json",
-        "seeds/kb.json"
+        "seeds/kb.json",
+        "seeds/eval-sets.json",
+        "seeds/prompts.json",
+        "seeds/badcases.json"
       ]
     }
   }

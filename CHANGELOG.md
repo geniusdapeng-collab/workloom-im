@@ -2,6 +2,28 @@
 
 本文件记录 WorkLoom IM 底座的变更历史。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [ai-pm Bundle 3.0.0] - 2026-09-05 · AI 产品经理包 V3：产品经理负责制研发机制
+
+> ai-pm 行业包从"工具集"重构为"一位数字产品经理（产品总监）领导的完整研发团队"：
+> 需求统一受理 → PRD+eval 骨架 → 研发派发 → eval/红队质量门禁 → 发布交付 → 失败回流 → 学习飞轮，
+> 全链路自动化运营、保质保量、全程可审计（五问必答：谁提的需求/谁定义的标准/谁写的代码/测没测过/谁批的）。
+
+### 新增
+
+- **班组 9→14（产品总监领队）**：`presets/chief-pm.yml`（产品参谋官升级为产品总监，唯一责任人，对需求→交付端到端负责）；新增 5 员——模型评测官 eval-master（eval 集/回归/judge 校准/微调跟踪）、模型侦察官 model-scout（新模型试跑+三轴选型+换型触发器纪律）、提示词主理官 prompt-curator（prompt 版本化+回归门禁）、红队官 red-teamer（对抗测试 P0/P1/P2）、知识保鲜官 knowledge-curator（学习周刊+KB 保鲜+固化建议）。
+- **技能 12→20**：新增 eval-forge（PRD→可执行 eval 集，双轨评分）、badcase-harvest（失败回流）、prompt-regression（prompt 回归 diff）、model-scout（本产品场景试跑）、finetune-tracker（微调四问+全生命周期）、kb-fresh（知识保鲜巡检）、learning-digest（学习周刊+固化建议）、redteam-scan（对抗测试）；industry-radar 升级四路信号（竞品/模型/工具/政策）。
+- **围栏 R-PM1~7 → R-PM1~14 + default_level=review 兜底**（修复"未命中即放行"漏洞）：R-PM8 prompt 变更回归门禁（双段式）、R-PM9 模型路由切换必审、R-PM10 eval 集变更必审、R-PM11 微调/数据外发 block、R-PM12 知识库外发脱敏、R-PM13 红队 P0 必审、R-PM14 换型触发器纪律。
+- **经营对象 7→16**：新增 model / eval_set / eval_run / prompt / badcase / dataset / finetune_run / knowledge_item / prototype（占位）。
+- **model-policy 扩展 9 个模型侧场景**：eval-judge 与 judge-calibration 锁 L3 禁降级（judge 失准=评测体系失效）。
+- **feedback-enums v2（7→14 条）**：新增 eval.weak / judge.drift / model.misjudge / source.stale / prompt.regression / security.risk / cost.overrun，驳回样本驱动学习飞轮统计。
+- **上岗考题 20→36**：新增 16 道 AI 领域专项（eval 设计/judge 校准/微调四问/换型触发器/prompt 回归/信任渐进/产品经理负责制），含 R-PM8/R-PM9/R-PM11 红线题。
+- **种子数据**：eval-sets.json（eval 集+跑分台账）、prompts.json（prompt 版本库）、badcases.json（失败案例库），seed-aipm.ts 同步接线三个新知识集。
+- **3D 职场**：新增评测实验室（质量组）、红队角、知识书房分区；前端 display/VoiceEngine 同步新员工映射（pm-staff-officer → chief-pm 更名全局同步）。
+
+### 门禁验证
+
+- ✅ typecheck 全绿 · 资产校验：14 preset / 20 skill / 14 围栏交叉引用一致 · bundle.json provides 与文件一一对应 · JSON/YAML 全量语法通过
+
 ## [1.12.0] - 2026-09-02 · 技能保鲜环 P1：自动同步 + 上行回流 + 官方运营台（闭环合拢）
 
 > 承接 1.11.0（P0 下行通道）：本版本让机制完整转起来——客户端**夜班窗口自动同步**（客户零操作）、

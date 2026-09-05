@@ -1,5 +1,6 @@
-# AI 产品经理行业包 · 第⑧装配槽：反馈枚举表（D24 自我进化飞轮 M1）
-version: aipm-feedback-enums/v1
+# AI 产品经理行业包 · 第⑧装配槽：反馈枚举表（D24 自我进化飞轮 M2/V3）
+# 驳回样本按原因分类统计，驱动学习飞轮：高频驳回模式 → 规则加严/eval 增补建议
+version: aipm-feedback-enums/v2
 enums:
   - code: fact.error
     label: 事实错误
@@ -18,6 +19,28 @@ enums:
     appliesTo: [reject, edit]
   - code: source.missing
     label: 来源缺失
+    appliesTo: [reject]
+  # —— V3 新增：AI 产品质量与模型侧驳回原因 ——
+  - code: eval.weak
+    label: eval 覆盖不足
+    appliesTo: [reject, edit]
+  - code: judge.drift
+    label: judge 失准
+    appliesTo: [reject]
+  - code: model.misjudge
+    label: 模型能力误判
+    appliesTo: [reject]
+  - code: source.stale
+    label: 信息过期
+    appliesTo: [reject, edit]
+  - code: prompt.regression
+    label: prompt 退化
+    appliesTo: [reject]
+  - code: security.risk
+    label: 安全隐患
+    appliesTo: [reject]
+  - code: cost.overrun
+    label: 成本失控
     appliesTo: [reject]
   - code: other
     label: 其他（兜底）

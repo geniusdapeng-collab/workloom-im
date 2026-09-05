@@ -1,25 +1,36 @@
-# AI 产品经理行业包 · 基线围栏（方案 V4 §8）
+# AI 产品经理行业包 · 基线围栏（V3：产品经理负责制研发机制）
+# 设计原则：
+#   auto   = 规则明确、重复执行、可回滚（信号抓取/聚类/起草/跑分）
+#   review = 需要判断、影响产品质量或对外（审批卡必须自带证据，3 分钟可裁决）
+#   block  = 不可逆、涉资金/数据/法律（系统层面无执行权，仅人工白名单放行）
+# 兜底纪律：未命中任何规则的动作按 default_level 处理（修复旧版"未命中即放行"漏洞）
+version: aipm-baseline/v3
+default_level: review
 fences:
   - rule_id: R-PM1
     name: 重大事项上报必经审批
     level: review
     match: { object_types: [team_briefing], actions: [publish] }
     action: { result: review }
+    note: 晨报/重大事项对外上报前必须人审
   - rule_id: R-PM2
     name: 需求优先级变更人审
     level: review
     match: { object_types: [requirement], actions: [reprioritize] }
     action: { result: review }
+    note: 审批卡附"排在它前面的都是什么、为什么"
   - rule_id: R-PM3
     name: 外部引用须标注来源
     level: review
     match: { object_types: [report], actions: [publish_external_ref] }
     action: { result: review }
+    note: 来源清单+置信度随卡呈现；C 级信息不得进入决策建议
   - rule_id: R-PM4
     name: 数据只读纪律
     level: block
     match: { object_types: [metrics_store], actions: [write, delete] }
     action: { result: block }
+    note: 指标库只读，写/删一律拒绝并告警
   - rule_id: R-PM5
     name: 外发回复必审
     level: review
@@ -35,3 +46,47 @@ fences:
     level: review
     match: { object_types: [release], actions: [recommend] }
     action: { result: review }
+    note: 发布检查单回滚预案必填，缺项不允许提交
+  # —— V3 新增：模型侧全生命周期与质量门禁 ——
+  - rule_id: R-PM8
+    name: prompt 变更回归门禁
+    level: block
+    match: { object_types: [prompt], actions: [update] }
+    action: { result: block }
+    note: 双段式——回归未通过 block 直接阻断；回归通过转 review 人审（由 prompt-regression 技能产出 diff 后降级提交）
+  - rule_id: R-PM9
+    name: 模型路由切换必审
+    level: review
+    match: { object_types: [model], actions: [route_switch] }
+    action: { result: review }
+    note: 换模型=换产品行为；审批卡附质量/时延/成本三轴对比报告
+  - rule_id: R-PM10
+    name: eval 集变更人审
+    level: review
+    match: { object_types: [eval_set], actions: [update] }
+    action: { result: review }
+    note: eval 即验收标准，标准变更等于合同变更
+  - rule_id: R-PM11
+    name: 微调发起与数据外发熔断
+    level: block
+    match: { object_types: [finetune_run, dataset], actions: [launch, export] }
+    action: { result: block }
+    note: 涉资金与数据合规，默认禁止；仅人工白名单放行
+  - rule_id: R-PM12
+    name: 知识库外发脱敏人审
+    level: review
+    match: { object_types: [knowledge_item], actions: [share_external] }
+    action: { result: review }
+    note: 组织资产外发必审+脱敏预览
+  - rule_id: R-PM13
+    name: 红队 P0 必审
+    level: review
+    match: { object_types: [redteam_finding], actions: [report_p0] }
+    action: { result: review }
+    note: 安全发现必须到人；红队未过审的上线候选不得进入合入
+  - rule_id: R-PM14
+    name: 换型触发器纪律
+    level: review
+    match: { object_types: [model], actions: [evaluation_propose] }
+    action: { result: review }
+    note: 触发器不成立的换型申请在审批卡中给出驳回建议+理由（防 benchmark 营销跟风）

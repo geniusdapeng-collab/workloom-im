@@ -1,1 +1,1 @@
-{"objects":["requirement","competitor_report","metric_daily","feedback_item","document","release_checklist","intel_item"]}
+{"objects":["requirement","competitor_report","metric_daily","feedback_item","document","release_checklist","intel_item","model","eval_set","eval_run","prompt","badcase","dataset","finetune_run","knowledge_item","prototype"]}
