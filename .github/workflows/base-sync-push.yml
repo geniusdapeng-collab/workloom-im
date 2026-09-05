@@ -1,0 +1,64 @@
+# ============================================================
+# WorkLoom IM · 基座能力父→子自动推送（base-sync push）
+#
+# 触发：main 分支上基座能力路径发生变更（paths 过滤，行业演示能力变更不触发）
+# 行为：对 sync/child-repos.json 订阅清单逐仓执行基座对齐并推送
+# 范围：唯一事实源 sync/base-scope.json——只推基座能力，行业属性/演示能力永不同步
+#
+# 运行形态：
+#   ① 配置 SYNC_TOKEN secret（repo 权限 PAT）→ 全自动推送
+#   ② 未配置 → dry-run 输出同步计划 + Summary 提醒（机制仍在，降级为半自动）
+# ============================================================
+name: base-sync-push
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/base/**"
+      - "packages/runtime/**"
+      - "packages/shared/**"
+      - "packages/db/**"
+      - "apps/server/src/**"
+      - "apps/desktop/**"
+      - "apps/web/src/lib/**"
+      - "scripts/**"
+      - "sync/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: 基座能力推送到全部子仓
+        env:
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+        run: |
+          if [ -z "$SYNC_TOKEN" ]; then
+            echo "⚠️ 未配置 SYNC_TOKEN secret——降级为 dry-run（只输出同步计划，不推送）"
+            echo "   配置后即为全自动：Settings → Secrets and variables → Actions → New repository secret"
+            node sync/base-sync.mjs push --base . --dry-run
+          else
+            node sync/base-sync.mjs push --base .
+          fi
+
+      - name: 同步报告（Job Summary）
+        if: always()
+        run: |
+          echo "## WorkLoom IM 基座同步报告" >> $GITHUB_STEP_SUMMARY
+          echo "- 基座提交：$(git rev-parse --short HEAD)" >> $GITHUB_STEP_SUMMARY
+          echo "- 同步范围：sync/base-scope.json（仅基座能力）" >> $GITHUB_STEP_SUMMARY
+          echo "- 订阅子仓：$(node -e "console.log(JSON.parse(require('fs').readFileSync('sync/child-repos.json','utf8')).children.length)") 个" >> $GITHUB_STEP_SUMMARY

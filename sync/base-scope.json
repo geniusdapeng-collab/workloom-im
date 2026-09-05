@@ -1,0 +1,144 @@
+{
+  "version": 2,
+  "description": "WorkLoom IM 基座能力同步范围声明——base-sync 引擎的唯一事实源。基座能力（include）才会在父→子/子→父双向同步中流转；行业属性与演示能力（exclude）永不同步。修改本文件即修改同步边界，需基座 owner 评审。v2：迁移目录移出自动同步（各仓迁移链已分叉，须人工按各自编号体系接入）；CI workflow 与构建/评测产物移出；支持仓级 extraExclude（child-repos.json）。",
+
+  "include": [
+    "packages/base/**",
+    "packages/runtime/**",
+    "packages/shared/**",
+    "packages/db/**",
+    "apps/server/src/**",
+    "apps/server/package.json",
+    "apps/desktop/**",
+    "apps/web/src/lib/**",
+    "apps/web/package.json",
+    "scripts/**",
+    "AGENTS.md",
+    "docker-compose.yml",
+    "electron-builder.yml"
+  ],
+
+  "exclude": [
+    "bundles/**",
+    "demo/**",
+    "docs/**",
+    "mock/**",
+    "vendor/**",
+    "design-system/**",
+    "apps/site/**",
+    "apps/webc/**",
+
+    "apps/web/src/App.tsx",
+    "apps/web/src/shell/**",
+    "apps/web/src/pages/**",
+    "apps/web/src/components/**",
+    "apps/web/src/styles/**",
+    "apps/web/src/audio/**",
+    "apps/web/src/voice/**",
+    "apps/web/index.html",
+    "apps/web/public/**",
+    "apps/web/src/lib/display.ts",
+    "apps/web/src/lib/demo-conversation.ts",
+
+    "apps/server/src/trpc/router.ts",
+    "apps/server/src/service/router.ts",
+    "apps/server/src/service/dialog.ts",
+    "apps/server/src/service/kb.ts",
+    "apps/server/src/service/store.ts",
+    "apps/server/src/service/gateway.ts",
+    "apps/server/src/service/ticket.ts",
+    "apps/server/src/service/adapters/**",
+
+    "packages/base/captain/charter.ts",
+    "packages/base/captain/decision.ts",
+    "packages/base/captain/loop.ts",
+    "packages/base/captain/board.ts",
+    "packages/base/captain/captain.test.ts",
+    "packages/base/tenancy/auth.ts",
+    "packages/base/bundles/assembly.ts",
+    "packages/base/bundles/bundles.test.ts",
+    "packages/base/bundles/segment.ts",
+
+    "packages/db/src/schema.ts",
+    "packages/db/migrations/**",
+
+    "apps/desktop/WorkLoom.app/**",
+
+    "skills/**",
+
+    "scripts/seed*.ts",
+    "scripts/demo.ts",
+    "scripts/reset.sh",
+    "scripts/simulate-twin.ts",
+    "scripts/snapshot-twin.sh",
+    "scripts/restore-twin.sh",
+    "scripts/twin-genie.ts",
+    "scripts/audit-scan.ts",
+    "scripts/hardcode-scan.mjs",
+    "scripts/pack-macos.sh",
+    "scripts/install-im-channels.sh",
+    "scripts/skill-forge.mts",
+    "scripts/skill-dist-demo.mts",
+    "scripts/build-sales-pptx.py",
+    "scripts/eval/report/**",
+
+    "package.json",
+    "pnpm-workspace.yaml",
+    "pnpm-lock.yaml",
+    ".ai-prompt",
+    ".env*",
+    "README*",
+    "CHANGELOG.md",
+    "LICENSE",
+    "oss-components.json",
+    ".oss-watch-state.json",
+    "core.*",
+    "PREVIEW_CHECKLIST.md",
+
+    ".github/workflows/**",
+    "sync/**"
+  ],
+
+  "anchorMerge": {
+    "packages/base/package.json": {
+      "strategy": "json-merge-keep-child-extra",
+      "mergeKeys": ["exports", "dependencies", "devDependencies"],
+      "comment": "基座版为底；子仓独有的 exports（如 asset-cms/publish-rpa 等行业模块）与依赖必须保留——2026-09-05 八仓对齐时整体覆盖曾致 ERR_PACKAGE_PATH_NOT_EXPORTED 服务瘫痪"
+    },
+    "packages/base/tsconfig.json": {
+      "strategy": "json-merge-keep-child-extra",
+      "mergeKeys": ["include"],
+      "comment": "基座版为底；子仓独有的 include 目录（如 audit-core 试验田）必须保留"
+    },
+    "apps/web/package.json": {
+      "strategy": "json-merge-keep-child-extra",
+      "mergeKeys": ["dependencies", "devDependencies"],
+      "comment": "基座版为底；子仓独有依赖保留"
+    },
+    "apps/server/package.json": {
+      "strategy": "json-merge-keep-child-extra",
+      "mergeKeys": ["dependencies", "devDependencies"],
+      "comment": "基座版为底；子仓独有依赖（如 segment 接线需要的 yaml）保留"
+    }
+  },
+
+  "appendOnlyDirs": [],
+
+  "pollutionGuard": {
+    "pathBlacklist": [
+      "^bundles/",
+      "^demo/",
+      "^docs/demo",
+      "^scripts/seed",
+      "^scripts/demo",
+      "hotel-baseline",
+      "ai-pm",
+      "yunqi",
+      "ecommerce",
+      "panda-cineforge"
+    ],
+    "blacklistNote": "以 ^ 开头=路径前缀匹配；其余=子串匹配。^bundles/ 只锚定仓库根的行业包目录，不误伤 packages/base/bundles（基座 bundle 加载器）",
+    "maxFilesPerSync": 200,
+    "comment": "推送前硬校验：待同步文件路径命中黑名单或数量超限即中止——宁可漏报不可污染"
+  }
+}

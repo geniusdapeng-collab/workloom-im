@@ -1,0 +1,47 @@
+{
+  "version": 2,
+  "description": "WorkLoom IM 基座同步的子仓订阅清单——父仓 push 模式按本清单逐仓同步；新仓接入时在 adopt.sh 引导下追加。pathPrefix 用于仓内子目录形态（如 workroom-tiger 的前端在 governance/ 下）。extraExclude 为仓级追加排除（该仓的行业化文件，全局 scope 无法表达的按仓差异）。",
+  "baseRepo": "geniusdapeng-collab/workloom-im",
+  "children": [
+    { "repo": "geniusdapeng-collab/workroom-fox",        "pathPrefix": "",            "note": "试验田（其基座演进不回流）", "extraExclude": [] },
+    { "repo": "geniusdapeng-collab/workloom-hotel",      "pathPrefix": "",            "note": "酒店行业版", "extraExclude": [] },
+    { "repo": "geniusdapeng-collab/hyperreality-system", "pathPrefix": "",            "note": "AI 视频社媒营销", "extraExclude": [] },
+    { "repo": "geniusdapeng-collab/workloom",            "pathPrefix": "",            "note": "酒店获客系统", "extraExclude": [] },
+    {
+      "repo": "geniusdapeng-collab/panda-cineforge", "pathPrefix": "", "note": "自主经营电商（service 层与测试已电商化改写）",
+      "extraExclude": [
+        "apps/server/src/service/contract.test.ts",
+        "apps/server/src/service/dialog.test.ts",
+        "apps/server/src/service/e2e.test.ts",
+        "packages/base/im-channels/im-channels.test.ts",
+        "packages/base/model-router/model-router.test.ts",
+        "packages/base/review-console/approvals.test.ts",
+        "packages/base/service-dialog/**",
+        "packages/base/service-kb/**",
+        "packages/base/service-ticket/scenarios.test.ts",
+        "packages/base/service-ticket/service-ticket.test.ts",
+        "packages/base/tenancy/tenancy.test.ts",
+        "packages/base/workdata/atomicity.test.ts",
+        "packages/base/workdata/memory.test.ts",
+        "packages/base/workdata/recall.test.ts",
+        "packages/base/workdata/recall.ts",
+        "packages/base/workdata/security-audit.test.ts",
+        "packages/base/workdata/workdata.test.ts",
+        "packages/shared/src/constants.ts",
+        "packages/shared/src/event-schema.test.ts",
+        "scripts/agent-tour.sh",
+        "scripts/e2e-service-c.mjs",
+        "scripts/release-gate.ts"
+      ]
+    },
+    {
+      "repo": "geniusdapeng-collab/workroom-tiger", "pathPrefix": "governance/", "note": "AI 股票交易（前端在 governance/ 子目录）",
+      "extraExclude": [
+        "apps/server/src/service/contract.test.ts",
+        "apps/server/src/service/dialog.test.ts",
+        "apps/server/src/service/e2e.test.ts"
+      ]
+    },
+    { "repo": "geniusdapeng-collab/workroom-eagle",      "pathPrefix": "",            "note": "鹰眼 AI 咨询", "extraExclude": [] }
+  ]
+}
