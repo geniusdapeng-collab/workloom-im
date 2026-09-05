@@ -20,6 +20,10 @@ import { appendEventOn, serviceTx, svcQuery } from "./events.js";
 import { llmCall } from "./llm.js";
 import { ensureServiceSchema } from "./store.js";
 import {
+  activeInstall, clearBundle, clearPreview, generateStaffing,
+  onboardingExam, rollbackSnapshot,
+} from "./bundle.js";
+import {
   githubPulse as aipmGithubPulse, industryRadar as aipmIndustryRadar,
   competitorScan as aipmCompetitorScan, prdForge as aipmPrdForge,
 } from "./aipm.js";
@@ -420,10 +424,46 @@ const aipmRouter = router({
     }),
 });
 
+/**
+ * 行业装配机制（V4 §3/§6/§7）：清空预览/一键清空/快照回滚/编制生成/上岗考
+ * 全部写操作五元事件留痕；清空红线：快照未成功禁止执行。
+ */
+const bundleRouter = router({
+  /** 当前装配台账 */
+  activeInstall: protectedProcedure.query(async ({ ctx }) => {
+    return { install: await activeInstall(scopeOf(ctx.identity).workspaceId) };
+  }),
+  /** 清空预览（明示范围：将卸什么/将留什么） */
+  clearPreview: protectedProcedure.query(async ({ ctx }) => {
+    return clearPreview(scopeOf(ctx.identity).workspaceId);
+  }),
+  /** 一键清空（快照→台账卸载→留痕；30 天可回滚） */
+  clear: writeProcedure.mutation(async ({ ctx }) => {
+    return clearBundle(scopeOf(ctx.identity).workspaceId, { id: ctx.identity.memberNo, type: "human" });
+  }),
+  /** 快照回滚 */
+  rollback: writeProcedure
+    .input(z.object({ snapshotId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      return rollbackSnapshot(scopeOf(ctx.identity).workspaceId, input.snapshotId, { id: ctx.identity.memberNo, type: "human" });
+    }),
+  /** L3 编制生成（草案先行，人审才装配） */
+  generateStaffing: writeProcedure
+    .input(z.object({ industryText: z.string().min(4).max(2000) }))
+    .mutation(async ({ ctx, input }) => {
+      return generateStaffing(scopeOf(ctx.identity).workspaceId, input.industryText);
+    }),
+  /** 上岗考（exam 门禁：达标才 activated） */
+  onboardingExam: writeProcedure.mutation(async ({ ctx }) => {
+    return onboardingExam(scopeOf(ctx.identity).workspaceId);
+  }),
+});
+
 export const serviceRouter = router({
   kb: kbRouter,
   tickets: ticketsRouter,
   stats: statsRouter,
   eval: evalRouter,
   aipm: aipmRouter,
+  bundle: bundleRouter,
 });

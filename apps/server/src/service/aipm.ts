@@ -157,13 +157,13 @@ export async function competitorScan(workspaceId: string, targets: Array<{ name:
       const hash = createHash("sha1").update(text).digest("hex");
       // 与上次快照比对（org_memory 存快照哈希）
       const prev = await svcQuery<{ content: string }>(workspaceId,
-        `SELECT content FROM org_memory WHERE kind='competitor-snapshot' AND source=$1 LIMIT 1`, [t.url]);
+        `SELECT content FROM org_memory WHERE kind='competitor-snapshot' AND content LIKE $1 LIMIT 1`, [`%${t.url}%`]);
       const changed = prev.length > 0 && !prev[0]!.content.includes(hash);
       await svcQuery(workspaceId,
-        `INSERT INTO org_memory (id, workspace_id, kind, content, source, created_at)
-         VALUES ($1, current_setting('app.workspace_id', true), 'competitor-snapshot', $2, $3, now())
-         ON CONFLICT (id) DO UPDATE SET content=EXCLUDED.content`,
-        [`mem-comp-${createHash("sha1").update(t.url).digest("hex").slice(0, 10)}`, `${t.name} 页面快照哈希：${hash}`, t.url]).catch(() => undefined);
+        `INSERT INTO org_memory (memory_id, tenant_id, workspace_id, scope, kind, content, source_events)
+         VALUES ($1, 'demo', current_setting('app.workspace_id', true), 'workspace', 'competitor-snapshot', $2, '{}')
+         ON CONFLICT (memory_id) DO UPDATE SET content=EXCLUDED.content`,
+        [`mem-comp-${createHash("sha1").update(t.url).digest("hex").slice(0, 10)}`, `${t.name}（${t.url}）页面快照哈希：${hash}`]).catch(() => undefined);
       reports.push({ name: t.name, url: t.url, changed, snippet: text.slice(0, 300), mock: false });
     } catch {
       reports.push({ name: t.name, url: t.url, changed: false, snippet: "（抓取失败——网络或反爬）", mock: true });

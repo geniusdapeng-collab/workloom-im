@@ -10,6 +10,7 @@
  * 设计纪律：每一步都可跳过但状态如实回显；所有写操作经 onboarding.* 端点五元事件留痕。
  */
 import { useEffect, useMemo, useState } from "react";
+import CustomizeWizard from "./CustomizeWizard";
 import { ensureDemoLogin, trpc } from "../../lib/trpc";
 import type { OnboardingStatus } from "../../components/SimBanner";
 
@@ -27,6 +28,9 @@ export default function Onboarding() {
   const [st, setSt] = useState<OnboardingStatus | null>(null);
   const [step, setStep] = useState(0);
   const [err, setErr] = useState("");
+  // V4：?mode=customize → 定制向导（行业段：清空→编制→上岗考）
+  const customizeMode = typeof window !== "undefined"
+    && new URLSearchParams(window.location.search).get("mode") === "customize";
 
   // 步骤②表单
   const [prov, setProv] = useState("deepseek");
