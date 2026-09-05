@@ -2648,8 +2648,8 @@ const captainRouter = router({
          ORDER BY seq DESC LIMIT 1`,
         [scope.workspaceId],
       );
-      const agents = await client.query<{ id: string; preset_key: string; name: string }>(
-        `SELECT id, preset_key, name FROM agents WHERE workspace_id=$1 AND status='ready' ORDER BY id LIMIT 12`,
+      const agents = await client.query<{ id: string; preset_key: string; name: string; alias: string | null }>(
+        `SELECT id, preset_key, name, alias FROM agents WHERE workspace_id=$1 AND status='ready' ORDER BY id LIMIT 12`,
         [scope.workspaceId],
       );
       const grades = await client.query<{ agent_id: string; grade: string }>(
@@ -2686,7 +2686,7 @@ const captainRouter = router({
         latestBriefing: briefing.rows[0]
           ? { text: String(((briefing.rows[0].payload.decision as Record<string, unknown>).after as Record<string, unknown>)?.text ?? ""), at: briefing.rows[0].created_at }
           : null,
-        satellites: agents.rows.map((a) => ({ id: a.id, presetKey: a.preset_key, name: a.name, grade: gradeMap[a.id] ?? "正常" })),
+        satellites: agents.rows.map((a) => ({ id: a.id, presetKey: a.preset_key, name: a.name, alias: a.alias, grade: gradeMap[a.id] ?? "正常" })),
         ticker: events.rows,
         floor,
       };
