@@ -20,6 +20,10 @@ import { appendEventOn, serviceTx, svcQuery } from "./events.js";
 import { llmCall } from "./llm.js";
 import { ensureServiceSchema } from "./store.js";
 import {
+  githubPulse as aipmGithubPulse, industryRadar as aipmIndustryRadar,
+  competitorScan as aipmCompetitorScan, prdForge as aipmPrdForge,
+} from "./aipm.js";
+import {
   getSettings as evalGetSettings, latestReport as evalLatestReport,
   listAnswers as evalListAnswers, listExams as evalListExams,
   listQuestions as evalListQuestions, runExam as evalRunExam,
@@ -385,9 +389,41 @@ const evalRouter = router({
     }),
 });
 
+/**
+ * AI 产品经理技能执行面（V4 P1）：github-pulse / industry-radar / competitor-scan / prd-forge
+ * 全部真实接线（真实 API/RSS/抓取/LLM）；凭据只出不进（secret 永不回传）。
+ */
+const aipmRouter = router({
+  /** 仓库脉搏：真实 GitHub API（repos 如 ["org/repo"]） */
+  githubPulse: protectedProcedure
+    .input(z.object({ repos: z.array(z.string()).min(1).max(8) }))
+    .mutation(async ({ ctx, input }) => {
+      return aipmGithubPulse(scopeOf(ctx.identity).workspaceId, input.repos);
+    }),
+  /** 行业雷达：真实 RSS 聚合（可自定义源） */
+  industryRadar: writeProcedure
+    .input(z.object({ feeds: z.array(z.string().url()).max(8).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      return aipmIndustryRadar(scopeOf(ctx.identity).workspaceId, input.feeds);
+    }),
+  /** 竞品扫描：真实抓取竞品页面对比快照 */
+  competitorScan: writeProcedure
+    .input(z.object({ targets: z.array(z.object({ name: z.string(), url: z.string().url() })).min(1).max(6) }))
+    .mutation(async ({ ctx, input }) => {
+      return aipmCompetitorScan(scopeOf(ctx.identity).workspaceId, input.targets);
+    }),
+  /** PRD 起草：真实 LLM 生成可导出 MD */
+  prdForge: writeProcedure
+    .input(z.object({ title: z.string().min(1).max(200), context: z.string().max(2000).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      return aipmPrdForge(scopeOf(ctx.identity).workspaceId, input);
+    }),
+});
+
 export const serviceRouter = router({
   kb: kbRouter,
   tickets: ticketsRouter,
   stats: statsRouter,
   eval: evalRouter,
+  aipm: aipmRouter,
 });
