@@ -30,7 +30,10 @@ import { eventHash, safeParseReplayAwareEvent } from "@workloom/base/workdata";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, "..");
-const BUNDLE_DIR = join(REPO_ROOT, "bundles/hotel");
+// 行业包目录：默认 ai-pm（基座出厂示例包，方案 V4）；其他行业版以 BUNDLE_DIR 指定
+const BUNDLE_DIR = process.env.BUNDLE_DIR
+  ? join(REPO_ROOT, process.env.BUNDLE_DIR)
+  : join(REPO_ROOT, "bundles/ai-pm");
 
 const DATABASE_URL =
   process.env.DATABASE_URL ?? "postgres://postgres:workloom@localhost:5432/workloom";
@@ -138,7 +141,8 @@ interface FenceRule {
 }
 
 function loadFences(): FenceRule[] {
-  const doc = YAML.parse(readFileSync(join(BUNDLE_DIR, "fences/hotel-baseline.yml"), "utf-8"));
+  const fencesFile = readdirSync(join(BUNDLE_DIR, "fences")).find((f) => f.endsWith(".yml"))!;
+  const doc = YAML.parse(readFileSync(join(BUNDLE_DIR, "fences", fencesFile), "utf-8"));
   return (doc?.rules ?? []) as FenceRule[];
 }
 

@@ -1,0 +1,8 @@
+# AI 产品经理行业包 · 驳回归因受控词表（evolve 自我进化用）
+enums:
+  - { key: fact-error, label: 事实错误 }
+  - { key: tone-drift, label: 口径偏差 }
+  - { key: threat-misjudge, label: 威胁评级不当 }
+  - { key: structure-incomplete, label: 结构不完整 }
+  - { key: tone-improper, label: 语气不当 }
+  - { key: source-missing, label: 来源缺失 }
