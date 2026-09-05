@@ -447,7 +447,7 @@ WorkLoom 没有重复造 Agent 运行时的轮子，而是**站在 DeepSeek Harn
 | `apps/{server,web,webc,site,desktop}` | Hono+tRPC 服务 / 工作台 PC 前端 / C 端 H5 / 官网 / Mac 桌面包 |
 | `packages/base/wizard` | **行业落地向导**：首次装机的状态机与编排（技能一/二/三→交付配置），行业内容零预置（D18） |
 | `skills/official/` | 官方套件：`industry-entry/`（行业落地四技能+快速上线模板）、`product-feedback/`（反哺分析技能）（D17） |
-| `vendor/{dsh,dsh-im}` | dsh 0.1.1-rc.1 审计基线（只读）/ dsh IM 通道插件（MIT 回馈） |
+| `vendor/{dsh,dsh-im}` | dsh 0.1.2-rc.1 审计基线（只读）/ dsh IM 通道插件（MIT 回馈） |
 | `scripts/` | migrate / seed / demo / verify-chain / **suite（371 场景用例）** / dsh-gate |
 
 ### 6.2 最小跑通路径
@@ -536,7 +536,7 @@ LLM_MODEL=deepseek-chat
 
 - ✅ 当前：Mac 桌面包一键启航 + 官网 + CI 质量门禁（371 场景用例 + 哈希链验证，每次 push 全量执行）
 - ✅ v1.10 自我进化飞轮 P0（D24）：反馈 → 记忆 → 行为校准（偏好注入主链路 / 记忆提炼器 / 进化积分卡 / P23 组织记忆中心）
-- ✅ dsh 0.1.1-rc.1 已集成（subagent Codex / Claude Code 按需安装；E6 dsh-gate 门禁全绿）
+- ✅ dsh 0.1.2-rc.1 已集成（subagent Codex / Claude Code 按需安装；E6 dsh-gate 门禁全绿）
 - 🔜 Intel Mac 包 / Windows 包
 - 🔜 技能市场 industry 层开放（脱敏审核流水线 + 跨组织安装）
 - 🔜 更多领域 bundles（社媒营销、AI 视频与内容创作、餐饮、零售、物业）

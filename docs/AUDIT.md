@@ -386,3 +386,11 @@ npm 最新 rc.7（latest）/ rc.8（next），与锁定 rc.8 一致——**无�
   员工卫星群绩效色可点 / 语音气泡打字机 / L4 请示聚光灯三手势 / 实况字幕 / 聊天框三模式真实路由 / 开门仪式每日首访 / 移动端适配）。
 - 路由："/" → 剧场，原 P1 迁 /p1（工作台镜头化：剧场管感觉、工作台管操作）。
 - 实测：桌面+移动双端零报错；ask 应答/三手势批准/开门仪式全链通过；套件 422→423。
+
+## dsh 0.1.2-rc.1 升级登记（2026-09-05，随发布即升纪律）
+
+- **触发**：官方发布 `0.1.2-rc.1`（npm latest/next 双 tag 同指，发布 2026-09-03T06:21Z；中间另有 0.1.1-rc.2 与 0.1.2-alpha.2~5）。
+- **变更面**：新增嵌入式 profile（sdk/sdk-minimal/acp——dsh 可作 agent 服务嵌入外部客户端）；agent-presets 改 configTrees 挂载；patchReload 热重载生命周期；图像处理（sharp）进附件链路；全家桶统一 bump。
+- **动作**：vendor/dsh 换基线 0.1.2-rc.1（integrity `sha512-RPq48Tzx…QrnVA==` 与 registry 逐字符一致 ✅）；dsh-gate pin 0.1.2-rc.1 + **清 lock 重装**（混版坑：ImageVariantId 导出缺失）；README 中英 + oss 台账同步。
+- **坑位**：Node ≥22.15 硬要求（zstd）——gate/生产须 Node 24；sharp 原生走 @img 可选依赖链，净装即就位。
+- **验证**：E6 dsh-gate 全绿（Node v24.9.0）：用例一全链（围栏瀑布 deny 优先 + 哈希链 38 条验链）+ 用例二 H-5（kill -9 → 链完整 26 条 + 重放零重复）。
