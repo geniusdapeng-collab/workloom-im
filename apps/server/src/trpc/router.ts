@@ -125,6 +125,7 @@ import {
   recheckBundle,
 } from "@workloom/base/bundles";
 import { serviceRouter } from "../service/router.js";
+import { appendEventOn } from "../service/events.js";
 import {
   buildEvolutionScorecard,
   decayMemories,
@@ -501,6 +502,55 @@ const membersRouter = router({
   list: protectedProcedure.query(async ({ ctx }) => {
     return listMembers(getAppPool(), scopeOf(ctx.identity));
   }),
+  /** F-NAME2：数字员工别名设置（显示层第三层；留痕上链，改别名零数据迁移） */
+  updateAlias: writeProcedure
+    .input(z.object({
+      memberNo: z.string().min(1),
+      alias: z.string().max(12).nullable(),          // null/空 = 清除别名回岗位名
+      presetKey: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const scope = scopeOf(ctx.identity);
+      const app = getAppPool();
+      const client = await app.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+        await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+        const alias = input.alias?.trim() || null;
+        // 数字员工（agents，按 preset_key）优先；否则按人类成员 member_no
+        let objectType = "member";
+        let objectId = input.memberNo;
+        let r;
+        if (input.presetKey) {
+          r = await client.query(
+            `UPDATE agents SET alias=$3 WHERE preset_key=$1 AND workspace_id=$2 RETURNING id, name, alias`,
+            [input.presetKey, scope.workspaceId, alias],
+          );
+          objectType = "agent";
+          objectId = input.presetKey;
+        } else {
+          r = await client.query(
+            `UPDATE members SET alias=$3 WHERE member_no=$1 AND workspace_id=$2 RETURNING member_no, name, alias`,
+            [input.memberNo, scope.workspaceId, alias],
+          );
+        }
+        if (!r.rows[0]) throw new TRPCError({ code: "NOT_FOUND", message: `成员 ${input.memberNo} 不存在` });
+        await appendEventOn(client, { workspaceId: scope.workspaceId, tenantId: scope.tenantId },
+          { id: ctx.identity.memberNo, type: "human" }, {
+            objectType, objectId,
+            action: alias ? "member.alias.set" : "member.alias.clear",
+            after: { alias, preset_key: input.presetKey ?? null },
+          });
+        await client.query("COMMIT");
+        return { member: r.rows[0] };
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => undefined);
+        throw err;
+      } finally {
+        client.release();
+      }
+    }),
 });
 
 /** threads router：list（L7.1 越权返回空）/ dispatch（Quest 接口；H-10 越版 403+留痕） */
