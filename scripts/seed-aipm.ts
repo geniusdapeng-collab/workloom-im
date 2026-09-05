@@ -194,6 +194,28 @@ async function main(): Promise<void> {
   // 晨报由夜班节拍运行时真实生成（night-shift/captain，系统无静态晨报表）——不在种子内伪造
   console.log("✓ 晨报：运行时夜班生成（种子不伪造）");
 
+  // —— 行业考题（考试院 ai-pm 科目；eval/questions.json → eval_questions） ——
+  try {
+    const evalPack = JSON.parse(readFileSync(join(BUNDLE_DIR, "eval/questions.json"), "utf-8")) as { questions: Array<Record<string, unknown>> };
+    for (const [i, qu] of evalPack.questions.entries()) {
+      await q(
+        `INSERT INTO eval_questions
+           (id, workspace_id, subject, structure, primary_dimensions, red_line, difficulty, source, tags, scenario, assertions, judge_rubric, holdout)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'seed',$8,$9,$10,$11,false)
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          `evq-aipm-seed-${i}`, WS_ID, qu.subject, qu.structure,
+          JSON.stringify(qu.primary_dimensions), qu.red_line, qu.difficulty,
+          JSON.stringify(qu.tags ?? []), JSON.stringify(qu.scenario),
+          JSON.stringify(qu.assertions ?? []), qu.judgeRubric ? JSON.stringify(qu.judgeRubric) : null,
+        ],
+      );
+    }
+    console.log(`✓ 行业考题 ×${evalPack.questions.length}`);
+  } catch (e) {
+    console.log("  （行业考题注入跳过：", (e as Error).message.slice(0, 60), "）");
+  }
+
   // —— bundle_installs 装配台账（一键清空的精确卸载依据，方案 V4 §3） ——
   await q(
     `INSERT INTO bundle_installs (id, workspace_id, bundle_id, assets, status)

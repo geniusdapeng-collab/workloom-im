@@ -253,6 +253,7 @@ const onboardingRouter = router({
         dataMode: (prof.rows[0]?.data_mode ?? "simulated") as "simulated" | "real",
         llm: llmAssembly(),
         workspace: { name: ws.rows[0]?.name ?? "", events, members, agents, memories },
+        workspaceId: scope.workspaceId,
         // V4 §2 示例明示：示例包装配标记（SimBanner 银带语义事实源）
         bundle: { id: ws.rows[0]?.bundle_id ?? null, isExample: !!ws.rows[0]?.is_example },
       };

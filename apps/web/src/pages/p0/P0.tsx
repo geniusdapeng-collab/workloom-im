@@ -17,6 +17,8 @@ import { FloorView, type FloorPayload, type FloorAgent } from "./Floor";
 import { Stage3D } from "../../components/Stage3D";
 import { Floor3D } from "../../components/Floor3D";
 import { SubtitleBar } from "../../voice/SubtitleBar";
+import { WelcomeCeremony, shouldShowWelcome, markWelcomed } from "../../components/WelcomeCeremony";
+import type { CeremonyActor } from "../../components/CeremonyStage";
 import { VoiceEngine } from "../../voice/VoiceEngine";
 import { AudioEngine } from "../../audio/AudioEngine";
 import { useAmbience } from "../../audio/ambience";
@@ -170,10 +172,23 @@ function TypeBubble({ text, tone }: { text: string; tone: string }) {
 /* ================= 主组件 ================= */
 export default function P0() {
   const [wsName, setWsName] = useState("WorkLoom");
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [isExample, setIsExample] = useState(false);
   useEffect(() => {
     void ensureDemoLogin().then(() =>
       trpc.onboarding.status.query()
-        .then((r) => { const n = (r as { workspace?: { name?: string } }).workspace?.name; if (n) setWsName(n); })
+        .then((r) => {
+          const rr = r as { workspace?: { name?: string }; bundle?: { isExample?: boolean }; workspaceId?: string };
+          const n = rr.workspace?.name;
+          if (n) setWsName(n);
+          const wsId = rr.workspaceId ?? null;
+          if (wsId) setWorkspaceId(wsId);
+          if (rr.bundle?.isExample) {
+            setIsExample(true);
+            if (wsId && shouldShowWelcome(wsId)) setShowWelcome(true);
+          }
+        })
         .catch(() => undefined),
     );
   }, []);
@@ -535,6 +550,20 @@ export default function P0() {
             </div>
           </div>
         </div>
+      )}
+      {/* 首次启动欢迎仪式（V4 §0：is_example 工作区 + 仅一次；团队编制驱动布阵） */}
+      {showWelcome && data && (
+        <WelcomeCeremony
+          actors={[
+            { presetKey: "company-ceo", name: data.ceoName } satisfies CeremonyActor,
+            ...data.satellites.map((a): CeremonyActor => ({ presetKey: a.presetKey, name: a.name })),
+          ]}
+          bundleName={wsName}
+          onDone={() => {
+            if (workspaceId) markWelcomed(workspaceId);
+            setShowWelcome(false);
+          }}
+        />
       )}
       {/* 新闻台字幕条（语音字幕等价物 + 降级兜底） */}
       <SubtitleBar />
