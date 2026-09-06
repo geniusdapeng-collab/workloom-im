@@ -98,13 +98,15 @@ done
 echo "→ Node $NODE_VER win-x64…"
 mkdir -p "$PKG/node"
 fetch "${NODE_URLS[@]}" -o "$STAGE/$NODE_TARBALL"
-unzip -q "$STAGE/$NODE_TARBALL" -d "$STAGE/node"
+mkdir -p "$STAGE/node"
+if command -v unzip >/dev/null; then unzip -q "$STAGE/$NODE_TARBALL" -d "$STAGE/node"; else tar -xf "$STAGE/$NODE_TARBALL" -C "$STAGE/node"; fi
 mv "$STAGE/node/node-v${NODE_VER}-win-x64/"* "$PKG/node/"
 
 # ---------- 4. PostgreSQL 17 win-x64（zonky jar → txz 解包） ----------
 echo "→ PostgreSQL $PG_ZONKY_VER win-x64（zonky）…"
 fetch "${ZONKY_URLS[@]}" -o "$STAGE/pg.jar"
-unzip -q -o "$STAGE/pg.jar" -d "$STAGE/pgjar"
+mkdir -p "$STAGE/pgjar"
+if command -v unzip >/dev/null; then unzip -q -o "$STAGE/pg.jar" -d "$STAGE/pgjar"; else tar -xf "$STAGE/pg.jar" -C "$STAGE/pgjar"; fi
 TXZ="$(find "$STAGE/pgjar" -name '*.txz' | head -1)"
 [ -n "$TXZ" ] || { echo "❌ zonky jar 内未找到 .txz"; exit 1; }
 mkdir -p "$STAGE/pgsql"
@@ -135,8 +137,8 @@ copy apps/desktop/windows/WorkLoom.bat "$PKG/WorkLoom.bat"
 echo "→ 压缩…"
 ZIP="$DIST/WorkLoom-Windows.zip"
 rm -f "$ZIP" "$ZIP.sha256"
-( cd "$STAGE" && zip -qry "$OLDPWD/$ZIP" WorkLoom )
-( cd "$DIST" && shasum -a 256 "WorkLoom-Windows.zip" > "WorkLoom-Windows.zip.sha256" )
+if command -v zip >/dev/null; then ( cd "$STAGE" && zip -qry "$OLDPWD/$ZIP" WorkLoom ); else ( cd "$STAGE" && tar -a -cf "$OLDPWD/$ZIP" WorkLoom ); fi
+( cd "$DIST" && { command -v sha256sum >/dev/null && sha256sum "WorkLoom-Windows.zip" || shasum -a 256 "WorkLoom-Windows.zip"; } > "WorkLoom-Windows.zip.sha256" )
 SIZE=$(du -h "$ZIP" | cut -f1)
 echo "✅ 产出 ${ZIP}（${SIZE}）+ sha256"
 if [ "$STRUCTURE_ONLY" = "1" ]; then echo "⚠️  本包为结构校验产物，PLACEHOLDER 在位，禁止上传 Release"; fi
