@@ -34,3 +34,7 @@ enums:
   - code: evidence.missing
     label: 审批卡缺证据链（上下文摘要不足）
     appliesTo: [reject]
+  - code: other
+    label: 其他（各行业兜底枚举，第⑧槽校验要求）
+    appliesTo: [reject, edit]
+
