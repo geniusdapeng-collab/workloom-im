@@ -27,7 +27,7 @@ const sources = [
   ["packages/runtime/package.json", ["dependencies"]],
   // 运行期工具（来自 devDependencies，仅取这两个）
   ["package.json", ["devDependencies"], ["tsx"]],
-  ["apps/web/package.json", ["devDependencies"], ["vite"]],
+  ["apps/web/package.json", ["devDependencies"], ["vite", "@tailwindcss/vite", "@vitejs/plugin-react"]],
 ];
 
 const deps = {};
