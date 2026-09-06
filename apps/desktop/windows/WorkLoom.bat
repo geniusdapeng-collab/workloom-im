@@ -64,6 +64,7 @@ if %errorlevel%==0 (
   call :say "→ 启动 PostgreSQL 17 …"
   "%PGBIN%\pg_ctl.exe" -D "%PGDATA%" -l "%LOGDIR%\pg.log" -o "-p 5432 -c listen_addresses=127.0.0.1" -w -t 60 start >> "%LOG%" 2>&1 || goto :die_pg
 )
+call :say "→ 角色与库检查（psql 连接测试）…"
 rem 角色与库（幂等）
 "%PGBIN%\psql.exe" -h 127.0.0.1 -p 5432 -U postgres -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='workloom_app'" 2>nul | find "1" >nul || (
   "%PGBIN%\psql.exe" -h 127.0.0.1 -p 5432 -U postgres -d postgres -c "ALTER USER postgres PASSWORD 'workloom'" >> "%LOG%" 2>&1
@@ -71,7 +72,13 @@ rem 角色与库（幂等）
 "%PGBIN%\psql.exe" -h 127.0.0.1 -p 5432 -U postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='workloom'" 2>nul | find "1" >nul || (
   "%PGBIN%\createdb.exe" -h 127.0.0.1 -p 5432 -U postgres -O postgres workloom
 )
-"%PGBIN%\psql.exe" -h 127.0.0.1 -p 5432 -U postgres -d workloom -c "CREATE EXTENSION IF NOT EXISTS vector" >> "%LOG%" 2>&1 || goto :die_pg
+call :say "→ 创建 vector 扩展…"
+"%PGBIN%\psql.exe" -h 127.0.0.1 -p 5432 -U postgres -d workloom -c "CREATE EXTENSION IF NOT EXISTS vector" >> "%LOG%" 2>&1
+if errorlevel 1 (
+  call :say "❌ CREATE EXTENSION vector 失败（psql 错误已留上方；疑 pgvector 与运行时 ABI 不匹配）"
+  goto :die_pg
+)
+call :say "✓ vector 扩展就绪"
 
 rem ---------- 2. 配置：.env 默认即本地自足 ----------
 if not exist "%RUNTIME%\.env" (
@@ -80,6 +87,7 @@ if not exist "%RUNTIME%\.env" (
 )
 
 rem ---------- 3. 首启引导：迁移 + 种子（幂等） ----------
+call :say "→ 配置检查…"
 if not exist "%SUPPORT%\.bootstrapped" (
   call :say "→ 首航引导：数据库迁移 + 演示数据种子（约 30 秒）…"
   pushd "%RUNTIME%"
@@ -91,6 +99,7 @@ if not exist "%SUPPORT%\.bootstrapped" (
   call :say "✅ 首航引导完成"
 )
 
+call :say "→ 引导阶段完成，准备起服务…"
 rem ---------- 4. 起服务：server(8787) + web preview(5173) ----------
 call :say "→ 启动服务…"
 pushd "%RUNTIME%\apps\server"
