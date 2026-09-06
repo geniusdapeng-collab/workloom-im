@@ -102,6 +102,13 @@ node scripts/pack-nm-merge.mjs "$NM_STAGE/package.json"
 NPM_REG="${NPM_REGISTRY:-https://registry.npmjs.org}"
 if ( cd "$NM_STAGE" && npm install --no-audit --no-fund --legacy-peer-deps --registry="$NPM_REG" ); then
   copy "$NM_STAGE/node_modules" "$R/node_modules"
+  # 内部工作区包以实体目录入 node_modules（seed.ts 等导入 @workloom/base/workdata，
+  # v2.0.14 冒烟实证缺失；npm 合成器已过滤 workspace:*，此处按包名补位）
+  mkdir -p "$R/node_modules/@workloom"
+  for pkg in shared db base runtime; do
+    [ -d "packages/$pkg" ] && cp -aL "packages/$pkg" "$R/node_modules/@workloom/$pkg"
+  done
+  find "$R/node_modules/@workloom" -type d -name node_modules -prune -exec rm -rf {} + 2>/dev/null || true
 else
   echo "⚠️  npm install 失败（离线？）——回退解引用拷贝（仅结构模式可用，禁分发）"
   [ "$STRUCTURE_ONLY" = "1" ] || { echo "❌ 正式包必须 npm 扁平化安装成功"; exit 1; }
