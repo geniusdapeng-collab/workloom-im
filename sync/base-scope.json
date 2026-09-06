@@ -135,7 +135,8 @@
       "ai-pm",
       "yunqi",
       "ecommerce",
-      "panda-cineforge"
+      "panda-cineforge",
+      "platform-ops"
     ],
     "blacklistNote": "以 ^ 开头=路径前缀匹配；其余=子串匹配。^bundles/ 只锚定仓库根的行业包目录，不误伤 packages/base/bundles（基座 bundle 加载器）",
     "maxFilesPerSync": 200,
