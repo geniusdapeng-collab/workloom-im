@@ -93,7 +93,7 @@ fi
 if [ ! -f "$SUPPORT/.bootstrapped" ]; then
   say "→ 首航引导：数据库迁移 + 演示数据种子…"
   (cd "$RUNTIME" && "$TSX" --env-file=.env scripts/migrate.ts) || die "数据库迁移失败"
-  (cd "$RUNTIME" && "$TSX" --env-file=.env scripts/seed.ts) || die "演示数据种子失败"
+  (cd "$RUNTIME" && BUNDLE_DIR=bundles/hotel "$TSX" --env-file=.env scripts/seed.ts) || die "演示数据种子失败"
   touch "$SUPPORT/.bootstrapped"
   say "✅ 首航引导完成"
 fi
