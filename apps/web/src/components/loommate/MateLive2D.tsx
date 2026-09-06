@@ -86,7 +86,7 @@ if (typeof window !== "undefined") {
   window.setTimeout(() => { void ensureCore().catch(() => undefined); }, 1500);
 }
 
-export function MateLive2D({ size, mood = "neutral", gesture = null, modelUrl = "/live2d/shizuku/shizuku.model.json", frame = "bust", onReady }: {
+export function MateLive2D({ size, mood = "neutral", gesture = null, modelUrl = "/live2d/mao/Mao.model3.json", frame = "bust", onReady }: {
   size: number;
   mood?: MateMood;
   gesture?: MateGesture;
