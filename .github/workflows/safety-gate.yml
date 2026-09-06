@@ -38,7 +38,16 @@ jobs:
         run: pnpm exec tsc --noEmit -p platform-ops/tsconfig.json
       # G2 测试闸：全量 platform-ops 测试（含审计加固）
       - name: G2 vitest
-        run: pnpm exec vitest run platform-ops/test
+        id: g2
+        run: pnpm exec vitest run platform-ops/test --reporter=verbose 2>&1 | tee /tmp/g2-vitest.log
+      - name: G2 失败留证上传（远程诊断）
+        if: failure() && steps.g2.outcome == 'failure'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: /tmp/g2-vitest.log
+          tag_name: safety-evidence
+          name: safety-evidence
+          fail_on_unmatched_files: false
       # G3 考试院闸：硬轨全过（exam.test.ts 内嵌于 G2，此处独立门禁防跳过）
       - name: G3 考试院硬轨
         run: pnpm exec vitest run platform-ops/test/exam.test.ts
