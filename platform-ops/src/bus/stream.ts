@@ -32,7 +32,7 @@ export interface BusMessage<T = unknown> {
 
 interface PendingDelivery<T> { msg: BusMessage<T>; deliverCount: number }
 
-class ConsumerGroup<T = unknown> {
+export class ConsumerGroup<T = unknown> {
   private pending = new Map<number, PendingDelivery<T>>();
   private cursor = 0; // 下一待拉取位点（durable：崩溃后从本位点重投递）
   constructor(

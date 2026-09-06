@@ -18,13 +18,16 @@ describe("令牌桶与写入口保护阀（§20.2）", () => {
     expect(b.available()).toBe(5);
   });
 
-  it("L4 保护阀：账务/审批/工单永不采样，遥测可被降级", () => {
+  it("L4 保护阀：账务/审批/工单永不采样永不拒绝，遥测可被降级", () => {
     let now = 0;
     const valve = new WriteIngressValve(new TokenBucket({ capacity: 2, refillPerSec: 0, now: () => now }), 0);
+    // 关键事件：不占桶、永不采样、永不拒绝（背压由上游队列承载）
     expect(valve.admit("credits.grant")).toBe(true);
     expect(valve.admit("credits.grant")).toBe(true);
-    expect(valve.admit("credits.grant")).toBe(false); // 桶空：关键事件也只是等桶，绝不进采样
-    // 遥测类：桶空且采样率 0 → 丢弃（允许，§20.2 非关键事件采样降级）
+    expect(valve.admit("credits.grant")).toBe(true);
+    // 遥测类：先占桶（2 个），桶空后按采样率降级（采样率 0 → 丢弃）
+    expect(valve.admit("telemetry.a")).toBe(true);
+    expect(valve.admit("telemetry.b")).toBe(true);
     expect(valve.admit("telemetry.span")).toBe(false);
   });
 });

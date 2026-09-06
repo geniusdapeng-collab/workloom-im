@@ -35,7 +35,7 @@ describe("推送匹配器（§17.5）", () => {
     await reg.set("c1", { tenantId: "t1", memberId: "m1", topics: ["ticket.status"] });
     const matcher = new PushMatcher(reg, () => 1000);
     const huge: PushEvent = { ...ev, summary: "x".repeat(5000) };
-    const [hit] = await matcher.match(huge);
+    const hit = (await matcher.match(huge))[0]!;
     expect(Buffer.byteLength(JSON.stringify(hit.frame))).toBeLessThan(2048);
     expect(Object.keys(hit.frame).sort()).toEqual(["event_id", "summary", "topic", "ts"]);
   });
@@ -67,9 +67,9 @@ describe("上报网关（§17.2）", () => {
 
   it("幂等签收：重复 event_id 返回 duplicate 不入库", () => {
     const gw = new IngestGateway({ now: () => 1000 });
-    const [a] = gw.ingestBatch("t1", [mk()]);
+    const a = gw.ingestBatch("t1", [mk()])[0]!;
     expect(a.action).toBe("accept");
-    const [b] = gw.ingestBatch("t1", [mk()]);
+    const b = gw.ingestBatch("t1", [mk()])[0]!;
     expect(b.action).toBe("duplicate");
   });
 
@@ -86,7 +86,7 @@ describe("上报网关（§17.2）", () => {
   it("乱序窗口：超 5min 的迟到事件走迟到通道单独标记", () => {
     const now = 10 * 60_000;
     const gw = new IngestGateway({ now: () => now });
-    const [v] = gw.ingestBatch("t1", [mk({ occurred_at: 0 })]); // 早 10 分钟
+    const v = gw.ingestBatch("t1", [mk({ occurred_at: 0 })])[0]!; // 早 10 分钟
     expect(v.action).toBe("late");
   });
 });

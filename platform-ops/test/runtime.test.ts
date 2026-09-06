@@ -21,10 +21,10 @@ describe("心跳租约与僵尸恢复（§18.2）", () => {
     expect(v).toEqual([{ runId: "run-1", action: "replay", zombieCount: 1 }]);
     // 第 2、3 次 → 熔断
     v = await sup.sweep();
-    expect(v[0].action).toBe("replay");
+    expect(v[0]!.action).toBe("replay");
     v = await sup.sweep();
-    expect(v[0].action).toBe("circuit");
-    expect(v[0].ticket?.level).toBe("P1");
+    expect(v[0]!.action).toBe("circuit");
+    expect(v[0]!.ticket?.level).toBe("P1");
     // 熔断后不再自动 replay
     expect(await sup.sweep()).toHaveLength(0);
   });
@@ -57,7 +57,7 @@ describe("漏触发对账（§18.2-3）", () => {
     // 未触发 → P1
     const missed = wd.reconcile(triggers, [], now - 3_600_000);
     expect(missed).toHaveLength(1);
-    expect(missed[0].expectedAt).toBe(expected);
+    expect(missed[0]!.expectedAt).toBe(expected);
     // 已触发 → 无漏报
     const fired = wd.reconcile(triggers, [{ triggerId: "reconcile-daily", firedAt: expected + 1000 }], now - 3_600_000);
     expect(fired).toHaveLength(0);

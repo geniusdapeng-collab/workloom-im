@@ -38,7 +38,7 @@ describe("事件总线（§17.3 JetStream 语义）", () => {
     expect(g.pull(10, 1000)).toHaveLength(3);
     expect(g.pull(10, 1000)).toHaveLength(0); // 背压
     const first = bus.logOf("ops-signals")[0];
-    g.ack(first.seq);
+    g.ack(first!.seq);
     expect(g.pull(10, 1000)).toHaveLength(1); // ack 后恢复投递
   });
 
@@ -72,7 +72,7 @@ describe("outbox relay（§17.1 先落库后上总线）", () => {
     expect(await relay.pumpOnce()).toBe(0);
     expect(bus.logOf("events-core")).toHaveLength(1);
     // 事件携带 event_id/tenant_id（消费者幂等键）
-    const msg = bus.logOf("events-core")[0].payload as { event_id: string; tenant_id: string };
+    const msg = bus.logOf("events-core")[0]!.payload as { event_id: string; tenant_id: string };
     expect(msg.event_id).toBe("e1");
     expect(msg.tenant_id).toBe("t1");
   });

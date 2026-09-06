@@ -54,13 +54,16 @@ export const CRITICAL_EVENT_TYPES = ["credits.", "approval.", "ticket.", "fence.
 export class WriteIngressValve {
   constructor(private bucket: TokenBucket, private sampleRate = 1.0, private rand: () => number = Math.random) {}
 
-  /** 返回 true=放行入库；false=采样丢弃（仅非关键事件可能被丢弃） */
+  /**
+   * 返回 true=放行入库；false=采样丢弃。
+   * 纪律（§20.2 审计修订）：
+   * - 关键事件（账务/审批/工单/围栏）**永不采样、永不拒绝**——其背压由上游队列深度承载（§17.3 削峰靠队列不靠丢消息）；
+   * - 非关键事件（遥测类）：先占桶；桶空时按 sampleRate 采样放行（降级采样），其余丢弃。
+   */
   admit(eventType: string): boolean {
     const critical = CRITICAL_EVENT_TYPES.some((p) => eventType.startsWith(p));
-    if (critical) return this.bucket.tryTake(1); // 关键事件：只占桶，永不采样
-    if (!this.bucket.tryTake(1)) {
-      return this.rand() < this.sampleRate ? this.bucket.tryTake(1) : false; // 遥测类按采样率降级
-    }
-    return true;
+    if (critical) return true; // 审计修复：旧实现桶空时误拒关键事件，违反"关键事件永不采样"
+    if (this.bucket.tryTake(1)) return true;
+    return this.rand() < this.sampleRate; // 审计修复：旧实现采样路径二次占桶必失败，采样率形同虚设
   }
 }

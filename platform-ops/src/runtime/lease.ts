@@ -34,7 +34,7 @@ export class MemoryLeaseStore implements LeaseStore {
     const out: Array<{ runId: string; value: string }> = [];
     for (const [k, e] of this.data) {
       const m = /^run:(.+):lease$/.exec(k);
-      if (m && this.now() <= e.expiresAt) out.push({ runId: m[1], value: e.value });
+      if (m && m[1] && this.now() <= e.expiresAt) out.push({ runId: m[1], value: e.value });
     }
     return out;
   }
@@ -83,6 +83,7 @@ export class RunSupervisor {
       this.zombies.set(runId, count);
       if (count >= (this.opts.maxZombies ?? 3)) {
         this.known.delete(runId); // 熔断：不再自动 replay
+        this.zombies.delete(runId); // 审计修订：熔断后清理计数，避免长跑内存膨胀
         verdicts.push({
           runId, action: "circuit", zombieCount: count,
           ticket: { level: "P1", title: `病态任务熔断：run ${runId} 连续 ${count} 次僵尸`, runId },

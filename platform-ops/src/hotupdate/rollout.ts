@@ -44,12 +44,12 @@ export class RolloutController {
     private thresholds: RolloutThresholds = DEFAULT_THRESHOLDS,
     private opts: { observationMs?: number; now?: () => number } = {},
   ) {
-    this.state = { phase: "awaiting_approval", batch: BATCH_ORDER[0] };
+    this.state = { phase: "awaiting_approval", batch: BATCH_ORDER[0]! };
   }
 
   getState(): RolloutState { return this.state; }
   currentBatch(): BatchName | null {
-    return this.state.phase === "completed" || this.state.phase === "rolled_back" ? null : BATCH_ORDER[this.batchIdx];
+    return this.state.phase === "completed" || this.state.phase === "rolled_back" ? null : BATCH_ORDER[this.batchIdx]!;
   }
 
   /** R-PL5 审批通过 → 进入观察期 */
@@ -86,13 +86,23 @@ export class RolloutController {
     if (this.batchIdx >= BATCH_ORDER.length) {
       this.state = { phase: "completed" };
     } else {
-      this.state = { phase: "awaiting_approval", batch: BATCH_ORDER[this.batchIdx] };
+      this.state = { phase: "awaiting_approval", batch: BATCH_ORDER[this.batchIdx]! };
     }
   }
 
   /** 回滚上一批次（快照恢复；回滚本身也走审批——本方法只在审批通过后调用） */
   rollbackApproved(toSnapshot: string, reason: string): void {
     this.state = { phase: "rolled_back", toSnapshot, reason };
+  }
+
+  /**
+   * 暂停后恢复（审计修订：旧实现 paused 后只剩回滚一条路，热修复重发被卡死）：
+   * 问题修复并完成整改评审后，经 R-PL5 重新审批，从当前批次重新进入观察期。
+   */
+  resumeApproved(): void {
+    if (this.state.phase !== "paused") throw new Error(`当前状态 ${this.state.phase} 不可恢复（仅 paused 可恢复）`);
+    const batch = (this.state as { batch: BatchName }).batch;
+    this.state = { phase: "observing", batch, startedAt: (this.opts.now ?? Date.now)() };
   }
 
   version(): string { return this.bundleVersion; }

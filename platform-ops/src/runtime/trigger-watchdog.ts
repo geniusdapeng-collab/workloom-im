@@ -26,11 +26,11 @@ function expandField(field: string, lo: number, hi: number): Set<number> | null 
   for (const part of field.split(",")) {
     const stepMatch = /^(.+)\/(\d+)$/.exec(part);
     const step = stepMatch ? Number(stepMatch[2]) : 1;
-    const base = stepMatch ? stepMatch[1] : part;
+    const base = (stepMatch ? stepMatch[1] : part) ?? part;
     if (base === "*") {
       for (let i = lo; i <= hi; i += step) out.add(i);
     } else if (/^\d+-\d+$/.test(base)) {
-      const [a, b] = base.split("-").map(Number);
+      const [a = 0, b = 0] = base.split("-").map(Number);
       for (let i = a; i <= b; i += step) out.add(i);
     } else if (/^\d+$/.test(base)) {
       out.add(Number(base));

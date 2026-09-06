@@ -16,6 +16,21 @@ export const REPORT_FIELD_WHITELIST = [
   "metrics", "error_code", "ticket_id", "status", "level", "summary",
 ] as const;
 
+/**
+ * 通道化白名单（审计修订）：不同上报通道的数据敏感度不同，白名单按通道分 profile——
+ * - meta（默认）：客户实例元数据通道（§18.6 巡检下沉），严格白名单，客户业务字段一律拒批；
+ * - internal：平台内部事件通道（同机房/同 VPC 服务间，如积分/工单事件），携带业务字段为合法。
+ * 原单一白名单会把 credits.grant（pool/amount）等内部合法事件误拒整批。
+ */
+export const CHANNEL_PROFILES = {
+  meta: REPORT_FIELD_WHITELIST,
+  internal: [
+    ...REPORT_FIELD_WHITELIST,
+    "pool", "amount", "model_trace", "payload", "prev_hash", "hash", "assignee", "intent", "priority",
+  ],
+} as const;
+export type IngestChannel = keyof typeof CHANNEL_PROFILES;
+
 export interface ReportEvent {
   event_id: string;
   tenant_id: string;
@@ -55,15 +70,16 @@ export class IngestGateway {
     return this.buckets.get(tenant)!;
   }
 
-  /** 整批处理：任一事件含白名单外字段 → 拒整批并告警（宁拒不错收） */
-  ingestBatch(tenantId: string, events: ReportEvent[]): IngestVerdict[] {
+  /** 整批处理：任一事件含通道白名单外字段 → 拒整批并告警（宁拒不错收） */
+  ingestBatch(tenantId: string, events: ReportEvent[], channel: IngestChannel = "meta"): IngestVerdict[] {
     const now = (this.opts.now ?? Date.now)();
-    // ① 白名单校验（整批）
+    const whitelist = CHANNEL_PROFILES[channel] as readonly string[];
+    // ① 白名单校验（整批，按通道 profile）
     for (const e of events) {
-      const extra = Object.keys(e).filter((k) => !(REPORT_FIELD_WHITELIST as readonly string[]).includes(k));
+      const extra = Object.keys(e).filter((k) => !whitelist.includes(k));
       if (extra.length > 0) {
         this.opts.onWhitelistBreach?.(tenantId, extra);
-        return events.map(() => ({ action: "rejected", reason: `字段白名单外：${extra.join(",")}` } as IngestVerdict));
+        return events.map(() => ({ action: "rejected", reason: `字段白名单外(${channel})：${extra.join(",")}` } as IngestVerdict));
       }
     }
     // ② 逐条：限流 → 幂等 → 乱序

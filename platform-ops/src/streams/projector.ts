@@ -44,7 +44,7 @@ export class Projector<T = unknown> {
   /** 拉一轮：poll → 微批缓冲 → 到窗/满批 flush → ack + checkpoint */
   async tick(batchSize = 200): Promise<number> {
     const now = (this.opts.now ?? Date.now)();
-    const msgs = this.opts.group.pull(batchSize, now).filter((m) => {
+    const msgs = (this.opts.group.pull(batchSize, now) as BusMessage<T>[]).filter((m) => {
       const id = (m.payload as { event_id?: string })?.event_id;
       if (id && this.seen.has(id)) return false;
       if (id) this.seen.add(id);
@@ -62,7 +62,7 @@ export class Projector<T = unknown> {
     const batch = this.buffer;
     this.buffer = [];
     await this.opts.apply(batch);
-    const last = batch[batch.length - 1];
+    const last = batch[batch.length - 1]!;
     for (const m of batch) this.opts.group.ack(m.seq);
     await this.opts.checkpoints.set(this.opts.name, last.seq);
     this.lastFlush = (this.opts.now ?? Date.now)();

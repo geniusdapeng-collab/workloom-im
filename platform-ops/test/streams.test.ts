@@ -111,7 +111,7 @@ describe("SLA 延迟计时（§16.4/§17.4：deliver-at 替代扫表）", () => 
     timer.schedule({ ticketId: "tk2", tenantId: "t1", status: "处理中", intent: "bug_report" });
     const breach = timer.onDeadline({ ticketId: "tk2", tenantId: "t1", status: "处理中", intent: "bug_report" });
     expect(breach).toEqual({ escalated: true, to: "incident-responder" });
-    const sig = bus.logOf("ops-signals")[0].payload as { kind: string; level: string; escalate_to: string };
+    const sig = bus.logOf("ops-signals")[0]!.payload as { kind: string; level: string; escalate_to: string };
     expect(sig).toMatchObject({ kind: "sla.breach", level: "P1", escalate_to: "incident-responder" });
   });
 });
