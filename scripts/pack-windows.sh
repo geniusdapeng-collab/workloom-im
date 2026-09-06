@@ -120,20 +120,24 @@ mkdir -p "$STAGE/node"
 if command -v unzip >/dev/null; then unzip -q "$STAGE/$NODE_TARBALL" -d "$STAGE/node"; else tar -xf "$STAGE/$NODE_TARBALL" -C "$STAGE/node"; fi
 mv "$STAGE/node/node-v${NODE_VER}-win-x64/"* "$PKG/node/"
 
-# ---------- 4. PostgreSQL 17 win-x64（zonky jar → txz 解包） ----------
-echo "→ PostgreSQL $PG_ZONKY_VER win-x64（zonky）…"
-fetch "${ZONKY_URLS[@]}" -o "$STAGE/pg.jar"
-mkdir -p "$STAGE/pgjar"
-if command -v unzip >/dev/null; then unzip -q -o "$STAGE/pg.jar" -d "$STAGE/pgjar"; else tar -xf "$STAGE/pg.jar" -C "$STAGE/pgjar"; fi
-TXZ="$(find "$STAGE/pgjar" -name '*.txz' | head -1)"
-[ -n "$TXZ" ] || { echo "❌ zonky jar 内未找到 .txz"; exit 1; }
-mkdir -p "$STAGE/pgsql"
-tar -xJf "$TXZ" -C "$STAGE/pgsql"
-# zonky 解出为 pgsql/{bin,lib,include,share}
-[ -f "$STAGE/pgsql/bin/postgres.exe" ] || { echo "❌ PG 结构异常（postgres.exe 缺失）"; exit 1; }
+# ---------- 4. PostgreSQL 17 win-x64（优先 vendor/pg-win 同源树；否则 zonky 回退） ----------
 mkdir -p "$PKG/pg"
-cp -a "$STAGE/pgsql/bin" "$STAGE/pgsql/lib" "$STAGE/pgsql/share" "$PKG/pg/"
-rm -rf "$PKG/pg/lib/pkgconfig" 2>/dev/null || true
+if [ -f "vendor/pg-win/bin/postgres.exe" ]; then
+  echo "→ PG 运行时：vendor/pg-win（与 pgvector 编译底座同源，ABI 一致）…"
+  cp -a vendor/pg-win/bin vendor/pg-win/lib vendor/pg-win/share "$PKG/pg/"
+else
+  echo "→ PG 运行时：zonky $PG_ZONKY_VER（回退；注意与 pgvector ABI 需同小版本）…"
+  fetch "${ZONKY_URLS[@]}" -o "$STAGE/pg.jar"
+  mkdir -p "$STAGE/pgjar"
+  if command -v unzip >/dev/null; then unzip -q -o "$STAGE/pg.jar" -d "$STAGE/pgjar"; else tar -xf "$STAGE/pg.jar" -C "$STAGE/pgjar"; fi
+  TXZ="$(find "$STAGE/pgjar" -name '*.txz' | head -1)"
+  [ -n "$TXZ" ] || { echo "❌ zonky jar 内未找到 .txz"; exit 1; }
+  mkdir -p "$STAGE/pgsql"
+  tar -xJf "$TXZ" -C "$STAGE/pgsql"
+  [ -f "$STAGE/pgsql/bin/postgres.exe" ] || { echo "❌ PG 结构异常（postgres.exe 缺失）"; exit 1; }
+  cp -a "$STAGE/pgsql/bin" "$STAGE/pgsql/lib" "$STAGE/pgsql/share" "$PKG/pg/"
+  rm -rf "$PKG/pg/lib/pkgconfig" 2>/dev/null || true
+fi
 
 # ---------- 5. pgvector（CI 预编译合入；structure-only 占位） ----------
 if [ "$STRUCTURE_ONLY" = "1" ]; then
