@@ -67,10 +67,12 @@ rem 句柄脱离（<nul >文件 2>&1）防止 postmaster 继承本批处理控�
 start "WorkLoom-PG" /min cmd /c ""%PGBIN%\pg_ctl.exe" -D "%PGDATA%" -l "%LOGDIR%\pg.log" -o "-p 5432 -c listen_addresses=127.0.0.1" -w -t 60 start <nul >>"%LOGDIR%\pgctl.log" 2>&1"
 set "PGUP="
 rem 等就绪：timeout 在非交互环境立即返回（v2.0.10 实证竞态败北），用 ping 做延迟
-call :say "→ 等待 PG 就绪（探测日志留证）…"
+call :say "→ 等待 PG 就绪（pg_ctl status 探测）…"
+rem 内嵌 PG 无 pg_isready（zonky 只有 initdb/pg_ctl/postgres 三件套，v2.0.12 实证）——
+rem 用 pg_ctl status 探测（运行中返回 0）
 for /l %%i in (1,1,40) do (
   if not defined PGUP (
-    "%PGBIN%\pg_isready.exe" -h 127.0.0.1 -p 5432 >> "%LOG%" 2>&1 && set "PGUP=1"
+    "%PGBIN%\pg_ctl.exe" status -D "%PGDATA%" >nul 2>&1 && set "PGUP=1"
     if not defined PGUP ping -n 2 127.0.0.1 >nul
   )
 )
@@ -79,14 +81,12 @@ if not defined PGUP goto :die_pg
 :pg_ok
 call :say "✓ PostgreSQL 就绪"
 
-rem 角色与库（幂等，线性执行；已存在则报错无害跳过）
-call :say "→ 角色与库检查…"
-"%PGBIN%\psql.exe" -h 127.0.0.1 -p 5432 -U postgres -d postgres -c "ALTER USER postgres PASSWORD 'workloom'" >> "%LOG%" 2>&1
-"%PGBIN%\createdb.exe" -h 127.0.0.1 -p 5432 -U postgres -O postgres workloom >> "%LOG%" 2>&1
-call :say "→ 创建 vector 扩展…"
-"%PGBIN%\psql.exe" -h 127.0.0.1 -p 5432 -U postgres -d workloom -c "CREATE EXTENSION IF NOT EXISTS vector" >> "%LOG%" 2>&1
+rem 角色/建库/vector 扩展：内嵌 PG 无 psql/createdb（zonky 三件套），改载荷 Node 引导
+call :say "→ 角色与库与 vector 扩展（Node 引导）…"
+set "WORKLOOM_RUNTIME=%RUNTIME%"
+"%NODEBIN%\node.exe" "%RUNTIME%\scripts\desktop-bootstrap-db.mjs" >> "%LOG%" 2>&1
 if errorlevel 1 goto :die_pg
-call :say "✓ vector 扩展就绪"
+call :say "✓ 数据库引导完成（角色/库/vector）"
 
 rem ---------- 2. 配置：.env 默认即本地自足 ----------
 call :say "→ 配置检查…"
