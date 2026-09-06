@@ -1,0 +1,15 @@
+{
+  "dimensions": [
+    { "key": "activity", "label": "活跃度", "weight": 0.30 },
+    { "key": "credits", "label": "积分消耗", "weight": 0.20 },
+    { "key": "tickets", "label": "工单密度与情绪", "weight": 0.20 },
+    { "key": "version_lag", "label": "版本滞后", "weight": 0.15 },
+    { "key": "automation", "label": "自动化采纳率", "weight": 0.15 }
+  ],
+  "sample": [
+    { "tenant": "云栖酒店集团", "total": 88, "level": "健康", "trend": "+2", "note": "进周报，零打扰" },
+    { "tenant": "澄光制造", "total": 71, "level": "预警", "trend": "-9", "note": "14 天活跃度下降，已生成关怀任务待 CSM 审批" },
+    { "tenant": "澜庭精品酒店", "total": 54, "level": "高危", "trend": "-18", "note": "故障未闭环+情绪负面，值班人即时介入" },
+    { "tenant": "星野民宿连锁", "total": 79, "level": "健康", "trend": "+1", "note": "版本滞后 1 个版本，已生成升级建议" }
+  ]
+}

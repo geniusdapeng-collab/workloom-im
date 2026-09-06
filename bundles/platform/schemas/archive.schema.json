@@ -1,0 +1,42 @@
+{
+  "$id": "workloom://bundles/platform/schemas/archive",
+  "title": "平台一户一档字段组（仙女座运营运维系统 · PRD V3.0 §9.1 tenant_profiles）",
+  "type": "object",
+  "required": ["entity", "forbidden"],
+  "properties": {
+    "entity": {
+      "type": "object",
+      "description": "平台主体信息",
+      "properties": {
+        "name": { "type": "string", "description": "平台名称（仙女座运营运维系统）" },
+        "operator": { "type": "string", "description": "平台经营方" },
+        "industry_scope": { "type": "string", "description": "服务的行业范围（全部垂直行业）" },
+        "goal": { "type": "string", "description": "经营目标（服务成本不随客户数线性增长）" }
+      }
+    },
+    "service_pillars": {
+      "type": "object",
+      "description": "四根支柱配置（PRD §1.1）",
+      "properties": {
+        "bridge": { "type": "string", "description": "桥梁：技术支持通道入口配置" },
+        "ledger": { "type": "string", "description": "账本：工单中枢口径（只增不改）" },
+        "ammo": { "type": "string", "description": "弹药：企业知识库范围" },
+        "engine": { "type": "string", "description": "引擎：策略中心闭环节奏" }
+      }
+    },
+    "sla_commitments": {
+      "type": "object",
+      "description": "SLA 承诺（PRD F3：超时自动升级值班人）",
+      "properties": {
+        "bug_first_response_min": { "type": "number", "description": "故障类首响（分钟，≤5）" },
+        "feature_clarify_hours": { "type": "number", "description": "需求类澄清完成（小时，≤24）" },
+        "kb_qa_response": { "type": "string", "description": "咨询类即时作答" }
+      }
+    },
+    "forbidden": {
+      "type": "array",
+      "description": "数据红线硬约束（PRD §9.2：R-PL4 兜底，L1.6 至少 1 条）",
+      "items": { "type": "string" }
+    }
+  }
+}

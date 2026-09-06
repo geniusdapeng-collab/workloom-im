@@ -1,0 +1,67 @@
+{
+  "name": "@workloom/platform",
+  "version": "1.0.0",
+  "workloom": {
+    "industry": "platform",
+    "displayName": "仙女座运营运维系统 · WorkLoom 平台运营包（platform-bundle）",
+    "description": "平台运营运维系统 V1：以工单为账本、以技术支持为桥梁、以知识库为弹药、以自生长为引擎。七个数字员工班组 17 名（FAE 工单组/知识管理组/客户成功组/计费账务组/平台运维组/行业包运营组/策略运营组）+ 平台基线围栏 R-PL1~R-PL10（含 default_level 兜底）+ 11 个平台技能（意图分诊/需求澄清/工单记账/知识沉淀/知识保鲜/健康扫描/关怀触达/积分对账/故障应急/灰度观察/策略锻造）+ 需求确认单 schemas + 上架考题 + 运行态种子数据。与 ai-pm V3 研发流水线通过「需求转运官」标准接口衔接：确认后的需求注入产品经理负责制流水线，交付状态自动回传关单。",
+    "provides": {
+      "presets": [
+        "presets/fae-chief.yml",
+        "presets/ticket-triage-officer.yml",
+        "presets/requirement-dispatcher.yml",
+        "presets/kb-curator.yml",
+        "presets/kb-freshness-officer.yml",
+        "presets/customer-health-officer.yml",
+        "presets/renewal-watchman.yml",
+        "presets/onboarding-guide.yml",
+        "presets/credit-reconciler.yml",
+        "presets/billing-officer.yml",
+        "presets/inspector.yml",
+        "presets/incident-responder.yml",
+        "presets/bundle-version-officer.yml",
+        "presets/release-reviewer.yml",
+        "presets/insight-analyst.yml",
+        "presets/strategy-engineer.yml",
+        "presets/effect-evaluator.yml"
+      ],
+      "fences": [
+        "fences/platform-baseline.yml"
+      ],
+      "skills": [
+        "skills/intent-triage/SKILL.md",
+        "skills/ticket-ledger/SKILL.md",
+        "skills/requirement-clarify/SKILL.md",
+        "skills/kb-harvest/SKILL.md",
+        "skills/kb-fresh/SKILL.md",
+        "skills/health-scan/SKILL.md",
+        "skills/care-outreach/SKILL.md",
+        "skills/credit-reconcile/SKILL.md",
+        "skills/incident-playbook/SKILL.md",
+        "skills/rollout-watch/SKILL.md",
+        "skills/strategy-forge/SKILL.md"
+      ],
+      "schemas": [
+        "schemas/objects.json",
+        "schemas/stages.json",
+        "schemas/archive.schema.json"
+      ],
+      "floorScene": "floor-scene.json",
+      "modelPolicy": "model-policy.yml",
+      "feedbackEnums": "feedback-enums.yml",
+      "serviceFront": [
+        "service-front/faq.json"
+      ],
+      "evalQuestions": "eval/questions.json",
+      "seeds": [
+        "seeds/tickets.json",
+        "seeds/requirements.json",
+        "seeds/kb.json",
+        "seeds/strategies.json",
+        "seeds/health.json",
+        "seeds/approvals.json",
+        "seeds/night-jobs.json"
+      ]
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "tickets": [
+    { "id": "TK-2026-0001", "tenant": "云栖酒店集团", "intent": "feature_request", "priority": "normal", "status": "处理中", "title": "决策包按楼层拆分的功能需求", "sla": "澄清 24h", "assignee": "requirement-dispatcher", "linked": { "requirement": "REQ-2026-011" } },
+    { "id": "TK-2026-0002", "tenant": "澄光制造", "intent": "billing", "priority": "normal", "status": "已解决", "title": "昨日扣除 3000 积分明细查询", "sla": "即时", "assignee": "fae-chief", "linked": { "kb": ["kb_platform_003"] } },
+    { "id": "TK-2026-0003", "tenant": "澜庭精品酒店", "intent": "bug_report", "priority": "urgent", "status": "已升级", "title": "数字员工两小时无响应（队列积压）", "sla": "首响 ≤5min", "assignee": "incident-responder", "linked": { "incident": "INC-2026-004" } },
+    { "id": "TK-2026-0004", "tenant": "云栖酒店集团", "intent": "kb_qa", "priority": "normal", "status": "已关单", "title": "夜班决策包查看入口咨询", "sla": "即时", "assignee": "fae-chief", "linked": { "kb": ["kb_platform_002"] } },
+    { "id": "TK-2026-0005", "tenant": "星野民宿连锁", "intent": "complaint", "priority": "high", "status": "处理中", "title": "升级后审批页面布局变化引不满", "sla": "值班人即时介入", "assignee": "fae-chief", "linked": { "bundle_version": "hotel@1.4.0" } }
+  ]
+}

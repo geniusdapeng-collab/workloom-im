@@ -1,0 +1,36 @@
+# 仙女座运营运维系统 · 第⑧装配槽：反馈枚举表（驳回样本分类统计，驱动学习飞轮）
+version: platform-feedback-enums/v1
+enums:
+  - code: fact.error
+    label: 事实错误
+    appliesTo: [reject, edit]
+  - code: kb.missed
+    label: 知识未命中（答非所问）
+    appliesTo: [reject]
+  - code: tone.improper
+    label: 话术不当（客户面）
+    appliesTo: [reject, edit]
+  - code: clarify.insufficient
+    label: 澄清不足（确认单缺维度）
+    appliesTo: [reject, edit]
+  - code: route.misjudge
+    label: 意图误分/路由错误
+    appliesTo: [reject]
+  - code: billing.misexplain
+    label: 计费解释错误（高风险）
+    appliesTo: [reject]
+  - code: strategy.nometrics
+    label: 策略缺度量指标
+    appliesTo: [reject]
+  - code: strategy.overreach
+    label: 策略越界（涉钱/涉数据/碰围栏）
+    appliesTo: [reject]
+  - code: rollout.risky
+    label: 灰度方案激进（缺观察期/批次过大）
+    appliesTo: [reject, edit]
+  - code: announce.incomplete
+    label: 通报缺受影响租户名单
+    appliesTo: [reject, edit]
+  - code: evidence.missing
+    label: 审批卡缺证据链（上下文摘要不足）
+    appliesTo: [reject]

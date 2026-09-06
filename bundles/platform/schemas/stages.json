@@ -1,0 +1,13 @@
+{
+  "$id": "workloom://bundles/platform/schemas/stages",
+  "description": "仙女座运营运维系统 · 客户生命周期阶段枚举（PRD V3.0 §2.6：每阶段都有承接业务域，无断点）",
+  "stages": [
+    { "id": "onboarding", "label": "新签装配", "hint": "刚开通不会用：装配引导、首任务陪跑、3/7/30 天验收点（D5/D3）" },
+    { "id": "daily_use", "label": "日常使用", "hint": "高频问答偶尔报障：技术支持通道+知识库+工单闭环（D1/D2/D3）" },
+    { "id": "value_deepen", "label": "价值深化", "hint": "想要更多能力：需求通道、研发衔接、行业包升级（D4/D8）" },
+    { "id": "billing_cycle", "label": "账单周期", "hint": "关心扣费与发票：自动查账、对账准确、账单清晰（D6）" },
+    { "id": "health_wave", "label": "健康波动", "hint": "活跃下降/积分见底：健康分预警、关怀触达、加油包推荐（D5/D9）" },
+    { "id": "renewal", "label": "续费关口", "hint": "决策关口：续费三级预警、客户价值报告（D5）" },
+    { "id": "incident_moment", "label": "故障时刻", "hint": "最脆弱的时刻：故障直通、透明通报、事后复盘（D7/D1）" }
+  ]
+}

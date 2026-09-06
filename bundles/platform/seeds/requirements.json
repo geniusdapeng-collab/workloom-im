@@ -1,0 +1,28 @@
+{
+  "requirements": [
+    {
+      "id": "REQ-2026-011",
+      "title": "决策包支持按楼层维度拆分",
+      "source_tickets": ["TK-2026-0001"],
+      "confirmation": {
+        "goal": "楼层主管各看各的决策包，店长看全店汇总",
+        "scenario": "多楼层酒店早会按楼层分派任务",
+        "users": "楼层主管（移动端为主）、店长",
+        "acceptance": "决策包可按楼层过滤与汇总，移动端可用",
+        "constraints": "本季度内上线；积分消耗不显著增加",
+        "customer_confirmed_at": "2026-09-04T10:22:00+08:00"
+      },
+      "pipeline": { "entry": "平台工单入口", "stage": "开发中", "pm": "chief-pm", "callbacks": ["已立项", "开发中"] },
+      "heat": { "customer_count": 3, "health_weight": 0.8, "arr_weight": 0.6 },
+      "status": "开发中"
+    },
+    {
+      "id": "REQ-2026-009",
+      "title": "审批消息支持语音播报",
+      "source_tickets": ["TK-2026-0007", "TK-2026-0008", "TK-2026-0012"],
+      "pipeline": { "entry": "平台工单入口", "stage": "已发布", "pm": "chief-pm", "callbacks": ["已立项", "开发中", "评测中", "待发布", "已发布"] },
+      "delivery": { "version": "base@2.9.0", "note": "移动端审批卡新增语音播报按钮", "industry_generic": true },
+      "status": "已交付待回访"
+    }
+  ]
+}

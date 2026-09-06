@@ -1,0 +1,9 @@
+{
+  "approvals": [
+    { "id": "AP-2026-0101", "rule": "R-PL3", "object": "requirement/REQ-2026-011", "action": "inject_pipeline", "summary": "「决策包按楼层拆分」注入 ai-pm V3 流水线（3 家客户同求，热度 2.4）", "ai_advice": "建议立项：需求清晰、确认单已签、行业通用性高", "status": "待审批" },
+    { "id": "AP-2026-0102", "rule": "R-PL1", "object": "credit_account/澄光制造", "action": "refund", "summary": "对账差异核查期间客户申请退款 5000 积分", "ai_advice": "建议暂缓：差异未清零，先完成核查再处置", "status": "待审批" },
+    { "id": "AP-2026-0103", "rule": "R-PL9", "object": "strategy/STR-2026-0043", "action": "activate", "summary": "低余额客户加油包提示策略灰度 20% 上线", "ai_advice": "建议批准：度量指标与熔断条件齐备，墓地无同类失败", "status": "待审批" },
+    { "id": "AP-2026-0104", "rule": "R-PL5", "object": "bundle_version/hotel@1.4.1", "action": "rollout", "summary": "hotfix 1.4.1 第二批次 50% 灰度", "ai_advice": "建议批准：首批 5% 观察期错误率 0、工单密度持平", "status": "已批准" },
+    { "id": "AP-2026-0105", "rule": "R-PL8", "object": "kb_item/积分扣费规则详解", "action": "publish", "summary": "策略 STR-2026-0042 产出的知识条目发布", "ai_advice": "建议批准：口径与定价条款一致，已绑定适用版本范围", "status": "已批准" }
+  ]
+}

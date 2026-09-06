@@ -1,0 +1,46 @@
+{
+  "strategies": [
+    {
+      "strategy_id": "STR-2026-0042",
+      "type": "knowledge_gap_fill",
+      "trigger": "intent=billing 类工单周环比 >+30%",
+      "action": "生成《积分扣费规则详解》知识条目提案并补全 FAQ",
+      "targeting": "全部行业",
+      "rollout": "草案 → R-PL8 人审 → 发布即生效",
+      "metrics": "billing 类工单量、知识命中率（基线：上线前 4 周均值）",
+      "guardrail": "该条目被点未解决率 >10% 自动回炉",
+      "status": "active",
+      "effect": "上线两周后 billing 类工单量下降 55%，标记有效并固化"
+    },
+    {
+      "strategy_id": "STR-2026-0043",
+      "type": "billing_hint",
+      "trigger": "intent=billing 且余额 <500 的客户",
+      "action": "推送《积分扣费规则详解》知识卡片 + 加油包说明",
+      "targeting": "余额低于阈值租户",
+      "rollout": "20% 客户 → 观察 7 天 → 全量",
+      "metrics": "低余额客户流失率、加油包转化率",
+      "guardrail": "负面反馈率 >5% 自动暂停；R-PL10 频控共享计数",
+      "status": "canary"
+    },
+    {
+      "strategy_id": "STR-2026-0037",
+      "type": "proactive_care",
+      "trigger": "健康分三级分流=预警",
+      "action": "生成关怀任务（使用诊断+培训建议+CSM 电话）",
+      "targeting": "健康分 60-80 租户",
+      "rollout": "全量（人审后逐条触达）",
+      "metrics": "两周活跃度回升率",
+      "guardrail": "R-PL10 频控；CSM 驳回率 >30% 回炉话术",
+      "status": "active"
+    }
+  ],
+  "graveyard": [
+    {
+      "strategy_id": "STR-2026-0028",
+      "type": "billing_hint",
+      "lesson": "对全量低余额客户每日推送加油包 → 一周负面反馈率 8.2% 触发熔断回滚。教训：触达类策略必须带频控与观察期，禁止日频推送",
+      "rolled_back_at": "2026-08-19"
+    }
+  ]
+}

@@ -42,6 +42,7 @@
         "apps/server/src/service/e2e.test.ts"
       ]
     },
-    { "repo": "geniusdapeng-collab/workroom-eagle",      "pathPrefix": "",            "note": "鹰眼 AI 咨询", "extraExclude": [] }
+    { "repo": "geniusdapeng-collab/workroom-eagle",      "pathPrefix": "",            "note": "鹰眼 AI 咨询", "extraExclude": [] },
+    { "repo": "geniusdapeng-collab/workroom-andromeda",  "pathPrefix": "",            "note": "仙女座运营运维系统（平台运营包 platform-bundle 所在仓）", "extraExclude": [] }
   ]
 }
