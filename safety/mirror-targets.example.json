@@ -1,0 +1,19 @@
+{
+  "description": "镜像备份目标配置（复制为 safety/mirror-targets.json 并填入真实地址；凭据走环境变量，绝不写入本文件）。已对焦落点：工蜂/CNB 双托管（异构托管，防平台级事故）。",
+  "targets": [
+    {
+      "name": "cnb",
+      "urlTemplate": "https://oauth2:${TOKEN}@cnb.cool/<group>/workroom-andromeda-mirror.git",
+      "tokenEnv": "CNB_TOKEN",
+      "note": "腾讯 CNB 镜像仓（只读副本）"
+    },
+    {
+      "name": "gongfeng",
+      "urlTemplate": "https://oauth2:${TOKEN}@git.woa.com/<group>/workroom-andromeda-mirror.git",
+      "tokenEnv": "GONGFENG_TOKEN",
+      "note": "工蜂镜像仓（只读副本）"
+    }
+  ],
+  "schedule": "每日 03:30（夜班窗口）+ 每次 main 推送后",
+  "stateFile": ".safety-mirror-state.json"
+}

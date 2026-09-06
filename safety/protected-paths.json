@@ -1,0 +1,68 @@
+{
+  "version": "1.0.0",
+  "description": "仙女座运维安全保障机制 · 保护清单单一事实源（对焦方案 §2.3）。仓库侧 CI 与运行时共用本表：diff 命中即按策略拦截/升级审批。本表自身的变更按 self 条目策略执行（C3 双人复核——改保险丝须另一把保险丝同意）。",
+  "entries": [
+    {
+      "id": "fence-engine",
+      "label": "围栏引擎与规则",
+      "paths": ["packages/base/fence-engine/**", "bundles/*/fences/**"],
+      "minLevel": "C3",
+      "rules": ["no-delete", "loosen-needs-cooling"],
+      "approvers": 2,
+      "note": "放宽方向变更（block→review→auto）另加 24h 冷静期"
+    },
+    {
+      "id": "migrations",
+      "label": "事件库与迁移",
+      "paths": ["packages/db/migrations/**", "packages/base/workdata/**"],
+      "minLevel": "C3",
+      "rules": ["append-only"],
+      "approvers": 2,
+      "note": "已有迁移文件任何修改即拒（sha256 账本纪律），只允许新增文件"
+    },
+    {
+      "id": "sync-mechanism",
+      "label": "基座同步机制",
+      "paths": ["sync/**"],
+      "minLevel": "C3",
+      "rules": ["no-delete"],
+      "approvers": 2,
+      "note": "T6 扇出闸门总开关；base-scope 扩大 include 必须人工复核"
+    },
+    {
+      "id": "chain-verify",
+      "label": "账本校验",
+      "paths": ["scripts/verify-chain.ts"],
+      "minLevel": "C3",
+      "rules": ["no-delete"],
+      "approvers": 2
+    },
+    {
+      "id": "credit-path",
+      "label": "扣费链路",
+      "paths": ["packages/base/model-router/**"],
+      "minLevel": "C2",
+      "rules": ["needs-reconcile-test"],
+      "approvers": 2,
+      "note": "必带对账测试；钱的判断永不降级"
+    },
+    {
+      "id": "safety-self",
+      "label": "安全机制自身",
+      "paths": ["safety/**", "platform-ops/src/safety/**", "platform-ops/src/stability/**"],
+      "minLevel": "C3",
+      "rules": ["no-delete", "sandbox-required"],
+      "approvers": 2,
+      "note": "改保险丝须另一把保险丝同意：双人复核 + 沙箱演练"
+    },
+    {
+      "id": "event-schema",
+      "label": "事件 Schema 与共享类型",
+      "paths": ["packages/shared/src/**", "packages/db/src/schema.ts"],
+      "minLevel": "C2",
+      "rules": ["additive-only"],
+      "approvers": 2,
+      "note": "只允许新增字段/枚举值（向后兼容）；破坏性变更双版本并行过渡"
+    }
+  ]
+}

@@ -20,3 +20,11 @@ export * from "./runtime/slo.js";
 export * from "./hotupdate/asset-cache.js";
 export * from "./hotupdate/rollout.js";
 export * from "./capacity/load-model.js";
+export * from "./safety/change-classifier.js";
+export * from "./safety/protected-paths.js";
+export * from "./safety/change-gate.js";
+export * from "./safety/blast-radius.js";
+export * from "./safety/change-freeze.js";
+export * from "./safety/standby.js";
+export * from "./safety/sandbox.js";
+

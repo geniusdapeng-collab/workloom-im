@@ -1,0 +1,61 @@
+# 仙女座运维安全保障机制 · 变更闸门 CI（对焦方案 §2.4）
+# 注意：.github/workflows/** 不在 base-sync 同步范围（exclude），本文件为仙女座一方资产，永不外流。
+name: safety-gate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  guard-and-classify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.14.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # G1 前置：保护清单闸 + 变更分级（deny 即红）
+      - name: 保护清单校验与变更分级
+        run: pnpm exec tsx platform-ops/bin/guard-diff.mts --base origin/${{ github.base_ref || 'main' }}
+
+  static-and-tests:
+    runs-on: ubuntu-latest
+    needs: guard-and-classify
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.14.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # G1 静态闸：tsc 严格模式 0 错误（审计红线 A1）
+      - name: G1 typecheck
+        run: pnpm exec tsc --noEmit -p platform-ops/tsconfig.json
+      # G2 测试闸：全量 platform-ops 测试（含审计加固）
+      - name: G2 vitest
+        run: pnpm exec vitest run platform-ops/test
+      # G3 考试院闸：硬轨全过（exam.test.ts 内嵌于 G2，此处独立门禁防跳过）
+      - name: G3 考试院硬轨
+        run: pnpm exec vitest run platform-ops/test/exam.test.ts
+
+  mirror-backup:
+    # 每次 main 推送后镜像备份（工蜂/CNB 双托管；凭据走 secrets）
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: static-and-tests
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: 镜像备份到 CNB/工蜂
+        env:
+          CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
+          GONGFENG_TOKEN: ${{ secrets.GONGFENG_TOKEN }}
+        run: node platform-ops/bin/mirror-backup.mjs --config safety/mirror-targets.json
+        continue-on-error: true # 镜像失败不阻塞主干（巡检会核对 .safety-mirror-state.json）
