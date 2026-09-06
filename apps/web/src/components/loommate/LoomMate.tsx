@@ -55,7 +55,11 @@ const svc = () => trpc.service as unknown as {
   };
 };
 
-/* ---------------- 甜妹形象（可爱·大眼睛·会眨眼·纯 SVG） ---------------- */
+/* ---------------- 小织形象（金黄色长发·双马尾·纯 SVG 零素材兜底） ----------------
+ * 注意：这是 Live2D 主路径不可用（无 WebGL/模型加载失败）时的兜底形象——
+ * 必须与现行 Live2D 形象（金黄色长发二次元少女）保持一致。
+ * 历史教训：2026-09 前此处残留旧版紫发卡通形象，主路径换 Live2D 时未同步清除，
+ * 导致无 GPU 环境下用户看到已淘汰形象（品牌事故）。换形象时主/兜底必须同批更换。 */
 function MateAvatar({ size, excited }: { size: number; excited: boolean }) {
   return (
     <svg width={size} height={size} viewBox="0 0 120 120" className={excited ? "animate-[matewave_0.9s_ease-in-out_infinite]" : "animate-[matebreath_3.2s_ease-in-out_infinite]"}>
@@ -65,42 +69,47 @@ function MateAvatar({ size, excited }: { size: number; excited: boolean }) {
         @keyframes mateblink { 0%,92%,100% { transform: scaleY(1) } 95%,97% { transform: scaleY(0.06) } }
         .mate-eye { transform-origin: center; transform-box: fill-box; animation: mateblink 4.2s infinite; }
       `}</style>
-      {/* 发髻小揪揪 */}
-      <circle cx="36" cy="26" r="11" fill="#8b5e83" />
-      <circle cx="84" cy="26" r="11" fill="#8b5e83" />
-      <circle cx="36" cy="26" r="5.5" fill="#e8a0bf" opacity="0.7" />
-      <circle cx="84" cy="26" r="5.5" fill="#e8a0bf" opacity="0.7" />
-      {/* 头发 */}
-      <ellipse cx="60" cy="62" rx="42" ry="44" fill="#8b5e83" />
+      {/* 双马尾（金黄色长发，垂落两侧） */}
+      <path d="M30 40 Q14 58 16 86 Q17 104 24 112 Q30 104 30 88 Q30 66 36 48 Z" fill="#f2b83b" />
+      <path d="M90 40 Q106 58 104 86 Q103 104 96 112 Q90 104 90 88 Q90 66 84 48 Z" fill="#f2b83b" />
+      {/* 马尾蓝色缎带 */}
+      <rect x="26" y="42" width="9" height="14" rx="3" fill="#7fc4e8" transform="rotate(-12 30 49)" />
+      <rect x="85" y="42" width="9" height="14" rx="3" fill="#7fc4e8" transform="rotate(12 90 49)" />
+      {/* 后发 */}
+      <ellipse cx="60" cy="60" rx="40" ry="42" fill="#f2b83b" />
       {/* 脸 */}
-      <ellipse cx="60" cy="66" rx="34" ry="32" fill="#ffe3d6" />
-      {/* 刘海 */}
-      <path d="M26 58 Q30 30 60 28 Q90 30 94 58 Q86 44 76 46 Q80 38 74 34 Q68 44 60 44 Q52 44 46 34 Q40 38 44 46 Q34 44 26 58Z" fill="#8b5e83" />
-      {/* 大眼睛（会眨） */}
+      <ellipse cx="60" cy="66" rx="33" ry="31" fill="#ffe9dc" />
+      {/* 刘海（二次元碎发） */}
+      <path d="M28 56 Q32 30 60 28 Q88 30 92 56 Q86 42 80 46 Q82 36 76 33 Q72 46 66 44 Q70 34 64 31 Q60 44 54 44 Q56 34 50 33 Q44 38 46 47 Q36 43 28 56Z" fill="#f7c948" />
+      {/* 两侧垂发 */}
+      <path d="M30 52 Q26 68 30 84 L36 82 Q32 66 35 52 Z" fill="#f7c948" />
+      <path d="M90 52 Q94 68 90 84 L84 82 Q88 66 85 52 Z" fill="#f7c948" />
+      {/* 大眼睛（蓝色，会眨） */}
       <g className="mate-eye">
-        <ellipse cx="46" cy="66" rx="8.5" ry="10.5" fill="#fff" />
-        <ellipse cx="46" cy="68" rx="5.5" ry="7.5" fill="#5b3a56" />
-        <circle cx="48" cy="65" r="2.6" fill="#fff" />
-        <circle cx="43.5" cy="70.5" r="1.3" fill="#fff" opacity="0.8" />
+        <ellipse cx="47" cy="67" rx="8.5" ry="10.5" fill="#fff" />
+        <ellipse cx="47" cy="69" rx="5.5" ry="7.5" fill="#4a90d9" />
+        <ellipse cx="47" cy="70.5" rx="2.6" ry="3.4" fill="#2b5f9e" />
+        <circle cx="49" cy="65" r="2.6" fill="#fff" />
+        <circle cx="44.5" cy="71.5" r="1.3" fill="#fff" opacity="0.85" />
       </g>
       <g className="mate-eye" style={{ animationDelay: "0.08s" }}>
-        <ellipse cx="74" cy="66" rx="8.5" ry="10.5" fill="#fff" />
-        <ellipse cx="74" cy="68" rx="5.5" ry="7.5" fill="#5b3a56" />
-        <circle cx="76" cy="65" r="2.6" fill="#fff" />
-        <circle cx="71.5" cy="70.5" r="1.3" fill="#fff" opacity="0.8" />
+        <ellipse cx="73" cy="67" rx="8.5" ry="10.5" fill="#fff" />
+        <ellipse cx="73" cy="69" rx="5.5" ry="7.5" fill="#4a90d9" />
+        <ellipse cx="73" cy="70.5" rx="2.6" ry="3.4" fill="#2b5f9e" />
+        <circle cx="75" cy="65" r="2.6" fill="#fff" />
+        <circle cx="70.5" cy="71.5" r="1.3" fill="#fff" opacity="0.85" />
       </g>
       {/* 睫毛 */}
-      <path d="M37 57 Q46 52 55 57" stroke="#5b3a56" strokeWidth="1.8" fill="none" strokeLinecap="round" />
-      <path d="M65 57 Q74 52 83 57" stroke="#5b3a56" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+      <path d="M38 58 Q47 53 56 58" stroke="#8a6d3b" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+      <path d="M64 58 Q73 53 82 58" stroke="#8a6d3b" strokeWidth="1.8" fill="none" strokeLinecap="round" />
       {/* 腮红 */}
-      <ellipse cx="37" cy="78" rx="6" ry="3.6" fill="#f9b4c4" opacity="0.75" />
-      <ellipse cx="83" cy="78" rx="6" ry="3.6" fill="#f9b4c4" opacity="0.75" />
+      <ellipse cx="38" cy="78" rx="6" ry="3.6" fill="#f9b4c4" opacity="0.7" />
+      <ellipse cx="82" cy="78" rx="6" ry="3.6" fill="#f9b4c4" opacity="0.7" />
       {/* 嘴（开心笑） */}
-      <path d="M53 80 Q60 87 67 80" stroke="#c2557a" strokeWidth="2.4" fill="none" strokeLinecap="round" />
-      {/* 头顶小星星 */}
-      <path d="M60 8l1.8 4.2 4.2 1.8-4.2 1.8L60 20l-1.8-4.2L54 14l4.2-1.8z" fill="#ffd97a">
-        <animate attributeName="opacity" values="1;0.3;1" dur="1.8s" repeatCount="indefinite" />
-      </path>
+      <path d="M53 81 Q60 88 67 81" stroke="#c2557a" strokeWidth="2.4" fill="none" strokeLinecap="round" />
+      {/* 红色领结 */}
+      <path d="M60 100 L52 94 L52 106 Z M60 100 L68 94 L68 106 Z" fill="#d43d3d" />
+      <circle cx="60" cy="100" r="3.2" fill="#b32e2e" />
     </svg>
   );
 }
