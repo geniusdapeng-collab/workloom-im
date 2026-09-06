@@ -1,5 +1,17 @@
 <div align="center">
 
+# 仙女座运营运维系统（WorkLoom 平台运营实例）
+
+> 本仓是 WorkLoom 基座的**平台运营部署形态**：基座能力由 [workloom-im](https://github.com/geniusdapeng-collab/workloom-im) 经 base-sync 机制同步演进；平台运营差异资产全部在 [`bundles/platform/`](bundles/platform/README.md)（平台运营包 platform-bundle）。
+>
+> **以工单为账本、以技术支持为桥梁、以知识库为弹药、以自生长为引擎——用 AI 运营运维 AI，执行交给数字员工，裁决永远在人。**
+
+---
+
+</div>
+
+<div align="center">
+
 # WorkLoom 织元 · DeepSeek Harness 企业级 Agent IM
 
 **面向 AI 时代人机共存的新形态组织协作底座 · Enterprise Agent IM powered by DeepSeek Harness**
