@@ -60,8 +60,8 @@ jobs:
         run: |
           cp .env.example .env
           pnpm db:migrate
-          pnpm db:seed
-          pnpm db:seed # 幂等复跑（L1.4：全部冲突丢弃）
+          BUNDLE_DIR=bundles/hotel pnpm db:seed
+          BUNDLE_DIR=bundles/hotel pnpm db:seed # 幂等复跑（L1.4：全部冲突丢弃）
 
       - name: 哈希链全库验证（#32 口径）
         run: pnpm db:verify-chain

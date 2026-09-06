@@ -26,7 +26,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with: { version: 10 }
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
       - name: 装配 macOS 自包含包（PG17+pgvector 内嵌）
@@ -52,7 +51,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with: { version: 10 }
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
       - name: 编译 pgvector（官方无 Windows 预编译件，MSVC 源码构建）
