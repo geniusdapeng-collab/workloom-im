@@ -34,7 +34,8 @@ if exist "%SUPPORT%\VERSION" set /p INSTALLED_VER=<"%SUPPORT%\VERSION"
 if not "%PAYLOAD_VER%"=="%INSTALLED_VER%" (
   call :say "→ 装配运行时载荷（%PAYLOAD_VER%）…"
   if exist "%RUNTIME%.new" rmdir /s /q "%RUNTIME%.new"
-  robocopy "%~dp0runtime" "%RUNTIME%.new" /E /NFL /NDL /NJH /NJS >nul || goto :die_copy
+  robocopy "%~dp0runtime" "%RUNTIME%.new" /E /NFL /NDL /NJH /NJS >nul
+  if errorlevel 8 goto :die_copy
   if exist "%RUNTIME%" rmdir /s /q "%RUNTIME%"
   move "%RUNTIME%.new" "%RUNTIME%" >nul
   if exist "%SUPPORT%\node" rmdir /s /q "%SUPPORT%\node"
