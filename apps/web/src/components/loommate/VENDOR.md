@@ -26,6 +26,6 @@
 
 ## 备选后端：TalkingHead（3D，保留不引用）
 
-- `talkinghead/`（MIT，met4citizen）+ `public/avatars/`（business.glb 写实 CC BY-NC / vroid.glb 动漫非商用）
+- ~~`talkinghead/` + `public/avatars/`~~（2026-09-06 已移除：3D TalkingHead 备份路径与其非商用头像资产一并清除——CC BY-NC 资产留在公开仓本身即许可风险；兜底由 `mao/poster.png` 承担）
 - 写实 3D 在浏览器轻渲染下恐怖谷效应明显（用户评审"惊悚"否决），仅作技术储备
 - 生产若回 3D 路线：需定制 Mixamo 骨架 + ARKit blendshapes 风格化模型（非写实）
