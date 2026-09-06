@@ -60,8 +60,11 @@ call :say "→ 初始化数据库（initdb）…"
 "%PGBIN%\initdb.exe" -D "%PGDATA%" -U postgres --auth=trust -E UTF8 --locale=C >> "%LOG%" 2>&1
 if errorlevel 1 goto :die_pg
 :pg_start
-call :say "→ 启动 PostgreSQL 17（脱离式，防句柄继承锁日志）…"
-start "WorkLoom-PG" /min cmd /c ""%PGBIN%\postgres.exe" -D "%PGDATA%" -p 5432 -c listen_addresses=127.0.0.1 <nul >"%LOGDIR%\pg.log" 2>&1"
+call :say "→ 启动 PostgreSQL 17（pg_ctl 降权 + 句柄脱离）…"
+rem 必须用 pg_ctl 而非 postgres.exe：Windows 上只有 pg_ctl 会对管理员会话做
+rem CreateRestrictedToken 降权（v2.0.9 实测 postgres.exe 直接起被拒）；
+rem 句柄脱离（<nul >文件 2>&1）防止 postmaster 继承本批处理控制台/日志句柄。
+start "WorkLoom-PG" /min cmd /c ""%PGBIN%\pg_ctl.exe" -D "%PGDATA%" -l "%LOGDIR%\pg.log" -o "-p 5432 -c listen_addresses=127.0.0.1" -w -t 60 start <nul >>"%LOGDIR%\pgctl.log" 2>&1"
 set "PGUP="
 for /l %%i in (1,1,30) do (
   "%PGBIN%\pg_isready.exe" -h 127.0.0.1 -p 5432 >nul 2>&1 && set "PGUP=1" && goto :pg_up
