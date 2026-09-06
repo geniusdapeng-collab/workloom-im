@@ -100,16 +100,16 @@ call :say "→ 引导阶段完成，准备起服务…"
 rem ---------- 4. 起服务：server(8787) + web preview(5173) ----------
 call :say "→ 启动服务…"
 pushd "%RUNTIME%\apps\server"
-start "WorkLoom-Server" /min "%TSX%" --env-file="%RUNTIME%\.env" src\index.ts
+start "WorkLoom-Server" /min cmd /c ""%TSX%" --env-file="%RUNTIME%\.env" src\index.ts <nul >"%LOGDIR%\server.log" 2>&1"
 popd
 pushd "%RUNTIME%\apps\web"
-start "WorkLoom-Web" /min "%RUNTIME%\node_modules\.bin\vite.cmd" preview --host 127.0.0.1 --port %WEB_PORT% --strictPort
+start "WorkLoom-Web" /min cmd /c ""%RUNTIME%\node_modules\.bin\vite.cmd" preview --host 127.0.0.1 --port %WEB_PORT% --strictPort <nul >"%LOGDIR%\web.log" 2>&1"
 popd
 
 call :say "→ 等待服务就绪…"
 set "READY="
 for /l %%i in (1,1,60) do (
-  curl -sf "http://127.0.0.1:%SERVER_PORT%/health" >nul 2>&1 && curl -sf -o nul "http://127.0.0.1:%WEB_PORT%/" && set "READY=1" && goto :ready
+  curl -sf --max-time 5 "http://127.0.0.1:%SERVER_PORT%/health" >nul 2>&1 && curl -sf --max-time 5 -o nul "http://127.0.0.1:%WEB_PORT%/" && set "READY=1" && goto :ready
   timeout /t 1 /nobreak >nul
 )
 :ready

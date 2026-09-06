@@ -62,6 +62,7 @@ jobs:
       - name: 冒烟验收（首启自愈全流程）
         shell: cmd
         id: smoke
+        timeout-minutes: 25
         run: |
           tar -xf dist/WorkLoom-Windows.zip -C %TEMP%
           set WORKLOOM_SMOKE=1
