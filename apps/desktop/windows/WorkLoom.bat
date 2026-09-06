@@ -67,12 +67,14 @@ rem 句柄脱离（<nul >文件 2>&1）防止 postmaster 继承本批处理控�
 start "WorkLoom-PG" /min cmd /c ""%PGBIN%\pg_ctl.exe" -D "%PGDATA%" -l "%LOGDIR%\pg.log" -o "-p 5432 -c listen_addresses=127.0.0.1" -w -t 60 start <nul >>"%LOGDIR%\pgctl.log" 2>&1"
 set "PGUP="
 rem 等就绪：timeout 在非交互环境立即返回（v2.0.10 实证竞态败北），用 ping 做延迟
+call :say "→ 等待 PG 就绪（探测日志留证）…"
 for /l %%i in (1,1,40) do (
   if not defined PGUP (
-    "%PGBIN%\pg_isready.exe" -h 127.0.0.1 -p 5432 >nul 2>&1 && set "PGUP=1"
+    "%PGBIN%\pg_isready.exe" -h 127.0.0.1 -p 5432 >> "%LOG%" 2>&1 && set "PGUP=1"
     if not defined PGUP ping -n 2 127.0.0.1 >nul
   )
 )
+call :say "→ PG 探测结束（PGUP=%PGUP%）"
 if not defined PGUP goto :die_pg
 :pg_ok
 call :say "✓ PostgreSQL 就绪"
