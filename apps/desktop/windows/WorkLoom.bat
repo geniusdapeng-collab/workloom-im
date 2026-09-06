@@ -60,9 +60,16 @@ call :say "→ 初始化数据库（initdb）…"
 "%PGBIN%\initdb.exe" -D "%PGDATA%" -U postgres --auth=trust -E UTF8 --locale=C >> "%LOG%" 2>&1
 if errorlevel 1 goto :die_pg
 :pg_start
-call :say "→ 启动 PostgreSQL 17 …"
-"%PGBIN%\pg_ctl.exe" -D "%PGDATA%" -l "%LOGDIR%\pg.log" -o "-p 5432 -c listen_addresses=127.0.0.1" -w -t 60 start >> "%LOG%" 2>&1
-if errorlevel 1 goto :die_pg
+call :say "→ 启动 PostgreSQL 17（脱离式，防句柄继承锁日志）…"
+start "WorkLoom-PG" /min cmd /c ""%PGBIN%\postgres.exe" -D "%PGDATA%" -p 5432 -c listen_addresses=127.0.0.1 <nul >"%LOGDIR%\pg.log" 2>&1"
+set "PGUP="
+for /l %%i in (1,1,30) do (
+  "%PGBIN%\pg_isready.exe" -h 127.0.0.1 -p 5432 >nul 2>&1 && set "PGUP=1" && goto :pg_up
+  "%PGBIN%\pg_isready.exe" -h 127.0.0.1 -p 5432 >nul 2>&1
+  if errorlevel 1 ( "%SystemRoot%\System32\timeout.exe" /t 2 /nobreak >nul ) else ( goto :pg_up )
+)
+:pg_up
+if not defined PGUP goto :die_pg
 :pg_ok
 call :say "✓ PostgreSQL 就绪"
 

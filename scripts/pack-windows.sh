@@ -65,7 +65,9 @@ echo "== 装配 WorkLoom Windows 包（$VERSION · win-x64）=="
 # ---------- 1. 产品载荷 runtime/（与 pack-macos.sh 同口径） ----------
 R="$PKG/runtime"
 mkdir -p "$R/apps/server" "$R/apps/web" "$R/packages" "$R/scripts"
-copy() { cp -a "$1" "$2"; }
+# pnpm 的 node_modules 是 junction/symlink 结构：Windows zip 往返会丢链导致模块缺失
+# （v2.0.8 冒烟实证 esbuild/vite 丢失）——拷贝必须解引用为实体目录
+copy() { cp -aL "$1" "$2"; }
 for f in package.json pnpm-workspace.yaml tsconfig.base.json .env.example; do
   [ -f "$f" ] && copy "$f" "$R/"
 done
@@ -79,6 +81,9 @@ mkdir -p "$R/scripts"
 copy scripts/migrate.ts "$R/scripts/"
 copy scripts/seed.ts "$R/scripts/"
 printf '%s\n' "$VERSION" > "$R/VERSION"
+# 源码不携带 node_modules：各包自带 pnpm 链接版会抢占解析且缺嵌套依赖（v2.0.8 esbuild 缺失实证），
+# 运行期统一由下方 npm 扁平化安装的根 node_modules 提供
+find "$R/apps" "$R/packages" -type d -name node_modules -prune -exec rm -rf {} + 2>/dev/null || true
 
 # ---------- 2. 依赖与 web 构建产物 ----------
 if [ ! -d node_modules ] || [ ! -d apps/web/node_modules ]; then
@@ -88,11 +93,23 @@ if [ ! -f apps/web/dist/index.html ]; then
   echo "→ 构建 web…"; pnpm -C apps/web build
 fi
 copy apps/web/dist "$R/apps/web/dist"
-echo "→ 并入 node_modules…"
-copy node_modules "$R/node_modules"
-for d in apps/server apps/web packages/shared packages/db packages/base packages/runtime; do
-  [ -d "$d/node_modules" ] && { mkdir -p "$R/$d"; copy "$d/node_modules" "$R/$d/node_modules"; }
-done
+echo "→ 运行期依赖：npm 扁平化安装（pnpm 链接布局无法过 Windows zip 往返，v2.0.8 实证）…"
+# 合成运行期 package.json（root+server+packages 运行依赖 + tsx/vite），在暂存区 npm install：
+# npm 产出扁平真实目录（无 symlink），且按当前宿主平台自动选择 esbuild 等原生二进制
+NM_STAGE="$STAGE/nm-pkg"
+node scripts/pack-nm-merge.mjs "$NM_STAGE/package.json"
+NPM_REG="${NPM_REGISTRY:-https://registry.npmjs.org}"
+if ( cd "$NM_STAGE" && npm install --no-audit --no-fund --legacy-peer-deps --registry="$NPM_REG" ); then
+  copy "$NM_STAGE/node_modules" "$R/node_modules"
+else
+  echo "⚠️  npm install 失败（离线？）——回退解引用拷贝（仅结构模式可用，禁分发）"
+  [ "$STRUCTURE_ONLY" = "1" ] || { echo "❌ 正式包必须 npm 扁平化安装成功"; exit 1; }
+  mkdir -p "$R/node_modules"
+  copy_nm node_modules "$R/node_modules"
+  for d in apps/server apps/web packages/shared packages/db packages/base packages/runtime; do
+    [ -d "$d/node_modules" ] && copy_nm "$d/node_modules" "$R/node_modules"
+  done
+fi
 
 # ---------- 3. Node win-x64 官方二进制 ----------
 echo "→ Node $NODE_VER win-x64…"
