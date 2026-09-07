@@ -30,6 +30,8 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 /** 仓库 bundles/ 根（packages/base/bundles → 上三级）；测试可用 BUNDLES_ROOT 指到临时目录 */
 export const DEFAULT_BUNDLES_ROOT = join(__dirname, "..", "..", "..", "bundles");
+import { maybeApplyOverlay } from "../overlay/assembly-hook.js";
+
 export function bundlesRoot(): string {
   return process.env.BUNDLES_ROOT ?? DEFAULT_BUNDLES_ROOT;
 }
@@ -152,10 +154,13 @@ export function listProfileSlugs(root = bundlesRoot()): string[] {
 /* ================= 装配校验（F2.10 起飞前检查单） ================= */
 
 /** 磁盘资产（M4-装配：全部磁盘 I/O 的纯读结果，进 DB 事务前一次性读完） */
-interface BundleDiskAssets {
+export interface BundleDiskAssets {
   dir: string;
   bj: BundleJson;
   isDraft: boolean;
+  /** 租户覆盖层（L2）：合并后的扩展资产与应用记录（无覆盖层=null，见 overlay/assembly-hook） */
+  extra?: Record<string, unknown>;
+  overlayApplied?: { tenantId: string; overlayVersion: number; audit: Array<{ path: string; action: string; detail: string }> } | null;
   archiveSchema: { properties?: Record<string, unknown>; required?: string[] } | null;
   objectsJson: { objects?: Array<{ type: string; label: string }> } | null;
   stagesJson: { stages?: Array<{ id: string; label: string }> } | null;
@@ -220,6 +225,8 @@ export async function computeAssembly(
     await client.query("BEGIN");
     await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
     await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+    // 租户覆盖层（L2）：L0 基座→L1 行业包→L2 租户覆盖层逐层合并（无覆盖层=零行为变化）
+    await maybeApplyOverlay(client, scope, slug, assets);
     return await computeAssemblyScoped(client, scope, slug, assets);
   } catch (err) {
     await client.query("ROLLBACK").catch(() => undefined);
