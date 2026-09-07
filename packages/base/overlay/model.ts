@@ -65,7 +65,7 @@ export const crewItem = z.discriminatedUnion("op", [
     type: z.literal("crew"),
     op: z.literal("params"),
     path: z.string().regex(/^presets\/[a-z0-9-]+$/),
-    value: z.record(z.unknown()),
+    value: z.record(z.string(), z.unknown()),
   }),
 ]);
 
@@ -91,7 +91,7 @@ export const skillItem = z.discriminatedUnion("op", [
     type: z.literal("skill"),
     op: z.literal("params"),
     path: z.string().regex(/^skills\/[a-z0-9-]+$/),
-    value: z.record(z.unknown()),
+    value: z.record(z.string(), z.unknown()),
   }),
 ]);
 

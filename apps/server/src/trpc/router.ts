@@ -34,6 +34,7 @@ import { LlmIntentClassifier, type IntentClassifier } from "@workloom/runtime";
 import { providerFromEnv, OpenAiCompatibleProvider } from "@workloom/base/model-router";
 import { routedLlmCall, resetLlmAssembly } from "../service/llm.js";
 import { creditsRouter, modelFeedbackRouter } from "./credits-router.js";
+import { overlayRouter } from "./overlay-router.js";
 import { runRouterReviewBeat } from "@workloom/base/model-router";
 import {
   loadCharter, parseCharter, transition, defaultCharter,
@@ -2806,6 +2807,7 @@ export const appRouter = router({
   modelFeedback: modelFeedbackRouter,
   memory: memoryRouter,
   evolution: evolutionRouter,
+  overlay: overlayRouter,
 });
 
 export type AppRouter = typeof appRouter;

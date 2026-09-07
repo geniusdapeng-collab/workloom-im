@@ -99,7 +99,7 @@ function applyKb(view: BundleAssetView, item: Extract<OverlayItem, { type: "kb" 
     return;
   }
   if (idx < 0) throw new OverlayError("KB_ITEM_NOT_FOUND", `知识条目 ${item.path} 不存在，无法覆盖`);
-  coll[idx] = { ...coll[idx], ...item.value, id };
+  coll[idx] = { ...coll[idx], ...item.value, id } as KbEntry;
   audit.push({ path: item.path, action: "kb.override", detail: `覆盖知识条目 ${id}` });
 }
 

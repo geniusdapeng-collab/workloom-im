@@ -179,3 +179,26 @@ export async function listVersions(
   );
   return r.rows;
 }
+/** 健康汇总（晨报/健康分数据源）：覆盖层滞留与状态一目了然
+ *  - staleDraft：草稿超 3 天未进灰度（定制需求被搁置）
+ *  - staleCanary：灰度超 7 天未转全量（灰度泡太久，要么放行要么回滚） */
+export async function healthSummary(
+  q: Q, scope: OverlayScope,
+): Promise<Array<{ base_bundle: string; active: number; canary: number; draft: number; staleDraft: number; staleCanary: number }>> {
+  const r = await q.query<{ base_bundle: string; status: OverlayStatus; updated_at: string }>(
+    `SELECT base_bundle, status, updated_at FROM tenant_overlays
+      WHERE workspace_id=$1 AND tenant_id=$2`,
+    [scope.workspaceId, scope.tenantId],
+  );
+  const now = Date.now();
+  const byBundle = new Map<string, { active: number; canary: number; draft: number; staleDraft: number; staleCanary: number }>();
+  for (const row of r.rows) {
+    const b = byBundle.get(row.base_bundle) ?? { active: 0, canary: 0, draft: 0, staleDraft: 0, staleCanary: 0 };
+    const ageDays = (now - new Date(row.updated_at).getTime()) / 86_400_000;
+    if (row.status === "active") b.active++;
+    if (row.status === "canary") { b.canary++; if (ageDays > 7) b.staleCanary++; }
+    if (row.status === "draft") { b.draft++; if (ageDays > 3) b.staleDraft++; }
+    byBundle.set(row.base_bundle, b);
+  }
+  return [...byBundle.entries()].map(([base_bundle, v]) => ({ base_bundle, ...v }));
+}

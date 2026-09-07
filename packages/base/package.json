@@ -28,7 +28,8 @@
     "./audit-core": "./audit-core/index.ts",
     "./evolve": "./evolve/index.ts",
     "./eval-core": "./eval-core/index.ts",
-    "./dev-bridge": "./dev-bridge/index.ts"
+    "./dev-bridge": "./dev-bridge/index.ts",
+    "./overlay": "./overlay/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -15,13 +15,14 @@ import type { OverlayDoc } from "./model.js";
 /** 与装配器 BundleDiskAssets 结构保持松散兼容（只依赖我们消费的字段） */
 export interface AssemblyAssetsLike {
   dir: string;
-  bj: Record<string, unknown> & { workloom?: Record<string, unknown> };
-  presets: Array<Record<string, unknown> & { preset_key?: string }>;
-  fencePacks: Array<Record<string, unknown>>;
+  /** bundle.json 原文（各装配器 BundleJson 变体宽松兼容，toView 内归一） */
+  bj: unknown;
+  /** presets/*.yml 解析结果（PresetYml 等变体宽松兼容，toView 内归一） */
+  presets: unknown[];
+  fencePacks: unknown[];
   /** 覆盖层写回的扩展资产（persona/kb 等）与审计——装配档案可消费 */
   extra?: Record<string, unknown>;
   overlayApplied?: { tenantId: string; overlayVersion: number; audit: MergeResult["audit"] } | null;
-  [k: string]: unknown;
 }
 
 function toView(assets: AssemblyAssetsLike): BundleAssetView {
@@ -34,7 +35,12 @@ function toView(assets: AssemblyAssetsLike): BundleAssetView {
       extra.faq = Array.isArray(raw?.faqs) ? raw.faqs : [];
     } catch { extra.faq = []; }
   }
-  return { bj: assets.bj, presets: assets.presets, fencePacks: assets.fencePacks, extra };
+  return {
+    bj: assets.bj as BundleAssetView["bj"],
+    presets: assets.presets as BundleAssetView["presets"],
+    fencePacks: assets.fencePacks as BundleAssetView["fencePacks"],
+    extra,
+  };
 }
 
 /**
