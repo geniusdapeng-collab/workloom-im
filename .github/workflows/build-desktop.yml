@@ -57,20 +57,21 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
-      - name: 失败留证（冒烟日志上传 Release 供远程诊断）
+      - name: 失败留证（冒烟日志开 Issue 供远程诊断——沙箱无法直读 Actions 日志）
         if: failure()
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mkdir -p smoke-logs
-          cp -R /tmp/wl-smoke/logs smoke-logs/ 2>/dev/null || echo no-logs > smoke-logs/no-logs.txt
-
-      - name: 上传冒烟日志（失败时）
-        if: failure()
-        uses: softprops/action-gh-release@v2
-        with:
-          files: smoke-logs/**
-          name: ${{ env.VERSION }}
-          fail_on_unmatched_files: false
+          {
+            echo "## build-desktop macos 失败留证（run ${{ github.run_id }}）"
+            for f in /tmp/wl-smoke/logs/launch-*.log /tmp/wl-smoke/logs/pg.log /tmp/wl-smoke/logs/server.log /tmp/wl-smoke/logs/web.log; do
+              [ -f "$f" ] || continue
+              echo ""; echo "### $(basename "$f")（尾部 120 行）"; echo '```'
+              tail -120 "$f"; echo '```'
+            done
+          } > smoke-report.md
+          gh issue create --title "build-desktop macOS 冒烟失败留证（${{ env.VERSION }} run ${{ github.run_id }}）" --body-file smoke-report.md || true
 
       - name: 上传产物（macOS 双架构 DMG + 安装说明）
         uses: softprops/action-gh-release@v2
@@ -108,7 +109,7 @@ jobs:
         run: bash scripts/pack-electron-payload.sh --platform win --arch x64 --version "$VERSION"
 
       - name: 打包 NSIS 安装包
-        run: pnpm exec electron-builder --win nsis --x64 --publish never -c.extraMetadata.version="$env:VERSION.TrimStart('v')"
+        run: pnpm exec electron-builder --win nsis --x64 --publish never -c.extraMetadata.version="$($env:VERSION.TrimStart('v'))"
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
@@ -118,21 +119,19 @@ jobs:
         shell: pwsh
         timeout-minutes: 15
 
-      - name: 失败留证（冒烟日志上传 Release 供远程诊断）
+      - name: 失败留证（冒烟日志开 Issue 供远程诊断——沙箱无法直读 Actions 日志）
         if: failure()
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          New-Item -ItemType Directory -Force smoke-logs | Out-Null
-          Copy-Item -Recurse "$env:TEMP\wl-smoke\logs" smoke-logs\ -ErrorAction SilentlyContinue
-          if (-not (Test-Path smoke-logs\logs)) { "no-logs" | Out-File smoke-logs\no-logs.txt }
-
-      - name: 上传冒烟日志（失败时）
-        if: failure()
-        uses: softprops/action-gh-release@v2
-        with:
-          files: smoke-logs/**
-          name: ${{ env.VERSION }}
-          fail_on_unmatched_files: false
+          $report = "## build-desktop windows 失败留证（run ${{ github.run_id }}）`n"
+          Get-ChildItem "$env:TEMP\wl-smoke\logs\*.log" -ErrorAction SilentlyContinue | ForEach-Object {
+            $report += "`n### $($_.Name)（尾部 120 行）`n``````n" + (Get-Content $_.FullName -Tail 120 | Out-String) + "``````n"
+          }
+          $report | Out-File -Encoding utf8 smoke-report.md
+          gh issue create --title "build-desktop Windows 冒烟失败留证（${{ env.VERSION }} run ${{ github.run_id }}）" --body-file smoke-report.md
+          if ($LASTEXITCODE -ne 0) { Write-Host "issue 创建失败（忽略）" }
 
       - name: 上传产物（Windows NSIS）
         uses: softprops/action-gh-release@v2
