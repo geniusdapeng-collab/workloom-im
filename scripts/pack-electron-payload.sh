@@ -48,6 +48,11 @@ fetch() { # fetch <out> <url...>：按序回退
   echo "❌ 全部下载源失败：$out"; return 1
 }
 
+# 跨平台解引用拷贝：macOS 自带 BSD cp 无 -a（用 -pRL 跟随符号链接），GNU cp 用 -aL
+copy() {
+  if cp --version 2>/dev/null | grep -q GNU; then cp -aL "$1" "$2"; else cp -pRL "$1" "$2"; fi
+}
+
 echo "== 装配 Electron 自包含载荷（$VERSION · $PLATFORM-$ARCH）=="
 rm -rf "$OUT"
 mkdir -p "$OUT"
@@ -63,7 +68,7 @@ done
 for d in apps/server apps/web/src apps/web/index.html apps/web/public apps/web/package.json apps/web/vite.config.ts apps/web/tsconfig.json packages/db packages/base packages/shared packages/runtime bundles; do
   [ -e "$d" ] || continue
   mkdir -p "$R/$(dirname "$d")"
-  cp -aL "$d" "$R/$(dirname "$d")/"
+  copy "$d" "$R/$(dirname "$d")/"
 done
 cp scripts/migrate.ts scripts/seed.ts scripts/seed-aipm.ts scripts/desktop-bootstrap-db.mjs "$R/scripts/"
 printf '%s\n' "$VERSION" > "$R/VERSION"
@@ -75,17 +80,17 @@ if [ ! -f apps/web/dist/index.html ]; then
   echo "→ 构建 web…"; pnpm -C apps/web build
 fi
 mkdir -p "$R/apps/web"
-cp -aL apps/web/dist "$R/apps/web/dist"
+copy apps/web/dist "$R/apps/web/dist"
 echo "→ 运行期依赖：npm 扁平化安装…"
 NM_STAGE="$STAGE/nm-pkg"
 node scripts/pack-nm-merge.mjs "$NM_STAGE/package.json"
 NPM_REG="${NPM_REGISTRY:-https://registry.npmjs.org}"
 ( cd "$NM_STAGE" && npm install --no-audit --no-fund --legacy-peer-deps --registry="$NPM_REG" )
-cp -aL "$NM_STAGE/node_modules" "$R/node_modules"
+copy "$NM_STAGE/node_modules" "$R/node_modules"
 # 内部工作区包以实体目录入 node_modules（seed-aipm.ts 等导入 @workloom/base，v2.0.14 实证）
 mkdir -p "$R/node_modules/@workloom"
 for pkg in shared db base runtime; do
-  [ -d "packages/$pkg" ] && cp -aL "packages/$pkg" "$R/node_modules/@workloom/$pkg"
+  [ -d "packages/$pkg" ] && copy "packages/$pkg" "$R/node_modules/@workloom/$pkg"
 done
 find "$R/node_modules/@workloom" -type d -name node_modules -prune -exec rm -rf {} + 2>/dev/null || true
 
@@ -103,11 +108,13 @@ fetch "$STAGE/$NODE_DIST" \
 mkdir -p "$OUT/node" "$STAGE/node"
 if [[ "$NODE_DIST" == *.zip ]]; then
   unzip -q "$STAGE/$NODE_DIST" -d "$STAGE/node"
-  cp -aL "$STAGE/node/node-v${NODE_VER}-win-x64/"* "$OUT/node/"
+  copy "$STAGE/node/node-v${NODE_VER}-win-x64/"* "$OUT/node/"
 else
   tar xzf "$STAGE/$NODE_DIST" -C "$STAGE/node"
-  cp -aL "$STAGE/node/node-v${NODE_VER}-"*/{bin,lib,include,share} "$OUT/node/" 2>/dev/null || \
-    cp -aL "$STAGE/node/node-v${NODE_VER}-"*/* "$OUT/node/"
+  NDIR="$(find "$STAGE/node" -maxdepth 1 -type d -name "node-v*" | head -1)"
+  for sub in bin lib include share; do
+    [ -d "$NDIR/$sub" ] && copy "$NDIR/$sub" "$OUT/node/"
+  done
 fi
 
 # ---------- 4. PostgreSQL 17 + pgvector（bin/lib/share 同构摊平） ----------
@@ -117,18 +124,18 @@ if [ "$PLATFORM" = "mac" ]; then
   # Postgres.app 2.9.6-17 为 universal 二进制（arm64+x86_64 通吃）
   fetch "$STAGE/pg.dmg" "https://github.com/PostgresApp/PostgresApp/releases/download/v2.9.6/Postgres-${PGAPP_VER}.dmg"
   hdiutil attach -nobrowse -mountpoint "$STAGE/mnt" "$STAGE/pg.dmg" >/dev/null
-  cp -aL "$STAGE/mnt/Postgres.app/Contents/Versions/17/bin" "$OUT/pg/bin"
-  cp -aL "$STAGE/mnt/Postgres.app/Contents/Versions/17/lib" "$OUT/pg/lib"
-  cp -aL "$STAGE/mnt/Postgres.app/Contents/Versions/17/share" "$OUT/pg/share"
+  copy "$STAGE/mnt/Postgres.app/Contents/Versions/17/bin" "$OUT/pg/bin"
+  copy "$STAGE/mnt/Postgres.app/Contents/Versions/17/lib" "$OUT/pg/lib"
+  copy "$STAGE/mnt/Postgres.app/Contents/Versions/17/share" "$OUT/pg/share"
   hdiutil detach "$STAGE/mnt" >/dev/null
   [ -x "$OUT/pg/bin/postgres" ] || { echo "❌ PG 结构异常（postgres 缺失）"; exit 1; }
   ls "$OUT/pg/lib/postgresql/vector.dylib" >/dev/null || { echo "❌ pgvector 未随包"; exit 1; }
 else
   # Windows：vendor/pg-win（与 pgvector 编译底座同源 EDB 全量树，82139ce 口径）+ CI 预编译 pgvector
   [ -f "vendor/pg-win/bin/postgres.exe" ] || { echo "❌ 缺 vendor/pg-win——先跑 scripts/build-pgvector-win.ps1"; exit 1; }
-  cp -aL vendor/pg-win/bin "$OUT/pg/bin"
-  cp -aL vendor/pg-win/lib "$OUT/pg/lib"
-  cp -aL vendor/pg-win/share "$OUT/pg/share"
+  copy vendor/pg-win/bin "$OUT/pg/bin"
+  copy vendor/pg-win/lib "$OUT/pg/lib"
+  copy vendor/pg-win/share "$OUT/pg/share"
   PV="vendor/pgvector-win"
   [ -f "$PV/lib/vector.dll" ] || { echo "❌ 缺 $PV/lib/vector.dll——先跑 scripts/build-pgvector-win.ps1"; exit 1; }
   cp "$PV/lib/vector.dll" "$OUT/pg/lib/"

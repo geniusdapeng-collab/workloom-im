@@ -150,8 +150,8 @@ async function bootstrap(opts) {
     if (!fs.existsSync(path.join(PGDATA, "PG_VERSION"))) {
       status("→ 初始化数据库（initdb）…");
       fs.mkdirSync(PGDATA, { recursive: true });
-      const initUser = IS_WIN ? "postgres" : (process.env.USER || "postgres");
-      const r = run(pgBin("initdb"), ["-D", PGDATA, "-U", initUser, "--auth=trust", "-E", "UTF8", "--locale=C"]);
+      // 超级用户固定 postgres：desktop-bootstrap-db.mjs 以 postgres 角色连接建库（两平台同口径）
+      const r = run(pgBin("initdb"), ["-D", PGDATA, "-U", "postgres", "--auth=trust", "-E", "UTF8", "--locale=C"]);
       if (r.code !== 0) throw new Error(`initdb 失败：${r.err.slice(-300)}`);
     }
     status("→ 启动 PostgreSQL 17 …");
