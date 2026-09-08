@@ -80,6 +80,7 @@ done
 mkdir -p "$R/scripts"
 copy scripts/migrate.ts "$R/scripts/"
 copy scripts/seed.ts "$R/scripts/"
+copy scripts/seed-aipm.ts "$R/scripts/"
 copy scripts/desktop-bootstrap-db.mjs "$R/scripts/"
 printf '%s\n' "$VERSION" > "$R/VERSION"
 # 源码不携带 node_modules：各包自带 pnpm 链接版会抢占解析且缺嵌套依赖（v2.0.8 esbuild 缺失实证），
