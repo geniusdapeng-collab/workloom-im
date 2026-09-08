@@ -115,7 +115,11 @@ fi
 if [ ! -f "$SUPPORT/.bootstrapped" ]; then
   say "→ 首航引导：数据库迁移 + 演示数据种子…"
   (cd "$RUNTIME" && "$TSX" --env-file=.env scripts/migrate.ts) || die "数据库迁移失败"
-  (cd "$RUNTIME" && "$TSX" --env-file=.env scripts/seed-aipm.ts) || die "演示数据种子失败"
+  # 种子脚本按仓配置（.env.defaults DESKTOP_SEED_SCRIPT；不在 base-sync 同步范围）——
+  # 基座出厂 AI 产品经理包；行业版子仓配自己行业种子（672cf7b 硬编码 hotel 根因）
+  SEED_SCRIPT="$(grep -E '^DESKTOP_SEED_SCRIPT=' "$RUNTIME/.env.defaults" 2>/dev/null | head -1 | cut -d= -f2)"
+  SEED_SCRIPT="${SEED_SCRIPT:-scripts/seed-aipm.ts}"
+  (cd "$RUNTIME" && "$TSX" --env-file=.env "$SEED_SCRIPT") || die "演示数据种子失败"
   touch "$SUPPORT/.bootstrapped"
   say "✅ 首航引导完成"
 fi

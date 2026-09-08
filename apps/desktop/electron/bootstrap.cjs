@@ -209,11 +209,17 @@ async function bootstrap(opts) {
     status("→ 首航引导：数据库迁移 + 演示数据种子（约 30 秒）…");
     const mig = run(NODE_BIN, [TSX_CLI, "--env-file=.env", "scripts/migrate.ts"], { cwd: RUNTIME });
     if (mig.code !== 0) throw new Error(`数据库迁移失败：${(mig.err || mig.out).slice(-400)}`);
-    // 行业示例包：AI 产品经理（seed-aipm.ts；seed.ts 为酒店剧本，BUNDLE_DIR 指向 ai-pm 会因引用酒店 preset 空指针——672cf7b 根因）
-    const seed = run(NODE_BIN, [TSX_CLI, "--env-file=.env", "scripts/seed-aipm.ts"], { cwd: RUNTIME });
-    if (seed.code !== 0) throw new Error(`演示数据种子失败：${(seed.err || seed.out).slice(-400)}`);
+    // 种子脚本按仓配置（.env.defaults DESKTOP_SEED_SCRIPT；不在 base-sync 同步范围）——
+    // 基座出厂 AI 产品经理包；行业版子仓配自己行业种子（672cf7b 硬编码 hotel 根因）
+    let seedScript = "scripts/seed-aipm.ts";
+    try {
+      const m = fs.readFileSync(path.join(RUNTIME, ".env.defaults"), "utf-8").match(/^DESKTOP_SEED_SCRIPT=(.+)$/m);
+      if (m) seedScript = m[1].trim();
+    } catch { /* 缺省即可 */ }
+    const seed = run(NODE_BIN, [TSX_CLI, "--env-file=.env", seedScript], { cwd: RUNTIME });
+    if (seed.code !== 0) throw new Error(`演示数据种子失败（${seedScript}）：${(seed.err || seed.out).slice(-400)}`);
     fs.writeFileSync(bootFlag, "done");
-    status("✅ 首航引导完成（AI 产品经理示例团队已装配）");
+    status("✅ 首航引导完成（示例团队已装配）");
   }
 
   /* ---------- 4. 起服务：server(8787) + web preview(5173) ---------- */
