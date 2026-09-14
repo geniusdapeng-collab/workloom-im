@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { trpc, setToken, setRefreshToken } from "../../lib/trpc";
 
-const WS = (import.meta.env.VITE_DEMO_WORKSPACE as string | undefined) ?? "yunqi-hotel";
+const WS = (import.meta.env.VITE_DEMO_WORKSPACE as string | undefined) ?? "ai-pm-demo";
 
 export default function InviteAccept() {
   const nav = useNavigate();
