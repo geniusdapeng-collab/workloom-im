@@ -1,6 +1,6 @@
 {
-  "version": 2,
-  "description": "WorkLoom IM 基座能力分发范围声明。文件型能力按 include/exclude 经 base-sync 流转；三端交互壳、组件、令牌和视觉语言属于基座能力，但只通过 @workloom/ui 稳定制品与升级 PR 分发，严禁复制源码。行业属性、投影和演示资产不得进入公共能力。修改本文件即修改同步边界，需基座 owner 评审。",
+  "version": 4,
+  "description": "WorkLoom IM 基座能力同步范围声明——base-sync 引擎的唯一事实源。文件型公共能力按 include/exclude 受控分发；三端组件与视觉语言只通过 @workloom/ui 稳定制品升级 PR 下发。行业属性与演示能力永不同步。requiredRootAssets 无视行业代码的 pathPrefix，始终安装并校验在 Git 仓库根目录。修改本文件即修改同步边界，需基座 owner 评审。",
 
   "registryCapabilities": [
     {
@@ -9,9 +9,62 @@
       "consumers": ["apps/web", "apps/webb", "apps/webc"],
       "distribution": "stable-registry-upgrade-pr",
       "consumerGate": "scripts/verify-ui-consumer.mjs",
-      "comment": "PC B端、移动B端、移动C端必须实际渲染共享壳、弹层、表单和状态组件；行业仓只能覆盖品牌变量。"
+      "migration": "two-phase-required",
+      "comment": "第一阶段先补齐三个真实生产客户端与产品身份配置，第二阶段再锁定稳定制品并运行消费门禁；缺少 apps/webb 等客户端时必须报告迁移未完成，禁止按三端合规处理。"
     }
   ],
+
+  "protectedChildAssets": {
+    "files": [
+      "electron-builder.yml",
+      "product.manifest.json"
+    ],
+    "identityFields": [
+      "appId",
+      "productName",
+      "ports",
+      "publish"
+    ],
+    "comment": "桌面应用标识、产品名、端口和发布身份属于部署实例资产；base-sync 不得整文件覆盖。新行业应由 product.manifest.json 显式配置，存量仓先完成身份迁移再接收稳定基座升级。"
+  },
+
+  "requiredRootAssets": {
+    "files": [
+      "WORKLOOM_PRODUCT_CONTEXT.md"
+    ],
+    "copiedFiles": {
+      ".github/workflows/base-sync-heartbeat.yml": {
+        "source": "sync/heartbeat-template.yml"
+      }
+    },
+    "managedSections": {
+      "AGENTS.md": {
+        "beginMarker": "<!-- WORKLOOM-CONTEXT:BEGIN -->",
+        "endMarker": "<!-- WORKLOOM-CONTEXT:END -->",
+        "missingFilePrefix": "# WorkLoom 仓库开发指引\n\n> 本文件包含 WorkLoom 各仓共享的受控规则；仓库专属规则位于 AGENTS.repo.md 或更近层级的 AGENTS.md / AGENTS.override.md。共享规则由 workloom-im 统一维护和分发。",
+        "missingFileSuffix": "## 本仓专属规则\n\n请把本仓独有的职责、命令、验证要求与例外写入根级 AGENTS.repo.md 或更近层级的 AGENTS.md / AGENTS.override.md；不得修改上方受控区块来放宽公共安全不变量。",
+        "replaceWholeFileSha256": [
+          "72f6c5c7f636f8a507ec2b7d4db40e7bdaf4e2dcfab0ea2fdb57c07bb13b8e5d"
+        ],
+        "legacyGitBlobOids": [
+          "6fbce152b7a9439ebac5829061b75f754913b882"
+        ]
+      }
+    },
+    "comment": "copiedFiles 与 files 均整文件验真；AGENTS.md 只按受控区块合并。legacyGitBlobOids 仅供审计，迁移判定只使用逐字节 SHA-256 allowlist。"
+  },
+
+  "preCommitSecretScanner": "scripts/secret-scan.mjs",
+
+  "adoptMigrations": {
+    "AGENTS.repo.md": {
+      "strategy": "replace-if-identical-to-base",
+      "scaffold": "# 本仓专属开发规则\n\n> 本文件用于补充当前行业仓独有的职责、命令、验证要求与例外。请结合本仓实际内容填写；共享产品认知与安全不变量由根级 AGENTS.md 的受控区块继承。\n"
+    },
+    ".github/workflows/base-sync-push.yml": {
+      "strategy": "remove-if-identical-to-base"
+    }
+  },
 
   "include": [
     "packages/base/**",
@@ -25,9 +78,7 @@
     "apps/web/src/lib/**",
     "apps/web/package.json",
     "scripts/**",
-    "AGENTS.md",
-    "docker-compose.yml",
-    "electron-builder.yml"
+    "docker-compose.yml"
   ],
 
   "exclude": [
@@ -40,6 +91,9 @@
     "apps/site/**",
     "apps/webb/**",
     "apps/webc/**",
+
+    "electron-builder.yml",
+    "product.manifest.json",
 
     "apps/web/src/App.tsx",
     "apps/web/src/shell/**",
@@ -61,6 +115,7 @@
     "apps/server/src/service/gateway.ts",
     "apps/server/src/service/ticket.ts",
     "apps/server/src/service/adapters/**",
+    "apps/server/src/industry/**",
 
     "packages/base/captain/charter.ts",
     "packages/base/captain/decision.ts",

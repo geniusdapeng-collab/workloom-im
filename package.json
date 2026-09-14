@@ -40,6 +40,8 @@
     "ui:e2e": "playwright test",
     "ui:e2e:update": "playwright test --update-snapshots",
     "pc-shell:verify": "node scripts/verify-pc-shell.mjs",
+    "secrets:scan": "node scripts/secret-scan.mjs --files AGENTS.md AGENTS.repo.md WORKLOOM_PRODUCT_CONTEXT.md",
+    "secrets:scan:staged": "node scripts/secret-scan.mjs --staged",
     "capabilities:pptx": "python3 scripts/build-capability-pptx.py",
     "postinstall": "pnpm -C packages/ui build && pnpm -C packages/industry-contract build && (node scripts/postinstall-note.js || true)",
     "oss:watch": "bash scripts/oss-watch.sh",

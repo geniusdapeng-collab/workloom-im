@@ -1,133 +1,135 @@
-# WorkLoom IM · 基座能力可审计升级机制（base-sync）
+# WorkLoom IM 基座同步
 
-> WorkLoom IM 的**基座能力**更新后，只有 main 对应的 `ci-gate` 成功，中央流程才会向全部订阅行业仓
-> 推送独立升级分支并创建可审计 PR；**永不直推、永不自动合并行业仓 main**。行业仓心跳只读检测漂移。
-> 同步范围由 `sync/base-scope.json` 机器可读声明唯一界定。三端导航、布局、弹层、表单、状态、设计令牌与视觉语言
-> 都是 **WorkLoom IM 基座能力**：源码只存在于 `packages/ui`，经稳定 registry 制品与升级 PR 下发，绝不复制。
-> 行业属性与演示能力（Bundle、种子数据、行业页面投影与文案）不进入公共能力分发。
+`base-sync` 把 WorkLoom IM 的公共能力安全分发给行业仓，同时保护行业仓自有代码。同步边界的唯一事实源是 `sync/base-scope.json`。
 
-## 为什么旧机制会失效（失效根因分析）
+## 三类基座资产
 
-| # | 失效模式 | 实证（2026-09 八仓审计） |
-|---|---|---|
-| 1 | **零自动化**——同步靠人脑记忆 + 手工复制 | 仓内 workflows 只有构建/CI/release，同步类提交全部手工完成 |
-| 2 | **范围无机器可读声明**——"哪些是基座能力"靠人肉判断 | 漏同步：V4 定制向导接线不完整被一致推广到 8 仓；误覆盖：`trpc/router.ts` 行业段被覆盖后回滚重打（有提交为证）；`package.json` exports 覆盖致行业模块 `ERR_PACKAGE_PATH_NOT_EXPORTED` 服务瘫痪 |
-| 3 | **无对齐状态记录**——漂移无人发现 | 审计时单仓与基座漂移达 78 个文件，无告警无感知 |
-| 4 | **行业演示与基座混居**——无边界护栏 | bundles/ 行业包、seed 行业数据、行业文案与基座能力同树共存，同步时全凭自觉 |
+### 根级必备资产
 
-本机制针对四条根因逐一设防：**ci-gate 成功事件触发升级 PR**（治 1）、**scope 声明式边界**（治 2）、**state 基线 + 只读心跳检测**（治 3）、**exclude + 下发前黑名单硬校验双保险**（治 4）。
+`requiredRootAssets` 无视 `pathPrefix`，始终安装在目标 Git 仓库根目录：
 
-## 架构：双向闭环
+- `WORKLOOM_PRODUCT_CONTEXT.md`：完整覆盖，workloom-im 是唯一受控原文；
+- `AGENTS.md`：只替换 `WORKLOOM-CONTEXT:BEGIN/END` 之间的唯一受控区块，标记外的子仓规则原样保留；
+- `.github/workflows/base-sync-heartbeat.yml`：从 `sync/heartbeat-template.yml` 逐字节覆盖，模板无仓别占位符，可随 required-only/full 同步自升级；
+- `.workloom-base-sync.json`：由引擎生成在 Git 根目录，记录必备资产 SHA-256、真实基座提交与 `pathPrefix`。
 
-```
-                 WorkLoom IM（父仓 · 唯一事实源）
-                 ├─ sync/base-scope.json      ← 同步范围声明（include/exclude/锚点合并/防污染护栏）
-                 ├─ sync/child-repos.json     ← 子仓订阅清单
-                 ├─ sync/base-sync.mjs        ← 同步引擎（detect/pull/push 三模式，Node 原生零依赖）
-                 └─ .github/workflows/base-sync-push.yml
-                            │  workflow_run：main 的 ci-gate 成功
-                            │  → 固定升级分支 → 逐仓可审计 PR（不直推 main）
-                            ▼
-        ┌───────────┬───────────┬───────────┐
-        ▼           ▼           ▼           ▼  （7+ 子仓，订阅制扩容）
-   workroom-fox  workloom-hotel  hyperreality …
-        └─ .github/workflows/base-sync-heartbeat.yml
-           行业仓只读心跳：每日 cron + 手动 + push 自检
-           落后 → CI 报告；等待基座中央流程创建升级 PR
-        └─ .workloom-base-sync.json（对齐基线：lastSyncedBaseSha）
-```
+因此 Tiger 的公共代码即使位于 `governance/`，上述四个文件仍位于 Tiger 仓库根目录。heartbeat 从根级 state 读取 `pathPrefix`（根仓为 `.`、Tiger 为 `governance`）。引擎兼容读取旧版 `governance/.workloom-base-sync.json`，下一次对齐会把它迁到根目录。
 
-**防副本漂移设计**：子仓 workflow 只是触发器——引擎与 scope 每次从基座 main 的 raw URL 实时拉取，
-边界规则演进只需改基座一处，全部子仓下次心跳自动生效。
+若子仓完全没有 `AGENTS.md`，引擎会生成稳定的通用根级 scaffold：一级标题、共享受控区块和标记外的“本仓专属规则”入口；不会带入 workloom-im 的本仓命令或尾部说明。已知旧版通用 WorkLoom IM 指引只有在完整文件 SHA-256 精确命中 allowlist 时才整文件迁移；未知且无标记的文件保留原文、追加受控区块，并在 report 标记 `manualMigrationRequired`。残缺、重复或乱序标记会 fail closed。
 
-## 同步范围边界（base-scope.json 速览）
+### 公共基座文件
 
-- **include（基座能力）**：`packages/{base,runtime,shared,db}`、`apps/server/src`（核心服务）、`apps/desktop`、`apps/web/src/lib`、`scripts`（基座脚本）、共享 CI、`AGENTS.md` 等
-- **exclude（行业属性、应用投影与演示能力，不做文件覆盖）**：
-  - 行业演示：`bundles/**`、`scripts/seed*`、`demo/**`、`docs/demo`、`mock/**`
-  - 本地应用编排层：`apps/web/src/{App.tsx,shell,pages,components,styles,audio,voice}`、`apps/webb/**`、`apps/webc/**`、`apps/site/**`。这些目录只能做路由、权限和行业投影适配；基础交互壳必须实际调用 `@workloom/ui`，由消费门禁证明，不能自建同名组件。
-  - 行业服务接线：`trpc/router.ts`、`service/{dialog,kb,store,gateway,ticket,adapters}`、`devtools.ts`
-  - 行业 KPI 语义：`captain/{charter,decision,loop,board}`、`tenancy/auth.ts`
-  - 数据库纪律：`packages/db/migrations/**` 不自动同步；各行业仓须按自己的迁移编号链在升级 PR 中人工接入并评审
-  - 技能体系：`skills/**` 由仓内既有 skill-ops 保鲜环负责分发，base-sync 不碰
-- **共享 UI 基座能力**：`packages/ui` 是三端交互壳、组件、令牌、图标和视觉语言的唯一源码，不进入文件复制；`ui-v*` 发布 `@workloom/ui` 后，`sync/ui-upgrade-pr.mjs` 给每个行业仓创建精确版本升级 PR。升级门禁不仅检查版本，还检查三端是否真实渲染共享 `AppShell`、导航、上下文栏、弹层和表单，拒绝本地同名副本及非品牌令牌重定义。
-- **anchorMerge（锚点合并，非覆盖）**：`packages/*/package.json`、`tsconfig.json` 等——基座版为底，**子仓独有 exports/deps/include 条目一律保留**（血泪教训：整体覆盖曾致行业模块瘫痪）
-- **pollutionGuard（推送前硬校验）**：待同步清单命中 `bundles/`、`seed`、`hotel-baseline`、`ai-pm`、`yunqi`、`ecommerce` 等黑名单关键词，或单次超 200 文件 → 立即中止。**宁可漏报，不可污染。**
+`include` 选中公共包、运行时、`packages/industry-contract` 和共享服务；`exclude`、仓级 `extraExclude`、锚点合并与污染守卫共同保护行业 bundle、种子、页面、迁移链、平台运维代码及行业依赖。
 
-## 不可绕过的远程写入门禁
+`AGENTS.md` 不在普通复制范围内，避免整文件覆盖子仓约定。根级必备资产也不受 `docs/**` 排除或行业 `pathPrefix` 影响。
 
-`base-sync.mjs push` 在执行任何远程写入前同时核对：
+### 稳定 registry 制品
 
-1. `SYNC_TOKEN` 或 `GH_TOKEN` 存在；
-2. `BASE_SYNC_GATE_STATUS=success`；
-3. `BASE_SYNC_GATE_SHA` 与当前检出的基座 `HEAD` 完全一致；
-4. `BASE_SYNC_GATE_URL` 提供可追溯的门禁运行链接，且基座工作树无未提交变化。
+`packages/ui` 是 B 端 PC、B 端移动和 C 端移动三端组件、设计令牌、图标、布局与交互范式的唯一源码，但不由 base-sync 复制。基座完成门禁并发布稳定 `@workloom/ui` 后，由独立升级 PR 在三个客户端锁定同一精确版本，再运行 `scripts/verify-ui-consumer.mjs`。`apps/web/package.json` 的锚点合并会保留子仓已经锁定的 `@workloom/ui` 版本，普通代码同步不能把它改回 `workspace:*`。
 
-任一条件不成立都会强制降级为 dry-run。`workflow_dispatch` 也固定为 dry-run，不能成为绕过入口。
-每个升级 PR 都记录完整基座 SHA、ci-gate 运行链接、复制/合并/跳过数量和最多 50 个变更文件。
-升级分支固定为 `chore/workloom-base-<基座SHA前12位>`，重复运行可幂等复用；PR 的目标分支固定为 `main`。
-基座仓的 `SYNC_TOKEN` 需对订阅行业仓具备“Contents: write、Pull requests: write”；行业仓本身不保存该凭据。
+存量行业仓必须分两阶段迁移：
 
-## 使用方式
+1. 先补齐真实的 `apps/web`、`apps/webb`、`apps/webc` 生产入口和本仓产品身份配置；缺少任一端时，引擎报告 `phase-1-client-structure-required`，不得声称“三端合规”。
+2. 再接收稳定 UI 制品升级 PR，三端都锁定同一稳定版本并通过消费门禁后，才可进入行业仓验收。
 
-### 父仓：基座能力更新后（自动）
+`electron-builder.yml` 与 `product.manifest.json` 是下游部署实例的受保护身份资产。它们显式位于 `exclude`，base-sync 不做整文件复制，也不覆盖 `appId`、`productName`、端口或发布身份。新行业必须从最新版基座模板生成自己的 manifest；存量行业先完成产品身份迁移，再进入第二阶段。
 
-正常开发合入 main 后先运行 `ci-gate`。只有该次 main push 的门禁成功，`base-sync-push.yml` 才检出
-门禁对应的精确 SHA，并对订阅清单逐仓生成升级 PR。PR 必须继续通过行业仓自己的 CI 和人工评审后再合并。
-基座门禁失败、PR 场景门禁、SHA 不匹配、缺凭据或手动触发都不会产生下游写入。
+当前 `apps/server/src/industry/**` 明确排除，避免 `apps/server/src/**` 的宽范围把酒店 catalog 等行业语义下发到其他经营体。现有 business registry 适配层仍位于已排除的 `apps/server/src/service/adapters/**`，且实现会引用行业 catalog，因此本版不把它伪装成可自动下发的通用能力。后续须先把“无行业语义的注册接口/运行时”与“各行业 catalog 实现”物理拆分并补兼容测试，再单独扩大同步范围。
 
-### 子仓：日常开发（自动/半自动）
-
-- 行业仓 heartbeat 只读比较 scope 内文件；发现漂移时在 Job Summary 列出差异并标红提醒。
-- 跨仓写凭据只保存在 WorkLoom IM 基座仓，行业仓不配置跨仓写 token。
-- 对齐由中央升级 PR 承载；行业方通过 PR 查看 diff、运行 CI、评审并决定合并或驳回。
-
-### 手动操作（任何环境）
+## 命令
 
 ```bash
-node sync/base-sync.mjs detect --repo /path/to/child          # 检测：落后则退出码 2 + 差异清单
-node sync/base-sync.mjs pull   --repo /path/to/child --no-commit  # 本地逐文件拉齐，保留待评审改动
-node sync/base-sync.mjs push   --base /path/to/workloom-im --dry-run # 父仓视角：只生成全部子仓计划
-# 通用：--dry-run 只看不改 · --json 机器可读 · --base-url 镜像前缀（受限网络）
+# 每次都比较实际文件；即使 state 的 base SHA 相同也会验真
+node sync/base-sync.mjs detect --repo /path/to/child
+
+# 对齐并生成一个只含白名单文件与 state 的提交
+node sync/base-sync.mjs pull --repo /path/to/child
+
+# 只安装/校验根级上下文，不触碰其他基座或行业代码
+node sync/base-sync.mjs pull --repo /path/to/child --required-only
+
+# 特殊接入/稀疏工作树：写文件和 state，但不暂存、不提交、不推送
+node sync/base-sync.mjs pull --repo /path/to/child --required-only --no-commit
+
+# 本地测试或固定基座提交，完全绕开远程发现
+node sync/base-sync.mjs detect --repo /path/to/child --base-dir /path/to/workloom-im
+
+# 只读生成全部订阅仓计划
+node sync/base-sync.mjs push --base . --dry-run
+
+# 只读生成“仅根级必备资产”的全部订阅仓计划
+node sync/base-sync.mjs push --base . --dry-run --required-only
 ```
 
-`pull --push` 仅为受控 CI 兼容入口：它同样需要匹配的 ci-gate 证明，并且只推升级分支、创建 PR，
-绝不会执行 `main:main`；目标仓不在干净的 main 分支时也会强制 dry-run。日常本地使用请选择 `--no-commit`。
+通用参数：
 
-### 新仓接入（一次性，约 2 分钟）
+- `--required-only`：detect/pull/push 只处理根级必备资产与根级 state；
+- `--no-commit`：pull 只写不提交，也不会暂存文件；不能与 `--push` 组合；
+- `--dry-run`：只计算计划，不写文件/state；
+- `--json`：输出机器可读报告；
+- `--base-dir`：使用已固定的本地基座 checkout；
+- `--extra-exclude a,b`：追加仓级排除规则；
+- `--push`：pull 提交后直接推 `HEAD:main`，仅保留为受控人工入口，自动化默认采用 PR。
+
+默认 pull 会自动提交，因此开始前要求目标仓库完全干净；存在任何非本次改动就会在写入前拒绝。必须在有意保留脏工作树时使用 `--no-commit`，随后由操作者人工审查和白名单暂存。引擎只允许显式白名单暂存。`--adopt` 是 `adopt.sh` 的受限内部开关，只能与 `pull --required-only --no-commit` 组合。
+
+本地 `--base-dir` 必须是基座 Git 根，且本次会读取的受控源文件必须由当前 HEAD 跟踪并逐字节一致；无关的本地改动不阻塞。远程 clone 固定使用 `main`、`--single-branch`，并验证 `HEAD == refs/heads/main`。来源或目标路径任一段为 symlink（包括 dangling symlink）、越界路径或不规范 `pathPrefix` 都会被拒绝。
+
+## 新行业仓接入
 
 ```bash
-bash sync/adopt.sh /path/to/new-child            # 或 --path-prefix governance/（子目录形态）
-# 然后按提示把新仓注册到基座 sync/child-repos.json；凭据只配置在基座仓
+bash sync/adopt.sh /path/to/new-industry
+bash sync/adopt.sh /path/to/workroom-tiger --path-prefix governance/
 ```
 
-adopt.sh 会先校验 B端PC、B端移动、C端移动三个生产入口齐备，锁定 `sync/base-capabilities.json` 的最新稳定 UI，并立即运行共享界面消费门禁；只写依赖但仍使用本地复制壳会被拒绝。随后注入只读心跳 workflow，按 scope **逐文件真实拉齐**其他基座公共能力，写入可复核 SHA，再用同一基座快照逐文件复检为零差异。首次接入不自动提交，便于行业方把基座变化与自己的 Bundle 一起评审。
-**继承只带基座能力和治理机制，不带任何行业演示内容**；禁止仅写 `lastSyncedBaseSha` 却没有实际对齐文件。
-为保证 SHA 与文件内容一一对应，`adopt.sh` 会拒绝从含未提交变化的基座工作树接入新行业。
+`adopt.sh` 支持普通 clone 和 `.git` 为文件的 linked worktree。执行顺序是：
 
-如果基座尚无稳定 UI 版本、新仓缺少任一生产客户端，或三端没有实际采用共享壳，接入会直接失败；候选版本不会自动进入新行业。新行业应从已通过当前稳定基座门禁的模板或行业仓创建，因此开仓即继承最新版基座能力。
+1. 验证普通 clone/linked worktree、规范化 `pathPrefix`、基座脚本来源和全部路径边界；
+2. 安装根级产品上下文、AGENTS 受控块与静态 heartbeat，并在写 state 前逐项复验、执行密钥扫描；
+3. 若仓库由 workloom-im fork/template 派生，仅在内容与基座逐字节相同时，把父仓专属 `AGENTS.repo.md` 替换为通用待填写 scaffold，并删除父仓专属 `.github/workflows/base-sync-push.yml`；未知或已定制内容绝不覆盖，其他 workflow 不受影响；
+4. 写入带 `pathPrefix` 的根级 state，再运行独立 detect 与四项接入资产密钥扫描。
 
-### 存量行业仓首次迁移
+脚本不暂存、不提交、不推送，也不把缺少 `apps/webb` 的二端仓登记成三端产品。审查根级接入资产和可选的两项精确派生迁移后，由操作者白名单提交；随后完成三端结构/产品身份与稳定 UI 两阶段接入，再把新仓登记进 `sync/child-repos.json`。任何扫描或安装失败都会回滚本次写入，不把受阻内容留在目标工作树。
 
-稳定版本升级脚本不会把旧仓“只改依赖号”伪装成已完成迁移。尚未具备移动 B 端或尚未消费共享壳的仓库，升级会明确失败；必须先建立逐仓迁移 PR，补齐三端薄适配层并通过 `verify-ui-consumer.mjs`。首次迁移合并后，后续版本才能只通过稳定制品升级 PR 自动演进。
+## 自动化与凭据
 
-## 分阶段落地
+- 父仓 plan 在不接触跨仓凭据时先执行 YAML、密钥扫描器和同步引擎测试；PR 事件停在本地验证；
+- 可选 fan-out 只使用限定到清单仓库的短期 GitHub App installation token：先做 private-safe 跨仓 dry-run，再以精确 `base_sha` 和 `mode=required-only|full` 发送 `repository_dispatch`，并仅对 GitHub 标记为 `disabled_inactivity` 的 heartbeat 做恢复与运行监控；未配置 App 时公开九仓仍由各自 schedule 工作；
+- 子仓 heartbeat 先以公开只读、无 token 的方式把基座 `main` 固定为不可变提交，再执行该提交里的引擎；同步阶段显式拒绝残留认证 header；
+- 发生变更后，子仓在注入写令牌前执行 `pnpm install --frozen-lockfile --ignore-scripts`，并按脚本存在性运行 typecheck/test；heartbeat 同时输出三端迁移状态：缺端或未锁定稳定制品时明确标记为未合规，已接入 UI 清单时必须通过消费门禁；验证后要求工作树干净，最后才用本仓短期、最小权限 `GITHUB_TOKEN` 推同仓分支并创建 PR；
+- Git 远端 URL 永不拼入令牌。确需命令行认证时，引擎只通过临时 Git 环境配置传递 HTTP header，并对错误做二次脱敏；
+- 成功、失败和 dry-run 路径都会清理临时 clone。
 
-**MVP（当前已落地）**：scope 边界声明 + 三模式引擎 + ci-gate 后升级 PR + 子仓只读心跳 + adopt.sh +
-防污染硬校验 + 锚点合并 + 状态基线 + 无凭据强制 dry-run + 禁止直推 main。
+不要配置、记录或提交个人访问令牌。同仓 `GITHUB_TOKEN` 创建的事件不保证自动触发后续 PR CI，因此 heartbeat 自身的推送前验证是硬门槛；同步 PR 仍须人工评审，若仓库另有可触发的外部 CI，再把它作为附加门槛。
 
-**完整方案（按需演进）**：
-1. **合并队列**：行业仓 CI 全绿后仍由代码所有者批准，必要时接 GitHub merge queue；
-2. **IM 通知**：升级 PR 失败或等待人工处置时推送企业微信/飞书机器人；
-3. **基座版本号**：从 SHA 基线升级为 semver 标签基线（release.yml 打 tag 时联动）。
+## 状态与验真语义
 
-## 运维手册
+根级 `.workloom-base-sync.json` 包含：
 
-| 场景 | 操作 |
-|---|---|
-| 调整同步边界 | 改 `sync/base-scope.json`（基座 owner 评审）→ 下次心跳全仓生效 |
-| 新增子仓 | `bash sync/adopt.sh` + 注册 `child-repos.json`；跨仓写 secret 仅配置在基座仓 |
-| 某仓暂缓升级 | 保持升级 PR 未合并并记录原因；不删订阅、不直改基座副本 |
-| 升级 PR 的行业仓 CI 红 | 在该 PR 分支解决兼容问题并重新评审，禁止绕过门禁直推 main |
-| 紧急暂停 | 暂停基座仓 `base-sync-upgrade-pr` workflow；已创建 PR 保持可审计且不会自动合并 |
-| 审计同步历史 | 基座 workflow run + 行业仓升级 PR + `.workloom-base-sync.json` 三方交叉核验 |
+- `lastSyncedBaseSha`：最近一次完整基座同步提交；
+- `lastRequiredAssetsBaseSha`：最近一次根级必备资产来源提交；
+- `requiredRootAssetsSha256`：完整上下文、静态 heartbeat 及 AGENTS 受控区块的独立哈希；
+- `pathPrefix`：行业基座在仓内的规范相对路径（根目录记为 `.`）；
+- `lastSyncMode`、`lastSyncAt`、`filesTouched` 和仓级排除项。
+
+state 只用于审计和加速理解，不是“已对齐”的证明。`detect` 总会重新读取基座与目标文件；SHA 相同但上下文缺失、被改写或标记异常仍会返回退出码 `2`。反过来，内容已一致但根级 state 缺失或过期也会以独立的 `stateDrift` 返回退出码 `2`，从而触发一次 state-only pull。标记缺失时可安全追加，标记残缺、重复或顺序错误时 fail closed，等待人工修复。
+
+## 提交与失败边界
+
+- 同步计划在落盘前完成污染黑名单和单次文件数检查；
+- 内容安装后再次计算计划，确认零漂移后才写 state；
+- 锚点合并后的 lockfile 只用 `pnpm install --lockfile-only --ignore-scripts` 刷新，失败即关闭；
+- 自动提交只暂存计划内文件、新产生的 lockfile 和根级 state，并在 state 落盘前后分别调用基座 HEAD 中受控的密钥扫描器检查 staged 白名单；
+- `--no-commit` 也会扫描本次写入资产与待写 state；扫描、lockfile、安装复验或提交前任一环节失败，事务会恢复文件和 index 到同步前状态；
+- required assets 无法验证、AGENTS 标记异常、目标工作树不干净或认证失败时立即停止；
+- 错误文本会移除已知 token、GitHub token 形态、认证 header 载荷和 URL userinfo。
+
+## 测试
+
+```bash
+node --test sync/base-sync.test.mjs sync/set-ui-version.test.mjs sync/ui-upgrade-pr.test.mjs
+bash -n sync/adopt.sh
+node --check sync/base-sync.mjs
+```
+
+测试覆盖 AGENTS 三态迁移与 report、同 SHA 文件验真、Tiger 根级落点、旧 state 迁移、静态 heartbeat 自升级、来源 HEAD 约束、白名单提交、脏树拒绝、`--required-only --no-commit`、required-only push、lockfile/密钥扫描事务回滚、凭据脱敏、源/目标/dangling/pathPrefix symlink 对抗、临时 clone 全路径清理、linked worktree 跨仓前缀接入、父仓专属文件的精确派生清理、稳定 UI 版本保留、缺端迁移报告，以及桌面产品身份不被整文件同步。
