@@ -57,7 +57,9 @@ jobs:
         run: bash scripts/pack-electron-payload.sh --platform mac --arch arm64 --version "$VERSION"
 
       - name: 打包 DMG（arm64）
-        run: pnpm exec electron-builder --mac dmg --arm64 --publish never -c.extraMetadata.version="${VERSION#v}"
+        run: |
+          retry() { local attempt=1; until "$@"; do [ "$attempt" -ge 3 ] && return 1; echo "网络依赖下载失败，准备第 $((attempt + 1))/3 次重试"; attempt=$((attempt + 1)); sleep 8; done; }
+          retry pnpm exec electron-builder --mac dmg --arm64 --publish never -c.extraMetadata.version="${VERSION#v}"
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
@@ -96,7 +98,9 @@ jobs:
         run: bash scripts/pack-electron-payload.sh --platform mac --arch x64 --version "$VERSION"
 
       - name: 打包 DMG（x64）
-        run: pnpm exec electron-builder --mac dmg --x64 --publish never -c.extraMetadata.version="${VERSION#v}"
+        run: |
+          retry() { local attempt=1; until "$@"; do [ "$attempt" -ge 3 ] && return 1; echo "网络依赖下载失败，准备第 $((attempt + 1))/3 次重试"; attempt=$((attempt + 1)); sleep 8; done; }
+          retry pnpm exec electron-builder --mac dmg --x64 --publish never -c.extraMetadata.version="${VERSION#v}"
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
@@ -166,7 +170,9 @@ jobs:
 
       - name: 打包 NSIS 安装包
         shell: bash  # pwsh 会把 -c.extraMetadata.version="x" 的 -c 吞掉（ENOENT 实证），统一 bash
-        run: pnpm exec electron-builder --win nsis --x64 --publish never -c.extraMetadata.version="${VERSION#v}"
+        run: |
+          retry() { local attempt=1; until "$@"; do [ "$attempt" -ge 3 ] && return 1; echo "网络依赖下载失败，准备第 $((attempt + 1))/3 次重试"; attempt=$((attempt + 1)); sleep 8; done; }
+          retry pnpm exec electron-builder --win nsis --x64 --publish never -c.extraMetadata.version="${VERSION#v}"
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
