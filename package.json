@@ -29,6 +29,7 @@
     "preview:all": "bash scripts/preview-all.sh",
     "capabilities": "node scripts/generate-capabilities.mjs",
     "capabilities:check": "node scripts/generate-capabilities.mjs --check",
+    "product:verify": "node scripts/verify-product-content.mjs",
     "capabilities:pptx": "python3 scripts/build-capability-pptx.py",
     "postinstall": "node scripts/postinstall-note.js || true",
     "oss:watch": "bash scripts/oss-watch.sh",

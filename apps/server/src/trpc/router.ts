@@ -2651,7 +2651,9 @@ const captainRouter = router({
         [scope.workspaceId],
       );
       const agents = await client.query<{ id: string; preset_key: string; name: string; alias: string | null }>(
-        `SELECT id, preset_key, name, alias FROM agents WHERE workspace_id=$1 AND status='ready' ORDER BY id LIMIT 12`,
+        // 剧场、欢迎仪式和在岗计数必须使用完整编制。旧 LIMIT 12 会把 14 人
+        // AI 产品经理团队静默裁掉两人，造成“种子 14 / 页面 14 / 仪式 12”三套口径。
+        `SELECT id, preset_key, name, alias FROM agents WHERE workspace_id=$1 AND status='ready' ORDER BY id LIMIT 64`,
         [scope.workspaceId],
       );
       const grades = await client.query<{ agent_id: string; grade: string }>(
