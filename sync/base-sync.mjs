@@ -1,320 +1,1064 @@
 #!/usr/bin/env node
 /**
- * WorkLoom IM · 基座能力双向同步引擎（base-sync）
+ * WorkLoom IM · 基座能力同步引擎（Node >= 20，零第三方依赖）
  *
- * 三种模式：
- *   node base-sync.mjs detect --repo <子仓路径>            心跳检测：子仓基座落后则报告并退出码 2（CI 红=提醒）
- *   node base-sync.mjs pull   --repo <子仓路径> [--push]   子仓拉齐：按 scope 复制基座文件 → 提交 [→ 推送]
- *   node base-sync.mjs push   --base <基座路径>            父仓推送：对 child-repos.json 全部子仓执行拉齐并推送
+ *   detect --repo <子仓基座目录> [--base-dir <本地基座>]
+ *   pull   --repo <子仓基座目录> [--base-dir <本地基座>] [--push] [--no-commit]
+ *   push   --base <本地基座> [--dry-run]
  *
- * 通用参数：
- *   --base-dir <path>     基座本地路径（默认：临时 clone 基座 main）
- *   --base-url <prefix>   git 远端前缀覆盖（沙箱/镜像环境用，默认 https://github.com）
- *   --dry-run             只输出计划，不落盘不提交
- *   --json                机器可读报告输出
- *
- * 设计纪律：
- *   ① 同步范围唯一事实源 = sync/base-scope.json（include/exclude/anchorMerge/appendOnlyDirs/pollutionGuard）；
- *   ② 行业属性与演示能力永不同步（exclude + 推送前黑名单硬校验双保险）；
- *   ③ 迁移目录 append-only（子仓已有同名迁移内容不同→跳过并告警，绝不覆盖）；
- *   ④ 锚点合并文件（package.json/tsconfig.json）按策略合并，保留子仓独有条目；
- *   ⑤ 无外部依赖（Node ≥20 原生 ESM），CI 与本地均可直接执行。
+ * 行业代码仍写入 --repo/pathPrefix 指向的目录；requiredRootAssets 始终写入
+ * 目标 Git 仓库根目录。AGENTS.md 只同步受控标记块，绝不覆盖仓库自有说明。
+ * --required-only 仅安装/校验根级必备资产与根级 state，不触碰其余基座文件。
  */
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, copyFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const SCRIPT_PATH = fileURLToPath(import.meta.url);
+const SCRIPT_DIR = dirname(SCRIPT_PATH);
+const DEFAULT_BASE_REPO = "geniusdapeng-collab/workloom-im";
+const STATE_FILE = ".workloom-base-sync.json";
 
-/* ---------------- 参数解析 ---------------- */
-const args = process.argv.slice(2);
-const MODE = args[0];
-const opt = (name, dft = "") => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : dft; };
-const has = (name) => args.includes(name);
-const REPO = opt("--repo");
-const BASE_DIR_OPT = opt("--base-dir");
-const BASE_URL = opt("--base-url", "https://github.com");
-const DRY = has("--dry-run");
-const AS_JSON = has("--json");
-const DO_PUSH = has("--push");
-const TOKEN = process.env.SYNC_TOKEN || process.env.GH_TOKEN || "";
-
-if (!["detect", "pull", "push"].includes(MODE)) {
-  console.error("用法: node base-sync.mjs detect|pull|push [--repo <path>] [--base <path>] [--base-dir <path>] [--base-url <prefix>] [--push] [--dry-run] [--json]");
-  process.exit(64);
+function parseArgs(argv) {
+  const mode = argv[0];
+  const opt = (name, dft = "") => {
+    const index = argv.indexOf(name);
+    return index >= 0 ? argv[index + 1] : dft;
+  };
+  const has = (name) => argv.includes(name);
+  return {
+    mode,
+    repo: opt("--repo"),
+    base: opt("--base"),
+    baseDir: opt("--base-dir"),
+    baseUrl: opt("--base-url", "https://github.com"),
+    extraExclude: opt("--extra-exclude") ? opt("--extra-exclude").split(",").filter(Boolean) : [],
+    dryRun: has("--dry-run"),
+    json: has("--json"),
+    push: has("--push"),
+    noCommit: has("--no-commit"),
+    requiredOnly: has("--required-only"),
+    adopt: has("--adopt"),
+  };
 }
 
-/* ---------------- 工具 ---------------- */
-const sh = (cmd, cmdArgs, cwd) => execFileSync(cmd, cmdArgs, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-const git = (cwd, ...gitArgs) => sh("git", gitArgs, cwd);
+/* ---------------- 安全的命令执行与认证 ---------------- */
+function redact(value, token = process.env.GH_TOKEN || "") {
+  let text = String(value ?? "");
+  const secrets = [token, token ? encodeURIComponent(token) : "", token ? Buffer.from(`x-access-token:${token}`).toString("base64") : ""].filter(Boolean);
+  for (const secret of secrets) text = text.split(secret).join("[REDACTED]");
+  return text
+    .replace(/\bgh[pousr]_[A-Za-z0-9_]{20,}\b/g, "[REDACTED_GITHUB_TOKEN]")
+    .replace(/\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, "[REDACTED_GITHUB_TOKEN]")
+    .replace(/(https?:\/\/)[^/@\s]+@/g, "$1[REDACTED]@");
+}
 
+function gitAuthEnv(token = process.env.GH_TOKEN || "") {
+  const env = { ...process.env, GIT_TERMINAL_PROMPT: "0" };
+  if (!token) return env;
+  const count = Number.parseInt(env.GIT_CONFIG_COUNT || "0", 10) || 0;
+  env.GIT_CONFIG_COUNT = String(count + 1);
+  env[`GIT_CONFIG_KEY_${count}`] = "http.extraHeader";
+  env[`GIT_CONFIG_VALUE_${count}`] = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`;
+  return env;
+}
+
+function sh(cmd, cmdArgs, cwd, { auth = false } = {}) {
+  try {
+    return execFileSync(cmd, cmdArgs, {
+      cwd,
+      encoding: "utf8",
+      env: auth ? gitAuthEnv() : { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+  } catch (error) {
+    const stderr = error?.stderr ? String(error.stderr).trim() : "";
+    const detail = redact(stderr || error?.message || `${cmd} 执行失败`);
+    throw new Error(detail.slice(0, 2000));
+  }
+}
+
+const git = (cwd, ...args) => sh("git", args, cwd);
+
+function credentialFreeRemote(url) {
+  if (/^https?:\/\//i.test(url)) {
+    const parsed = new URL(url);
+    if (parsed.username || parsed.password) throw new Error(`远端 URL 不得包含凭据：${redact(url)}`);
+  }
+  return url;
+}
+
+function canSendGithubHeader(url) {
+  if (!process.env.GH_TOKEN || !/^https?:\/\//i.test(url)) return false;
+  try {
+    return new URL(url).hostname.toLowerCase() === "github.com";
+  } catch {
+    return false;
+  }
+}
+
+function gitNetwork(cwd, remoteUrl, ...args) {
+  const safeUrl = credentialFreeRemote(remoteUrl);
+  return sh("git", args, cwd, { auth: canSendGithubHeader(safeUrl) });
+}
+
+function repoUrl(baseUrl, repo) {
+  return credentialFreeRemote(`${baseUrl.replace(/\/$/, "")}/${repo}.git`);
+}
+
+function assertClean(repoRoot, action) {
+  const dirty = git(repoRoot, "status", "--porcelain=v1", "--untracked-files=all");
+  if (dirty) {
+    const lines = dirty.split("\n");
+    const paths = lines.slice(0, 8).map((line) => line.slice(3)).join(", ");
+    throw new Error(`拒绝${action}：目标仓库存在未提交改动（${paths}${lines.length > 8 ? " …" : ""}）。请先提交或暂存到其他工作树。`);
+  }
+}
+
+/* ---------------- scope 与内容工具 ---------------- */
 function globToRegExp(glob) {
-  let re = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&");
-  re = re.replace(/\*\*/g, "\u0000");          // 占位：双星
-  re = re.replace(/\*/g, "[^/]*");         // 单星：单层
-  re = re.replace(/\u0000/g, ".*");            // 双星：任意层级
-  return new RegExp("^" + re + "$");
+  let pattern = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  pattern = pattern.replace(/\*\*/g, "\u0000");
+  pattern = pattern.replace(/\*/g, "[^/]*");
+  pattern = pattern.replace(/\u0000/g, ".*");
+  return new RegExp(`^${pattern}$`);
+}
+
+function assertSafeRelative(path, label) {
+  const raw = String(path);
+  const segments = raw.split("/");
+  if (
+    !raw ||
+    raw.includes("\\") ||
+    raw.includes("\u0000") ||
+    raw.includes("\n") ||
+    raw.includes("\r") ||
+    raw.startsWith("/") ||
+    segments.some((segment) => !segment || segment === "." || segment === "..")
+  ) {
+    throw new Error(`${label} 必须是仓库内安全相对路径：${redact(path)}`);
+  }
+  return raw;
+}
+
+function assertContained(root, path, label) {
+  const rootPath = resolve(root);
+  const targetPath = resolve(path);
+  if (targetPath !== rootPath && !targetPath.startsWith(`${rootPath}${sep}`)) {
+    throw new Error(`${label} 逃逸出受控根目录：${redact(path)}`);
+  }
+  return targetPath;
+}
+
+function assertNoSymlinkPath(root, path, label, { allowMissing = true } = {}) {
+  const lexicalRoot = resolve(root);
+  const lexicalTarget = assertContained(lexicalRoot, path, label);
+  const rootPath = realpathSync(lexicalRoot);
+  const targetPath = join(rootPath, relative(lexicalRoot, lexicalTarget));
+  assertContained(rootPath, targetPath, label);
+  const rel = relative(rootPath, targetPath);
+  let cursor = rootPath;
+  for (const part of rel.split(sep).filter(Boolean)) {
+    cursor = join(cursor, part);
+    let stat;
+    try {
+      stat = lstatSync(cursor);
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+      if (!allowMissing) throw new Error(`${label} 不存在：${relative(rootPath, cursor)}`);
+      break;
+    }
+    if (stat.isSymbolicLink()) {
+      throw new Error(`${label} 不允许 symlink：${relative(rootPath, cursor)}`);
+    }
+  }
+  return targetPath;
+}
+
+function isContained(root, path) {
+  const rootPath = resolve(root);
+  const targetPath = resolve(path);
+  return targetPath === rootPath || targetPath.startsWith(`${rootPath}${sep}`);
+}
+
+function resolveChildTarget(requested) {
+  const lexicalTarget = resolve(requested);
+  let targetStat;
+  try {
+    targetStat = lstatSync(lexicalTarget);
+  } catch (error) {
+    if (error?.code === "ENOENT") throw new Error(`--repo 目录不存在：${lexicalTarget}`);
+    throw error;
+  }
+  if (targetStat.isSymbolicLink()) throw new Error("--repo 目标路径不允许 symlink");
+  if (!targetStat.isDirectory()) throw new Error("--repo 必须指向目录");
+
+  const childDir = realpathSync(lexicalTarget);
+  const repoRoot = realpathSync(resolve(git(lexicalTarget, "rev-parse", "--show-toplevel")));
+  if (!isContained(repoRoot, childDir)) throw new Error("--repo 解析后逃逸出目标 Git 工作树");
+
+  // 从目标路径逐层向上找物理 Git 根。每一层都先 lstat，因此即使某个
+  // pathPrefix 中间段是指向另一仓库的 symlink，也会在 realpath 前被拒绝。
+  let lexicalRoot = lexicalTarget;
+  while (realpathSync(lexicalRoot) !== repoRoot) {
+    const parent = dirname(lexicalRoot);
+    if (parent === lexicalRoot) throw new Error("--repo 无法映射回目标 Git 根目录");
+    lexicalRoot = parent;
+    const stat = lstatSync(lexicalRoot);
+    if (stat.isSymbolicLink()) {
+      throw new Error(`--repo 目标路径不允许 symlink：${lexicalRoot}`);
+    }
+  }
+  assertNoSymlinkPath(lexicalRoot, lexicalTarget, "--repo 目标路径", { allowMissing: false });
+  return { childDir, repoRoot };
+}
+
+function validateScope(scope, baseDir) {
+  const required = scope.requiredRootAssets;
+  if (!required || !Array.isArray(required.files) || typeof required.managedSections !== "object") {
+    throw new Error("base-scope.json 缺少 requiredRootAssets.files/managedSections");
+  }
+  for (const path of required.files) {
+    const safePath = assertSafeRelative(path, "required root asset");
+    assertNoSymlinkPath(baseDir, join(baseDir, safePath), `required root asset ${safePath}`, { allowMissing: false });
+  }
+  for (const [path, config] of Object.entries(required.managedSections)) {
+    const safePath = assertSafeRelative(path, "managed section path");
+    assertNoSymlinkPath(baseDir, join(baseDir, safePath), `managed section ${safePath}`, { allowMissing: false });
+    extractManagedSection(readFileSync(join(baseDir, safePath), "utf8"), config, safePath);
+  }
+  for (const [target, config] of Object.entries(required.copiedFiles ?? {})) {
+    const safeTarget = assertSafeRelative(target, "copied root asset target");
+    const source = assertSafeRelative(config.source, `copied root asset ${safeTarget} source`);
+    assertNoSymlinkPath(baseDir, join(baseDir, source), `copied root asset source ${source}`, { allowMissing: false });
+  }
+  if (typeof scope.preCommitSecretScanner !== "string") throw new Error("base-scope.json 缺少 preCommitSecretScanner");
+  const scanner = assertSafeRelative(scope.preCommitSecretScanner, "preCommitSecretScanner");
+  assertNoSymlinkPath(baseDir, join(baseDir, scanner), `pre-commit scanner ${scanner}`, { allowMissing: false });
+  for (const [path, config] of Object.entries(scope.adoptMigrations ?? {})) {
+    const safePath = assertSafeRelative(path, "adopt migration path");
+    if (!["replace-if-identical-to-base", "remove-if-identical-to-base"].includes(config.strategy)) {
+      throw new Error(`adopt migration ${safePath} strategy 不受支持`);
+    }
+    if (config.strategy === "replace-if-identical-to-base" && typeof config.scaffold !== "string") {
+      throw new Error(`adopt migration ${safePath} 缺少 scaffold`);
+    }
+    assertNoSymlinkPath(baseDir, join(baseDir, safePath), `adopt migration source ${safePath}`, { allowMissing: false });
+  }
 }
 
 function loadScope(baseDir) {
-  const scope = JSON.parse(readFileSync(join(baseDir, "sync/base-scope.json"), "utf8"));
+  const raw = JSON.parse(readFileSync(join(baseDir, "sync/base-scope.json"), "utf8"));
+  validateScope(raw, baseDir);
   return {
-    raw: scope,
-    includes: scope.include.map(globToRegExp),
-    excludes: scope.exclude.map(globToRegExp),
+    raw,
+    includes: raw.include.map(globToRegExp),
+    excludes: raw.exclude.map(globToRegExp),
   };
 }
-/** 仓级追加排除：合并到 scope（全局边界管不了的"同一文件在不同仓性质不同"，如 panda 电商化改写的 service 层） */
-function withExtraExclude(sc, extraExclude = []) {
-  if (!extraExclude.length) return sc;
-  return { raw: sc.raw, includes: sc.includes, excludes: [...sc.excludes, ...extraExclude.map(globToRegExp)] };
+
+function withExtraExclude(scope, extraExclude = []) {
+  if (!extraExclude.length) return scope;
+  return { ...scope, excludes: [...scope.excludes, ...extraExclude.map(globToRegExp)] };
 }
-const hitAny = (res, p) => res.some((r) => r.test(p));
-const inScope = (sc, p) => !hitAny(sc.excludes, p) && hitAny(sc.includes, p);
+
+const hitAny = (patterns, path) => patterns.some((pattern) => pattern.test(path));
+const inScope = (scope, path) => !hitAny(scope.excludes, path) && hitAny(scope.includes, path);
 
 function* walk(dir, base = dir) {
   for (const name of readdirSync(dir)) {
     if (["node_modules", ".git", "dist", ".dsh-home"].includes(name)) continue;
     const full = join(dir, name);
-    const st = statSync(full);
-    if (st.isDirectory()) yield* walk(full, base);
+    const stat = lstatSync(full);
+    if (stat.isSymbolicLink()) yield relative(base, full);
+    else if (stat.isDirectory()) yield* walk(full, base);
     else yield relative(base, full);
   }
 }
 
-function ensureBaseClone(baseRepo) {
-  const dir = mkdtempSync(join(tmpdir(), "workloom-base-"));
-  const authUrl = TOKEN ? `${BASE_URL.replace("https://", `https://oauth2:${TOKEN}@`)}/${baseRepo}.git` : `${BASE_URL}/${baseRepo}.git`;
-  sh("git", ["clone", "--depth", "1", authUrl, dir]);
-  return dir;
+function controlledSourcePaths(baseDir, scope, requiredOnly, additionalPaths = []) {
+  const paths = [
+    "sync/base-sync.mjs",
+    "sync/base-scope.json",
+    scope.raw.preCommitSecretScanner,
+    ...scope.raw.requiredRootAssets.files,
+    ...Object.keys(scope.raw.requiredRootAssets.managedSections),
+    ...Object.values(scope.raw.requiredRootAssets.copiedFiles ?? {}).map((config) => config.source),
+    ...additionalPaths,
+  ];
+  if (!requiredOnly) paths.push(...[...walk(baseDir)].filter((path) => inScope(scope, path)));
+  return [...new Set(paths.map((path) => assertSafeRelative(path, "受控源文件")))].sort();
 }
 
-function readState(childDir) {
-  const p = join(childDir, ".workloom-base-sync.json");
-  return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : null;
-}
-function writeState(childDir, state) {
-  if (DRY) return;
-  writeFileSync(join(childDir, ".workloom-base-sync.json"), JSON.stringify(state, null, 2) + "\n");
+function verifyBaseSourcesAtHead(baseDir, scope, requiredOnly, additionalPaths = []) {
+  const root = realpathSync(resolve(git(baseDir, "rev-parse", "--show-toplevel")));
+  if (root !== realpathSync(resolve(baseDir))) throw new Error(`--base-dir 必须指向基座 Git 根目录：${root}`);
+  const paths = controlledSourcePaths(baseDir, scope, requiredOnly, additionalPaths);
+  for (const path of paths) assertNoSymlinkPath(baseDir, join(baseDir, path), `受控源文件 ${path}`, { allowMissing: false });
+
+  const status = git(baseDir, "status", "--porcelain=v1", "--untracked-files=all", "--", ...paths);
+  if (status) {
+    const changed = status.split("\n").slice(0, 8).map((line) => line.slice(3)).join(", ");
+    throw new Error(`基座受控源文件与 HEAD 不一致：${changed}`);
+  }
+
+  const worktreeHashes = git(baseDir, "hash-object", "--", ...paths).split("\n").filter(Boolean);
+  const headHashes = git(baseDir, "rev-parse", ...paths.map((path) => `HEAD:${path}`)).split("\n").filter(Boolean);
+  if (worktreeHashes.length !== paths.length || headHashes.length !== paths.length) {
+    throw new Error("基座受控源文件必须全部由当前 HEAD 跟踪");
+  }
+  for (let index = 0; index < paths.length; index += 1) {
+    if (worktreeHashes[index] !== headHashes[index]) throw new Error(`基座受控源文件与 HEAD 字节不一致：${paths[index]}`);
+  }
+
+  const engineInBase = join(baseDir, "sync/base-sync.mjs");
+  if (!readFileSync(SCRIPT_PATH).equals(readFileSync(engineInBase))) {
+    throw new Error("当前执行的 base-sync.mjs 与 --base-dir HEAD 中的引擎不一致");
+  }
+  return { baseSha: git(baseDir, "rev-parse", "HEAD"), paths };
 }
 
-/* ---------------- 锚点合并：基座版为底，子仓独有条目补回 ---------------- */
+function sha256(content) {
+  return createHash("sha256").update(content).digest("hex");
+}
+
+function markerCount(content, marker) {
+  return content.split(marker).length - 1;
+}
+
+function extractManagedSection(content, config, path = "AGENTS.md") {
+  const { beginMarker, endMarker } = config;
+  const begins = markerCount(content, beginMarker);
+  const ends = markerCount(content, endMarker);
+  if (begins !== 1 || ends !== 1) {
+    throw new Error(`${path} 的 WorkLoom 受控标记必须且只能各出现一次（BEGIN=${begins}, END=${ends}）`);
+  }
+  const begin = content.indexOf(beginMarker);
+  const end = content.indexOf(endMarker, begin + beginMarker.length);
+  if (end < begin) throw new Error(`${path} 的 WorkLoom 受控标记顺序错误`);
+  return content.slice(begin, end + endMarker.length);
+}
+
+function managedScaffold(section, config) {
+  const prefix = (config.missingFilePrefix ?? "# WorkLoom 仓库开发指引").trim();
+  const suffix = (config.missingFileSuffix ?? "## 本仓专属规则\n\n请在此补充本仓约定，或写入根级 AGENTS.repo.md。").trim();
+  return `${prefix}\n\n${section}\n\n${suffix}\n`;
+}
+
+function mergeManagedSectionDetailed(baseContent, childContent, config, path = "AGENTS.md") {
+  const section = extractManagedSection(baseContent, config, path);
+  if (!childContent.trim()) {
+    return { content: managedScaffold(section, config), scaffoldCreated: true };
+  }
+  const hasBegin = childContent.includes(config.beginMarker);
+  const hasEnd = childContent.includes(config.endMarker);
+  if (!hasBegin && !hasEnd) {
+    const fingerprint = sha256(Buffer.from(childContent, "utf8"));
+    if ((config.replaceWholeFileSha256 ?? []).includes(fingerprint)) {
+      return { content: managedScaffold(section, config), legacyReplaced: true };
+    }
+    const prefix = childContent.trimEnd();
+    return {
+      content: `${prefix}${prefix ? "\n\n" : ""}${section}\n`,
+      unknownWithoutMarkers: true,
+    };
+  }
+  const oldSection = extractManagedSection(childContent, config, path);
+  return { content: childContent.replace(oldSection, section) };
+}
+
+function mergeManagedSection(baseContent, childContent, config, path = "AGENTS.md") {
+  return mergeManagedSectionDetailed(baseContent, childContent, config, path).content;
+}
+
 function mergeKeepChildExtra(baseObj, childObj, mergeKeys) {
   const out = JSON.parse(JSON.stringify(baseObj));
   for (const key of mergeKeys) {
-    const b = baseObj[key], c = childObj[key];
-    if (Array.isArray(b) || Array.isArray(c)) {
-      const bb = Array.isArray(b) ? b : [], cc = Array.isArray(c) ? c : [];
-      out[key] = [...cc.filter((x) => !bb.includes(x)), ...bb]; // 子仓独有元素前置保留
+    const baseValue = baseObj[key];
+    const childValue = childObj[key];
+    if (Array.isArray(baseValue) || Array.isArray(childValue)) {
+      const baseArray = Array.isArray(baseValue) ? baseValue : [];
+      const childArray = Array.isArray(childValue) ? childValue : [];
+      out[key] = [...childArray.filter((item) => !baseArray.includes(item)), ...baseArray];
     } else {
-      const bb = b ?? {}, cc = c ?? {};
-      out[key] = { ...bb };
-      for (const [k, v] of Object.entries(cc)) if (!(k in bb)) out[key][k] = v;
+      const baseRecord = baseValue ?? {};
+      const childRecord = childValue ?? {};
+      out[key] = { ...baseRecord };
+      for (const [name, value] of Object.entries(childRecord)) if (!(name in baseRecord)) out[key][name] = value;
     }
   }
   return out;
 }
 
-/** 语义级判定：anchorMerge 文件按"基座条目在子仓缺失或值不同"判定（子仓独有条目/顺序/格式不触发） */
 function anchorNeedsSync(baseObj, childObj, mergeKeys) {
   const topKeys = new Set([...Object.keys(baseObj), ...mergeKeys]);
   for (const key of topKeys) {
-    const b = baseObj[key], c = childObj[key];
+    const baseValue = baseObj[key];
+    const childValue = childObj[key];
     if (mergeKeys.includes(key)) {
-      if (Array.isArray(b) || Array.isArray(c)) {
-        const bb = Array.isArray(b) ? b : [], cc = Array.isArray(c) ? c : [];
-        for (const item of bb) if (!cc.includes(item)) return true; // 基座元素在子仓缺失
+      if (Array.isArray(baseValue) || Array.isArray(childValue)) {
+        const baseArray = Array.isArray(baseValue) ? baseValue : [];
+        const childArray = Array.isArray(childValue) ? childValue : [];
+        if (baseArray.some((item) => !childArray.includes(item))) return true;
       } else {
-        const bb = b ?? {}, cc = c ?? {};
-        for (const [k, v] of Object.entries(bb)) {
-          if (!(k in cc) || JSON.stringify(cc[k]) !== JSON.stringify(v)) return true;
+        const baseRecord = baseValue ?? {};
+        const childRecord = childValue ?? {};
+        for (const [name, value] of Object.entries(baseRecord)) {
+          if (!(name in childRecord) || JSON.stringify(childRecord[name]) !== JSON.stringify(value)) return true;
         }
       }
-    } else if (JSON.stringify(b) !== JSON.stringify(c)) return true; // 非合并顶层 key 需一致
+    } else if (JSON.stringify(baseValue) !== JSON.stringify(childValue)) return true;
   }
   return false;
 }
 
-/** 文件级同步判定（detect 与 pull 共用的唯一事实逻辑） */
 function fileNeedsSync(scope, rel, src, dst) {
   if (!existsSync(dst)) return true;
-  if (scope.appendOnlyDirs.some((d) => rel.startsWith(d + "/"))) return false; // 已存在迁移永不同步（append-only 纪律）
-  const anchorCfg = scope.anchorMerge[rel];
-  if (anchorCfg) {
+  if (scope.appendOnlyDirs.some((dir) => rel.startsWith(`${dir}/`))) return false;
+  const anchor = scope.anchorMerge[rel];
+  if (anchor) {
     try {
-      return anchorNeedsSync(JSON.parse(readFileSync(src, "utf8")), JSON.parse(readFileSync(dst, "utf8")), anchorCfg.mergeKeys);
-    } catch { return true; } // 解析失败按需要同步处理
+      return anchorNeedsSync(JSON.parse(readFileSync(src, "utf8")), JSON.parse(readFileSync(dst, "utf8")), anchor.mergeKeys);
+    } catch {
+      return true;
+    }
   }
-  return readFileSync(dst, "utf8") !== readFileSync(src, "utf8");
+  return !readFileSync(dst).equals(readFileSync(src));
 }
 
-/* ---------------- 单仓同步核心（pull 与 push 共用） ---------------- */
-function syncToChild(baseDir, childDir, sc, report, extraGlobs = []) {
-  const baseSha = git(baseDir, "rev-parse", "HEAD");
-  const scope = sc.raw;
-  const copied = [], merged = [], skippedAppendOnly = [], warnings = [];
+function readState(childDir, repoRoot = targetRepoRoot(childDir)) {
+  const rootPath = join(repoRoot, STATE_FILE);
+  assertNoSymlinkPath(repoRoot, rootPath, `目标 state ${STATE_FILE}`);
+  if (existsSync(rootPath)) return JSON.parse(readFileSync(rootPath, "utf8"));
+  // v2 兼容：Tiger 曾把 state 放在 governance/。读取旧值，但下次 pull 统一迁到 Git 根。
+  const legacyPath = join(childDir, STATE_FILE);
+  assertNoSymlinkPath(repoRoot, legacyPath, `legacy state ${relative(repoRoot, legacyPath)}`);
+  return legacyPath !== rootPath && existsSync(legacyPath) ? JSON.parse(readFileSync(legacyPath, "utf8")) : null;
+}
 
-  // ① 收集 scope 内基座文件
-  const scopeFiles = [...walk(baseDir)].filter((p) => inScope(sc, p));
+function requiredAssetDigests(baseDir, scope) {
+  const result = {};
+  for (const path of scope.requiredRootAssets.files) result[path] = sha256(readFileSync(join(baseDir, path)));
+  for (const [target, config] of Object.entries(scope.requiredRootAssets.copiedFiles ?? {})) {
+    result[target] = sha256(readFileSync(join(baseDir, config.source)));
+  }
+  for (const [path, config] of Object.entries(scope.requiredRootAssets.managedSections)) {
+    const section = extractManagedSection(readFileSync(join(baseDir, path), "utf8"), config, path);
+    result[`${path}#managed-section`] = sha256(section);
+  }
+  return result;
+}
 
-  // ② 防污染硬校验（双保险：scope 已过滤，这里再扫黑名单；^ 前缀=路径锚定，其余=子串）
-  const blackHit = (p) => scope.pollutionGuard.pathBlacklist.some((b) => b.startsWith("^") ? p.startsWith(b.slice(1)) : p.includes(b));
+function targetRepoRoot(childDir) {
+  return realpathSync(resolve(git(childDir, "rev-parse", "--show-toplevel")));
+}
+
+function makePlan(baseDir, childDir, repoRoot, scope, options = {}) {
+  const { requiredOnly = false } = options;
+  const operations = [];
+  const skippedAppendOnly = [];
+  const warnings = [];
+  assertContained(repoRoot, childDir, "目标基座目录");
+  const scopeFiles = requiredOnly ? [] : [...walk(baseDir)].filter((path) => inScope(scope, path));
+  const blackHit = (path) => scope.raw.pollutionGuard.pathBlacklist.some((entry) => entry.startsWith("^") ? path.startsWith(entry.slice(1)) : path.includes(entry));
   const blackHits = scopeFiles.filter(blackHit);
   if (blackHits.length) throw new Error(`防污染护栏触发：scope 文件命中黑名单 → ${blackHits.slice(0, 5).join(", ")}`);
 
   for (const rel of scopeFiles) {
     const src = join(baseDir, rel);
     const dst = join(childDir, rel);
-    const dstExists = existsSync(dst);
-
-    // 统一判定：不需要同步的文件直接跳过（迁移 append-only / 锚点语义级 / 逐字节三态内含）
-    if (!fileNeedsSync(scope, rel, src, dst)) {
-      if (dstExists && scope.appendOnlyDirs.some((d) => rel.startsWith(d + "/")) && readFileSync(src, "utf8") !== readFileSync(dst, "utf8")) {
-        skippedAppendOnly.push(rel); warnings.push(`迁移漂移跳过（各仓迁移链须自洽）: ${rel}`);
+    assertNoSymlinkPath(baseDir, src, `基座源文件 ${rel}`, { allowMissing: false });
+    assertNoSymlinkPath(repoRoot, dst, `目标文件 ${relative(repoRoot, dst)}`);
+    if (!fileNeedsSync(scope.raw, rel, src, dst)) {
+      if (existsSync(dst) && scope.raw.appendOnlyDirs.some((dir) => rel.startsWith(`${dir}/`)) && !readFileSync(src).equals(readFileSync(dst))) {
+        skippedAppendOnly.push(rel);
+        warnings.push(`迁移漂移跳过（各仓迁移链须自洽）: ${rel}`);
       }
       continue;
     }
-
-    // ③ 迁移目录 append-only：子仓没有该迁移才复制（新增迁移可同步；已存在漂移上面已跳过）
-    if (scope.appendOnlyDirs.some((d) => rel.startsWith(d + "/"))) {
-      if (!DRY) { mkdirSync(dirname(dst), { recursive: true }); copyFileSync(src, dst); }
-      copied.push(rel);
-      continue;
+    const anchor = scope.raw.anchorMerge[rel];
+    if (anchor && existsSync(dst)) {
+      const merged = JSON.stringify(mergeKeepChildExtra(JSON.parse(readFileSync(src, "utf8")), JSON.parse(readFileSync(dst, "utf8")), anchor.mergeKeys), null, 2) + "\n";
+      operations.push({ kind: "merge", rel, dst, content: merged, stagePath: relative(repoRoot, dst) });
+    } else {
+      operations.push({ kind: "copy", rel, src, dst, stagePath: relative(repoRoot, dst) });
     }
-
-    // ④ 锚点合并文件：按策略合并而非覆盖
-    const anchorCfg = scope.anchorMerge[rel];
-    if (anchorCfg && dstExists) {
-      const mergedObj = mergeKeepChildExtra(JSON.parse(readFileSync(src, "utf8")), JSON.parse(readFileSync(dst, "utf8")), anchorCfg.mergeKeys);
-      if (!DRY) writeFileSync(dst, JSON.stringify(mergedObj, null, 2) + "\n");
-      merged.push(rel);
-      continue;
-    }
-
-    // ⑤ 常规复制
-    if (!DRY) { mkdirSync(dirname(dst), { recursive: true }); copyFileSync(src, dst); }
-    copied.push(rel);
   }
 
-  // ⑥ 提交 + 状态落盘
-  const changed = copied.length + merged.length;
-  // 防污染护栏：单次实际变更数超限即中止（scope 总量大是正常的，护栏管的是单次漂移幅度）
-  if (changed > scope.pollutionGuard.maxFilesPerSync) throw new Error(`防污染护栏触发：单次变更 ${changed} 文件超过上限 ${scope.pollutionGuard.maxFilesPerSync}——请人工核对同步范围`);
-  let committed = false;
-  if (changed > 0 && !DRY) {
-    // 锚点合并动了 package.json → 同步刷新 lockfile（否则子仓 CI 的 --frozen-lockfile 必挂；失败仅告警不阻断）
-    if (merged.length > 0) {
-      try {
-        sh("pnpm", ["install", "--lockfile-only"], childDir);
-        report.lockfileRefreshed = true;
-      } catch (e) { warnings.push(`lockfile 刷新失败（请手动 pnpm install）: ${String(e.message ?? e).slice(0, 120)}`); }
+  for (const rel of scope.raw.requiredRootAssets.files) {
+    const src = join(baseDir, rel);
+    const dst = join(repoRoot, rel);
+    assertNoSymlinkPath(baseDir, src, `required root asset ${rel}`, { allowMissing: false });
+    assertNoSymlinkPath(repoRoot, dst, `目标 required root asset ${rel}`);
+    if (!existsSync(dst) || !readFileSync(dst).equals(readFileSync(src))) {
+      operations.push({ kind: "required-copy", rel: `root:${rel}`, src, dst, stagePath: rel });
     }
-    git(childDir, "add", "-A");
-    const files = [...copied, ...merged.map((m) => m + "(merge)")].slice(0, 30).join(", ");
-    git(childDir, "-c", "user.name=WorkLoom Base Sync", "-c", "user.email=base-sync@workloom.im", "commit", "-m",
-      `chore(base-sync): 基座能力对齐 → ${baseSha.slice(0, 8)}（base-sync 自动）\n\n复制 ${copied.length} 文件 · 锚点合并 ${merged.length} 文件${skippedAppendOnly.length ? ` · 迁移跳过 ${skippedAppendOnly.length}` : ""}\n${files}${changed > 30 ? " …" : ""}`);
-    committed = true;
   }
-  if (!DRY) writeState(childDir, { baseRepo: readState(childDir)?.baseRepo ?? "geniusdapeng-collab/workloom-im", lastSyncedBaseSha: baseSha, lastSyncAt: new Date().toISOString(), filesTouched: changed, ...(extraGlobs.length || readState(childDir)?.extraExclude ? { extraExclude: extraGlobs.length ? extraGlobs : readState(childDir).extraExclude } : {}) });
+  for (const [target, config] of Object.entries(scope.raw.requiredRootAssets.copiedFiles ?? {})) {
+    const src = join(baseDir, config.source);
+    const dst = join(repoRoot, target);
+    assertNoSymlinkPath(baseDir, src, `copied root asset source ${config.source}`, { allowMissing: false });
+    assertNoSymlinkPath(repoRoot, dst, `目标 copied root asset ${target}`);
+    if (!existsSync(dst) || !readFileSync(dst).equals(readFileSync(src))) {
+      operations.push({ kind: "required-copy", rel: `root:${target}`, src, dst, stagePath: target });
+    }
+  }
+  for (const [rel, config] of Object.entries(scope.raw.requiredRootAssets.managedSections)) {
+    const src = join(baseDir, rel);
+    const dst = join(repoRoot, rel);
+    assertNoSymlinkPath(baseDir, src, `managed section source ${rel}`, { allowMissing: false });
+    assertNoSymlinkPath(repoRoot, dst, `目标 managed section ${rel}`);
+    const baseContent = readFileSync(src, "utf8");
+    const childContent = existsSync(dst) ? readFileSync(dst, "utf8") : "";
+    const result = mergeManagedSectionDetailed(baseContent, childContent, config, rel);
+    if (result.unknownWithoutMarkers) warnings.push(`${rel} 无受控标记且 fingerprint 未知：已保留原文并追加受控区块，请人工确认专属规则归档`);
+    if (result.content !== childContent) {
+      operations.push({
+        kind: "managed-section",
+        rel: `root:${rel}#managed-section`,
+        dst,
+        content: result.content,
+        stagePath: rel,
+        legacyAgentsReplaced: Boolean(result.legacyReplaced),
+        manualMigrationRequired: Boolean(result.unknownWithoutMarkers),
+      });
+    }
+  }
 
-  report.copied = copied; report.merged = merged; report.skippedAppendOnly = skippedAppendOnly;
-  report.warnings = warnings; report.changed = changed; report.committed = committed; report.baseSha = baseSha;
-  return report;
+  if (options.adopt && realpathSync(baseDir) !== realpathSync(repoRoot)) {
+    for (const [rel, config] of Object.entries(scope.raw.adoptMigrations ?? {})) {
+      const src = join(baseDir, rel);
+      const dst = join(repoRoot, rel);
+      assertNoSymlinkPath(baseDir, src, `adopt migration source ${rel}`, { allowMissing: false });
+      assertNoSymlinkPath(repoRoot, dst, `adopt migration target ${rel}`);
+      if (!existsSync(dst)) continue;
+      if (!readFileSync(dst).equals(readFileSync(src))) {
+        warnings.push(`${rel} 与基座 fingerprint 不同：视为子仓已定制，adopt 未覆盖`);
+        continue;
+      }
+      if (config.strategy === "remove-if-identical-to-base") {
+        operations.push({ kind: "adopt-delete", rel: `root:${rel}#adopt-remove`, dst, stagePath: rel, delete: true });
+      } else if (readFileSync(dst, "utf8") !== config.scaffold) {
+        operations.push({ kind: "adopt-scaffold", rel: `root:${rel}#adopt-scaffold`, dst, stagePath: rel, content: config.scaffold });
+      }
+    }
+  }
+
+  if (operations.length > scope.raw.pollutionGuard.maxFilesPerSync) {
+    throw new Error(`防污染护栏触发：单次变更 ${operations.length} 文件超过上限 ${scope.raw.pollutionGuard.maxFilesPerSync}——请人工核对同步范围`);
+  }
+  return { operations, skippedAppendOnly, warnings };
 }
 
-/* ---------------- 模式：detect（心跳检测） ---------------- */
-function modeDetect(childDir) {
-  const state = readState(childDir);
-  const baseRepo = state?.baseRepo ?? "geniusdapeng-collab/workloom-im";
-  const authUrl = TOKEN ? `${BASE_URL.replace("https://", `https://oauth2:${TOKEN}@`)}/${baseRepo}.git` : `${BASE_URL}/${baseRepo}.git`;
-  const remoteLine = sh("git", ["ls-remote", authUrl, "main"]);
-  const remoteSha = remoteLine.split(/\s/)[0];
-
-  const report = { mode: "detect", child: childDir, remoteSha, localSha: state?.lastSyncedBaseSha ?? null, behind: true, files: [] };
-  if (state && state.lastSyncedBaseSha === remoteSha) {
-    report.behind = false;
-    output(report, `✅ 基座已对齐（${remoteSha.slice(0, 8)}）`);
-    process.exit(0);
+function applyOperation(operation, repoRoot) {
+  assertNoSymlinkPath(repoRoot, operation.dst, `写入目标 ${operation.stagePath}`);
+  if (operation.delete) {
+    rmSync(operation.dst, { force: true });
+    return;
   }
-
-  // 落后：拉基座算差异清单（合并仓级 extraExclude：state 文件自描述 + --extra-exclude 参数）
-  const baseDir = BASE_DIR_OPT || ensureBaseClone(baseRepo);
-  const extra = [...(state?.extraExclude ?? []), ...(opt("--extra-exclude") ? opt("--extra-exclude").split(",") : [])];
-  const sc = withExtraExclude(loadScope(baseDir), extra);
-  const scopeFiles = [...walk(baseDir)].filter((p) => inScope(sc, p));
-  report.files = scopeFiles.filter((rel) => fileNeedsSync(sc.raw, rel, join(baseDir, rel), join(childDir, rel)));
-  // 文件级零差异即视为对齐（自动建立/刷新基线，避免"从未同步"假报警）
-  if (report.files.length === 0) {
-    report.behind = false;
-    if (!DRY) writeState(childDir, { baseRepo, lastSyncedBaseSha: remoteSha, lastSyncAt: new Date().toISOString(), filesTouched: 0, ...(state?.extraExclude ? { extraExclude: state.extraExclude } : {}) });
-    output(report, `✅ 基座能力已对齐（${remoteSha.slice(0, 8)}，scope 内 0 个文件待对齐）`);
-    process.exit(0);
-  }
-  report.behindBy = `${state?.lastSyncedBaseSha?.slice(0, 8) ?? "从未同步"} → ${remoteSha.slice(0, 8)}`;
-  output(report, `⚠️ 基座能力落后（${report.behindBy}）：scope 内 ${report.files.length} 个文件待对齐\n${report.files.slice(0, 20).map((f) => "  · " + f).join("\n")}${report.files.length > 20 ? `\n  … 共 ${report.files.length} 个` : ""}\n\n修复：node sync/base-sync.mjs pull --repo . --push（或等待心跳 CI 自动对齐）`);
-  if (!BASE_DIR_OPT) rmSync(baseDir, { recursive: true, force: true });
-  process.exit(2);
+  mkdirSync(dirname(operation.dst), { recursive: true });
+  if (operation.content !== undefined) writeFileSync(operation.dst, operation.content);
+  else copyFileSync(operation.src, operation.dst);
 }
 
-/* ---------------- 模式：pull（子仓拉齐） ---------------- */
-function modePull(childDir) {
-  const state = readState(childDir);
-  const baseDir = BASE_DIR_OPT || ensureBaseClone(state?.baseRepo ?? "geniusdapeng-collab/workloom-im");
-  const extra = [...(state?.extraExclude ?? []), ...(opt("--extra-exclude") ? opt("--extra-exclude").split(",") : [])];
-  const sc = withExtraExclude(loadScope(baseDir), extra);
-  const report = { mode: "pull", child: childDir };
-  syncToChild(baseDir, childDir, sc, report, extra);
-  if (DO_PUSH && report.committed && !DRY) {
-    const url = git(childDir, "remote", "get-url", "origin");
-    const pushUrl = TOKEN ? url.replace("https://", `https://oauth2:${TOKEN}@`) : url;
-    git(childDir, "push", pushUrl, "main:main");
-    report.pushed = true;
-  }
-  output(report, report.changed === 0
-    ? `✅ 已是最新（基座 ${report.baseSha.slice(0, 8)}），无文件需变更`
-    : `${DRY ? "[dry-run] " : ""}📦 对齐完成：复制 ${report.copied.length} · 锚点合并 ${report.merged.length} · 迁移跳过 ${report.skippedAppendOnly.length}${report.pushed ? " · 已推送" : ""}${report.warnings.length ? "\n⚠️ " + report.warnings.join("\n⚠️ ") : ""}`);
-  if (!BASE_DIR_OPT) rmSync(baseDir, { recursive: true, force: true });
+function changedPaths(repoRoot) {
+  const output = git(repoRoot, "status", "--porcelain=v1", "--untracked-files=all");
+  if (!output) return new Set();
+  return new Set(output.split("\n").map((line) => line.slice(3).replace(/^"|"$/g, "")));
 }
 
-/* ---------------- 模式：push（父仓推送到全部子仓） ---------------- */
-function modePush(baseDir) {
-  const sc0 = loadScope(baseDir);
-  const children = JSON.parse(readFileSync(join(baseDir, "sync/child-repos.json"), "utf8"));
-  const results = [];
-  for (const child of children.children) {
-    const r = { repo: child.repo, ok: false };
-    const dir = mkdtempSync(join(tmpdir(), "workloom-child-"));
+function statePayload(old, baseSha, digests, changed, extraExclude, options, pathPrefix) {
+  const payload = {
+    ...(old ?? {}),
+    baseRepo: old?.baseRepo ?? DEFAULT_BASE_REPO,
+    ...(!options.requiredOnly ? { lastSyncedBaseSha: baseSha } : {}),
+    lastRequiredAssetsBaseSha: baseSha,
+    lastSyncAt: new Date().toISOString(),
+    lastSyncMode: options.requiredOnly ? "required-only" : "full",
+    pathPrefix,
+    filesTouched: changed,
+    requiredRootAssetsSha256: digests,
+  };
+  if (extraExclude.length) payload.extraExclude = extraExclude;
+  else if (options.authoritativeExtraExclude) delete payload.extraExclude;
+  return payload;
+}
+
+function stateNeedsUpdate(oldState, baseSha, digests, extraExclude, options, pathPrefix) {
+  const recordedSha = options.requiredOnly ? oldState?.lastRequiredAssetsBaseSha : oldState?.lastSyncedBaseSha;
+  if (!oldState || recordedSha !== baseSha) return true;
+  if (oldState.pathPrefix !== pathPrefix) return true;
+  if (JSON.stringify(oldState.requiredRootAssetsSha256 ?? {}) !== JSON.stringify(digests)) return true;
+  if ((extraExclude.length || options.authoritativeExtraExclude) && JSON.stringify(oldState.extraExclude ?? []) !== JSON.stringify(extraExclude)) return true;
+  return false;
+}
+
+function stageWhitelist(repoRoot, paths) {
+  const clean = [...new Set(paths.filter(Boolean).map((path) => path.replace(/^\.\//, "")))];
+  if (clean.length) git(repoRoot, "add", "--", ...clean);
+}
+
+function unstageWhitelist(repoRoot, paths) {
+  const clean = [...new Set(paths.filter(Boolean).map((path) => path.replace(/^\.\//, "")))];
+  if (clean.length) git(repoRoot, "reset", "--quiet", "HEAD", "--", ...clean);
+}
+
+function runSecretScanner(baseDir, repoRoot, scannerArgs) {
+  const scanner = join(baseDir, assertSafeRelative(loadScope(baseDir).raw.preCommitSecretScanner, "preCommitSecretScanner"));
+  assertNoSymlinkPath(baseDir, scanner, "pre-commit secret scanner", { allowMissing: false });
+  sh(process.execPath, [scanner, ...scannerArgs], repoRoot);
+}
+
+function scanStateContent(baseDir, repoRoot, content) {
+  const dir = mkdtempSync(join(tmpdir(), "workloom-state-scan-"));
+  const path = join(dir, STATE_FILE);
+  try {
+    writeFileSync(path, content, { mode: 0o600 });
+    runSecretScanner(baseDir, repoRoot, ["--files", path]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function captureFileSnapshot(repoRoot, path, label) {
+  const safePath = assertNoSymlinkPath(repoRoot, path, label);
+  let stat;
+  try {
+    stat = lstatSync(safePath);
+  } catch (error) {
+    if (error?.code === "ENOENT") return { path: safePath, existed: false };
+    throw error;
+  }
+  if (stat.isSymbolicLink()) throw new Error(`${label} 不允许 symlink`);
+  if (!stat.isFile()) throw new Error(`${label} 必须是普通文件`);
+  return { path: safePath, existed: true, content: readFileSync(safePath), mode: stat.mode & 0o777 };
+}
+
+function captureTransaction(repoRoot, paths) {
+  const snapshots = [];
+  const seen = new Set();
+  for (const { path, label } of paths) {
+    const safePath = assertContained(repoRoot, path, label);
+    if (seen.has(safePath)) continue;
+    seen.add(safePath);
+    snapshots.push(captureFileSnapshot(repoRoot, safePath, label));
+  }
+  return { snapshots, seen };
+}
+
+function rememberNewFile(transaction, repoRoot, path, label) {
+  const safePath = assertContained(repoRoot, path, label);
+  if (transaction.seen.has(safePath)) return;
+  transaction.seen.add(safePath);
+  // 这个路径在写命令之前不存在；它在命令后首次出现时记录为“原本缺失”。
+  transaction.snapshots.push({ path: safePath, existed: false });
+}
+
+function restoreTransaction(repoRoot, transaction) {
+  for (const snapshot of [...transaction.snapshots].reverse()) {
+    assertContained(repoRoot, snapshot.path, "事务回滚目标");
+    let current = null;
     try {
-      const authUrl = TOKEN ? `${BASE_URL.replace("https://", `https://oauth2:${TOKEN}@`)}/${child.repo}.git` : `${BASE_URL}/${child.repo}.git`;
-      sh("git", ["clone", "--depth", "1", authUrl, dir]);
-      const childWorkdir = child.pathPrefix ? join(dir, child.pathPrefix.replace(/\/$/, "")) : dir;
-      const extra = child.extraExclude ?? [];
-      const sc = withExtraExclude(sc0, extra);  // 仓级追加排除（父仓权威）
-      syncToChild(baseDir, childWorkdir, sc, r, extra);
-      if (r.committed && !DRY) {
-        git(dir, "push", authUrl, "main:main");
-        r.pushed = true;
+      current = lstatSync(snapshot.path);
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+    if (!snapshot.existed) {
+      if (current) {
+        if (!current.isFile() && !current.isSymbolicLink()) {
+          throw new Error(`事务回滚拒绝移除非文件目标：${relative(repoRoot, snapshot.path)}`);
+        }
+        rmSync(snapshot.path, { force: true });
       }
-      r.ok = true;
-    } catch (e) { r.error = String(e.message ?? e).slice(0, 300); }
-    results.push(r);
-    console.log(`${r.ok ? "✅" : "❌"} ${child.repo}: changed=${r.changed ?? "-"}${r.pushed ? " 已推送" : ""}${r.error ? " 错误: " + r.error : ""}`);
-    if (!DRY) rmSync(dir, { recursive: true, force: true });
+      continue;
+    }
+    if (current?.isSymbolicLink()) rmSync(snapshot.path, { force: true });
+    else if (current && !current.isFile()) throw new Error(`事务回滚目标不是普通文件：${relative(repoRoot, snapshot.path)}`);
+    assertNoSymlinkPath(repoRoot, dirname(snapshot.path), "事务回滚父目录", { allowMissing: true });
+    mkdirSync(dirname(snapshot.path), { recursive: true });
+    writeFileSync(snapshot.path, snapshot.content);
+    chmodSync(snapshot.path, snapshot.mode);
   }
-  const summary = { mode: "push", baseSha: git(baseDir, "rev-parse", "HEAD"), results };
-  output(summary, `\n═══ 推送汇总：${results.filter((r) => r.ok).length}/${results.length} 仓成功 ═══`);
-  if (results.some((r) => !r.ok)) process.exit(1);
 }
 
-/* ---------------- 输出 ---------------- */
-function output(obj, text) {
-  if (AS_JSON) console.log(JSON.stringify(obj, null, 2));
+function transactionPaths(repoRoot, childDir, plan) {
+  const statePath = join(repoRoot, STATE_FILE);
+  const legacyStatePath = join(childDir, STATE_FILE);
+  const paths = [
+    ...plan.operations.map((operation) => ({ path: operation.dst, label: `同步目标 ${operation.stagePath}` })),
+    { path: statePath, label: `同步 state ${STATE_FILE}` },
+    { path: legacyStatePath, label: `legacy state ${relative(repoRoot, legacyStatePath)}` },
+    { path: join(repoRoot, "pnpm-lock.yaml"), label: "根级 pnpm-lock.yaml" },
+    { path: join(childDir, "pnpm-lock.yaml"), label: "基座目录 pnpm-lock.yaml" },
+  ];
+  for (const rel of walk(repoRoot)) {
+    if (/(^|\/)pnpm-lock\.yaml$/.test(rel)) paths.push({ path: join(repoRoot, rel), label: `lockfile ${rel}` });
+  }
+  return paths;
+}
+
+/* ---------------- 单仓同步核心 ---------------- */
+function syncToChild(baseDir, childDir, scope, report, extraExclude = [], options = {}) {
+  const repoRoot = targetRepoRoot(childDir);
+  const relativePrefix = relative(repoRoot, childDir).split(sep).join("/");
+  const pathPrefix = relativePrefix || ".";
+  const baseSha = git(baseDir, "rev-parse", "HEAD");
+  const digests = requiredAssetDigests(baseDir, scope.raw);
+  const oldState = readState(childDir, repoRoot);
+  const plan = makePlan(baseDir, childDir, repoRoot, scope, options);
+  const changed = plan.operations.length;
+
+  report.copied = plan.operations.filter((item) => item.kind.includes("copy")).map((item) => item.rel);
+  report.merged = plan.operations.filter((item) => item.kind === "merge").map((item) => item.rel);
+  report.managed = plan.operations.filter((item) => item.kind === "managed-section").map((item) => item.rel);
+  report.adopted = plan.operations.filter((item) => item.kind.startsWith("adopt-")).map((item) => item.rel);
+  report.legacyAgentsReplaced = plan.operations.some((item) => item.legacyAgentsReplaced);
+  report.manualMigrationRequired = plan.operations.some((item) => item.manualMigrationRequired);
+  report.skippedAppendOnly = plan.skippedAppendOnly;
+  report.warnings = plan.warnings;
+  report.changed = changed;
+  report.baseSha = baseSha;
+  report.requiredRootAssetsSha256 = digests;
+  report.pathPrefix = pathPrefix;
+  report.committed = false;
+
+  const updateState = stateNeedsUpdate(oldState, baseSha, digests, extraExclude, options, pathPrefix) || changed > 0 || !existsSync(join(repoRoot, STATE_FILE));
+  report.stateUpdated = updateState;
+  if (report.dryRun) return report;
+
+  const dirtyBefore = changedPaths(repoRoot);
+  const statePath = join(repoRoot, STATE_FILE);
+  const stateContent = updateState
+    ? JSON.stringify(statePayload(oldState, baseSha, digests, changed, extraExclude, options, pathPrefix), null, 2) + "\n"
+    : null;
+  const legacyStatePath = join(childDir, STATE_FILE);
+  const migrateLegacyState = legacyStatePath !== statePath && existsSync(legacyStatePath);
+  const transaction = captureTransaction(repoRoot, transactionPaths(repoRoot, childDir, plan));
+  const stagedPaths = plan.operations.map((item) => item.stagePath);
+  let didStage = false;
+
+  try {
+    for (const operation of plan.operations) applyOperation(operation, repoRoot);
+
+    // 先逐项复验已安装内容，再写 state，避免把半安装状态登记为“已对齐”。
+    const remaining = makePlan(baseDir, childDir, repoRoot, scope, options).operations;
+    if (remaining.length) throw new Error(`安装后验证失败，仍有 ${remaining.length} 个文件未对齐：${remaining.slice(0, 5).map((item) => item.rel).join(", ")}`);
+
+    if (plan.operations.some((item) => item.kind === "merge")) {
+      try {
+        sh("pnpm", ["install", "--lockfile-only", "--ignore-scripts"], childDir);
+        const dirtyAfter = changedPaths(repoRoot);
+        for (const path of dirtyAfter) {
+          if (!dirtyBefore.has(path) && /(^|\/)pnpm-lock\.yaml$/.test(path)) {
+            const absolute = join(repoRoot, path);
+            rememberNewFile(transaction, repoRoot, absolute, `新 lockfile ${path}`);
+            stagedPaths.push(path);
+          }
+        }
+        report.lockfileRefreshed = true;
+      } catch (error) {
+        throw new Error(`lockfile 刷新失败；未写 state、未提交：${redact(error?.message).slice(0, 300)}`);
+      }
+    }
+
+    if (options.noCommit) {
+      try {
+        const writtenTargets = [...new Set([
+          ...plan.operations.filter((item) => !item.delete && existsSync(item.dst)).map((item) => item.dst),
+          ...stagedPaths.map((path) => join(repoRoot, path)).filter((path) => existsSync(path)),
+        ])];
+        if (writtenTargets.length) runSecretScanner(baseDir, repoRoot, ["--files", ...writtenTargets]);
+        if (stateContent !== null) scanStateContent(baseDir, repoRoot, stateContent);
+      } catch (error) {
+        throw new Error(`no-commit 写入后密钥扫描失败；未写 state、未提交：${redact(error?.message).slice(0, 500)}`);
+      }
+      if (stateContent !== null) {
+        assertNoSymlinkPath(repoRoot, statePath, `写入目标 ${STATE_FILE}`);
+        writeFileSync(statePath, stateContent);
+      }
+      if (migrateLegacyState) {
+        rmSync(legacyStatePath);
+        report.legacyStateMigrated = true;
+      }
+      report.written = true;
+      return report;
+    }
+
+    // 自动提交前先只暂存本次内容白名单并扫描。state 先在仓外扫描，扫描成功后才写入。
+    didStage = true;
+    stageWhitelist(repoRoot, stagedPaths);
+    try {
+      runSecretScanner(baseDir, repoRoot, ["--staged"]);
+      if (stateContent !== null) scanStateContent(baseDir, repoRoot, stateContent);
+    } catch (error) {
+      throw new Error(`提交前密钥扫描失败；未写 state、未提交：${redact(error?.message).slice(0, 500)}`);
+    }
+
+    if (stateContent !== null) {
+      assertNoSymlinkPath(repoRoot, statePath, `写入目标 ${STATE_FILE}`);
+      writeFileSync(statePath, stateContent);
+      stagedPaths.push(STATE_FILE);
+    }
+    if (migrateLegacyState) {
+      rmSync(legacyStatePath);
+      stagedPaths.push(relative(repoRoot, legacyStatePath));
+      report.legacyStateMigrated = true;
+    }
+    stageWhitelist(repoRoot, stagedPaths);
+    try {
+      runSecretScanner(baseDir, repoRoot, ["--staged"]);
+    } catch (error) {
+      throw new Error(`提交前最终密钥扫描失败；未提交：${redact(error?.message).slice(0, 500)}`);
+    }
+
+    const staged = git(repoRoot, "diff", "--cached", "--name-only");
+    if (staged) {
+      const files = plan.operations.map((item) => item.rel).slice(0, 30).join(", ");
+      git(repoRoot, "-c", "user.name=WorkLoom Base Sync", "-c", "user.email=base-sync@workloom.im", "-c", "core.hooksPath=/dev/null", "commit", "-m",
+        `chore(base-sync): 基座能力对齐 → ${baseSha.slice(0, 8)}（base-sync 自动）\n\n内容 ${changed} 文件 · 状态 ${updateState ? "已更新" : "未变"}\n${files}${changed > 30 ? " …" : ""}`);
+      report.committed = true;
+    }
+    return report;
+  } catch (error) {
+    if (!report.committed) {
+      try {
+        if (didStage) unstageWhitelist(repoRoot, [...stagedPaths, STATE_FILE, relative(repoRoot, legacyStatePath)]);
+        restoreTransaction(repoRoot, transaction);
+        const dirtyAfterRollback = changedPaths(repoRoot);
+        if (
+          dirtyAfterRollback.size !== dirtyBefore.size ||
+          [...dirtyBefore].some((path) => !dirtyAfterRollback.has(path))
+        ) {
+          throw new Error("回滚后目标工作树状态与同步前不一致");
+        }
+      } catch (rollbackError) {
+        throw new Error(`${redact(error?.message)}；事务回滚失败：${redact(rollbackError?.message).slice(0, 500)}`);
+      }
+    }
+    throw error;
+  }
+}
+
+function ensureBaseClone(baseRepo, baseUrl) {
+  const dir = mkdtempSync(join(tmpdir(), "workloom-base-"));
+  try {
+    const url = repoUrl(baseUrl, baseRepo);
+    gitNetwork(undefined, url, "clone", "--depth", "1", "--branch", "main", "--single-branch", url, dir);
+    verifyClonedMain(dir);
+    return dir;
+  } catch (error) {
+    rmSync(dir, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+function verifyClonedMain(dir) {
+  const head = git(dir, "rev-parse", "HEAD");
+  const main = git(dir, "rev-parse", "refs/heads/main");
+  if (head !== main) throw new Error(`clone 未固定到 refs/heads/main（HEAD=${head.slice(0, 12)}）`);
+}
+
+function output(options, object, text) {
+  if (options.json) console.log(JSON.stringify(object, null, 2));
   else console.log(text);
 }
 
-/* ---------------- 入口 ---------------- */
-if (MODE === "detect") { if (!REPO) { console.error("detect 需要 --repo"); process.exit(64); } modeDetect(REPO); }
-if (MODE === "pull") { if (!REPO) { console.error("pull 需要 --repo"); process.exit(64); } modePull(REPO); }
-if (MODE === "push") { const b = opt("--base") || join(__dirname, ".."); modePush(b); }
+function effectiveExtra(state, options, configured = []) {
+  return [...new Set([...(configured ?? []), ...(state?.extraExclude ?? []), ...options.extraExclude])];
+}
+
+/* ---------------- CLI modes ---------------- */
+function modeDetect(options) {
+  const { childDir, repoRoot } = resolveChildTarget(options.repo);
+  const state = readState(childDir, repoRoot);
+  const baseRepo = state?.baseRepo ?? DEFAULT_BASE_REPO;
+  let baseDir = options.baseDir ? resolve(options.baseDir) : "";
+  let temporary = false;
+  try {
+    if (!baseDir) {
+      baseDir = ensureBaseClone(baseRepo, options.baseUrl);
+      temporary = true;
+    }
+    const baseSha = git(baseDir, "rev-parse", "HEAD");
+    const extra = effectiveExtra(state, options);
+    const scope = withExtraExclude(loadScope(baseDir), extra);
+    verifyBaseSourcesAtHead(baseDir, scope, options.requiredOnly);
+    const plan = makePlan(baseDir, childDir, repoRoot, scope, options);
+    const digests = requiredAssetDigests(baseDir, scope.raw);
+    const pathPrefix = relative(repoRoot, childDir).split(sep).join("/") || ".";
+    const stateCurrent = !stateNeedsUpdate(state, baseSha, digests, extra, options, pathPrefix) && existsSync(join(repoRoot, STATE_FILE));
+    const contentFiles = plan.operations.map((item) => item.rel);
+    const localRecordedSha = options.requiredOnly ? state?.lastRequiredAssetsBaseSha : state?.lastSyncedBaseSha;
+    const stateDrift = !stateCurrent;
+    const report = {
+      mode: "detect",
+      child: childDir,
+      remoteSha: baseSha,
+      localSha: localRecordedSha ?? null,
+      behind: contentFiles.length > 0 || stateDrift,
+      contentDrift: contentFiles.length > 0,
+      stateDrift,
+      stateCurrent,
+      contentFiles,
+      files: [...contentFiles, ...(stateDrift ? [`root:${STATE_FILE}`] : [])],
+      requiredRootAssetsSha256: digests,
+      requiredOnly: options.requiredOnly,
+    };
+    if (!report.behind) {
+      output(options, report, `✅ 基座内容与同步状态已对齐（${baseSha.slice(0, 8)}；required assets 已逐项验真）`);
+      return 0;
+    }
+    report.behindBy = `${localRecordedSha?.slice(0, 8) ?? "从未同步"} → ${baseSha.slice(0, 8)}`;
+    output(options, report, `⚠️ 基座同步漂移（${report.behindBy}）：内容漂移 ${contentFiles.length} 项 · 状态漂移 ${stateDrift ? 1 : 0} 项\n${report.files.slice(0, 20).map((file) => `  · ${file}`).join("\n")}${report.files.length > 20 ? `\n  … 共 ${report.files.length} 个` : ""}\n\n修复：node sync/base-sync.mjs pull --repo .（由 CI 建 PR，或人工审核后推送）`);
+    return 2;
+  } finally {
+    if (temporary && baseDir) rmSync(baseDir, { recursive: true, force: true });
+  }
+}
+
+function modePull(options) {
+  const { childDir, repoRoot } = resolveChildTarget(options.repo);
+  if (!options.noCommit && !options.dryRun) assertClean(repoRoot, options.push ? "自动推送" : "自动提交");
+  const state = readState(childDir, repoRoot);
+  let baseDir = options.baseDir ? resolve(options.baseDir) : "";
+  let temporary = false;
+  try {
+    if (!baseDir) {
+      baseDir = ensureBaseClone(state?.baseRepo ?? DEFAULT_BASE_REPO, options.baseUrl);
+      temporary = true;
+    }
+    const extra = effectiveExtra(state, options);
+    const scope = withExtraExclude(loadScope(baseDir), extra);
+    verifyBaseSourcesAtHead(
+      baseDir,
+      scope,
+      options.requiredOnly,
+      options.adopt ? Object.keys(scope.raw.adoptMigrations ?? {}) : [],
+    );
+    const report = { mode: "pull", child: childDir, dryRun: options.dryRun, requiredOnly: options.requiredOnly, noCommit: options.noCommit };
+    syncToChild(baseDir, childDir, scope, report, extra, options);
+    if (options.push && report.committed && !options.dryRun) {
+      const origin = git(repoRoot, "remote", "get-url", "origin");
+      gitNetwork(repoRoot, origin, "push", "origin", "HEAD:main");
+      report.pushed = true;
+    }
+    output(options, report, report.changed === 0
+      ? `✅ ${options.requiredOnly ? "根级必备资产" : "基座内容"}已是最新（${report.baseSha.slice(0, 8)}）${report.committed ? "；同步状态已提交" : report.written ? "；同步状态已写入（未提交）" : ""}`
+      : `${options.dryRun ? "[dry-run] " : ""}📦 ${options.requiredOnly ? "根级必备资产" : "基座"}对齐完成：内容 ${report.changed} · 普通复制 ${report.copied.length} · 锚点合并 ${report.merged.length} · AGENTS 受控块 ${report.managed.length}${report.written ? " · 已写入未提交" : ""}${report.pushed ? " · 已推送" : ""}${report.warnings.length ? `\n⚠️ ${report.warnings.join("\n⚠️ ")}` : ""}`);
+    return 0;
+  } finally {
+    if (temporary && baseDir) rmSync(baseDir, { recursive: true, force: true });
+  }
+}
+
+function modePush(options) {
+  const baseDir = resolve(options.base || join(SCRIPT_DIR, ".."));
+  const baseScope = loadScope(baseDir);
+  verifyBaseSourcesAtHead(baseDir, baseScope, options.requiredOnly, ["sync/child-repos.json"]);
+  const children = JSON.parse(readFileSync(join(baseDir, "sync/child-repos.json"), "utf8"));
+  const results = [];
+  for (const child of children.children) {
+    const report = { repo: child.repo, ok: false, dryRun: options.dryRun };
+    const dir = mkdtempSync(join(tmpdir(), "workloom-child-"));
+    try {
+      const url = repoUrl(options.baseUrl, child.repo);
+      gitNetwork(undefined, url, "clone", "--depth", "1", "--branch", "main", "--single-branch", url, dir);
+      verifyClonedMain(dir);
+      assertClean(dir, "父仓自动同步");
+      const prefix = child.pathPrefix ? assertSafeRelative(child.pathPrefix.replace(/\/$/, ""), `${child.repo} pathPrefix`) : "";
+      const requestedChildDir = prefix ? join(dir, prefix) : dir;
+      assertNoSymlinkPath(dir, requestedChildDir, `${child.repo} pathPrefix`, { allowMissing: false });
+      const childDir = realpathSync(requestedChildDir);
+      // 父仓清单是跨仓同步边界的权威来源；不采信子仓 state 自行追加的排除项。
+      const extra = [...new Set([...(child.extraExclude ?? []), ...options.extraExclude])];
+      const scope = withExtraExclude(baseScope, extra);
+      syncToChild(baseDir, childDir, scope, report, extra, { ...options, authoritativeExtraExclude: true });
+      if (report.committed && !options.dryRun) {
+        const origin = git(dir, "remote", "get-url", "origin");
+        gitNetwork(dir, origin, "push", "origin", "HEAD:main");
+        report.pushed = true;
+      }
+      report.ok = true;
+    } catch (error) {
+      report.error = redact(error?.message).slice(0, 500);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+    results.push(report);
+    if (!options.json) console.log(`${report.ok ? "✅" : "❌"} ${child.repo}: changed=${report.changed ?? "-"}${report.pushed ? " 已推送" : ""}${report.error ? ` 错误: ${report.error}` : ""}`);
+  }
+  const summary = { mode: "push", baseSha: git(baseDir, "rev-parse", "HEAD"), results };
+  output(options, summary, `\n═══ 推送汇总：${results.filter((item) => item.ok).length}/${results.length} 仓成功 ═══`);
+  return results.some((item) => !item.ok) ? 1 : 0;
+}
+
+function main(argv = process.argv.slice(2)) {
+  const options = parseArgs(argv);
+  if (!["detect", "pull", "push"].includes(options.mode)) {
+    console.error("用法: node base-sync.mjs detect|pull|push [--repo <path>] [--base <path>] [--base-dir <path>] [--base-url <prefix>] [--required-only] [--no-commit] [--adopt] [--push] [--dry-run] [--json]");
+    return 64;
+  }
+  if (["detect", "pull"].includes(options.mode) && !options.repo) {
+    console.error(`${options.mode} 需要 --repo`);
+    return 64;
+  }
+  if (options.push && options.noCommit) {
+    console.error("--push 与 --no-commit 不能同时使用");
+    return 64;
+  }
+  if (options.mode === "push" && options.noCommit) {
+    console.error("push 模式不支持 --no-commit");
+    return 64;
+  }
+  if (options.adopt && (options.mode !== "pull" || !options.requiredOnly || !options.noCommit)) {
+    console.error("--adopt 只允许与 pull --required-only --no-commit 组合，由 sync/adopt.sh 使用");
+    return 64;
+  }
+  if (options.mode === "detect") return modeDetect(options);
+  if (options.mode === "pull") return modePull(options);
+  return modePush(options);
+}
+
+function isDirectExecution() {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(resolve(process.argv[1])) === realpathSync(resolve(SCRIPT_PATH));
+  } catch {
+    return resolve(process.argv[1]) === resolve(SCRIPT_PATH);
+  }
+}
+
+if (isDirectExecution()) {
+  try {
+    process.exitCode = main();
+  } catch (error) {
+    console.error(`❌ ${redact(error?.message ?? error)}`);
+    process.exitCode = 1;
+  }
+}
+
+export {
+  anchorNeedsSync,
+  extractManagedSection,
+  gitAuthEnv,
+  main,
+  mergeKeepChildExtra,
+  mergeManagedSection,
+  redact,
+  repoUrl,
+};

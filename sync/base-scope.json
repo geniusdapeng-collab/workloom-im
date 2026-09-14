@@ -1,6 +1,44 @@
 {
-  "version": 2,
-  "description": "WorkLoom IM 基座能力同步范围声明——base-sync 引擎的唯一事实源。基座能力（include）才会在父→子/子→父双向同步中流转；行业属性与演示能力（exclude）永不同步。修改本文件即修改同步边界，需基座 owner 评审。v2：迁移目录移出自动同步（各仓迁移链已分叉，须人工按各自编号体系接入）；CI workflow 与构建/评测产物移出；支持仓级 extraExclude（child-repos.json）。",
+  "version": 3,
+  "description": "WorkLoom IM 基座能力同步范围声明——base-sync 引擎的唯一事实源。只有基座能力（include）会从基座受控分发到子仓；行业属性与演示能力（exclude）永不同步。requiredRootAssets 无视行业代码的 pathPrefix，始终安装并校验在 Git 仓库根目录。修改本文件即修改同步边界，需基座 owner 评审。",
+
+  "requiredRootAssets": {
+    "files": [
+      "WORKLOOM_PRODUCT_CONTEXT.md"
+    ],
+    "copiedFiles": {
+      ".github/workflows/base-sync-heartbeat.yml": {
+        "source": "sync/heartbeat-template.yml"
+      }
+    },
+    "managedSections": {
+      "AGENTS.md": {
+        "beginMarker": "<!-- WORKLOOM-CONTEXT:BEGIN -->",
+        "endMarker": "<!-- WORKLOOM-CONTEXT:END -->",
+        "missingFilePrefix": "# WorkLoom 仓库开发指引\n\n> 本文件包含 WorkLoom 各仓共享的受控规则；仓库专属规则位于 AGENTS.repo.md 或更近层级的 AGENTS.md / AGENTS.override.md。共享规则由 workloom-im 统一维护和分发。",
+        "missingFileSuffix": "## 本仓专属规则\n\n请把本仓独有的职责、命令、验证要求与例外写入根级 AGENTS.repo.md 或更近层级的 AGENTS.md / AGENTS.override.md；不得修改上方受控区块来放宽公共安全不变量。",
+        "replaceWholeFileSha256": [
+          "72f6c5c7f636f8a507ec2b7d4db40e7bdaf4e2dcfab0ea2fdb57c07bb13b8e5d"
+        ],
+        "legacyGitBlobOids": [
+          "6fbce152b7a9439ebac5829061b75f754913b882"
+        ]
+      }
+    },
+    "comment": "copiedFiles 与 files 均整文件验真；AGENTS.md 只按受控区块合并。legacyGitBlobOids 仅供审计，迁移判定只使用逐字节 SHA-256 allowlist。"
+  },
+
+  "preCommitSecretScanner": "scripts/secret-scan.mjs",
+
+  "adoptMigrations": {
+    "AGENTS.repo.md": {
+      "strategy": "replace-if-identical-to-base",
+      "scaffold": "# 本仓专属开发规则\n\n> 本文件用于补充当前行业仓独有的职责、命令、验证要求与例外。请结合本仓实际内容填写；共享产品认知与安全不变量由根级 AGENTS.md 的受控区块继承。\n"
+    },
+    ".github/workflows/base-sync-push.yml": {
+      "strategy": "remove-if-identical-to-base"
+    }
+  },
 
   "include": [
     "packages/base/**",
@@ -13,7 +51,6 @@
     "apps/web/src/lib/**",
     "apps/web/package.json",
     "scripts/**",
-    "AGENTS.md",
     "docker-compose.yml",
     "electron-builder.yml"
   ],

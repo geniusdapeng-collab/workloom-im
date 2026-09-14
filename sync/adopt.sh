@@ -1,64 +1,100 @@
 #!/usr/bin/env bash
-# WorkLoom IM · 新子仓接入脚本（adopt）
+# WorkLoom IM · 新子仓安全接入
 #
-# 用途：让一个使用 WorkLoom IM 基座能力的仓库自动继承双向同步机制。
-# 做的事（全部幂等）：
-#   ① 注入 .github/workflows/base-sync-heartbeat.yml（心跳触发器，cron 按仓名错峰）
-#   ② 初始化 .workloom-base-sync.json 基线状态（以基座当前 main 为准）
-#   ③ 输出后续两步人工动作：把新仓注册到基座 sync/child-repos.json + 配置 SYNC_TOKEN secret
+# 只安装根级必备资产（完整产品上下文、AGENTS 受控块、同步 state）与心跳
+# workflow，不触碰行业代码。所有产物留在工作树中供人工复核、白名单暂存和提交。
 #
-# 用法：
-#   bash adopt.sh <子仓本地路径> [--path-prefix governance/]
+# 用法：bash sync/adopt.sh <子仓本地路径> [--path-prefix governance/]
 set -euo pipefail
 
-CHILD="${1:?用法: bash adopt.sh <子仓路径> [--path-prefix <prefix>]}"
+CHILD="${1:?用法: bash sync/adopt.sh <子仓路径> [--path-prefix <prefix>]}"
 PREFIX=""
-[ "${2:-}" = "--path-prefix" ] && PREFIX="${3%/}/"
-SYNC_DIR="$(cd "$(dirname "$0")" && pwd)"
-BASE_DIR="$(cd "$SYNC_DIR/.." && pwd)"
+if [ "${2:-}" = "--path-prefix" ]; then
+  [ -n "${3:-}" ] || { echo "❌ --path-prefix 需要目录参数"; exit 64; }
+  RAW_PREFIX="${3%/}"
+  case "$RAW_PREFIX" in
+    ""|/*|*//*|*\\*|*[!A-Za-z0-9._/-]*) echo "❌ --path-prefix 必须是仓库内安全相对目录"; exit 64 ;;
+  esac
+  IFS='/' read -r -a PREFIX_PARTS <<< "$RAW_PREFIX"
+  for PART in "${PREFIX_PARTS[@]}"; do
+    [ -n "$PART" ] && [ "$PART" != "." ] && [ "$PART" != ".." ] || {
+      echo "❌ --path-prefix 必须是仓库内安全相对目录"
+      exit 64
+    }
+  done
+  PREFIX="$RAW_PREFIX/"
+elif [ -n "${2:-}" ]; then
+  echo "❌ 未知参数：$2"
+  exit 64
+fi
+
+SYNC_DIR="$(cd "$(dirname "$0")" && pwd -P)"
+BASE_DIR="$(cd "$SYNC_DIR/.." && pwd -P)"
+CHILD="$(cd "$CHILD" 2>/dev/null && pwd -P)" || { echo "❌ 子仓目录不存在"; exit 1; }
 REPO_NAME="$(basename "$CHILD")"
 WORKDIR="$CHILD"
 [ -n "$PREFIX" ] && WORKDIR="$CHILD/${PREFIX%/}"
 
-[ -d "$CHILD/.git" ] || { echo "❌ $CHILD 不是 git 仓库"; exit 1; }
-
-echo "== WorkLoom IM 基座同步接入 =="
-echo "   子仓：$REPO_NAME（工作目录前缀：${PREFIX:-（根）}）"
-
-# ① 注入心跳 workflow（cron 按仓名错峰：0-59 分钟由仓名哈希决定；__REPO_DIR__ 按 pathPrefix 适配工作区）
-mkdir -p "$CHILD/.github/workflows"
-MIN=$(( $(echo -n "$REPO_NAME" | cksum | awk '{print $1}') % 60 ))
-HOUR=$(( 3 + $(echo -n "$REPO_NAME" | cksum | awk '{print $1}') % 3 ))   # 凌晨 3-5 点段
-REPO_DIR="${PREFIX%/}"; [ -z "$REPO_DIR" ] && REPO_DIR="."
-sed -e "s/__CRON__/$MIN $HOUR * * */" -e "s/__REPO_DIR__/$REPO_DIR/g" "$SYNC_DIR/heartbeat-template.yml" > "$CHILD/.github/workflows/base-sync-heartbeat.yml"
-echo "  ✅ 心跳 workflow 已注入（cron: $MIN $HOUR * * *，工作区: $REPO_DIR）"
-
-# ② 初始化基线状态（以基座当前 HEAD 为准；真实首次对齐由引擎 diff 决定）
-BASE_SHA="$(git -C "$BASE_DIR" rev-parse HEAD)"
-if [ ! -f "$WORKDIR/.workloom-base-sync.json" ]; then
-  cat > "$WORKDIR/.workloom-base-sync.json" <<EOF
-{
-  "baseRepo": "geniusdapeng-collab/workloom-im",
-  "lastSyncedBaseSha": "$BASE_SHA",
-  "lastSyncAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "filesTouched": 0,
-  "note": "adopt.sh 初始化基线；首次心跳/拉取时由 base-sync 引擎按 scope 实际 diff 对齐"
+git -C "$CHILD" rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
+  echo "❌ $CHILD 不是 Git 仓库或 linked worktree"
+  exit 1
 }
-EOF
-  echo "  ✅ 基线状态已初始化（基座 ${BASE_SHA:0:8}）"
-else
-  echo "  ⏭️  基线状态已存在（跳过）"
-fi
+GIT_ROOT="$(git -C "$CHILD" rev-parse --show-toplevel)"
+GIT_ROOT="$(cd "$GIT_ROOT" && pwd -P)"
+[ "$CHILD" = "$GIT_ROOT" ] || { echo "❌ 请把子仓 Git 根目录作为第一个参数：$GIT_ROOT"; exit 64; }
+[ -d "$WORKDIR" ] || { echo "❌ pathPrefix 目录不存在：$WORKDIR"; exit 1; }
+case "${WORKDIR}/" in
+  "${CHILD}/"*) ;;
+  *) echo "❌ pathPrefix 解析后逃逸出目标 Git 工作树"; exit 64 ;;
+esac
+command -v node >/dev/null 2>&1 || { echo "❌ 未找到 Node.js（需要 Node >= 20）"; exit 1; }
 
-# ③ 后续人工动作提示
+# adopt 本身也必须来自当前基座 HEAD；不允许用工作树里尚未提交的接入逻辑
+# 给子仓登记一个并不存在于来源提交中的版本。
+ADOPT_WORKTREE_HASH="$(git -C "$BASE_DIR" hash-object -- sync/adopt.sh)"
+ADOPT_HEAD_HASH="$(git -C "$BASE_DIR" rev-parse HEAD:sync/adopt.sh 2>/dev/null || true)"
+[ -n "$ADOPT_HEAD_HASH" ] && [ "$ADOPT_WORKTREE_HASH" = "$ADOPT_HEAD_HASH" ] || {
+  echo "❌ 基座 sync/adopt.sh 与 HEAD 不一致；请先评审并提交基座变更"
+  exit 1
+}
+
+echo "== WorkLoom IM 根级上下文接入 =="
+echo "   子仓：${REPO_NAME}（行业基座目录：${PREFIX:-（根）}）"
+
+# ① 只安装根级 required assets。引擎先写内容、逐项复验，再写根级 state。
+# --no-commit 使既有工作树也能安全接入，且不会偷偷暂存或提交任何用户文件。
+node "$SYNC_DIR/base-sync.mjs" pull \
+  --repo "$WORKDIR" \
+  --base-dir "$BASE_DIR" \
+  --required-only \
+  --no-commit \
+  --adopt
+
+# ② 独立复验；即使 state 的 SHA 看似相同，也会重新读取文件并比较受控区块/哈希。
+node "$SYNC_DIR/base-sync.mjs" detect \
+  --repo "$WORKDIR" \
+  --base-dir "$BASE_DIR" \
+  --required-only
+(cd "$CHILD" && node "$BASE_DIR/scripts/secret-scan.mjs" --files \
+  AGENTS.md \
+  WORKLOOM_PRODUCT_CONTEXT.md \
+  .workloom-base-sync.json \
+  .github/workflows/base-sync-heartbeat.yml)
+echo "  ✅ 根级产品上下文、AGENTS 受控块与 state 已安装并验真"
+
+# ③ heartbeat 是 required copied asset，已由引擎从受控模板逐字节安装；
+# 运行时从根级 state.pathPrefix 读取行业基座目录，因此无需仓别模板渲染。
+echo "  ✅ 通用 heartbeat workflow 已安装（行业基座目录由根级 state.pathPrefix 解析）"
+
 cat <<EOF
 
-  📋 还差两步（人工，一次性）：
-  1. 把本仓注册到基座订阅清单——编辑 workloom-im 仓 sync/child-repos.json，children 追加：
-       { "repo": "<owner>/$REPO_NAME", "pathPrefix": "$PREFIX", "note": "" }
-  2. 配置推送凭据（全自动模式）：本仓 Settings → Secrets and variables → Actions
-       新建 secret：SYNC_TOKEN = <repo 权限的 GitHub PAT>
-     （不配置则为半自动：心跳检测落后时 CI 标红提醒，人工执行拉取）
+  📋 接入文件已写入但未暂存、未提交、未推送。请先审查：
+       git -C "$CHILD" diff -- WORKLOOM_PRODUCT_CONTEXT.md AGENTS.md AGENTS.repo.md .workloom-base-sync.json .github/workflows/base-sync-heartbeat.yml .github/workflows/base-sync-push.yml
 
-  验证：本仓 push 任意提交触发 heartbeat，或手动 Actions → base-sync-heartbeat → Run workflow。
+  若目标由 workloom-im fork/template 派生，adopt 仅在逐字节 fingerprint
+  完全相同时把父仓 AGENTS.repo.md 改为通用待填写 scaffold，并移除父仓专属
+  base-sync-push workflow；任何已定制内容都会保留。审查通过后只白名单暂存
+  上述接入变更并提交。随后把本仓登记到
+  workloom-im/sync/child-repos.json。GitHub Actions 使用仓库自带的短期
+  GITHUB_TOKEN 建同步 PR；不要配置或提交个人访问令牌。
 EOF

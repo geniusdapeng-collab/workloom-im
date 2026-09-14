@@ -30,6 +30,8 @@
     "capabilities": "node scripts/generate-capabilities.mjs",
     "capabilities:check": "node scripts/generate-capabilities.mjs --check",
     "product:verify": "node scripts/verify-product-content.mjs",
+    "secrets:scan": "node scripts/secret-scan.mjs --files AGENTS.md AGENTS.repo.md WORKLOOM_PRODUCT_CONTEXT.md",
+    "secrets:scan:staged": "node scripts/secret-scan.mjs --staged",
     "capabilities:pptx": "python3 scripts/build-capability-pptx.py",
     "postinstall": "node scripts/postinstall-note.js || true",
     "oss:watch": "bash scripts/oss-watch.sh",
