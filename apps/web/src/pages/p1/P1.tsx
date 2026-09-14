@@ -42,16 +42,6 @@ interface ArchiveShape {
 }
 interface ProfileResp { archive: ArchiveShape; stage: string | null; name: string }
 
-/** 内置 6 快捷目标（F3.5 原文：调价建议/回复评价/经营复盘/更新首图/对账说明/差评审批；行业 Bundle 预置可覆盖） */
-const QUICK_GOALS = [
-  { label: "调价建议", text: "给出明天主打品的价格建议", preset: "pricing-agent" },
-  { label: "回复评价", text: "起草最新差评的回复", preset: "review-agent" },
-  { label: "经营复盘", text: "本周经营复盘（客流/均价/营收）", preset: "reconcile-agent" },
-  { label: "更新首图", text: "检查并更新各渠道首图", preset: "content-agent" },
-  { label: "对账说明", text: "昨夜对账差异说明", preset: "reconcile-agent" },
-  { label: "差评审批", text: "汇总待审批的差评回复", preset: "review-agent" },
-];
-
 const THREAD_DOT: Record<string, string> = {
   running: "bg-holo animate-pulse-hud", queued: "bg-ink3", pending_review: "bg-warn animate-pulse-warn",
   completed: "bg-go", failed: "bg-alert", paused: "bg-warn",
@@ -71,6 +61,11 @@ export default function P1() {
   const [profile, setProfile] = useState<ProfileResp | null>(null);
   const [agents, setAgents] = useState<Array<{ preset_key: string; name: string; version: string; kind: string; status: string }>>([]);
   const [members, setMembers] = useState<Array<{ memberNo: string; name: string; role: string }>>([]);
+  const quickGoals = useMemo(() => agents.slice(0, 6).map((agent) => ({
+    label: agent.name,
+    text: `请${agent.name}汇报当前进展并给出下一步建议`,
+    preset: agent.preset_key,
+  })), [agents]);
 
   // 派遣栏状态（P1E1）
   const [draft, setDraft] = useState("");
@@ -139,12 +134,15 @@ export default function P1() {
   }, [profile, insp]);
 
   /* ---------- 派遣（P1E1：含糊→反问不建任务 F3.2；成功→完成后态新线程顶部 0/y 蓝呼吸 F3.4） ---------- */
-  const dispatch = useCallback(async (text: string, presetKey = "pricing-agent") => {
+  const dispatch = useCallback(async (text: string, presetKey?: string) => {
     if (!text.trim()) return;
     setDispatchState("routing");
     setClarify(null);
     try {
-      const r = await trpc.threads.dispatch.mutate({ title: text.trim(), presetKey });
+      const r = await trpc.threads.dispatch.mutate({
+        title: text.trim(),
+        presetKey: presetKey ?? agents[0]?.preset_key ?? "inspection-agent",
+      });
       if (r.kind === "clarify") {
         setClarify(r.question ?? "请补充目标与时间"); // 反问澄清，不留任务
       } else {
@@ -157,7 +155,7 @@ export default function P1() {
       // #18 修复：用 text.trim() 判断而非闭包旧值 draft（setDraft 异步，闭包内 draft 未更新）
       setDispatchState(text.trim() ? "typing" : "empty");
     }
-  }, [load]);
+  }, [agents, load]);
 
   /* ---------- 状态变体 ---------- */
   const isLoading = demo === "p1_loading" || !ready;
@@ -395,7 +393,7 @@ export default function P1() {
         <div className="mt-4 space-y-2">
           {!isCommunity && (
             <div className="flex flex-wrap gap-1.5">
-              {QUICK_GOALS.map((g) => (
+              {quickGoals.map((g) => (
                 <button
                   key={g.label}
                   type="button"

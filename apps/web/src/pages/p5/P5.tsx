@@ -138,7 +138,7 @@ export default function P5() {
               value={nlText}
               onChange={(e) => setNlText(e.target.value)}
               rows={2}
-              placeholder="如：飞猪大床房周末不能低于 ¥420"
+              placeholder="如：对外发布前必须经过负责人审批"
               className="w-full rounded-lg border border-line bg-bg800 px-2.5 py-2 text-body text-ink outline-none placeholder:text-ink3 focus:border-gline"
             />
             <button

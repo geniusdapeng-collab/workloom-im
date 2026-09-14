@@ -54,7 +54,7 @@ export default function Onboarding() {
 
   // 步骤③表单
   const [bizName, setBizName] = useState("");
-  const [industry, setIndustry] = useState("酒店民宿");
+  const [industry, setIndustry] = useState("");
   const [note, setNote] = useState("");
   const [bizDone, setBizDone] = useState(false);
 
@@ -293,7 +293,7 @@ export default function Onboarding() {
           <div className="space-y-4 rounded-xl border border-line bg-panel/70 p-5">
             <div className="text-sm font-bold">经营主体 <span className="text-xs font-normal text-ink3">写入门店档案，成为数字团队的上下文</span></div>
             <label className="block text-xs text-ink3">主体名称
-              <input className={`${inputCls} mt-1`} value={bizName} onChange={(e) => setBizName(e.target.value)} placeholder="如：云栖酒店" />
+              <input className={`${inputCls} mt-1`} value={bizName} onChange={(e) => setBizName(e.target.value)} placeholder="如：您的企业或团队名称" />
             </label>
             <label className="block text-xs text-ink3">行业
               <input className={`${inputCls} mt-1`} value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="如：酒店民宿 / 餐饮 / 内容制作" />

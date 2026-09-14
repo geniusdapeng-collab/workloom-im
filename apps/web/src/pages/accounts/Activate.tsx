@@ -53,8 +53,8 @@ export default function Activate() {
         </div>
         {devCode && <p className="text-xs text-amber-400">开发通道验证码：{devCode}</p>}
         <input className={inp} placeholder="6 位验证码" value={form.code} onChange={set("code")} />
-        <input className={inp} placeholder="企业名称（如：云栖民宿）" value={form.tenantName} onChange={set("tenantName")} />
-        <input className={inp} placeholder="首店名称（如：云栖一号店）" value={form.workspaceName} onChange={set("workspaceName")} />
+        <input className={inp} placeholder="企业名称（如：远航科技）" value={form.tenantName} onChange={set("tenantName")} />
+        <input className={inp} placeholder="工作区名称（如：产品研发中心）" value={form.workspaceName} onChange={set("workspaceName")} />
         <input className={inp} placeholder="店铺标识（小写字母数字中划线，如 yunqi-01）" value={form.workspaceSlug} onChange={set("workspaceSlug")} />
         <select className={inp} value={form.industry} onChange={set("industry")}>
           <option value="hotel">酒店 / 民宿</option>
