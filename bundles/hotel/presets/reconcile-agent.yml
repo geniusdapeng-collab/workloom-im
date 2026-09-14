@@ -8,6 +8,8 @@ readonly: false
 night_shift: true
 high_risk: false
 fence_bindings: [R4, R5]   # 退款≥¥500必审 / 担保订单异常需介入
+coverage:
+  - { eventPrefix: "order.", label: 订单对账与退款 }
 skills: [channel-reconciler]
 tools:
   - { name: order.list, access: read,     desc: 拉取订单流水 }

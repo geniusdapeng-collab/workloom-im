@@ -41,6 +41,7 @@ jobs:
       IM_DRIVER: mock
       RUN_DB_TESTS: "1"
       TOOL_UNVERIFIED_RATE: "0"
+      RELEASE_WORKSPACE_ID: ws-aipm-demo
     steps:
       - uses: actions/checkout@v4
 
@@ -56,12 +57,27 @@ jobs:
       - name: typecheck 全包
         run: pnpm -r --if-present typecheck
 
+      - name: 三端 UI 同源与新行业接入门禁
+        run: |
+          pnpm product:verify
+          pnpm bundle:governance
+          pnpm projections:check
+          pnpm ui:governance
+          pnpm -C packages/industry-contract test
+          pnpm -C packages/industry-contract build
+          pnpm -C packages/ui test
+          pnpm -C packages/ui build
+          node --test scripts/verify-ui-consumer.test.mjs sync/base-sync.test.mjs sync/set-ui-version.test.mjs sync/ui-upgrade-pr.test.mjs
+
       - name: 迁移 + 种子（H-1 完整率 100%）
         run: |
           cp .env.example .env
           pnpm db:migrate
+          pnpm db:seed:aipm
+          pnpm db:seed:aipm # 基座出厂示例包幂等复跑
+          # 既有 326 项引擎集成套件使用 hotel 作为受控测试夹具；不进入桌面出厂数据。
           BUNDLE_DIR=bundles/hotel pnpm db:seed
-          BUNDLE_DIR=bundles/hotel pnpm db:seed # 幂等复跑（L1.4：全部冲突丢弃）
+          BUNDLE_DIR=bundles/hotel pnpm db:seed # 行业夹具同库复跑，验证事件物理序列与幂等
 
       - name: 哈希链全库验证（#32 口径）
         run: pnpm db:verify-chain
@@ -72,11 +88,24 @@ jobs:
           pnpm -C packages/base test
           pnpm -C packages/runtime test
 
+      - name: server 契约与 E2E（显式 hotel 测试夹具）
+        env:
+          SERVICE_C_TEST_WORKSPACE_ID: ws-yunqi
+        run: pnpm -C apps/server test
+
       - name: 全场景套件（326 用例）
         run: pnpm suite
 
-      - name: web 构建
-        run: pnpm -C apps/web build
+      - name: 三端生产构建
+        run: |
+          pnpm -C apps/web build
+          pnpm -C apps/webb build
+          pnpm -C apps/webc build
+
+      - name: 三端响应式、视觉与无障碍门禁
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm ui:e2e
 
       - name: dsh-gate E6（围栏瀑布 + 事件桥 + H-5 崩溃重放）
         run: bash scripts/dsh-gate.sh

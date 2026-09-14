@@ -10,15 +10,16 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ensureDemoLogin, trpc } from "../../lib/trpc";
-import { shortId } from "../../lib/display";
+import { payloadText, shortId } from "../../lib/display";
 import {
   BannerAlert,
   EmergencyBrake,
   EmptyState,
-  SkeletonBlock,
+  Skeleton,
   type Gesture,
 } from "../../components/hud";
 import { RejectDialog } from "../../components/RejectDialog";
+import { Link } from "react-router";
 
 interface NightRun {
   id: string; status: string; fenceSnapshot: string | null;
@@ -85,7 +86,7 @@ export default function P3() {
       return;
     }
     await trpc.approvals.decide.mutate({ approvalId: a.approval_id, gesture: g });
-    setBanner({ level: "info", text: "审批已写回事件库并触发组织记忆校准（F4.5/F1.7）" });
+    setBanner({ level: "info", text: "审批结果已写入事件账本，并用于校准组织记忆。" });
     await load();
   }, [load]);
 
@@ -99,57 +100,52 @@ export default function P3() {
       reasonText: r.reasonText,
     });
     setRejectTarget(null);
-    setBanner({ level: "info", text: `已驳回（${r.reasonEnum}）并回流偏好校准（F5.5/F1.7/D24）` });
+    setBanner({ level: "info", text: "已驳回并记录原因，后续会用于校准协作偏好。" });
     await load();
   }, [rejectTarget, load]);
 
   const doBatch = useCallback(async () => {
     const r = await trpc.approvals.batchApprove.mutate({ approvalIds: batchable.map((a) => a.approval_id) }) as { approved: string[]; skipped: Array<{ id: string; reason: string }> };
     setBatchArmed(false);
-    setBanner({ level: "info", text: `批量采纳 ${r.approved.length} 条低风险项（逐条留痕 G6）；跳过 ${r.skipped.length} 条（高危不批放 L5.4）` });
+    setBanner({ level: "info", text: `已批量采纳 ${r.approved.length} 条低风险事项，并逐条写入账本；另有 ${r.skipped.length} 条高风险事项未处理。` });
     await load();
   }, [batchable, load]);
 
   const doPause = useCallback(async () => {
     if (!run) return;
     const r = await trpc.nightShift.pause.mutate({ runId: run.id }) as { elapsedMs: number; withinSla: boolean };
+    const elapsed = `${Math.max(0.1, r.elapsedMs / 1000).toFixed(1)} 秒`;
     setBanner(r.withinSla
-      ? { level: "info", text: `一键暂停 ${r.elapsedMs}ms 全端生效（G5 ≤60s）` }
-      : { level: "alert", text: `暂停超时 ${r.elapsedMs}ms，已升级 P0 告警（E4.1）` });
+      ? { level: "info", text: `夜班已暂停，并在 ${elapsed} 内同步到全部客户端。` }
+      : { level: "alert", text: `暂停指令在 ${elapsed} 内未能完成，系统已升级为首页告警。` });
     await load();
   }, [run, load]);
 
-  /* ---------- 移动端 375px 机身（§4.2：真机框 44px 圆角 + 深空内容区） ---------- */
+  /* 同一响应式内容同时适配桌面窄栏与移动视口，不模拟固定尺寸手机壳。 */
   return (
-    <div className="flex min-h-screen items-start justify-center bg-bg950 py-6">
-      <div className="w-[375px] overflow-hidden rounded-[44px] border border-line bg-bg900 shadow-[0_30px_80px_rgba(0,0,0,.6)]">
-        {/* 机身边框装饰 */}
-        <div className="flex justify-center border-b border-line bg-bg950/80 py-2">
-          <span className="h-1.5 w-16 rounded-full bg-bg700" />
-        </div>
-
+    <div className="mx-auto flex min-h-full w-full min-w-0 max-w-3xl items-start justify-center px-2 py-4 sm:px-4 sm:py-6">
+      <div className="w-full overflow-hidden rounded-panel border border-line bg-bg900 shadow-[0_20px_60px_rgba(0,0,0,.35)]">
         <div className="space-y-3 p-3.5">
           {/* 页头 */}
           <div className="flex items-center gap-2">
-            <a href="/" className="text-caption text-holo no-underline">← 工作台</a>
             <span className="text-h2 font-black text-ink">掌上日报</span>
-            <span className="text-micro tracking-[.2em] text-ink3">P3 · HANDOFF</span>
+            <span className="text-body tracking-[.2em] text-ink3">夜班交接</span>
           </div>
 
           {banner && <BannerAlert level={banner.level} actionLabel="好" onAction={() => setBanner(null)}>{banner.text}</BannerAlert>}
 
           {!ready ? (
-            <><SkeletonBlock lines={2} h={56} /><SkeletonBlock lines={4} /></>
+            <><Skeleton count={2} height={56} label="夜班摘要正在加载" /><Skeleton count={4} label="夜班详情正在加载" /></>
           ) : !nightConfigured ? (
             /* p3_empty：夜班未启用（F4.8） */
-            <EmptyState icon="🌙" title="夜班中心尚未出征" hint="去规则与权限（P5）配置夜班，明早 08:30 日报送达" actionLabel="去配置 →" />
+            <EmptyState icon="🌙" title="夜班中心尚未出征" hint="前往规则与权限配置夜班，明早 08:30 日报送达。" actionLabel="去配置 →" />
           ) : (
             <>
               {/* P3E1 三栏计数头（与 P1 交接班卡强一致 F4.4；点击筛选） */}
               <div className="rounded-2xl border border-line bg-card p-3.5">
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-body font-black text-goldhi">✦ 昨夜日报</span>
-                  <span className="font-mono text-micro text-holo">{run?.fenceSnapshot ?? ""}</span>
+                  {run?.fenceSnapshot && <span className="text-body text-holo">围栏快照已锁定</span>}
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   {([
@@ -166,12 +162,12 @@ export default function P3() {
                       }`}
                     >
                       <div className={`font-orb text-kpi font-bold ${c.cls}`}>{c.n}</div>
-                      <div className="mt-0.5 text-micro text-ink2">{c.label}</div>
+                      <div className="mt-0.5 text-body text-ink2">{c.label}</div>
                     </button>
                   ))}
                 </div>
-                <div className="mt-2 text-center font-mono text-micro text-ink3">
-                  能量 {stats.credits_used} · 峰谷费率（F4.6/G9） · 计数与 P1 强一致（F4.4）
+                <div className="mt-2 text-center font-mono text-body text-ink3">
+                  积分 {stats.credits_used} · 已应用峰谷费率 · 与工作台数据同步
                 </div>
               </div>
 
@@ -180,10 +176,10 @@ export default function P3() {
                 <div key={a.approval_id} className="rounded-2xl border border-dashed border-warn/50 bg-warn/4 p-3.5">
                   <div className="mb-1 flex items-center justify-between">
                     <span className="text-body font-bold text-warn">◆ 已超时（虚框标记）</span>
-                    <span className="font-mono text-micro text-ink3">{shortId(a.approval_id)}</span>
+                    <span className="font-mono text-body text-ink3">{shortId(a.approval_id)}</span>
                   </div>
-                  <div className="text-caption text-ink2">{a.snapshot.summary ?? "待审项超 24h 未处理（F5.7）"}</div>
-                  <div className="mt-1 text-micro text-ink3">高危项不存在超时自动放行（L5.4）· 请尽快审批</div>
+                  <div className="text-body text-ink2">{a.snapshot.summary ?? "待审事项超过 24 小时未处理"}</div>
+                  <div className="mt-1 text-body text-ink3">高风险事项不会因超时自动放行，请尽快审批。</div>
                 </div>
               ))}
 
@@ -192,15 +188,15 @@ export default function P3() {
                 <div key={a.approval_id} className="rounded-2xl border border-warn/40 bg-card p-3.5">
                   <div className="mb-1.5 flex items-center justify-between">
                     <span className="text-body font-bold text-warn">◆ 待审批</span>
-                    <span className="font-mono text-micro text-ink3">{shortId(a.approval_id)}</span>
+                    <span className="font-mono text-body text-ink3">{shortId(a.approval_id)}</span>
                   </div>
                   {a.snapshot.rule_version && (
-                    <div className="mb-1 font-mono text-micro text-holo">命中 {a.snapshot.rule_version}</div>
+                    <div className="mb-1 text-body text-holo">命中关联围栏</div>
                   )}
                   {(a.snapshot.before !== undefined || a.snapshot.after !== undefined) && (
-                    <div className="mb-2.5 rounded-lg border border-line bg-bg800/60 p-2.5 font-mono text-caption">
-                      <div className="text-ink3 line-through">{JSON.stringify(a.snapshot.before)}</div>
-                      <div className="mt-0.5 text-holo">{JSON.stringify(a.snapshot.after)}</div>
+                    <div className="mb-2.5 rounded-lg border border-line bg-bg800/60 p-2.5 font-mono text-body">
+                      <div className="text-ink3 line-through">调整前：{payloadText(a.snapshot.before, 180) || "暂无"}</div>
+                      <div className="mt-0.5 text-holo">调整后：{payloadText(a.snapshot.after, 180) || "暂无"}</div>
                     </div>
                   )}
                   {canApprove && (
@@ -223,7 +219,7 @@ export default function P3() {
                   )}
                   {/* P3E3 查看决策链路 → P4 */}
                   <div className="mt-2 text-right">
-                    <a href="/p4" className="text-micro text-holo no-underline">查看决策链路 → P4（F1.12）</a>
+                    <Link to="/approvals" className="text-body text-holo no-underline">查看完整决策链路 →</Link>
                   </div>
                 </div>
               ))}
@@ -232,8 +228,8 @@ export default function P3() {
               {(filter === "all" || filter === "needHuman") && stats.need_human > 0 && (
                 <div className="rounded-2xl border border-alert/50 bg-alert/6 p-3.5">
                   <div className="mb-1 text-body font-bold text-alert">▲ 求援 · 需介入 {stats.need_human} 项</div>
-                  <div className="text-caption text-ink2">夜间未执行任何动作（不确定不猜测，L4.2）——请查看决策链路定位处理</div>
-                  <div className="mt-2 text-right"><a href="/p4" className="text-micro text-holo no-underline">去审批中心 →</a></div>
+                  <div className="text-body text-ink2">夜间未执行任何动作；系统不会在信息不足时猜测，请查看决策链路并处理。</div>
+                  <div className="mt-2 text-right"><Link to="/approvals" className="text-body text-holo no-underline">去审批中心 →</Link></div>
                 </div>
               )}
 
@@ -241,8 +237,8 @@ export default function P3() {
               {pending.length === 0 && (
                 <div className="rounded-2xl border border-go/35 bg-go/5 p-3.5 text-center">
                   <div className="text-body font-bold text-go">✓ 今日待审已清空</div>
-                  <div className="mt-1 text-caption text-ink2">
-                    手势统计：采纳 {gestureStats.approved} · 编辑后采纳 {gestureStats.edited} · 驳回 {gestureStats.rejected}（F5.5）
+                  <div className="mt-1 text-body text-ink2">
+                    手势统计：采纳 {gestureStats.approved} · 编辑后采纳 {gestureStats.edited} · 驳回 {gestureStats.rejected}
                   </div>
                 </div>
               )}

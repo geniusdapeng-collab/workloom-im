@@ -37,7 +37,7 @@ export function ruleBasedRoute(text: string): IntentResult {
   if (VAGUE_PATTERNS.some((p) => p.test(t)) || t.length < 4) {
     return {
       kind: "clarify",
-      clarifyQuestion: "想让我做什么？比如：「把周五主打款调价 5%」「回复那条 2 分差评」「今晚夜班跑一遍对账」——说一句具体的，我立即开工。",
+      clarifyQuestion: "想让我做什么？比如：「整理今天的待办」「核查一项异常」「生成本周复盘」——请说清对象和目标，我立即开工。",
       rationale: "指令过于含糊，缺少对象与动作",
       via: "rule",
     };

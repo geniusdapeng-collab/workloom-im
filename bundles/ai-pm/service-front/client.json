@@ -1,0 +1,66 @@
+{
+  "workspaceKey": "default",
+  "brandName": "WorkLoom 产品共创中心",
+  "agentName": "产品服务助手",
+  "logoText": "织",
+  "theme": {
+    "primary": "#2457c5",
+    "secondary": "#6d28d9"
+  },
+  "welcomeText": "您好，欢迎来到{brand}。我是{agent}，可以帮您提交产品反馈、查询需求进度或转接人工支持。",
+  "quickReplies": [
+    { "label": "提交产品反馈", "serviceKind": "feedback" },
+    { "label": "查询需求进度", "sendText": "我想查询已提交需求的处理进度" },
+    { "label": "使用帮助", "sendText": "请介绍如何开始使用 WorkLoom" },
+    { "label": "联系人工支持", "serviceKind": "support" }
+  ],
+  "serviceEntries": [
+    {
+      "kind": "feedback",
+      "title": "产品反馈",
+      "desc": "提交问题、建议或使用感受",
+      "icon": "议",
+      "sla": "提交后可在工单中查看真实进度",
+      "titlePlaceholder": "请描述场景、问题和期望结果"
+    },
+    {
+      "kind": "requirement",
+      "title": "需求建议",
+      "desc": "与产品团队共创下一步能力",
+      "icon": "需",
+      "sla": "完成澄清后进入可追踪评审",
+      "titlePlaceholder": "请说明目标用户、任务和验收标准"
+    },
+    {
+      "kind": "support",
+      "title": "人工支持",
+      "desc": "复杂问题转交平台支持人员",
+      "icon": "人",
+      "sla": "以服务端受理回执中的承诺为准",
+      "titlePlaceholder": "请描述问题现象和影响范围"
+    }
+  ],
+  "memberLevels": {
+    "正式用户": { "label": "正式用户" },
+    "协作伙伴": { "label": "协作伙伴" },
+    "游客": { "label": "游客" }
+  },
+  "profile": {
+    "identityBinding": false,
+    "membership": false,
+    "orders": false,
+    "labels": {
+      "identity": "共创身份",
+      "membership": "共创权益",
+      "points": "贡献值",
+      "orders": "近期事项",
+      "emptyOrders": "暂无事项"
+    }
+  },
+  "enableTabs": ["chat", "service", "tickets", "messages", "me"],
+  "supportPhone": "",
+  "demoHistory": [
+    { "role": "user", "text": "审批中心加载失败时，我不知道是没有待办还是网络问题。" },
+    { "role": "ai", "text": "已记录为产品反馈草稿。提交前我会请您确认影响范围；只有收到服务端工单编号后才会显示受理成功。" }
+  ]
+}

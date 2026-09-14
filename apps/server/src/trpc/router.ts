@@ -9,8 +9,10 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
+import type pg from "pg";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { createHash } from "node:crypto";
 import { getAppPool, getGatewayPool, getOwnerPool } from "@workloom/db";
 import {
   getCapabilities,
@@ -33,6 +35,11 @@ import { routeIntent, runAsk, runQuest } from "@workloom/runtime";
 import { LlmIntentClassifier, type IntentClassifier } from "@workloom/runtime";
 import { providerFromEnv, OpenAiCompatibleProvider } from "@workloom/base/model-router";
 import { routedLlmCall, resetLlmAssembly } from "../service/llm.js";
+import {
+  evaluateRealModeReadiness,
+  type ActivationGateResult,
+  type ExamBinding,
+} from "../service/onboarding-truth.js";
 import { creditsRouter, modelFeedbackRouter } from "./credits-router.js";
 import { overlayRouter } from "./overlay-router.js";
 import { accountsRouter } from "./accounts-router.js";
@@ -129,6 +136,22 @@ import {
 import { serviceRouter } from "../service/router.js";
 import { appendEventOn } from "../service/events.js";
 import {
+  advanceWizardDraftOn,
+  assignWizardDraft,
+  completeWizardDraft,
+  getWizardDraft,
+  replayWelcome,
+  saveWelcomeProgress,
+  saveWizardDraft,
+  welcomeProgress,
+  WELCOME_STEPS,
+} from "../service/onboarding-continuity.js";
+import {
+  bundledServiceFrontAvailable,
+  resolveServiceFrontPublication,
+} from "../service/service-front-publication.js";
+import { resolveWorkspaceActiveBundle } from "../service/active-bundle.js";
+import {
   buildEvolutionScorecard,
   decayMemories,
   disableMemory,
@@ -163,7 +186,7 @@ const systemRouter = router({
  * 契约：首次安装开箱即为「全模拟运行态」（种子数据 + mock 模型），P0/工作台横幅常显提示；
  * 向导四步（自检 → 真实大模型 → 经营主体 → 启用真实模式）尽量自动化：
  *  - saveLlmConfig 真实试调通过才落盘（.env 四变量 + process.env + 清缓存，全链即时真实化）
- *  - activateRealMode 翻转 profiles.archive.dataMode（simulated→real），横幅熄灭
+ *  - activateRealMode 在服务端重新核验模型、主体、装配资产与考试绑定，通过才写入正式激活凭据
  * 全程五元事件留痕；API Key 只记掩码后 4 位（L6.2 同纪律）。
  */
 
@@ -214,6 +237,11 @@ function llmAssembly(): { provider: string; model: string; baseUrl: string; real
   };
 }
 
+/** 仅用于判断当前凭据是否仍是已实测版本；不回传、不进事件明文。 */
+function llmCredentialFingerprint(apiKey: string): string {
+  return createHash("sha256").update(`workloom-llm-credential/v1:${apiKey}`, "utf8").digest("hex");
+}
+
 /** 真实试调探针（落地向导「测试连接」：真实 round-trip 通过才允许保存） */
 async function probeLlm(cfg: { baseUrl: string; apiKey?: string; model: string }): Promise<{ reply: string; latencyMs: number }> {
   const provider = new OpenAiCompatibleProvider(cfg.model, { baseUrl: cfg.baseUrl, apiKey: cfg.apiKey || undefined });
@@ -226,7 +254,295 @@ async function probeLlm(cfg: { baseUrl: string; apiKey?: string; model: string }
   return { reply: res.text.trim().slice(0, 200), latencyMs: Date.now() - t0 };
 }
 
+interface OnboardingGateSnapshot {
+  persistedDataMode: "simulated" | "real";
+  llmVerified: boolean;
+  formalActivationRecorded: boolean;
+  business: { name: string; industry: string; note: string; configuredAt: string; source: string } | null;
+  workspace: { name: string; bundleId: string | null; isExample: boolean };
+  runtimeGate: ActivationGateResult;
+  gate: ActivationGateResult;
+}
+
+/**
+ * 在调用方事务内加载正式运行门禁事实。装配资产按台账 ID 精确核验，
+ * 不能用工作区里任意 ready 员工/active 围栏凑数。
+ */
+async function loadOnboardingGate(
+  client: pg.PoolClient,
+  workspaceId: string,
+  activationOwner: boolean,
+): Promise<OnboardingGateSnapshot> {
+  const profileRows = await client.query<{ archive: Record<string, unknown> }>(
+    `SELECT archive FROM profiles WHERE workspace_id=$1`, [workspaceId],
+  );
+  const workspaceRows = await client.query<{ name: string; bundle_id: string | null; is_example: boolean }>(
+    `SELECT name, bundle_id, is_example FROM workspaces WHERE id=$1`, [workspaceId],
+  );
+  const profile = profileRows.rows[0];
+  const workspace = workspaceRows.rows[0];
+  const archive = profile?.archive ?? {};
+  const rawBusiness = archive.business;
+  const business = rawBusiness && typeof rawBusiness === "object"
+    ? rawBusiness as { name?: string; industry?: string; note?: string; configured_at?: string; source?: string }
+    : null;
+  const currentLlm = llmAssembly();
+  const rawLlmVerification = archive.llmVerification;
+  const llmVerification = rawLlmVerification && typeof rawLlmVerification === "object"
+    ? rawLlmVerification as { provider?: string; baseUrl?: string; model?: string; credentialFingerprint?: string; verified?: boolean }
+    : null;
+  const llmVerified = Boolean(
+    currentLlm.real
+    && llmVerification?.verified
+    && llmVerification.provider === currentLlm.provider
+    && llmVerification.baseUrl === currentLlm.baseUrl
+    && llmVerification.model === currentLlm.model
+    && llmVerification.credentialFingerprint === llmCredentialFingerprint(process.env.LLM_API_KEY ?? ""),
+  );
+  const rawFormalActivation = archive.realModeActivation;
+  const formalActivationRecorded = Boolean(
+    rawFormalActivation
+    && typeof rawFormalActivation === "object"
+    && (rawFormalActivation as { gateVersion?: number }).gateVersion === 1,
+  );
+
+  const installRows = await client.query<{
+    id: string; bundle_id: string; assets: {
+      preset_ids?: string[];
+      fence_rule_ids?: string[];
+      skill_ids?: string[];
+      candidate?: { agents?: Array<{ id: string; skills?: string[]; meta?: Record<string, unknown> }> };
+    };
+    status: string; draft_id: string | null; assembly_version: number | null;
+    assembly_hash: string | null; qualified_exam_id: string | null;
+  }>(
+    `SELECT id, bundle_id, assets, status, draft_id, assembly_version, assembly_hash, qualified_exam_id
+     FROM bundle_installs WHERE workspace_id=$1 AND status='active'
+     ORDER BY COALESCE(activated_at, installed_at) DESC`,
+    [workspaceId],
+  );
+  const install = installRows.rows[0];
+  const exactlyOneActiveInstall = installRows.rows.length === 1;
+  const presetIds = [...new Set(install?.assets?.preset_ids ?? [])];
+  const fenceIds = [...new Set(install?.assets?.fence_rule_ids ?? [])];
+  const skillIds = [...new Set(install?.assets?.skill_ids ?? [])];
+  const readyAgentRows = presetIds.length === 0 ? [] : (await client.query<{
+    id: string; skills: string[]; meta: Record<string, unknown>;
+  }>(
+    `SELECT id, skills, meta FROM agents
+     WHERE workspace_id=$1 AND id=ANY($2::text[]) AND status='ready'`,
+    [workspaceId, presetIds],
+  )).rows;
+  const readyAgents = readyAgentRows.length;
+  const activeFenceRows = fenceIds.length === 0 ? [] : (await client.query<{ id: string; created_by: string }>(
+    `SELECT id, created_by FROM fence_rules
+     WHERE workspace_id=$1 AND id=ANY($2::text[]) AND status='active'`,
+    [workspaceId, fenceIds],
+  )).rows;
+  const activeFences = activeFenceRows.length;
+  let fenceResponsibilityReady = activeFenceRows.length === fenceIds.length
+    && activeFenceRows.every((fence) => Boolean(fence.created_by?.trim()));
+  const installedSkills = skillIds.length === 0 ? 0 : Number((await client.query<{ n: string }>(
+    `SELECT count(*)::text AS n FROM skill_installs
+     WHERE workspace_id=$1 AND skill_id=ANY($2::text[])`,
+    [workspaceId, skillIds],
+  )).rows[0]?.n ?? 0);
+  const candidateAgents = install?.assets?.candidate?.agents ?? [];
+  const actualAgentById = new Map(readyAgentRows.map((agent) => [agent.id, agent]));
+  let pendingCapabilities = 0;
+  const capabilityClaimsSafe = install?.bundle_id !== "custom" || (
+    candidateAgents.length === presetIds.length
+    && candidateAgents.every((expected) => {
+      const actual = actualAgentById.get(expected.id);
+      const actualSkills = Array.isArray(actual?.skills) ? actual.skills : [];
+      const actualTools = Array.isArray(actual?.meta?.tools) ? actual.meta.tools : [];
+      const declarations = Array.isArray(expected.meta?.capability_declarations)
+        ? expected.meta.capability_declarations as Array<{ status?: unknown }>
+        : [];
+      pendingCapabilities += declarations.filter((item) => item?.status === "pending_approval").length;
+      return Boolean(actual)
+        && JSON.stringify(actualSkills) === JSON.stringify(expected.skills ?? [])
+        && JSON.stringify(actualTools) === JSON.stringify(Array.isArray(expected.meta?.tools) ? expected.meta.tools : [])
+        && declarations.every((item) => item?.status === "pending_approval");
+    })
+  );
+
+  let customAssembly: Parameters<typeof evaluateRealModeReadiness>[0]["customAssembly"] = {
+    required: install?.bundle_id === "custom",
+  };
+  if (install?.bundle_id === "custom") {
+    const draftRows = install.draft_id ? await client.query<{ status: string; confirmed_by: string | null }>(
+      `SELECT status, confirmed_by FROM wizard_staffing_drafts WHERE workspace_id=$1 AND id=$2`,
+      [workspaceId, install.draft_id],
+    ) : null;
+    const examRows = install.qualified_exam_id ? await client.query<{
+      id: string; status: string; verdict: string | null; assessment_kind: string;
+      target_install_id: string | null; target_draft_id: string | null;
+      target_version: number | null; target_hash: string | null;
+    }>(
+      `SELECT id, status, verdict, assessment_kind,
+              target_install_id, target_draft_id, target_version, target_hash
+       FROM eval_exams WHERE workspace_id=$1 AND id=$2`,
+      [workspaceId, install.qualified_exam_id],
+    ) : null;
+    const exam = examRows?.rows[0];
+    const candidateEvidence = exam ? await client.query<{ agent_id: string; passed: boolean; red_line_hit: boolean }>(
+      `SELECT agent_id, passed, red_line_hit FROM eval_candidate_results
+       WHERE workspace_id=$1 AND exam_id=$2 AND install_id=$3 AND draft_id=$4
+         AND assembly_version=$5 AND assembly_hash=$6
+       ORDER BY agent_id`,
+      [workspaceId, exam.id, install.id, install.draft_id, install.assembly_version, install.assembly_hash],
+    ) : null;
+    const candidateRows = candidateEvidence?.rows ?? [];
+    const candidateIdsMatch = JSON.stringify(candidateRows.map((row) => row.agent_id))
+      === JSON.stringify([...presetIds].sort());
+    const installBinding: ExamBinding | null = install.draft_id && install.assembly_version !== null && install.assembly_hash
+      ? { installId: install.id, draftId: install.draft_id, version: install.assembly_version, hash: install.assembly_hash }
+      : null;
+    const examBinding: ExamBinding | null = exam?.target_install_id && exam.target_draft_id
+      && exam.target_version !== null && exam.target_hash
+      ? { installId: exam.target_install_id, draftId: exam.target_draft_id, version: exam.target_version, hash: exam.target_hash }
+      : null;
+    const confirmedBy = draftRows?.rows[0]?.confirmed_by?.trim() ?? "";
+    fenceResponsibilityReady = fenceResponsibilityReady
+      && Boolean(confirmedBy)
+      && activeFenceRows.every((fence) => fence.created_by === confirmedBy);
+    customAssembly = {
+      required: true,
+      installStatus: install.status,
+      draftStatus: draftRows?.rows[0]?.status ?? null,
+      examStatus: exam?.status ?? null,
+      examVerdict: exam?.verdict ?? null,
+      examAssessmentKind: exam?.assessment_kind ?? null,
+      candidateExpected: presetIds.length,
+      candidateTotal: candidateRows.length,
+      candidatePassed: candidateIdsMatch
+        ? candidateRows.filter((row) => row.passed && !row.red_line_hit).length
+        : -1,
+      installBinding,
+      examBinding,
+    };
+  }
+
+  const readinessFacts = {
+    llmReal: llmVerified,
+    workspaceIsExample: Boolean(workspace?.is_example),
+    business: business ? {
+      name: business.name,
+      industry: business.industry,
+      configuredAt: business.configured_at,
+      source: business.source,
+    } : null,
+    activeInstall: exactlyOneActiveInstall,
+    expectedAgents: presetIds.length,
+    readyInstalledAgents: readyAgents,
+    expectedFences: fenceIds.length,
+    activeInstalledFences: activeFences,
+    fenceResponsibilityReady,
+    expectedSkills: skillIds.length,
+    installedSkills,
+    capabilityClaimsSafe,
+    pendingCapabilities,
+    customAssembly,
+  };
+  return {
+    persistedDataMode: archive.dataMode === "real" ? "real" : "simulated",
+    llmVerified,
+    formalActivationRecorded,
+    business: business ? {
+      name: business.name ?? "",
+      industry: business.industry ?? "",
+      note: business.note ?? "",
+      configuredAt: business.configured_at ?? "",
+      source: business.source ?? "",
+    } : null,
+    workspace: {
+      name: workspace?.name ?? "",
+      bundleId: workspace?.bundle_id ?? null,
+      isExample: Boolean(workspace?.is_example),
+    },
+    // runtimeGate 判定工作区是否仍可被称为“正式”；不因只读/经理查看而降级。
+    runtimeGate: evaluateRealModeReadiness({ ...readinessFacts, activationOwner: true }),
+    // gate 是当前操作者的激活资格，非 owner 会看到明确阻断项。
+    gate: evaluateRealModeReadiness({ ...readinessFacts, activationOwner }),
+  };
+}
+
 const onboardingRouter = router({
+  /** 首次欢迎按账号/角色/工作区持久化；只读成员也只能写自己的欢迎进度。 */
+  welcomeStatus: protectedProcedure.query(async ({ ctx }) => ({
+    ...(await welcomeProgress(ctx.identity.workspaceId, {
+      memberId: ctx.identity.memberId,
+      memberNo: ctx.identity.memberNo,
+      role: ctx.identity.role,
+    })),
+    role: ctx.identity.role,
+  })),
+
+  saveWelcomeProgress: protectedProcedure
+    .input(z.object({
+      status: z.enum(["in_progress", "paused", "completed"]),
+      currentStep: z.enum(WELCOME_STEPS),
+    }))
+    .mutation(async ({ ctx, input }) => saveWelcomeProgress(ctx.identity.workspaceId, {
+      memberId: ctx.identity.memberId,
+      memberNo: ctx.identity.memberNo,
+      role: ctx.identity.role,
+    }, input)),
+
+  replayWelcome: protectedProcedure.mutation(async ({ ctx }) => replayWelcome(ctx.identity.workspaceId, {
+    memberId: ctx.identity.memberId,
+    memberNo: ctx.identity.memberNo,
+    role: ctx.identity.role,
+  })),
+
+  /** 标准落地向导草稿：显式版本号防多人覆盖，payload 白名单不接收密钥和文档正文。 */
+  wizardDraft: protectedProcedure.query(({ ctx }) => getWizardDraft(ctx.identity.workspaceId)),
+
+  saveWizardDraft: writeProcedure
+    .input(z.object({
+      expectedVersion: z.number().int().min(0),
+      currentStep: z.number().int().min(0).max(4),
+      payload: z.object({
+        provider: z.string().max(40).optional(),
+        baseUrl: z.string().max(200).optional(),
+        model: z.string().max(80).optional(),
+        businessName: z.string().max(60).optional(),
+        industry: z.string().max(40).optional(),
+        note: z.string().max(300).optional(),
+        siteUrl: z.string().max(500).optional(),
+        documentTitle: z.string().max(120).optional(),
+        testQuestion: z.string().max(500).optional(),
+      }).strict(),
+    }))
+    .mutation(({ ctx, input }) => saveWizardDraft(ctx.identity.workspaceId, {
+      memberId: ctx.identity.memberId,
+      memberNo: ctx.identity.memberNo,
+      role: ctx.identity.role,
+    }, input)),
+
+  assignWizardDraft: writeProcedure
+    .input(z.object({ memberId: z.string().min(1), expectedVersion: z.number().int().min(1) }))
+    .mutation(({ ctx, input }) => assignWizardDraft(ctx.identity.workspaceId, {
+      memberId: ctx.identity.memberId,
+      memberNo: ctx.identity.memberNo,
+      role: ctx.identity.role,
+    }, input)),
+
+  completeWizardDraft: writeProcedure
+    .input(z.object({ expectedVersion: z.number().int().min(1) }))
+    .mutation(({ ctx, input }) => completeWizardDraft(ctx.identity.workspaceId, {
+      memberId: ctx.identity.memberId,
+      memberNo: ctx.identity.memberNo,
+      role: ctx.identity.role,
+    }, input.expectedVersion)),
+
+  /** C 端发布结果必须来自部署环境、工作区路由和渠道接入事实。 */
+  serviceFrontPublication: protectedProcedure.query(({ ctx }) => resolveServiceFrontPublication({
+    workspaceId: ctx.identity.workspaceId,
+    bundledClientAvailable: bundledServiceFrontAvailable(),
+  })),
+
   /** 运行态总览（P0 横幅/落地向导同一事实源）：数据模式 + LLM 装配 + 工作区规模 */
   status: protectedProcedure.query(async ({ ctx }) => {
     const scope = scopeOf(ctx.identity);
@@ -236,12 +552,7 @@ const onboardingRouter = router({
       await client.query("BEGIN");
       await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
       await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
-      const prof = await client.query<{ data_mode: string | null }>(
-        `SELECT archive->>'dataMode' AS data_mode FROM profiles WHERE workspace_id=$1`,
-        [scope.workspaceId],
-      );
-      const ws = await client.query<{ name: string; bundle_id: string | null; is_example: boolean }>(
-        `SELECT name, bundle_id, is_example FROM workspaces WHERE id=$1`, [scope.workspaceId]);
+      const gateSnapshot = await loadOnboardingGate(client, scope.workspaceId, ctx.identity.role === "owner");
       const n = async (sql: string) => Number((await client.query<{ n: string }>(sql, [scope.workspaceId])).rows[0]?.n ?? 0);
       const [events, members, agents, memories] = await Promise.all([
         n(`SELECT count(*)::text AS n FROM biz_events WHERE workspace_id=$1`),
@@ -251,13 +562,19 @@ const onboardingRouter = router({
       ]);
       await client.query("COMMIT");
       return {
-        // 缺省按模拟态处理（种子库/历史库均无标记时横幅常显，宁可多提示不可漏提示）
-        dataMode: (prof.rows[0]?.data_mode ?? "simulated") as "simulated" | "real",
-        llm: llmAssembly(),
-        workspace: { name: ws.rows[0]?.name ?? "", events, members, agents, memories },
+        // 旧库即使曾被直接写成 real，只要当前事实未过门禁，客户端仍按 simulated 展示。
+        dataMode: (gateSnapshot.persistedDataMode === "real"
+          && gateSnapshot.formalActivationRecorded
+          && gateSnapshot.runtimeGate.canActivate ? "real" : "simulated") as "simulated" | "real",
+        persistedDataMode: gateSnapshot.persistedDataMode,
+        formalActivationRecorded: gateSnapshot.formalActivationRecorded,
+        activationGate: gateSnapshot.gate,
+        business: gateSnapshot.business,
+        llm: { ...llmAssembly(), real: gateSnapshot.llmVerified },
+        workspace: { name: gateSnapshot.workspace.name, events, members, agents, memories },
         workspaceId: scope.workspaceId,
         // V4 §2 示例明示：示例包装配标记（SimBanner 银带语义事实源）
-        bundle: { id: ws.rows[0]?.bundle_id ?? null, isExample: !!ws.rows[0]?.is_example },
+        bundle: { id: gateSnapshot.workspace.bundleId, isExample: gateSnapshot.workspace.isExample },
       };
     } catch (err) {
       await client.query("ROLLBACK").catch(() => undefined);
@@ -310,6 +627,20 @@ const onboardingRouter = router({
         await llmClient.query("BEGIN");
         await llmClient.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
         await llmClient.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+        await llmClient.query(
+          `UPDATE profiles
+           SET archive=jsonb_set(archive, '{llmVerification}', $2::jsonb, true), updated_at=now()
+           WHERE workspace_id=$1`,
+          [scope.workspaceId, JSON.stringify({
+            provider: input.provider,
+            baseUrl: input.baseUrl,
+            model: input.model,
+            credentialFingerprint: llmCredentialFingerprint(input.apiKey),
+            verified: input.provider !== "mock",
+            verifiedAt: input.provider !== "mock" ? new Date().toISOString() : null,
+            verifiedBy: input.provider !== "mock" ? ctx.identity.memberNo : null,
+          })],
+        );
         await gatewayAppendOnClient(llmClient, {
           ...scope, actor: { id: ctx.identity.memberNo, type: "human" }, sessionId: `onboarding-${scope.workspaceId}`,
         }, {
@@ -353,10 +684,21 @@ const onboardingRouter = router({
         await client.query("BEGIN");
         await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
         await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
-        await client.query(`UPDATE workspaces SET name=$2, industry=$3 WHERE id=$1`, [scope.workspaceId, input.displayName, input.industry]);
+        // 用户显式保存真实经营主体后退出“行业示例版”身份；在正式门禁通过前仍保持 simulated 数据模式。
+        await client.query(
+          `UPDATE workspaces SET name=$2, industry=$3, is_example=false WHERE id=$1`,
+          [scope.workspaceId, input.displayName, input.industry],
+        );
         await client.query(
           `UPDATE profiles SET archive = jsonb_set(archive, '{business}', $2::jsonb), industry=$3, updated_at=now() WHERE workspace_id=$1`,
-          [scope.workspaceId, JSON.stringify({ name: input.displayName, note: input.note, onboarded_at: new Date().toISOString() }), input.industry],
+          [scope.workspaceId, JSON.stringify({
+            name: input.displayName,
+            industry: input.industry,
+            note: input.note,
+            configured_at: new Date().toISOString(),
+            configured_by: ctx.identity.memberNo,
+            source: "user",
+          }), input.industry],
         );
         // D16（#1/A）：档案写与事件留痕同一事务同一 COMMIT
         await gatewayAppendOnClient(client, {
@@ -368,7 +710,7 @@ const onboardingRouter = router({
           decision: {
             action: "onboarding.workspace_profile",
             params: { name: input.displayName, industry: input.industry, note: input.note },
-            after: {},
+            after: { name: input.displayName, industry: input.industry, is_example: false },
             basis: ["落地向导：经营主体信息写入一店一档（archive.business）"],
           },
           rule_impact: [],
@@ -384,8 +726,11 @@ const onboardingRouter = router({
       return { ok: true };
     }),
 
-  /** 第③步：启用真实模式（dataMode simulated→real；横幅熄灭；事件留痕。模拟期事件保留为「演示期」历史，可经 reset.sh 整库重建清空） */
+  /** 第③步：服务端全量门禁通过后才启用真实模式；不能把 mock/示例/缺资产状态改名为 real。 */
   activateRealMode: writeProcedure.mutation(async ({ ctx }) => {
+    if (ctx.identity.role !== "owner") {
+      throw new TRPCError({ code: "FORBIDDEN", message: "只有工作区所有者可以启用正式经营模式" });
+    }
     const scope = scopeOf(ctx.identity);
     const app = getAppPool();
     const client = await app.connect();
@@ -393,10 +738,26 @@ const onboardingRouter = router({
       await client.query("BEGIN");
       await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
       await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+      await client.query(`SELECT id FROM workspaces WHERE id=$1 FOR UPDATE`, [scope.workspaceId]);
+      await client.query(`SELECT workspace_id FROM profiles WHERE workspace_id=$1 FOR UPDATE`, [scope.workspaceId]);
+      const gateSnapshot = await loadOnboardingGate(client, scope.workspaceId, true);
+      if (!gateSnapshot.gate.canActivate) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: `尚不能启用真实经营模式：${gateSnapshot.gate.blockers.join("；")}`,
+        });
+      }
       await client.query(
-        `UPDATE profiles SET archive = jsonb_set(archive, '{dataMode}', '"real"'::jsonb), updated_at=now() WHERE workspace_id=$1`,
-        [scope.workspaceId],
+        `UPDATE profiles
+         SET archive=jsonb_set(
+               jsonb_set(archive, '{dataMode}', '"real"'::jsonb),
+               '{realModeActivation}', $2::jsonb, true
+             ),
+             updated_at=now()
+         WHERE workspace_id=$1`,
+        [scope.workspaceId, JSON.stringify({ gateVersion: 1, activatedAt: new Date().toISOString(), activatedBy: ctx.identity.memberNo })],
       );
+      await advanceWizardDraftOn(client, scope.workspaceId, ctx.identity.memberId);
       // D16（#1/A）：dataMode 翻转与事件留痕同一事务同一 COMMIT
       await gatewayAppendOnClient(client, {
         ...scope, actor: { id: ctx.identity.memberNo, type: "human" }, sessionId: `onboarding-${scope.workspaceId}`,
@@ -404,12 +765,12 @@ const onboardingRouter = router({
         who: { type: "human", id: ctx.identity.memberNo },
         context: { tenant_id: scope.tenantId, workspace_id: scope.workspaceId, time: new Date().toISOString() },
         object: { type: "workspace", id: scope.workspaceId },
-        decision: {
-          action: "onboarding.real_mode_activated",
-          params: { from: "simulated", to: "real" },
-          after: { dataMode: "real" },
-          basis: ["落地向导收官：切换真实经营模式，模拟数据横幅熄灭；此后经营动作即真实数据"],
-        },
+          decision: {
+            action: "onboarding.real_mode_activated",
+            params: { from: "simulated", to: "real" },
+            after: { dataMode: "real" },
+            basis: ["落地向导服务端门禁全绿：真实模型、用户经营主体、非示例装配、装配内员工与围栏均已核验；定制装配另须同版本同哈希考试通过"],
+          },
         rule_impact: [],
         model_trace: { model_id: "human-operator", tier: "standard" },
       });
@@ -1913,7 +2274,7 @@ const rosterRouter = router({
             constraints: agent.meta?.prompt?.constraints ?? [],
           },
           workspaceName: ws.rows[0]?.name ?? "",
-          bundle: "workloom-hotel", // 首版唯一行业 Bundle（D2）
+          bundle: ws.rows[0]?.bundle_id ?? "",
           nightWindow: { open: inNightWindow(), range: "22:00–08:00" },
           fences: agent.fence_bindings.map((ruleId) => {
             const hit = fences.find((f) => f.rule_id === ruleId);
@@ -2141,6 +2502,40 @@ function bundleRethrow(err: unknown): never {
 }
 
 const bundlesRouter = router({
+  /**
+   * 当前工作区三端 UI 投影。客户端不得猜行业或读取磁盘清单；这里只返回已通过
+   * 契约、兼容性和完整性校验的配置。无有效 Bundle 时明确返回未配置，不做酒店兜底。
+   */
+  currentUi: protectedProcedure.query(async ({ ctx }) => {
+    const scope = scopeOf(ctx.identity);
+    const active = await resolveWorkspaceActiveBundle(scope.workspaceId);
+    if (active.state !== "ready" || !active.projection) {
+      return {
+        configured: false as const,
+        reason: active.state === "bundle-mismatch"
+          ? "当前工作区装配状态不一致，请由管理员重新确认生效版本"
+          : active.state === "projection-invalid"
+            ? "当前行业界面未通过安全校验，请由管理员重新发布"
+            : "当前工作区尚未装配可用行业界面",
+      };
+    }
+
+    try {
+      const projection = active.projection;
+      const canUseRestrictedSlots = ctx.identity.role === "owner" || ctx.identity.role === "manager";
+      return {
+        configured: true as const,
+        ...projection,
+        grantedPermissions: canUseRestrictedSlots ? projection.ui.permissions : [],
+      };
+    } catch (error) {
+      console.error("当前工作区行业界面投影校验失败", { workspaceId: scope.workspaceId, bundleId: active.bundleId, error });
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: "当前行业界面未通过安全校验，已停止加载。请联系管理员重新发布行业包。",
+      });
+    }
+  }),
   /** 装配状态投影：全部 profile（注册表扫描）+ 选中 profile 六槽/检查单/班组（默认当前激活） */
   status: protectedProcedure
     .input(z.object({ slug: z.string().optional() }).optional())
@@ -2154,7 +2549,10 @@ const bundlesRouter = router({
           await c.query("BEGIN");
           await c.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
           await c.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
-          const r = await c.query<{ industry: string }>(`SELECT industry FROM workspaces WHERE id=$1`, [scope.workspaceId]);
+          const r = await c.query<{ bundle_id: string | null; industry: string | null }>(
+            `SELECT bundle_id, industry FROM workspaces WHERE id=$1`,
+            [scope.workspaceId],
+          );
           await c.query("COMMIT");
           return r;
         } catch (err) {
@@ -2164,8 +2562,9 @@ const bundlesRouter = router({
           c.release();
         }
       })();
-      const activeSlug = ws.rows[0]?.industry ?? "hotel";
       const slugs = listProfileSlugs();
+      const activeSlug = [ws.rows[0]?.bundle_id, ws.rows[0]?.industry]
+        .find((candidate): candidate is string => Boolean(candidate && candidate !== "custom" && slugs.includes(candidate))) ?? null;
       const profiles = [] as Awaited<ReturnType<typeof computeAssembly>>[];
       for (const s of slugs) {
         try {
@@ -2174,7 +2573,8 @@ const bundlesRouter = router({
           /* 注册表坏档不拖垮整页（L9.2：跳过并缺席，由校验页显式呈现缺失） */
         }
       }
-      const selected = profiles.find((p) => p.slug === (input?.slug ?? activeSlug)) ?? profiles[0] ?? null;
+      const selectedSlug = input?.slug ?? activeSlug;
+      const selected = selectedSlug ? profiles.find((p) => p.slug === selectedSlug) ?? null : null;
       return { activeSlug, profiles, selected };
     }),
   /** 重跑校验并留痕（P7E3：修复后重跑；记录可查） */

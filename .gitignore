@@ -31,3 +31,8 @@ docs/demo/.manifest.json
 __pycache__/
 *.pyc
 release/
+playwright-report/
+test-results/
+
+# 发布流水线由 Ed25519 私钥派生的独立 Bundle 公钥环（仅进入受签名构建资源，不入源码提交）
+build/bundle-trust.json

@@ -46,9 +46,9 @@ pnpm computer:mcp                                          # 或以 MCP server �
 ## 1. 首次启动：先看三端全貌（强制）
 
 ```bash
-pnpm preview:all     # 一键拉起三端 + Mock 数据固化（无需真实后端/密钥）
+pnpm preview:all     # 一键拉起三端 + 演示数据固化（无需外部模型密钥，需本地 PostgreSQL）
 #  🖥 PC 端 B 端工作台        http://localhost:3000
-#  📱 B 端移动（高保真+手机壳） http://localhost:3001
+#  📱 B 端移动工作台           http://localhost:3001
 #  📱 C 端 AI 服务前台 H5      http://localhost:3002
 ```
 
@@ -57,11 +57,11 @@ pnpm preview:all     # 一键拉起三端 + Mock 数据固化（无需真实后�
 ### 1.1 产品形态：客户端即产品（不走浏览器）
 
 **WorkLoom 的正式产品形态是桌面客户端**（对标 WorkBuddy/微信桌面端），浏览器仅作开发调试辅助。
-客户端内所有模块尺寸比例**永久固定**——1440×900 设计稿逻辑画布，窗口任意拉伸只做等比缩放，
-绝不重排变形（实测：窗口拉成 1900×500 条形，内容等比缩小、布局零变形）。
+客户端布局必须按窗口真实可用宽度响应式重排，禁止用固定 1440×900 画布或整页缩放冒充响应式。
+PC 工作区支持面板折叠、隐藏、拖拽缩放、恢复默认和全屏；窄窗口中的辅助面板降级为抽屉，正文不得横向溢出。
 
 ```bash
-pnpm app            # 完整客户端：内嵌 server + 固定比例窗口 + 系统托盘 + 单实例锁
+pnpm app            # 完整客户端：内嵌 server + 可自由缩放窗口 + 系统托盘 + 单实例锁
 pnpm app --dev      # 开发姿态（vite HMR）
 pnpm app --smoke    # 冒烟验证（CI/无头环境）
 pnpm app:pack       # 打出本机可执行包（release/ 免安装目录）
@@ -122,11 +122,13 @@ pnpm dev                         # server :8787（tRPC /trpc/*）+ web :5173
 | 目录 | 内容 |
 |---|---|
 | `apps/server` | tRPC 服务端（:8787） |
-| `apps/web` / `apps/webc` | B 端 PC 工作台 / C 端 H5（:5173） |
+| `apps/web` / `apps/webb` / `apps/webc` | B 端 PC 工作台 / B 端移动工作台 / C 端移动服务前台 |
+| `packages/ui` | 三端唯一基础组件、设计令牌、图标、布局控制与导航语言源；行业仓禁止复制分叉 |
+| `packages/industry-contract` | 行业 Bundle 的跨端 UI 投影契约、中文展示与兼容性校验 |
 | `packages/base` | 底座包：workdata（事件/RLS）、fence-engine（围栏 DSL）、captain（数字CEO）、computer-use（生产级电脑/浏览器自动操作，见 docs/computer-use-production.md）等 |
-| `bundles/` | 行业 Bundle：`hotel/`（酒店垂直包） |
+| `bundles/` | 示例、行业与平台 Bundle；差异只能通过契约内配置、投影、权限和业务对象表达 |
 | `skills/official/` | 自带技能：release-gate / industry-entry / product-feedback |
-| `scripts/` | `suite*.ts` 测试套件、`seed*.ts` 种子、`release-gate.ts` 发布门禁、`agent-tour.sh` 能力巡游、`preview-all.sh` 三端预览 |
+| `scripts/` | 测试套件、发布门禁、Bundle/三端投影与 UI 治理、能力巡游、三端预览 |
 | `docs/` | 设计规范、方案、测试目录、**capability-map.md**、**agent-computer-guide.md** |
 
 ## 附：开源组件更新（oss-watch）

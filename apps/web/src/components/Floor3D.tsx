@@ -21,7 +21,8 @@ import { CineDirector, FuseVignette } from "./CineDirector";
 import type { DirectorEvent } from "../lib/theaterDiff";
 import { AudioEngine } from "../audio/AudioEngine";
 import { useNightTime } from "../lib/useNightTime";
-import { personaOf } from "../lib/naming";
+import { personaOf, roleTitleOf } from "../lib/naming";
+import { clientChineseText } from "@workloom/ui";
 import { CineFloor, SpotBeam, CineRig, CinePost, SkyDome, Skyline, NamePlate, DustMotes } from "./cinematic";
 import type { FloorAgent, FloorScene, FloorPayload } from "../pages/p0/Floor";
 
@@ -146,7 +147,7 @@ function Worker({
         <Avatar3D ref={avatarRef} skin={skin} state={agent.state} moving={movingRef.current} />
       </group>
       {/* 一句话状态气泡（hover 0.5s / 注视触发） */}
-      <HoverBubble text={agent.statusLine} visible={bubble} position={[0, 1.0, 0]} />
+      <HoverBubble text={clientChineseText(agent.statusLine, "当前状态待确认")} visible={bubble} position={[0, 1.0, 0]} />
       {/* 请示金色体积光柱 */}
       {asking && (
         <SpotBeam color="#ffd98a" height={4.2} topR={0.12} bottomR={0.62} opacity={night ? 0.1 : 0.14} phase={hash(agent.id) % 3} />
@@ -174,7 +175,7 @@ function Worker({
       {!dimmed && (
         <NamePlate
           persona={personaOf(agent.presetKey)}
-          role={asking ? `${agent.name} · 请您定` : ""}
+          role={asking ? `${roleTitleOf(agent.name, agent.presetKey)} · 请您定` : ""}
           color={color}
           spotlight={asking}
           position={[0, 1.22 + (hash(agent.id) % 4) * 0.24, 0]}
@@ -193,7 +194,7 @@ function Worker({
               if (task) onDropTask(agent, task);
             }}
             style={{ width: 72, height: 96, transform: "translateY(-48px)", borderRadius: 12 }}
-            title={`拖任务给 ${agent.name}`}
+            title={`拖任务给 ${roleTitleOf(agent.name, agent.presetKey)}`}
           />
         </Html>
       )}

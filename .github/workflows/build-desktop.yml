@@ -27,6 +27,12 @@ env:
 jobs:
   macos:
     runs-on: macos-latest
+    env:
+      CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -37,8 +43,16 @@ jobs:
         env:
           VITE_DEMO_WORKSPACE: ai-pm-demo
           VITE_DEMO_MEMBER: MEM-001
+          BUNDLE_SIGNING_PRIVATE_KEY: ${{ secrets.BUNDLE_SIGNING_PRIVATE_KEY }}
+          BUNDLE_SIGNING_KEY_ID: ${{ vars.BUNDLE_SIGNING_KEY_ID || 'workloom-release-v1' }}
         run: |
           pnpm install --frozen-lockfile
+          test -n "$CSC_LINK" && test -n "$CSC_KEY_PASSWORD" || { echo "❌ 缺少 macOS Developer ID 签名证书，拒绝对外发行"; exit 1; }
+          test -n "$APPLE_ID" && test -n "$APPLE_APP_SPECIFIC_PASSWORD" && test -n "$APPLE_TEAM_ID" || { echo "❌ 缺少 Apple 公证凭据，拒绝对外发行"; exit 1; }
+          test -n "$BUNDLE_SIGNING_PRIVATE_KEY" || { echo "❌ 缺少 BUNDLE_SIGNING_PRIVATE_KEY，拒绝生成生产安装包"; exit 1; }
+          pnpm bundle:release
+          test -s build/bundle-trust.json || { echo "❌ 独立 Bundle 公钥环未生成"; exit 1; }
+          pnpm projections:generate
           grep -q 'WORKLOOM_SAFE_RENDERING' apps/desktop/electron/main.cjs
           grep -q 'WORKLOOM_RENDER_SMOKE' apps/desktop/electron/main.cjs
           grep -q 'previousEnvFile' apps/desktop/electron/bootstrap.cjs
@@ -50,6 +64,8 @@ jobs:
           grep -q 'mouthPeak' apps/desktop/electron/main.cjs
           ! grep -q '__workloomEnterTeam' apps/web/src/components/WelcomeCeremony.tsx
           pnpm product:verify
+          pnpm bundle:governance
+          pnpm projections:check
           pnpm exec vitest run apps/web/src/voice/VoiceEngine.test.ts
           pnpm -C apps/web build
 
@@ -58,16 +74,18 @@ jobs:
 
       - name: 打包 DMG（arm64）
         run: pnpm exec electron-builder --mac dmg --arm64 --publish never -c.extraMetadata.version="${VERSION#v}"
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: 拆包验收 + 冒烟（对 .app 内载荷归档跑首启全流程——验证用户拿到的内容）
         run: |
           APP="$(find release/mac-arm64 -maxdepth 1 -name '*.app' -print -quit)"
           test -n "$APP" || { echo "❌ arm64 .app 未生成"; exit 1; }
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          spctl --assess --verbose --type exec "$APP"
+          xcrun stapler validate "$APP"
           RES="$APP/Contents/Resources"
           test -f "$RES/payload.tar.gz" || { echo "❌ 拆包验收失败：payload.tar.gz 未进包"; exit 1; }
           test -f "$RES/payload/PAYLOAD_VERSION" || { echo "❌ 拆包验收失败：PAYLOAD_VERSION 未进包（缺失将致每次启动重解压）"; exit 1; }
+          test -s "$RES/bundle-trust.json" || { echo "❌ 拆包验收失败：独立 Bundle 公钥环未进包"; exit 1; }
           tar -tzf "$RES/payload.tar.gz" > /tmp/wl-pkg-list.txt && grep -q "runtime/node_modules/tsx/package.json" /tmp/wl-pkg-list.txt || { echo "❌ 拆包验收失败：归档内缺 tsx"; exit 1; }
           grep -q "nats/nats-server" /tmp/wl-pkg-list.txt || { echo "❌ 拆包验收失败：归档内缺 nats"; exit 1; }
           echo "✅ 拆包验收通过（arm64 .app 载荷归档完整）"
@@ -97,15 +115,17 @@ jobs:
 
       - name: 打包 DMG（x64）
         run: pnpm exec electron-builder --mac dmg --x64 --publish never -c.extraMetadata.version="${VERSION#v}"
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: 拆包验收（x64 .app 载荷归档完整性；arm64 runner 无法跑 x64 二进制，文件级核验）
         run: |
           APP="$(find release/mac -maxdepth 1 -name '*.app' -print -quit)"
           test -n "$APP" || { echo "❌ x64 .app 未生成"; exit 1; }
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          spctl --assess --verbose --type exec "$APP"
+          xcrun stapler validate "$APP"
           RES="$APP/Contents/Resources"
           test -f "$RES/payload.tar.gz" || { echo "❌ x64 载荷归档未进包"; exit 1; }
+          test -s "$RES/bundle-trust.json" || { echo "❌ x64 独立 Bundle 公钥环未进包"; exit 1; }
           tar -tzf "$RES/payload.tar.gz" > /tmp/wl-pkg-list-x64.txt && grep -q "runtime/node_modules/tsx/package.json" /tmp/wl-pkg-list-x64.txt || { echo "❌ x64 归档内缺 tsx"; exit 1; }
           echo "✅ x64 拆包验收通过"
       - name: 失败留证（冒烟日志开 Issue 供远程诊断——沙箱无法直读 Actions 日志）
@@ -133,13 +153,16 @@ jobs:
           body: |
             ## 安装说明
             **固定下载入口（永不过期）**：本页地址 `https://github.com/<org>/<repo>/releases/latest` 永远指向最新版；在 Assets 中按 `mac-arm64.dmg`（M 系列芯片）、`mac-x64.dmg`（Intel）或 `win-x64.exe`（Windows）后缀选择。
-            **macOS**：下载对应芯片的 dmg → 拖入「应用程序」→ **首次打开前在「终端」执行一次** `xattr -cr "/Applications/WorkLoom 织元.app"`（清除下载隔离属性——当前安装包未做 Apple 公证，因此首次需要）→ 双击打开 → 首启自动初始化约 1 分钟 → 客户端窗口自动出现。
-            **Windows**：下载 exe → 双击安装 → SmartScreen 点「更多信息 → 仍要运行」（仅首次需要）→ 桌面双击「WorkLoom 织元」→ 首启自动初始化约 1 分钟。
+            **macOS**：下载对应芯片的 dmg → 拖入「应用程序」→ 双击打开 → 首启自动初始化约 1 分钟 → 客户端窗口自动出现。安装包必须通过 Developer ID 签名、公证和票据装订门禁。
+            **Windows**：下载 exe → 双击安装 → 桌面双击「WorkLoom 织元」→ 首启自动初始化约 1 分钟。安装包必须通过受信发布者签名门禁。
             > 开箱即「体验模式」：默认游客身份，无需登录即可完整体验（数字人/汇报/各页面）；进入「配置引导」正式开通时才登录注册。体验完可一键清理，填入模型 Key 即可真实使用。
             > 客户端完全自包含（内嵌 Node 24 + PostgreSQL 17 + pgvector + 事件总线），无需安装任何依赖、不打开外部浏览器。
 
   windows:
     runs-on: windows-latest
+    env:
+      WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+      WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -151,12 +174,22 @@ jobs:
         run: scripts/build-pgvector-win.ps1
 
       - name: 安装依赖 + 构建 web
+        shell: bash
         env:
           VITE_DEMO_WORKSPACE: ai-pm-demo
           VITE_DEMO_MEMBER: MEM-001
+          BUNDLE_SIGNING_PRIVATE_KEY: ${{ secrets.BUNDLE_SIGNING_PRIVATE_KEY }}
+          BUNDLE_SIGNING_KEY_ID: ${{ vars.BUNDLE_SIGNING_KEY_ID || 'workloom-release-v1' }}
         run: |
           pnpm install --frozen-lockfile
+          test -n "$WIN_CSC_LINK" && test -n "$WIN_CSC_KEY_PASSWORD" || { echo "❌ 缺少 Windows 代码签名证书，拒绝对外发行"; exit 1; }
+          test -n "$BUNDLE_SIGNING_PRIVATE_KEY" || { echo "❌ 缺少 BUNDLE_SIGNING_PRIVATE_KEY，拒绝生成生产安装包"; exit 1; }
+          pnpm bundle:release
+          test -s build/bundle-trust.json || { echo "❌ 独立 Bundle 公钥环未生成"; exit 1; }
+          pnpm projections:generate
           pnpm product:verify
+          pnpm bundle:governance
+          pnpm projections:check
           pnpm exec vitest run apps/web/src/voice/VoiceEngine.test.ts
           pnpm -C apps/web build
 
@@ -168,7 +201,6 @@ jobs:
         shell: bash  # pwsh 会把 -c.extraMetadata.version="x" 的 -c 吞掉（ENOENT 实证），统一 bash
         run: pnpm exec electron-builder --win nsis --x64 --publish never -c.extraMetadata.version="${VERSION#v}"
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
 
       - name: 拆包验收 + 冒烟（对 win-unpacked 载荷归档跑首启全流程——验证用户拿到的内容）
@@ -177,10 +209,15 @@ jobs:
           RES="release/win-unpacked/resources"
           test -f "$RES/payload.tar.gz" || { echo "❌ 拆包验收失败：payload.tar.gz 未进包"; exit 1; }
           test -f "$RES/payload/PAYLOAD_VERSION" || { echo "❌ 拆包验收失败：PAYLOAD_VERSION 未进包（缺失将致每次启动重解压）"; exit 1; }
+          test -s "$RES/bundle-trust.json" || { echo "❌ 拆包验收失败：独立 Bundle 公钥环未进包"; exit 1; }
           tar -tzf "$RES/payload.tar.gz" > /tmp/wl-pkg-list.txt && grep -q "runtime/node_modules/tsx/package.json" /tmp/wl-pkg-list.txt || { echo "❌ 拆包验收失败：归档内缺 tsx"; exit 1; }
           node apps/desktop/electron/bootstrap.cjs --smoke --resources "$RES" --support "${TEMP}/wl-smoke"
           EXE="$(find release/win-unpacked -maxdepth 1 -type f -name '*.exe' ! -iname '*uninstall*' -print -quit)"
           test -n "$EXE" || { echo "❌ Windows 应用主程序未生成"; exit 1; }
+          powershell -NoProfile -Command '$s = Get-AuthenticodeSignature -FilePath $args[0]; if ($s.Status -ne "Valid") { Write-Error "应用签名无效：$($s.Status)"; exit 1 }' "$EXE"
+          INSTALLER="$(find release -maxdepth 1 -type f -name '*.exe' -print -quit)"
+          test -n "$INSTALLER" || { echo "❌ Windows 安装包未生成"; exit 1; }
+          powershell -NoProfile -Command '$s = Get-AuthenticodeSignature -FilePath $args[0]; if ($s.Status -ne "Valid") { Write-Error "安装包签名无效：$($s.Status)"; exit 1 }' "$INSTALLER"
           node -e 'const {spawnSync}=require("node:child_process"); const r=spawnSync(process.argv[1],[],{stdio:"inherit",env:{...process.env,WORKLOOM_APP_SMOKE:"1",WORKLOOM_SUPPORT_DIR:process.argv[2]}}); process.exit(r.status ?? 1)' "$EXE" "${TEMP}/wl-app-smoke"
           test -f "${TEMP}/wl-app-smoke/.bootstrapped" || { echo "❌ 真实应用首启未完成"; exit 1; }
           node -e 'const {spawnSync}=require("node:child_process"); const r=spawnSync(process.argv[1],[],{stdio:"inherit",env:{...process.env,WORKLOOM_RENDER_SMOKE:"1",WORKLOOM_SUPPORT_DIR:process.argv[2]}}); process.exit(r.status ?? 1)' "$EXE" "${TEMP}/wl-render-default"

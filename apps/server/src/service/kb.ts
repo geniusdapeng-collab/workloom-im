@@ -242,7 +242,7 @@ export async function crawlAndStructure(input: {
   if (input.llm) {
     try {
       md = await input.llm(
-        `把以下网页内容结构化为住客服务 FAQ（Markdown，二级标题为问题，正文为答案，不要编造原文没有的信息）：\n\n${text.slice(0, 6000)}`,
+        `把以下网页内容结构化为当前业务的客户服务常见问答（Markdown，二级标题为问题，正文为答案，不要编造原文没有的信息）：\n\n${text.slice(0, 6000)}`,
       );
     } catch (err) {
       console.warn("[service-c] KB 抓取 LLM 结构化失败，降级直存原文：", err instanceof Error ? err.message : err);

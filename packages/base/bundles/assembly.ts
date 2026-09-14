@@ -15,7 +15,8 @@
 import {
   existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { createHash, createPublicKey, timingSafeEqual, verify as verifySignature } from "node:crypto";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import YAML from "yaml";
@@ -26,6 +27,13 @@ import {
   registerFeedbackEnums,
   unregisterFeedbackEnums,
 } from "../evolve/feedback-enums.js";
+import {
+  assertBundleCompatibility,
+  canonicalBundleArtifactPayload,
+  formatContractError,
+  parseBundleManifest,
+  type BundleManifest,
+} from "@workloom/industry-contract";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 /** 仓库 bundles/ 根（packages/base/bundles → 上三级）；测试可用 BUNDLES_ROOT 指到临时目录 */
@@ -89,7 +97,7 @@ export interface BundleProfile {
 
 export class BundleError extends Error {
   constructor(
-    public readonly code: "NOT_FOUND" | "ALREADY_EXISTS" | "INVALID_INPUT" | "ASSEMBLY_CHECK_FAILED",
+    public readonly code: "NOT_FOUND" | "ALREADY_EXISTS" | "INVALID_INPUT" | "ASSEMBLY_CHECK_FAILED" | "INTEGRITY_FAILED" | "INCOMPATIBLE",
     message: string,
     public readonly checks?: CheckItem[],
   ) {
@@ -111,16 +119,371 @@ function readJson<T = Record<string, unknown>>(path: string): T | null {
   }
 }
 
-interface BundleJson {
-  name?: string;
-  version?: string;
-  workloom?: {
-    industry?: string;
-    displayName?: string;
-    description?: string;
-    status?: string;
-    owner?: string;
-    provides?: Record<string, string[]>;
+type BundleJson = BundleManifest;
+
+const RUNTIME_BASE_VERSION = process.env.WORKLOOM_BASE_VERSION ?? "0.1.0";
+const RUNTIME_UI_VERSION = process.env.WORKLOOM_UI_VERSION ?? "0.1.0";
+
+function digestForBundle(manifest: BundleJson | Record<string, unknown>): string {
+  // 摘要统一覆盖“契约解析后的规范形”：Schema 默认值也属于最终制品内容。
+  // 否则草稿转 candidate 时从原始 JSON 计算，而校验/治理从 parse 后计算，
+  // 同一清单会出现两种摘要并在下一次装载时被误判为篡改。
+  const normalized = parseBundleManifest(manifest);
+  return createHash("sha256").update(canonicalBundleArtifactPayload(normalized)).digest("hex");
+}
+
+function secureHexEqual(a: string, b: string): boolean {
+  return /^[a-f0-9]{64}$/.test(a) && /^[a-f0-9]{64}$/.test(b)
+    && timingSafeEqual(Buffer.from(a, "hex"), Buffer.from(b, "hex"));
+}
+
+interface BundleTrustKey {
+  algorithm: "ed25519";
+  publicKey: string;
+}
+
+interface BundleTrustRing {
+  keys: Record<string, BundleTrustKey>;
+  revoked: Set<string>;
+}
+
+function parseTrustMaterial(value: unknown, label: string): BundleTrustRing {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new BundleError("INTEGRITY_FAILED", `${label}不是有效的公钥环`);
+  }
+  const record = value as Record<string, unknown>;
+  const sourceKeys = record.keys && typeof record.keys === "object" && !Array.isArray(record.keys)
+    ? record.keys as Record<string, unknown>
+    : record;
+  const keys: Record<string, BundleTrustKey> = {};
+  for (const [keyId, item] of Object.entries(sourceKeys)) {
+    if (["schemaVersion", "revoked"].includes(keyId)) continue;
+    const publicKey = typeof item === "string"
+      ? item
+      : item && typeof item === "object" && !Array.isArray(item)
+        ? (item as Record<string, unknown>).publicKey
+        : undefined;
+    const algorithm = item && typeof item === "object" && !Array.isArray(item)
+      ? (item as Record<string, unknown>).algorithm
+      : "ed25519";
+    if (algorithm !== "ed25519" || typeof publicKey !== "string" || !publicKey.includes("BEGIN PUBLIC KEY")) {
+      throw new BundleError("INTEGRITY_FAILED", `${label}中的公钥 ${keyId} 无效`);
+    }
+    try { createPublicKey(publicKey); } catch {
+      throw new BundleError("INTEGRITY_FAILED", `${label}中的公钥 ${keyId} 无法解析`);
+    }
+    keys[keyId] = { algorithm: "ed25519", publicKey };
+  }
+  const revoked = new Set(Array.isArray(record.revoked)
+    ? record.revoked.filter((item): item is string => typeof item === "string")
+    : []);
+  return { keys, revoked };
+}
+
+function mergeTrustRing(target: BundleTrustRing, source: BundleTrustRing): void {
+  Object.assign(target.keys, source.keys);
+  for (const keyId of source.revoked) target.revoked.add(keyId);
+}
+
+function loadBundleTrustRing(bundleRoot: string): BundleTrustRing {
+  const merged: BundleTrustRing = { keys: {}, revoked: new Set() };
+  const configuredPath = process.env.BUNDLE_TRUST_PATH?.trim();
+  if (configuredPath) {
+    const trustFile = resolve(configuredPath);
+    const normalizedBundleRoot = resolve(bundleRoot);
+    const rel = relative(normalizedBundleRoot, trustFile);
+    if (!rel || (!rel.startsWith("..") && !isAbsolute(rel))) {
+      throw new BundleError("INTEGRITY_FAILED", "行业包验证公钥必须锚定在行业包目录之外");
+    }
+    const parsed = readJson<unknown>(trustFile);
+    if (parsed === null) throw new BundleError("INTEGRITY_FAILED", "独立行业包验证公钥环不存在或不可读取");
+    mergeTrustRing(merged, parseTrustMaterial(parsed, "独立行业包验证公钥环"));
+  }
+  if (process.env.BUNDLE_VERIFICATION_KEYS?.trim()) {
+    let parsed: unknown;
+    try { parsed = JSON.parse(process.env.BUNDLE_VERIFICATION_KEYS); } catch {
+      throw new BundleError("INTEGRITY_FAILED", "环境变量中的行业包验证材料不是合法 JSON");
+    }
+    mergeTrustRing(merged, parseTrustMaterial(parsed, "环境变量中的行业包验证材料"));
+  }
+  return merged;
+}
+
+function verifyStableBundleSignature(manifest: BundleJson, digest: string, root: string): void {
+  if (manifest.workloom.status !== "stable") return;
+  const signature = manifest.integrity?.signature;
+  if (!signature) throw new BundleError("INTEGRITY_FAILED", "拒绝装载未签名的稳定行业包");
+  const trust = loadBundleTrustRing(root);
+  if (trust.revoked.has(signature.keyId)) {
+    throw new BundleError("INTEGRITY_FAILED", `行业包签名密钥 ${signature.keyId} 已撤销，已拒绝装载`);
+  }
+  const trusted = trust.keys[signature.keyId];
+  if (!trusted) {
+    throw new BundleError("INTEGRITY_FAILED", `行业包签名密钥 ${signature.keyId} 不在可信公钥环，已拒绝装载`);
+  }
+  let valid = false;
+  try {
+    valid = verifySignature(
+      null,
+      Buffer.from(digest, "hex"),
+      createPublicKey(trusted.publicKey),
+      Buffer.from(signature.value, "base64"),
+    );
+  } catch { valid = false; }
+  if (!valid) throw new BundleError("INTEGRITY_FAILED", `行业包签名 ${signature.keyId} 无法验证，已拒绝装载`);
+}
+
+export function verifyBundleManifestDocument(input: unknown, slug: string, trustRoot = bundlesRoot()): BundleJson {
+  let manifest: BundleJson;
+  try {
+    manifest = parseBundleManifest(input);
+  } catch (error) {
+    throw new BundleError("INVALID_INPUT", `行业包契约无效：${formatContractError(error).join("；")}`);
+  }
+  if (manifest.workloom.industry !== slug) {
+    throw new BundleError("INVALID_INPUT", `行业包目录 ${slug} 与清单标识 ${manifest.workloom.industry} 不一致`);
+  }
+  try {
+    assertBundleCompatibility(manifest, { base: RUNTIME_BASE_VERSION, ui: RUNTIME_UI_VERSION });
+  } catch (error) {
+    throw new BundleError("INCOMPATIBLE", error instanceof Error ? error.message : String(error));
+  }
+  const expected = digestForBundle(manifest);
+  if (manifest.workloom.status !== "draft" && !manifest.integrity) {
+    throw new BundleError("INTEGRITY_FAILED", "非草稿行业包缺少完整性摘要，已拒绝装载");
+  }
+  if (manifest.integrity && !secureHexEqual(manifest.integrity.digest, expected)) {
+    throw new BundleError("INTEGRITY_FAILED", "行业包内容与完整性摘要不一致，已拒绝装载");
+  }
+  verifyStableBundleSignature(manifest, expected, trustRoot);
+  return manifest;
+}
+
+/**
+ * 读取经过契约、运行时兼容性、完整性摘要及生产签名校验的 Bundle 清单。
+ * 服务端能力只能从这个入口取得行业资产引用，禁止绕过校验直接读取 bundle.json。
+ */
+export function loadVerifiedBundleManifest(slug: string, root = bundlesRoot()): BundleJson {
+  const raw = readJson(join(root, slug, "bundle.json"));
+  if (!raw) throw new BundleError("NOT_FOUND", `行业包「${slug}」不存在或不可读取`);
+  const manifest = verifyBundleManifestDocument(raw, slug, root);
+  verifyBundleAssetContents(slug, manifest, root);
+  return manifest;
+}
+
+function verifiedAssetPath(slug: string, assetPath: string, root: string): string {
+  if (!assetPath.trim() || isAbsolute(assetPath) || assetPath.includes("\\")) {
+    throw new BundleError("INVALID_INPUT", "行业包资产路径无效");
+  }
+  const segments = assetPath.split("/");
+  if (segments.some((segment) => !segment || segment === "." || segment === "..")) {
+    throw new BundleError("INVALID_INPUT", "行业包资产路径不得越出包目录");
+  }
+  const bundleDir = resolve(root, slug);
+  const target = resolve(bundleDir, ...segments);
+  const rel = relative(bundleDir, target);
+  if (!rel || rel.startsWith("..") || isAbsolute(rel)) {
+    throw new BundleError("INVALID_INPUT", "行业包资产路径不得越出包目录");
+  }
+  return target;
+}
+
+function declaredAssetPaths(manifest: BundleJson): string[] {
+  const paths: string[] = [];
+  for (const value of Object.values(manifest.workloom.provides)) {
+    if (typeof value === "string") paths.push(value);
+    else if (Array.isArray(value)) paths.push(...value);
+  }
+  return paths;
+}
+
+function collectBundleAssetDigests(slug: string, manifest: BundleJson, root: string): Record<string, string> {
+  const paths = declaredAssetPaths(manifest);
+  if (new Set(paths).size !== paths.length) {
+    throw new BundleError("INTEGRITY_FAILED", "行业包资产清单存在重复路径，已拒绝装载");
+  }
+  const entries = paths.sort((a, b) => a.localeCompare(b)).map((assetPath) => {
+    const path = verifiedAssetPath(slug, assetPath, root);
+    try {
+      const digest = createHash("sha256").update(readFileSync(path)).digest("hex");
+      return [assetPath, digest] as const;
+    } catch {
+      throw new BundleError("INTEGRITY_FAILED", `行业包资产「${assetPath}」不存在或不可读取`);
+    }
+  });
+  return Object.fromEntries(entries);
+}
+
+function verifyBundleAssetContents(slug: string, manifest: BundleJson, root: string): void {
+  if (!manifest.integrity) return; // 草稿可以尚未封装；候选与稳定包已在清单门禁中强制 integrity。
+  const actual = collectBundleAssetDigests(slug, manifest, root);
+  const declared = manifest.integrity.assets;
+  const actualPaths = Object.keys(actual).sort();
+  const declaredPaths = Object.keys(declared).sort();
+  if (actualPaths.length !== declaredPaths.length
+    || actualPaths.some((path, index) => path !== declaredPaths[index])) {
+    throw new BundleError("INTEGRITY_FAILED", "行业包资产摘要索引与 provides 清单不一致，已拒绝装载");
+  }
+  for (const path of actualPaths) {
+    if (!secureHexEqual(actual[path]!, declared[path]!)) {
+      throw new BundleError("INTEGRITY_FAILED", `行业包资产「${path}」内容与摘要不一致，已拒绝装载`);
+    }
+  }
+}
+
+function sealBundleWithoutSignature(slug: string, manifest: BundleJson, root: string): BundleJson["integrity"] {
+  const assets = collectBundleAssetDigests(slug, manifest, root);
+  const candidate = {
+    ...manifest,
+    integrity: { algorithm: "sha256" as const, digest: "0".repeat(64), assets },
+  };
+  return { algorithm: "sha256", digest: digestForBundle(candidate), assets };
+}
+
+/**
+ * 从已验证清单声明的相对路径读取 JSON 资产。调用方仍须校验具体资产 Schema；
+ * 本函数只保证来源属于指定 Bundle，且清单本身已经通过完整性/签名门禁。
+ */
+export function readVerifiedBundleJsonAsset(
+  slug: string,
+  assetPath: string,
+  root = bundlesRoot(),
+): unknown {
+  // 先验证清单；即使调用方已拿到投影，也不允许资产读取绕过生产签名门禁。
+  loadVerifiedBundleManifest(slug, root);
+  const path = verifiedAssetPath(slug, assetPath, root);
+  const asset = readJson<unknown>(path);
+  if (asset === null) {
+    throw new BundleError("NOT_FOUND", `行业包「${slug}」声明的资产不可读取`);
+  }
+  return asset;
+}
+
+/**
+ * 三端只消费这一份经过契约、兼容性与完整性校验的 UI 投影。
+ * 禁止客户端自行读取 bundle.json、猜测当前行业，或在失败时回退到某个示例行业。
+ */
+export interface BundleUiProjection {
+  bundleId: string;
+  bundleName: string;
+  bundleVersion: string;
+  bundleStatus: BundleManifest["workloom"]["status"];
+  contractVersion: string;
+  integrityDigest: string | null;
+  /** 稳定包已由 verifyBundleManifestDocument 无条件验签。 */
+  signatureKeyId: string | null;
+  ui: BundleManifest["workloom"]["ui"];
+}
+
+function presetActorTerminology(manifest: BundleManifest, slug: string, root: string): Record<string, string> {
+  const labels: Record<string, string> = {};
+  for (const assetPath of manifest.workloom.provides.presets) {
+    const path = verifiedAssetPath(slug, assetPath, root);
+    let value: unknown;
+    try {
+      value = YAML.parse(readFileSync(path, "utf-8"));
+    } catch (error) {
+      throw new BundleError("INVALID_INPUT", `行业包「${slug}」岗位清单不可解析：${assetPath}（${String(error)}）`);
+    }
+    if (!value || typeof value !== "object") {
+      throw new BundleError("INVALID_INPUT", `行业包「${slug}」岗位清单不是对象：${assetPath}`);
+    }
+    const preset = value as { preset_key?: unknown; name?: unknown };
+    if (typeof preset.preset_key !== "string" || typeof preset.name !== "string") {
+      throw new BundleError("INVALID_INPUT", `行业包「${slug}」岗位清单缺少岗位标识或中文岗位名：${assetPath}`);
+    }
+    const key = preset.preset_key.trim();
+    const name = preset.name.trim();
+    if (!/^[a-z][a-z0-9-]{1,79}$/.test(key) || !/[\u3400-\u9fff]/u.test(name)) {
+      throw new BundleError("INVALID_INPUT", `行业包「${slug}」岗位标识或中文岗位名无效：${assetPath}`);
+    }
+    const terminologyKey = `actor.${key}`;
+    if (labels[terminologyKey]) {
+      throw new BundleError("INVALID_INPUT", `行业包「${slug}」重复声明岗位标识：${key}`);
+    }
+    labels[terminologyKey] = name;
+  }
+  return labels;
+}
+
+export function loadBundleUiProjection(slug: string, root = bundlesRoot()): BundleUiProjection {
+  const manifest = loadVerifiedBundleManifest(slug, root);
+  const actorTerminology = presetActorTerminology(manifest, slug, root);
+  return {
+    bundleId: manifest.workloom.industry,
+    bundleName: manifest.workloom.displayName,
+    bundleVersion: manifest.version,
+    bundleStatus: manifest.workloom.status,
+    contractVersion: manifest.workloom.compatibility.contract,
+    integrityDigest: manifest.integrity?.digest ?? null,
+    signatureKeyId: manifest.integrity?.signature?.keyId ?? null,
+    ui: {
+      ...manifest.workloom.ui,
+      terminology: {
+        ...actorTerminology,
+        ...manifest.workloom.ui.terminology,
+      },
+    },
+  };
+}
+
+/**
+ * 面向首次开通的行业包注册表条目。
+ *
+ * 磁盘目录存在不等于“可安装”：只有契约、兼容性、完整性均通过，且已经
+ * 进入 stable、明确声明 example=true 的 Bundle 才能出现在自助开通页。
+ * 平台内用包、候选包、草稿包仍可在装配台治理，但不会误放给新客户选择。
+ */
+export interface SelfServiceBundleEntry {
+  slug: string;
+  displayName: string;
+  description: string;
+  version: string;
+  serviceFrontEnabled: boolean;
+  provisioningMode: "guided-assembly";
+}
+
+export interface SelfServiceBundleRegistry {
+  version: string;
+  entries: SelfServiceBundleEntry[];
+  rejected: Array<{ slug: string; reason: string }>;
+}
+
+export function listSelfServiceBundles(root = bundlesRoot()): SelfServiceBundleRegistry {
+  const entries: SelfServiceBundleEntry[] = [];
+  const rejected: Array<{ slug: string; reason: string }> = [];
+  for (const slug of listProfileSlugs(root)) {
+    try {
+      const manifest = loadVerifiedBundleManifest(slug, root);
+      const visibleInCurrentChannel = manifest.workloom.status === "stable"
+        || (process.env.NODE_ENV !== "production" && manifest.workloom.status === "candidate");
+      if (!visibleInCurrentChannel) {
+        rejected.push({ slug, reason: "尚未进入稳定发布状态" });
+        continue;
+      }
+      if (!manifest.workloom.example) {
+        rejected.push({ slug, reason: "未开放自助开通" });
+        continue;
+      }
+      entries.push({
+        slug,
+        displayName: manifest.workloom.displayName,
+        description: manifest.workloom.description,
+        version: manifest.version,
+        serviceFrontEnabled: manifest.workloom.ui.serviceFront.enabled,
+        provisioningMode: "guided-assembly",
+      });
+    } catch (error) {
+      rejected.push({ slug, reason: error instanceof Error ? error.message : "行业包校验失败" });
+    }
+  }
+  return {
+    version: createHash("sha256")
+      .update(JSON.stringify(entries.map((entry) => [entry.slug, entry.version])))
+      .digest("hex")
+      .slice(0, 16),
+    entries,
+    rejected,
   };
 }
 
@@ -178,33 +541,39 @@ export interface BundleDiskAssets {
  * 且磁盘读不参与事务回滚语义，放事务内纯属占坑）。读完再开事务做 DB 侧校验。
  */
 function loadBundleDiskAssets(dir: string, slug: string): BundleDiskAssets {
-  const bj = readJson<BundleJson>(join(dir, "bundle.json"));
-  if (!bj) throw new BundleError("NOT_FOUND", `行业 Bundle「${slug}」不存在（bundles/${slug}/bundle.json 缺失）`);
-  const presetsDir = join(dir, "presets");
-  const presetFiles = existsSync(presetsDir)
-    ? readdirSync(presetsDir).filter((f) => f.endsWith(".yml")).sort()
-    : [];
-  const fencesDir = join(dir, "fences");
-  const fenceFiles = existsSync(fencesDir)
-    ? readdirSync(fencesDir).filter((f) => f.endsWith(".yml")).sort()
-    : [];
+  const raw = readJson(join(dir, "bundle.json"));
+  if (!raw) throw new BundleError("NOT_FOUND", `行业 Bundle「${slug}」不存在（bundles/${slug}/bundle.json 缺失）`);
+  // 只消费 provides 声明的资产。候选/稳定包还会在这里逐文件核验内容摘要；
+  // 未声明文件即使被放入 presets/fences 目录，也绝不进入运行时装配。
+  const bundleRoot = dirname(dir);
+  const bj = loadVerifiedBundleManifest(slug, bundleRoot);
+  const provides = bj.workloom.provides;
+  const schemaPath = (suffix: string) => provides.schemas.find((path) => path.endsWith(suffix));
+  const uiCasesPath = provides.ui.find((path) => path.endsWith("/cases.json"));
+  const readDeclaredJson = <T,>(assetPath: string | undefined): T | null => assetPath
+    ? readJson<T>(verifiedAssetPath(slug, assetPath, bundleRoot))
+    : null;
+  const presetAssets = provides.presets.map((assetPath) => ({
+    assetPath,
+    value: YAML.parse(readFileSync(verifiedAssetPath(slug, assetPath, bundleRoot), "utf-8")) as PresetYml,
+  }));
+  const fenceAssets = provides.fences.map((assetPath) => ({
+    assetPath,
+    value: YAML.parse(readFileSync(verifiedAssetPath(slug, assetPath, bundleRoot), "utf-8")) as FenceYml,
+  }));
   return {
     dir,
     bj,
-    isDraft: bj.workloom?.status === "draft",
-    archiveSchema: readJson(join(dir, "schemas/archive.schema.json")),
-    objectsJson: readJson(join(dir, "schemas/objects.json")),
-    stagesJson: readJson(join(dir, "schemas/stages.json")),
-    presets: presetFiles
-      .map((f) => YAML.parse(readFileSync(join(presetsDir, f), "utf-8")) as PresetYml)
-      .filter((p) => p?.preset_key),
-    fenceFiles,
-    fencePacks: fenceFiles
-      .map((f) => YAML.parse(readFileSync(join(fencesDir, f), "utf-8")) as FenceYml)
-      .filter((f) => f?.version),
-    uiCases: readJson(join(dir, "ui/cases.json")),
-    modelPolicyText: existsSync(join(dir, "model-policy.yml"))
-      ? readFileSync(join(dir, "model-policy.yml"), "utf-8")
+    isDraft: bj.workloom.status === "draft",
+    archiveSchema: readDeclaredJson(schemaPath("/archive.schema.json")),
+    objectsJson: readDeclaredJson(schemaPath("/objects.json")),
+    stagesJson: readDeclaredJson(schemaPath("/stages.json")),
+    presets: presetAssets.map(({ value }) => value).filter((preset) => preset?.preset_key),
+    fenceFiles: fenceAssets.map(({ assetPath }) => assetPath.split("/").at(-1) ?? assetPath),
+    fencePacks: fenceAssets.map(({ value }) => value).filter((fence) => fence?.version),
+    uiCases: readDeclaredJson(uiCasesPath),
+    modelPolicyText: provides.modelPolicy
+      ? readFileSync(verifiedAssetPath(slug, provides.modelPolicy, bundleRoot), "utf-8")
       : null,
   };
 }
@@ -512,7 +881,10 @@ export async function activateBundle(
     try {
       const bj = readJson<BundleJson>(bjPath);
       if (bj?.workloom) {
-        bj.workloom.status = "active";
+        // “已激活”属于工作区安装台账；行业包从草稿晋级候选，仍需考试、
+        // 灰度与发布签名后才能成为稳定制品。
+        bj.workloom.status = "candidate";
+        bj.integrity = sealBundleWithoutSignature(slug, bj, root);
         writeFileSync(bjPath, `${JSON.stringify(bj, null, 2)}\n`, "utf-8");
       }
     } catch (diskErr) {
@@ -620,6 +992,7 @@ export function scaffoldDraft(input: DraftInput, root = bundlesRoot()): void {
     mkdirSync(join(dir, sub), { recursive: true });
   }
   writeFileSync(join(dir, "bundle.json"), `${JSON.stringify({
+    schemaVersion: "workloom.bundle/v1",
     name: `@workloom/${input.slug}`,
     version: input.version,
     workloom: {
@@ -628,8 +1001,29 @@ export function scaffoldDraft(input: DraftInput, root = bundlesRoot()): void {
       description: input.changelog,
       status: "draft", // §2.3：草稿态不进入分发
       owner: input.ownerMemberNo,
+      example: false,
       fenceRef: input.fenceRef,
-      provides: { presets: [], fences: [], skills: [], schemas: [], ui: [] },
+      compatibility: {
+        base: `>=${RUNTIME_BASE_VERSION} <1.0.0`,
+        ui: `>=${RUNTIME_UI_VERSION} <1.0.0`,
+        contract: "1.0.0",
+      },
+      provides: {
+        presets: [], fences: [], skills: [], schemas: [], ui: [], serviceFront: [], seeds: [],
+        modelPolicy: "model-policy.yml",
+      },
+      ui: {
+        schemaVersion: "workloom.bundle.ui/v1",
+        terminology: {},
+        navigation: { slots: [] },
+        home: { widgets: [] },
+        objects: [],
+        workflows: [],
+        serviceFront: { enabled: false, identityPolicy: "disabled", tabs: [], services: [] },
+        theme: { brand: {} },
+        permissions: [],
+        experiments: [],
+      },
     },
   }, null, 2)}\n`, "utf-8");
   // 第⑦槽骨架：新行业默认继承底座路由策略，按行业特点增量覆盖场景即可

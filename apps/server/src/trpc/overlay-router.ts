@@ -6,7 +6,7 @@
  *    客户侧不暴露版本号/状态机概念，只讲人话（"您的 3 项定制已生效"）。
  */
 import { z } from "zod";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { getAppPool } from "@workloom/db";
@@ -18,22 +18,23 @@ import {
   type OverlayDoc,
 } from "@workloom/base/overlay";
 import { routedLlmCall } from "../service/llm.js";
+import { loadVerifiedBundleManifest } from "@workloom/base/bundles";
 import { protectedProcedure, router, scopeOf, writeProcedure } from "./context.js";
 
 /** 从磁盘行业包构建合并视图（与装配钩子 toView 同口径） */
 function loadViewFromDisk(slug: string): BundleAssetView {
-  const dir = join(process.cwd(), "bundles", slug);
-  const bj = JSON.parse(readFileSync(join(dir, "bundle.json"), "utf-8")) as BundleAssetView["bj"];
-  const presets = readdirSync(join(dir, "presets"))
-    .filter((f) => f.endsWith(".yml"))
-    .map((f) => parseYaml(readFileSync(join(dir, "presets", f), "utf-8")) as Record<string, unknown>);
-  const fencePacks = readdirSync(join(dir, "fences"))
-    .filter((f) => f.endsWith(".yml"))
-    .map((f) => parseYaml(readFileSync(join(dir, "fences", f), "utf-8")) as Record<string, unknown>);
+  const bundleRoot = join(process.cwd(), "bundles");
+  const dir = join(bundleRoot, slug);
+  const manifest = loadVerifiedBundleManifest(slug, bundleRoot);
+  const bj = manifest as BundleAssetView["bj"];
+  const presets = manifest.workloom.provides.presets
+    .map((assetPath) => parseYaml(readFileSync(join(dir, assetPath), "utf-8")) as Record<string, unknown>);
+  const fencePacks = manifest.workloom.provides.fences
+    .map((assetPath) => parseYaml(readFileSync(join(dir, assetPath), "utf-8")) as Record<string, unknown>);
   const extra: Record<string, unknown> = {};
-  const faqPath = join(dir, "service-front", "faq.json");
-  if (existsSync(faqPath)) {
-    const raw = JSON.parse(readFileSync(faqPath, "utf-8")) as { faqs?: unknown[] };
+  const faqAsset = manifest.workloom.provides.serviceFront.find((assetPath) => assetPath.endsWith("/faq.json"));
+  if (faqAsset) {
+    const raw = JSON.parse(readFileSync(join(dir, faqAsset), "utf-8")) as { faqs?: unknown[] };
     extra.faq = Array.isArray(raw?.faqs) ? raw.faqs : [];
   }
   return { bj, presets, fencePacks, extra };

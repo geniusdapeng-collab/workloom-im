@@ -206,14 +206,14 @@ export function NamePlate({
         filter: spotlight ? `drop-shadow(0 0 10px ${color})` : "none",
       }}>
         <div style={{
-          whiteSpace: "nowrap", fontSize: spotlight ? 14 : 12, fontWeight: 700, letterSpacing: 1.5,
+          maxWidth: 220, overflowWrap: "anywhere", textAlign: "center", fontSize: 14, fontWeight: 700, letterSpacing: 1.5,
           color: spotlight ? "#fff8e8" : "#eef4ff",
           textShadow: `0 0 8px ${color}88, 0 1px 3px rgba(0,0,0,.85)`,
         }}>
           {persona}{spotlight && spotText ? ` · ${spotText}` : ""}
         </div>
         <div style={{
-          whiteSpace: "nowrap", fontSize: 9, fontWeight: 500, letterSpacing: 2.5,
+          maxWidth: 220, overflowWrap: "anywhere", textAlign: "center", fontSize: 14, fontWeight: 500, letterSpacing: 2.5,
           color, textShadow: "0 1px 2px rgba(0,0,0,.8)", opacity: 0.95,
         }}>
           {role}{sub ? ` · ${sub}` : ""}

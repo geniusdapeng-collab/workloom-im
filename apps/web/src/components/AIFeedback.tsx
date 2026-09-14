@@ -10,6 +10,16 @@
 import { useState } from "react";
 import { trpc } from "../lib/trpc";
 
+const TIER_TEXT: Record<string, string> = {
+  L1: "基础能力档",
+  L2: "标准能力档",
+  L3: "增强能力档",
+};
+
+function tierText(value: string | null | undefined): string {
+  return value ? (TIER_TEXT[value] ?? "能力档位待确认") : "能力档位待确认";
+}
+
 export interface AIFeedbackProps {
   /** 路由场景（model-policy.yml 场景表 key） */
   scene: string;
@@ -55,8 +65,8 @@ export function AIFeedback({ scene, action, prompt, originalText, fromTier = "L2
         setUpgraded(r);
         setVoted("down");
       }
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+    } catch {
+      setErr("反馈暂时未能提交，请稍后重试。");
     } finally {
       setBusy(false);
     }
@@ -64,7 +74,7 @@ export function AIFeedback({ scene, action, prompt, originalText, fromTier = "L2
 
   return (
     <div className="mt-1.5">
-      <div className="flex items-center gap-2 text-micro text-ink3">
+      <div className="flex items-center gap-2 text-body text-ink3">
         <span>回答有帮助吗？</span>
         <button
           type="button"
@@ -74,6 +84,7 @@ export function AIFeedback({ scene, action, prompt, originalText, fromTier = "L2
             voted === "up" ? "bg-emerald-500/20 text-emerald-300" : "hover:bg-white/5"
           } disabled:opacity-50`}
           title="满意"
+          aria-label="这条回答有帮助"
         >👍</button>
         <button
           type="button"
@@ -83,6 +94,7 @@ export function AIFeedback({ scene, action, prompt, originalText, fromTier = "L2
             voted === "down" ? "bg-rose-500/20 text-rose-300" : "hover:bg-white/5"
           } disabled:opacity-50`}
           title="不满意——换更强大脑重答"
+          aria-label="这条回答没有帮助，使用更强能力重新回答"
         >👎</button>
         {busy && <span className="animate-pulse">更强大脑思考中…</span>}
         {voted === "up" && <span className="text-emerald-300/80">已收到，感谢反馈</span>}
@@ -91,23 +103,23 @@ export function AIFeedback({ scene, action, prompt, originalText, fromTier = "L2
 
       {upgraded && (
         <div className="mt-2 rounded-md border border-holo/30 bg-holo/5 p-2">
-          <div className="mb-1 flex items-center gap-2 text-micro">
-            <span className="text-holo">升级版回答（{upgraded.fromTier} → {upgraded.toTier ?? "—"}）</span>
+          <div className="mb-1 flex items-center gap-2 text-body">
+            <span className="text-holo">升级版回答（{tierText(upgraded.fromTier)} → {tierText(upgraded.toTier)}）</span>
             {upgraded.freeEscalation
               ? <span className="rounded bg-emerald-500/15 px-1.5 text-emerald-300">本次免费</span>
               : <span className="rounded bg-amber-500/15 px-1.5 text-amber-300">按倍率实扣</span>}
           </div>
           {upgraded.text ? (
-            <div className="whitespace-pre-wrap text-caption text-ink">{upgraded.text}</div>
+            <div className="whitespace-pre-wrap text-body text-ink">{upgraded.text}</div>
           ) : (
-            <div className="text-caption text-ink3">
+            <div className="text-body text-ink3">
               {upgraded.suggestHuman
                 ? "已是最强模型档——建议转人工/工单，由值班同事跟进（三级兜底）。"
                 : "升级模型暂时不可用，已留痕，稍后可在任务中心重试。"}
             </div>
           )}
-          <details className="mt-1 text-micro text-ink3">
-            <summary className="cursor-pointer">查看原回答（{fromTier}）</summary>
+          <details className="mt-1 text-body text-ink3">
+            <summary className="cursor-pointer">查看原回答（{tierText(fromTier)}）</summary>
             <div className="mt-1 whitespace-pre-wrap opacity-70">{originalText}</div>
           </details>
         </div>

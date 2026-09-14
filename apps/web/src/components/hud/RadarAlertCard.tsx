@@ -6,12 +6,13 @@
  */
 import { EventIdChip } from "./EventIdChip";
 
-export type RadarSeverity = "p0" | "p1" | "p2";
+export type RadarSeverity = "p0" | "p1" | "p2" | "attention";
 
-const SEV_META: Record<RadarSeverity, { pill: string; border: string; bg: string }> = {
-  p0: { pill: "bg-alert/15 text-alert border-alert/55", border: "border-alert/40", bg: "rgba(255,77,109,.06)" },
-  p1: { pill: "bg-warn/15 text-warn border-warn/50", border: "border-warn/40", bg: "rgba(255,170,51,.05)" },
-  p2: { pill: "bg-holo/10 text-holo border-holo/40", border: "border-holo/30", bg: "rgba(77,150,255,.04)" },
+const SEV_META: Record<RadarSeverity, { label: string; pill: string; border: string; bg: string }> = {
+  p0: { label: "最高优先级", pill: "bg-alert/15 text-alert border-alert/55", border: "border-alert/40", bg: "rgba(255,77,109,.06)" },
+  p1: { label: "高优先级", pill: "bg-warn/15 text-warn border-warn/50", border: "border-warn/40", bg: "rgba(255,170,51,.05)" },
+  p2: { label: "关注", pill: "bg-holo/10 text-holo border-holo/40", border: "border-holo/30", bg: "rgba(77,150,255,.04)" },
+  attention: { label: "需人工介入", pill: "bg-alert/15 text-alert border-alert/55", border: "border-alert/40", bg: "rgba(255,77,109,.06)" },
 };
 
 export function RadarAlertCard({
@@ -20,12 +21,14 @@ export function RadarAlertCard({
   title,
   source,
   onDispatch,
+  busy = false,
 }: {
   severity: RadarSeverity;
   eventId: string;
   title: string;
   source: string;
   onDispatch?: () => void;
+  busy?: boolean;
 }) {
   const m = SEV_META[severity];
   return (
@@ -39,19 +42,23 @@ export function RadarAlertCard({
         style={{ background: "conic-gradient(from 0deg, rgba(77,150,255,.16), transparent 60deg)" }}
       />
       <div className="relative flex items-center gap-2.5">
-        <span className={`rounded border px-2 py-0.5 font-orb text-caption font-black ${m.pill}`}>
-          {severity.toUpperCase()}
+        <span className={`rounded border px-2 py-0.5 font-orb text-body font-black ${m.pill}`}>
+          {m.label}
         </span>
         <EventIdChip id={eventId} />
-        <span className="text-caption text-ink3">雷达源：{source}</span>
+        <span className="text-body text-ink3">雷达源：{source}</span>
         <span className="flex-1" />
-        <button
-          type="button"
-          onClick={onDispatch}
-          className="cursor-pointer rounded-md gold-grad px-3 py-1 text-caption font-black text-ongold shadow-[0_0_12px_rgba(255,160,60,.35)]"
-        >
-          一键派单 ▶
-        </button>
+        {onDispatch && (
+          <button
+            type="button"
+            disabled={busy}
+            aria-busy={busy || undefined}
+            onClick={onDispatch}
+            className="cursor-pointer rounded-md gold-grad px-3 py-1 text-body font-black text-ongold shadow-[0_0_12px_rgba(255,160,60,.35)] disabled:cursor-wait disabled:opacity-50"
+          >
+            {busy ? "正在派单…" : "派发处理任务 ▶"}
+          </button>
+        )}
       </div>
       <div className="relative mt-1.5 text-body font-semibold text-ink">{title}</div>
     </div>

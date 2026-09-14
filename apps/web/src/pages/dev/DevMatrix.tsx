@@ -21,7 +21,7 @@ import {
   QuestCard,
   RadarAlertCard,
   RadarAllClear,
-  SkeletonBlock,
+  Skeleton,
   SquadRing,
   SubCallMessage,
   SystemDivider,
@@ -166,10 +166,10 @@ export default function DevMatrix() {
       </Section>
 
       <Section name="空态 / 骨架屏 / 告警条" spec="§5.10">
-        <Cell label="EmptyState（星云晕染+副官语气）+ SkeletonBlock（流光 1.4s）">
+        <Cell label="EmptyState + Skeleton（共享基座状态）">
           <div className="space-y-2">
             <EmptyState icon="🌌" title="一切平静" hint="派遣第一条主线任务，团队即刻开工" actionLabel="开始第一个任务 ▶" />
-            <SkeletonBlock lines={3} />
+            <Skeleton count={3} label="组件内容正在加载" />
           </div>
         </Cell>
         <Cell label="BannerAlert 三级（红/琥珀/青）">

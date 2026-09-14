@@ -14,6 +14,8 @@ import pg from "pg";
 
 const BASE = process.env.SERVER_BASE ?? "http://localhost:8787";
 const APP_URL = process.env.DATABASE_APP_URL ?? "postgres://workloom_app:workloom_dev_app@localhost:5432/workloom";
+const OWNER_URL = process.env.DATABASE_URL ?? "postgres://postgres:workloom@localhost:5432/workloom";
+const REQUESTED_WORKSPACE_ID = process.env.RELEASE_WORKSPACE_ID?.trim() || null;
 
 /* ================= 判定框架 ================= */
 interface CheckResult { id: string; name: string; ok: boolean; detail: string; ms: number }
@@ -78,55 +80,74 @@ await check("G-00", "服务健康前置", async () => {
   return "server up";
 });
 
-const tokens: Record<string, string> = {};
-// 工作区自动探测（跨产品复用口径：hyperreality 无 ws-geo，WorkLoom GEO 有；存在才校验）
-const WS_CANDIDATES = [
-  { key: "video", slug: "video-studio", member: "MEM-V01", name: "AI 视频经营（ws-video）", wsId: "ws-video", preset: "director" },
-  { key: "geo", slug: "geo-growth", member: "MEM-G01", name: "社媒×GEO 双域（ws-geo）", wsId: "ws-geo", preset: "director" },
-  { key: "hotel", slug: "yunqi-hotel", member: "MEM-001", name: "云栖酒店（ws-yunqi）", wsId: "ws-yunqi", preset: "pricing-agent" },
-];
-const WS_LIST: typeof WS_CANDIDATES = [];
-{
-  // RLS 收紧口径（0013⑧：workspaces 仅按 app.workspace_id 直查，不开租户口径）——逐候选设上下文探测，新旧策略均兼容
-  for (const w of WS_CANDIDATES) {
-    const app = new pg.Client({ connectionString: APP_URL });
-    await app.connect();
-    try {
-      await app.query("SELECT set_config('app.workspace_id',$1,false)", [w.wsId]);
-      const r = await app.query(`SELECT slug FROM workspaces WHERE id=$1`, [w.wsId]);
-      if (r.rows[0]?.slug === w.slug) WS_LIST.push(w);
-    } catch { /* 该区不存在或不可见，跳过 */ } finally {
-      await app.end();
-    }
-  }
-  console.log(`工作区探测：${WS_LIST.map((w) => w.wsId).join(" / ") || "（无演示工作区）"}
-`);
-}
-if (WS_LIST.length === 0) {
-  results.push({ id: "G-01", name: "工作区探测", ok: false, detail: "无任何演示工作区（请先播种 db:seed*）", ms: 0 });
-  console.log("✗ G-01 工作区探测 —— 无任何演示工作区（请先播种 db:seed*）");
-}
-for (const ws of WS_LIST) {
-  await check("G-01", `身份签发 · ${ws.name}`, async () => {
-    tokens[ws.key] = await login(ws.slug, ws.member);
-    return "JWT 签发正常";
-  });
+interface ReleaseTarget {
+  tenantId: string;
+  workspaceId: string;
+  slug: string;
+  name: string;
+  memberNo: string;
+  presetKey: string;
 }
 
+let TARGET: ReleaseTarget | null = null;
+{
+  // 发布门禁只依赖 Bundle 的公共投影，不得维护酒店、视频、电商等行业工作区名单。
+  const owner = new pg.Client({ connectionString: OWNER_URL });
+  await owner.connect();
+  try {
+    const result = await owner.query<{
+      tenant_id: string; id: string; slug: string; name: string; member_no: string; preset_key: string;
+    }>(
+      `SELECT w.tenant_id, w.id, w.slug, w.name, m.member_no, a.preset_key
+       FROM workspaces w
+       JOIN LATERAL (
+         SELECT member_no FROM members
+         WHERE workspace_id=w.id AND role IN ('owner','manager')
+         ORDER BY CASE role WHEN 'owner' THEN 0 ELSE 1 END, member_no LIMIT 1
+       ) m ON true
+       JOIN LATERAL (
+         SELECT preset_key FROM agents
+         WHERE workspace_id=w.id AND status IN ('ready','active') AND readonly=false
+         ORDER BY preset_key LIMIT 1
+       ) a ON true
+       WHERE w.is_example=true AND ($1::text IS NULL OR w.id=$1)
+       ORDER BY w.created_at DESC NULLS LAST, w.id
+       LIMIT 1`,
+      [REQUESTED_WORKSPACE_ID],
+    );
+    const row = result.rows[0];
+    if (row) TARGET = {
+      tenantId: row.tenant_id,
+      workspaceId: row.id,
+      slug: row.slug,
+      name: row.name,
+      memberNo: row.member_no,
+      presetKey: row.preset_key,
+    };
+  } finally {
+    await owner.end();
+  }
+  console.log(`工作区探测：${TARGET ? `${TARGET.name}（${TARGET.workspaceId}）` : "（无可验收示例工作区）"}\n`);
+}
+if (!TARGET) {
+  results.push({ id: "G-01", name: "工作区探测", ok: false, detail: "无可验收的示例工作区（请先播种当前 Bundle）", ms: 0 });
+  console.log("✗ G-01 工作区探测 —— 无可验收的示例工作区（请先播种当前 Bundle）");
+}
+const token = TARGET ? await login(TARGET.slug, TARGET.memberNo).catch(() => "") : "";
+if (TARGET) await check("G-01", `身份签发 · ${TARGET.name}`, async () => {
+  assert(token, "JWT 签发失败");
+  return "JWT 签发正常";
+});
+
 /* ---------- 链路一：ASK 问答模式 ---------- */
-const ASK_ALL: Array<{ ws: string; q: string }> = [
-  { ws: "video", q: "昨天账号的数据怎么样？" },
-  { ws: "video", q: "最近哪类选题完播率最高？" },
-  { ws: "geo", q: "我们本周在 AI 搜索里的能见度如何？" },
-  { ws: "geo", q: "竞品在品类词上的表现比我们好吗？" },
-  { ws: "hotel", q: "这周入住率怎么样？" },
-  { ws: "hotel", q: "现在差评主要集中在哪些方面？" },
-];
-const ASK_SCENARIOS = ASK_ALL.filter((sc) => WS_LIST.some((w) => w.key === sc.ws));
-for (const [i, sc] of ASK_SCENARIOS.entries()) {
-  await check(`A-0${i + 1}`, `ASK · ${sc.q.slice(0, 18)}…`, async () => {
+const ASK_SCENARIOS = TARGET ? [
+  "请问当前工作区最近有哪些关键进展？",
+  "请问现在有哪些事项需要我决定？",
+] : [];
+for (const [i, question] of ASK_SCENARIOS.entries()) {
+  await check(`A-0${i + 1}`, `ASK · ${question.slice(0, 18)}…`, async () => {
     const r = await call<{ kind: string; mode?: string; answer?: string; via?: string }>(
-      "threads.dispatch", tokens[sc.ws]!, { title: sc.q, presetKey: WS_LIST.find((w) => w.key === sc.ws)!.preset }, 30000,
+      "threads.dispatch", token, { title: question, presetKey: TARGET!.presetKey }, 30000,
     );
     assert(r.kind === "routed", `未路由（kind=${r.kind}）`);
     assert(r.mode === "ask", `意图误判为 ${r.mode}`);
@@ -137,26 +158,28 @@ for (const [i, sc] of ASK_SCENARIOS.entries()) {
 
 /* ---------- 链路二：QUEST 任务模式 ---------- */
 await check("Q-01", "QUEST · 一句话目标自动拆解多步骤", async () => {
+  assert(TARGET && token, "无可执行的验收工作区身份");
   const r = await call<{ kind: string; mode?: string; threadId?: string; status?: string; stepsTotal?: number; stepsDone?: number }>(
-    "threads.dispatch", tokens[WS_LIST[0]!.key]!,
-    { title: WS_LIST[0]!.key === "hotel" ? "把大床房周末房价上调 5%，并回复最新那条差评" : "给 RK-1500W 新品出 3 条小红书测评片，本周五前要", presetKey: WS_LIST[0]!.preset ?? "director", runImmediately: true },
+    "threads.dispatch", token,
+    { title: "生成一份本周运行复盘，并列出三项下一步任务", presetKey: TARGET.presetKey, runImmediately: true },
     60000,
   );
   assert(r.kind === "routed" && r.mode === "quest", `未按 quest 路由（${r.kind}/${r.mode}）`);
   assert(r.threadId, "未建线程");
   assert(typeof r.stepsTotal === "number" && r.stepsTotal >= 2, `未拆解多步骤（stepsTotal=${r.stepsTotal}）`);
   // 任务创建→拆解→执行流程完整：线程可查、进度在推进或已完成
-  const t = await call<{ id: string; status: string }>("threads.get", tokens[WS_LIST[0]!.key]!, { threadId: r.threadId }, 30000, "query");
+  const t = await call<{ id: string; status: string }>("threads.get", token, { threadId: r.threadId }, 30000, "query");
   assert(t && t.id === r.threadId, "线程回读失败");
   return `拆解 ${r.stepsTotal} 步 · 已执行 ${r.stepsDone} 步 · 状态 ${r.status}`;
 });
 await check("Q-02", "QUEST · 任务事件流留痕可回读", async () => {
+  assert(TARGET, "无可执行的验收工作区");
   // 复用 Q-01 的线程：近 30 分钟内应有 quest 线程及其事件
   const app = new pg.Client({ connectionString: APP_URL });
   await app.connect();
   try {
-    await app.query("SELECT set_config('app.tenant_id','tenant-demo',false)");
-    const wsId = WS_LIST[0]!.wsId;
+    await app.query("SELECT set_config('app.tenant_id',$1,false)", [TARGET.tenantId]);
+    const wsId = TARGET.workspaceId;
     await app.query("SELECT set_config('app.workspace_id',$1,false)", [wsId]);
     const r = await app.query(
       `SELECT count(DISTINCT session_id) tc, count(*) ec FROM biz_events
@@ -171,13 +194,14 @@ await check("Q-02", "QUEST · 任务事件流留痕可回读", async () => {
 });
 
 /* ---------- 链路三：自动化任务编排 ---------- */
-await check("T-01", "编排 · 触发器在位且启用（双工作区）", async () => {
+await check("T-01", "编排 · 当前 Bundle 触发器在位且启用", async () => {
+  assert(TARGET, "无可执行的验收工作区");
   // triggers 表有 workspace 级 RLS：逐工作区设上下文分别统计（同 T-02 口径）
   const countOf = async (wsId: string): Promise<number> => {
     const app = new pg.Client({ connectionString: APP_URL });
     await app.connect();
     try {
-      await app.query("SELECT set_config('app.tenant_id','tenant-demo',false)");
+      await app.query("SELECT set_config('app.tenant_id',$1,false)", [TARGET!.tenantId]);
       await app.query("SELECT set_config('app.workspace_id',$1,false)", [wsId]);
       const r = await app.query(`SELECT count(*) n FROM triggers WHERE enabled=true`);
       return Number(r.rows[0].n);
@@ -185,34 +209,31 @@ await check("T-01", "编排 · 触发器在位且启用（双工作区）", asyn
       await app.end();
     }
   };
-  const parts: string[] = [];
-  for (const w of WS_LIST) {
-    const n = await countOf(w.wsId);
-    assert(n >= 3, `${w.wsId} 触发器不足（${n}）`);
-    parts.push(`${w.wsId} ×${n}`);
-  }
-  return parts.join(" / ");
+  const count = await countOf(TARGET.workspaceId);
+  assert(count >= 1, `${TARGET.workspaceId} 没有启用的自动化触发器`);
+  return `${TARGET.workspaceId} ×${count}`;
 });
 await check("T-02", "编排 · 节拍执行→回调落痕（晨报触发全链）", async () => {
+  assert(TARGET && token, "无可执行的验收工作区身份");
   const app = new pg.Client({ connectionString: APP_URL });
   await app.connect();
   let before = 0;
   try {
-    await app.query("SELECT set_config('app.tenant_id','tenant-demo',false)");
-    const wsId = WS_LIST[0]!.wsId;
+    await app.query("SELECT set_config('app.tenant_id',$1,false)", [TARGET.tenantId]);
+    const wsId = TARGET.workspaceId;
     await app.query("SELECT set_config('app.workspace_id',$1,false)", [wsId]);
     const b = await app.query(`SELECT count(*) n FROM biz_events WHERE workspace_id=$1 AND payload->'decision'->>'action'='ceo.briefing'`, [wsId]);
     before = Number(b.rows[0].n);
   } finally {
     await app.end();
   }
-  const r = await call<{ eventId?: string; skipped?: string }>("captain.runBeat", tokens[WS_LIST[0]!.key]!, { beat: "daily" }, 60000);
+  const r = await call<{ eventId?: string; skipped?: string }>("captain.runBeat", token, { beat: "daily" }, 60000);
   assert(r.eventId || !r.skipped, `节拍未执行（skipped=${r.skipped}）`);
   const app2 = new pg.Client({ connectionString: APP_URL });
   await app2.connect();
   try {
-    await app2.query("SELECT set_config('app.tenant_id','tenant-demo',false)");
-    const wsId2 = WS_LIST[0]!.wsId;
+    await app2.query("SELECT set_config('app.tenant_id',$1,false)", [TARGET.tenantId]);
+    const wsId2 = TARGET.workspaceId;
     await app2.query("SELECT set_config('app.workspace_id',$1,false)", [wsId2]);
     const a = await app2.query(`SELECT count(*) n FROM biz_events WHERE workspace_id=$1 AND payload->'decision'->>'action'='ceo.briefing'`, [wsId2]);
     assert(Number(a.rows[0].n) === before + 1, `回调事件未落账（${before}→${a.rows[0].n}）`);

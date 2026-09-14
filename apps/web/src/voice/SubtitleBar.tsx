@@ -49,7 +49,7 @@ export function SubtitleBar({ channelName = "经营晨会" }: { channelName?: st
     <div
       style={{
         position: "fixed", left: "50%", bottom: 18, transform: `translateX(-50%) translateY(${visible ? 0 : 76}px)`,
-        zIndex: 60, display: "flex", alignItems: "stretch", maxWidth: "min(860px, 86vw)",
+        zIndex: 60, display: "flex", alignItems: "stretch", width: "min(860px, calc(100vw - 24px))", maxWidth: "100%",
         borderRadius: 10, overflow: "hidden",
         border: `1px solid ${fuse ? "rgba(224,90,107,.6)" : "rgba(214,220,228,.22)"}`,
         background: "rgba(14,16,19,.92)", backdropFilter: "blur(8px)",
@@ -60,19 +60,19 @@ export function SubtitleBar({ channelName = "经营晨会" }: { channelName?: st
       aria-live="polite"
     >
       <div style={{
-        flex: "none", display: "flex", alignItems: "center", gap: 6,
-        padding: "8px 12px", fontSize: 10, fontWeight: 700, letterSpacing: 1,
+        flex: "0 1 42%", minWidth: 0, display: "flex", alignItems: "center", gap: 6,
+        padding: "8px 12px", fontSize: 14, fontWeight: 700, letterSpacing: 1,
         color: fuse ? "#ffdce2" : "#e8edf4",
         background: fuse ? "#a8323f" : "#252a30",
-        borderRight: "1px solid rgba(214,220,228,.15)", whiteSpace: "nowrap",
+        borderRight: "1px solid rgba(214,220,228,.15)", overflowWrap: "anywhere",
       }}>
         <span style={{ width: 6, height: 6, borderRadius: 3, background: fuse ? "#fff" : "#e05a6b", boxShadow: "0 0 6px #e05a6b" }} />
-        WL-TV · {channelName}
+        播报台 · {channelName}
       </div>
-      <div style={{ padding: "8px 14px", fontSize: 12, color: "#eef4ff", lineHeight: 1.5, display: "flex", alignItems: "center" }}>
+      <div style={{ minWidth: 0, padding: "8px 14px", fontSize: 14, color: "#eef4ff", lineHeight: 1.5, display: "flex", flexWrap: "wrap", alignItems: "center" }}>
         {current && (
           <>
-            <b style={{ color: fuse ? "#ff9fae" : "#b3c6de", marginRight: 8, whiteSpace: "nowrap" }}>{current.persona}</b>
+            <b style={{ color: fuse ? "#ff9fae" : "#b3c6de", marginRight: 8, overflowWrap: "anywhere" }}>{current.persona}</b>
             <span>{current.text}</span>
           </>
         )}

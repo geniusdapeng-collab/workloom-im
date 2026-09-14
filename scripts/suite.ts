@@ -2429,22 +2429,15 @@ h2("onboarding 还原 mock 装配（套件环境复位）", async () => {
   const { data: st } = await api<{ result?: { data?: { llm?: { real?: boolean } } } }>("/trpc/onboarding.status", { token: tokenOwner });
   eq(st.result?.data?.llm?.real, false, "status 复位 mock");
 });
-h2("onboarding 经营主体写入 + 启用真实模式（横幅熄灭）→ 复位模拟态", async () => {
+h2("onboarding 经营主体写入后，mock/示例装配仍被正式模式门禁拦截", async () => {
   const { data } = await api<{ result?: { data?: { ok?: boolean } } }>("/trpc/onboarding.setupWorkspace", {
     method: "POST", token: tokenOwner, body: { displayName: "云栖酒店", industry: "hotel", note: "E2E 向导验收" },
   });
   eq(data.result?.data?.ok, true, "主体档案写入");
-  const { data: act } = await api<{ result?: { data?: { dataMode?: string } } }>("/trpc/onboarding.activateRealMode", { method: "POST", token: tokenOwner });
-  eq(act.result?.data?.dataMode, "real", "真实模式激活");
+  const { data: act } = await api<{ error?: { data?: { httpStatus?: number }; message?: string } }>("/trpc/onboarding.activateRealMode", { method: "POST", token: tokenOwner });
+  eq(act.error?.data?.httpStatus, 412, `门禁拒绝（${act.error?.message ?? ""}）`);
   const { data: st } = await api<{ result?: { data?: { dataMode?: string } } }>("/trpc/onboarding.status", { token: tokenOwner });
-  eq(st.result?.data?.dataMode, "real", "status 反映 real（横幅熄灭条件达成）");
-  const ev = await qApp<{ n: string }>(
-    `SELECT count(*)::text AS n FROM biz_events WHERE workspace_id=$1 AND payload->'decision'->>'action'='onboarding.real_mode_activated'`,
-    [scope.workspaceId],
-  );
-  assert(Number(ev.rows[0]!.n) >= 1, "切换留痕");
-  // 复位：套件出口保持种子模拟态（事件保留，append-only 纪律）
-  await qApp(`UPDATE profiles SET archive=jsonb_set(archive,'{dataMode}','"simulated"'::jsonb) WHERE workspace_id=$1`, [scope.workspaceId]);
+  eq(st.result?.data?.dataMode, "simulated", "拒绝后仍如实显示模拟运行态");
 });
 
 /* ---- D26 大版本融合 E2E：LLM 装配×节拍 / 开箱运行态 / 真实模式融合 / P21 互洽 / 降级链 ---- */
@@ -2483,14 +2476,14 @@ h2("融合·开箱运行态（种子即重度使用：卫星/实况/职场/请�
   eq(st.result?.data?.dataMode, "simulated", "模拟横幅数据源成立");
   eq(st.result?.data?.llm?.real, false, "mock 如实标注");
 });
-h2("融合·activateRealMode 后剧场/职场不受影响（模式切换纯标签）", async () => {
+h2("融合·activateRealMode 不能作为纯标签绕过真实性门禁", async () => {
   const before = await api<{ result?: { data?: { satellites?: unknown[] } } }>("/trpc/captain.theater", { token: tokenOwner });
-  await api("/trpc/onboarding.activateRealMode", { method: "POST", token: tokenOwner });
+  const act = await api<{ error?: { data?: { httpStatus?: number } } }>("/trpc/onboarding.activateRealMode", { method: "POST", token: tokenOwner });
+  eq(act.data.error?.data?.httpStatus, 412, "mock/示例态被服务端门禁拒绝");
   const { data: st } = await api<{ result?: { data?: { dataMode?: string } } }>("/trpc/onboarding.status", { token: tokenOwner });
-  eq(st.result?.data?.dataMode, "real", "切换生效");
+  eq(st.result?.data?.dataMode, "simulated", "拒绝后没有伪造 real 状态");
   const after = await api<{ result?: { data?: { satellites?: unknown[] } } }>("/trpc/captain.theater", { token: tokenOwner });
-  eq((after.data.result?.data?.satellites ?? []).length, (before.data.result?.data?.satellites ?? []).length, "剧场数据面稳定");
-  await qApp(`UPDATE profiles SET archive=jsonb_set(archive,'{dataMode}','"simulated"'::jsonb) WHERE workspace_id=$1`, [scope.workspaceId]);
+  eq((after.data.result?.data?.satellites ?? []).length, (before.data.result?.data?.satellites ?? []).length, "拒绝不会破坏剧场数据面");
 });
 h2("融合·P21 三端点互洽（state/theater/chairmanQueue/scorecard）", async () => {
   const [state, theater, queue, score] = await Promise.all([

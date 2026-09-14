@@ -1,0 +1,47 @@
+{
+  "name": "@workloom/ui",
+  "version": "0.1.0",
+  "description": "WorkLoom 三端共享交互、中文显示与内容安全基座",
+  "type": "module",
+  "sideEffects": [
+    "*.css",
+    "./src/*.css",
+    "./dist/*.css"
+  ],
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./content-safety.css": "./dist/content-safety.css",
+    "./tokens.css": "./dist/tokens.css",
+    "./components.css": "./dist/components.css"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-assets.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "prepack": "pnpm build && pnpm test"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "peerDependencies": {
+    "react": ">=19.0.0",
+    "react-dom": ">=19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "jsdom": "^30.0.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}

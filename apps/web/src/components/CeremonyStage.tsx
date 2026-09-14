@@ -231,7 +231,7 @@ function VectorCeremonyStage({ actors, occasion = "first-install", dancing = tru
         return (
           <div key={`${actor.presetKey}-${index}`} style={{ position: "absolute", left: `${left}%`, bottom: `${bottom}%`, zIndex: isCeo ? 5 : row === 0 ? 4 : 3, width: avatarSize + 74, marginLeft: -(avatarSize + 74) / 2, textAlign: "center", animation: dancing ? `ceremony-v2-dance ${slow ? 1.42 : .94}s ease-in-out ${index * .08}s infinite` : `ceremony-v2-arrive .65s ease ${index * .08}s both`, transformOrigin: "50% 100%" }}>
             <AgentAvatarOf name={actor.name} presetKey={actor.presetKey} size={avatarSize} />
-            <div style={{ marginTop: 4, color: isCeo ? "#ffd98a" : "#d6dce4", fontWeight: isCeo ? 750 : 550, fontSize: isCeo ? 16 : 12, whiteSpace: "nowrap", textShadow: "0 2px 12px #000" }}>{actor.name}</div>
+            <div style={{ marginTop: 4, color: isCeo ? "#ffd98a" : "#d6dce4", fontWeight: isCeo ? 750 : 550, fontSize: 16, lineHeight: 1.35, maxWidth: "100%", overflowWrap: "anywhere", textShadow: "0 2px 12px #000" }}>{actor.name}</div>
           </div>
         );
       })}

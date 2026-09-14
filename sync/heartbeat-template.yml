@@ -5,9 +5,8 @@
 # 引擎与范围声明始终从基座仓 main 拉取最新版（防副本漂移），本文件只是触发器。
 #
 # 触发：每日定时（错峰）+ 手动 + push 后自检
-# 行为：
-#   ① 检测基座落后 → 配置了 SYNC_TOKEN → 自动拉齐并推送（全自动）
-#   ② 检测基座落后 → 未配置 → CI 标红 + Summary 输出待对齐清单（半自动提醒）
+# 行为：只读检测并报告漂移。行业仓不持有跨仓写凭据，也不直推 main；
+#       基座 ci-gate 成功后由基座仓统一创建升级 PR。
 # ============================================================
 name: base-sync-heartbeat
 
@@ -20,7 +19,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 env:
   BASE_REPO: geniusdapeng-collab/workloom-im
@@ -45,29 +43,21 @@ jobs:
           curl -fsSL "https://raw.githubusercontent.com/${BASE_REPO}/main/sync/base-sync.mjs" -o /tmp/base-sync/sync/base-sync.mjs
           echo "引擎就绪：$(wc -l < /tmp/base-sync/sync/base-sync.mjs) 行"
 
-      - name: pnpm 就绪（锚点合并后 lockfile 刷新依赖）
-        run: corepack enable && corepack prepare pnpm@10.14.0 --activate
-
-      - name: 心跳检测 + 自动对齐
+      - name: 心跳检测（只读）
         id: sync
-        env:
-          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
         run: |
           set +e
-          node /tmp/base-sync/sync/base-sync.mjs detect --repo __REPO_DIR__ 2>&1 | tee /tmp/detect.log
+          node /tmp/base-sync/sync/base-sync.mjs detect --repo __REPO_DIR__ --dry-run 2>&1 | tee /tmp/detect.log
           CODE=$?
           set -e
           if [ "$CODE" = "0" ]; then
             echo "result=aligned" >> $GITHUB_OUTPUT
-          elif [ -n "$SYNC_TOKEN" ]; then
-            echo "result=auto-sync" >> $GITHUB_OUTPUT
-            cd __REPO_DIR__ && node /tmp/base-sync/sync/base-sync.mjs pull --repo . --push
           else
-            echo "result=behind-no-token" >> $GITHUB_OUTPUT
+            echo "result=behind" >> $GITHUB_OUTPUT
             echo "## ⚠️ 基座能力落后" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             cat /tmp/detect.log >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            echo "修复：① 配置 SYNC_TOKEN secret 后重跑本工作流（自动对齐）；② 或本地执行 \`node sync/base-sync.mjs pull --repo . --push\`" >> $GITHUB_STEP_SUMMARY
+            echo "处理：等待 WorkLoom IM 的 ci-gate 通过后由基座仓创建升级 PR；本工作流绝不写入主分支。" >> $GITHUB_STEP_SUMMARY
             exit 2
           fi

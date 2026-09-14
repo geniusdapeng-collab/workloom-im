@@ -8,6 +8,8 @@ readonly: false
 night_shift: true
 high_risk: true
 fence_bindings: ['R-PL7']
+coverage:
+  - { eventPrefix: "incident.", label: 故障处置 }
 skills: ['incident-playbook']
 tools:
   - { name: incidents.read, access: read, desc: 读取聚合事件与影响面 }

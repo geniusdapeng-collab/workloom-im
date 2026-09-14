@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "baseRepository": "geniusdapeng-collab/workloom-im",
+  "releasePolicy": "base-first-stable-only",
+  "ui": {
+    "package": "@workloom/ui",
+    "contractVersion": "1.0.0",
+    "candidateVersion": "0.1.0",
+    "latestStableVersion": null,
+    "requiredClientPackages": [
+      "apps/web/package.json",
+      "apps/webb/package.json",
+      "apps/webc/package.json"
+    ],
+    "allowedIndustryOverrides": [
+      "--wl-brand-primary",
+      "--wl-brand-on-primary",
+      "--wl-brand-accent"
+    ],
+    "sourceDirectory": "packages/ui",
+    "distribution": "registry-and-upgrade-pr"
+  }
+}

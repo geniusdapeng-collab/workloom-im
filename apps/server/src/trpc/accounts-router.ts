@@ -4,17 +4,17 @@
  * 命名空间：
  *  - accounts.auth.*      公开：验证码/密码登录、注册开通、激活、邀请接受、refresh、伙伴登录
  *  - accounts.my.*        登录态：资料/成员关系/会话/登录日志/快切 PIN/登出
- *  - accounts.admin.*     owner/manager：成员邀请/移除/改角色、审批模板查看与应用、API 密钥管理、伙伴授权管理
+ *  - accounts.admin.*     owner/manager：分级管理；移除/改角色/伙伴授权等高风险动作仅 owner
  *  - accounts.inbox.*     统一待办（跨 membership 聚合）
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { getAppPool, getOwnerPool } from "@workloom/db";
+import { getAppPool, getOwnerPool, withWorkspace } from "@workloom/db";
 import {
   requestCode, consumeCode, loginWithCode, loginWithPassword, refreshSession, logout,
   listMemberships, listSessions, revokeSession, revokeAllSessions, registerTenantOwner,
   inviteMember, acceptInvite, removeMember, updateMemberRole, setQuickPin, myLoginEvents,
-  loginEvent, DevEchoSms, type AccountsDeps,
+  loginEvent, createSmsSender, type AccountsDeps, type QueryFn,
 } from "@workloom/base/accounts";
 import {
   ensurePartner, issueGrant, revokeGrant, listGrantsForTenant, listGrantsForPartner,
@@ -26,17 +26,44 @@ import {
 } from "@workloom/base/accounts";
 import { router, publicProcedure, protectedProcedure, writeProcedure, scopeOf } from "./context.js";
 import { signDemoToken, type Identity } from "@workloom/base/tenancy";
+import { listSelfServiceBundles } from "@workloom/base/bundles";
 
-const sms = new DevEchoSms(); // seam：生产经环境注入真实短信通道（PRD §4.1 微信/短信）
+const sms = createSmsSender({
+  driver: process.env.ACCOUNTS_SMS_DRIVER ?? process.env.SMS_PROVIDER,
+  nodeEnv: process.env.NODE_ENV,
+});
 const deps = (): AccountsDeps => ({ q: (t: string, p?: unknown[]) => getAppPool().query(t, p as never[]) as Promise<{ rows: Record<string, unknown>[] }>, sms });
 // 登录引导例外点（F7.1 同 loginAs）：身份未建立前的工作区解析走 owner 池
 const ownerDeps = (): AccountsDeps => ({ q: (t: string, p?: unknown[]) => getOwnerPool().query(t, p as never[]) as Promise<{ rows: Record<string, unknown>[] }>, sms });
+const ownerQuery: QueryFn = (t, p) => getOwnerPool().query(t, p as never[]) as Promise<{ rows: Record<string, unknown>[] }>;
+
+/**
+ * 账号域中带 workspace_id / tenant_id 的表同样受 RLS 保护。
+ * 每个受保护过程必须在一个事务里设置两项身份上下文，不能把 set_config 和业务 SQL
+ * 分发到连接池的不同连接上，否则会出现“有权限但查不到”或跨租户串读。
+ */
+async function withIdentityDeps<T>(identity: Identity, fn: (scoped: AccountsDeps) => Promise<T>): Promise<T> {
+  return withWorkspace(getAppPool(), scopeOf(identity), async (_db, client) => fn({
+    q: (t, p) => client.query(t, p as never[]) as Promise<{ rows: Record<string, unknown>[] }>,
+    sms,
+  }));
+}
+
+async function withIdentityQuery<T>(identity: Identity, fn: (q: QueryFn) => Promise<T>): Promise<T> {
+  return withIdentityDeps(identity, (scoped) => fn(scoped.q));
+}
 
 const device = z.string().max(200).optional();
 const ip = z.string().max(64).optional();
 
 export const accountsRouter = router({
   auth: router({
+    /** 首次开通选项只能来自通过契约/兼容性/完整性校验的稳定自助 Bundle。 */
+    activationOptions: publicProcedure.query(() => {
+      const registry = listSelfServiceBundles();
+      return { registryVersion: registry.version, bundles: registry.entries };
+    }),
+
     /** 发送验证码（login/activate/invite/danger-confirm） */
     requestCode: publicProcedure
       .input(z.object({
@@ -62,10 +89,16 @@ export const accountsRouter = router({
       .input(z.object({
         phone: z.string().min(6).max(20), code: z.string().length(6), displayName: z.string().min(1).max(50),
         tenantName: z.string().min(1).max(100), workspaceName: z.string().min(1).max(100),
-        workspaceSlug: z.string().regex(/^[a-z0-9-]{3,40}$/), industry: z.string().min(1).max(40),
+        workspaceSlug: z.string().regex(/^[a-z0-9][a-z0-9-]{2,39}$/).optional(), industry: z.string().min(1).max(40),
         password: z.string().min(8).max(128).optional(), ip,
       }))
-      .mutation(async ({ input }) => registerTenantOwner(ownerDeps(), input)),
+      .mutation(async ({ input }) => {
+        const registry = listSelfServiceBundles();
+        if (!registry.entries.some((entry) => entry.slug === input.industry)) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "所选起步方案当前不可用于自助开通，请刷新后重新选择" });
+        }
+        return registerTenantOwner(ownerDeps(), input);
+      }),
 
     acceptInvite: publicProcedure
       .input(z.object({ phone: z.string().min(6).max(20), code: z.string().length(6), workspaceSlug: z.string(), displayName: z.string().max(50).optional(), ip }))
@@ -129,51 +162,51 @@ export const accountsRouter = router({
   my: router({
     /** 我的成员关系（统一待办与切店数据源） */
     memberships: protectedProcedure.query(async ({ ctx }) => {
-      const r = await getAppPool().query(
-        `SELECT account_id FROM members WHERE id=$1`, [ctx.identity!.memberId]);
-      const accId = r.rows[0]?.account_id as string | undefined;
+      const accId = await accountIdOf(ctx.identity!);
       if (!accId) return [];
-      return listMemberships(getAppPool().query.bind(getAppPool()), accId);
+      // “我的全部工作区”天然跨 RLS scope；先用当前身份确认 account_id，再由受控 owner 查询按该账号聚合。
+      return listMemberships(ownerQuery, accId);
     }),
 
     sessions: protectedProcedure.query(async ({ ctx }) => {
-      const accId = await accountIdOf(ctx.identity!.memberId);
+      const accId = await accountIdOf(ctx.identity!);
       return accId ? listSessions(getAppPool().query.bind(getAppPool()), accId) : [];
     }),
 
     revokeSession: writeProcedure
       .input(z.object({ sessionId: z.string() }))
       .mutation(async ({ ctx, input }) => {
-        const accId = await accountIdOf(ctx.identity!.memberId);
+        const accId = await accountIdOf(ctx.identity!);
         if (accId) await revokeSession(getAppPool().query.bind(getAppPool()), accId, input.sessionId);
         return { ok: true };
       }),
 
     revokeAllSessions: writeProcedure.mutation(async ({ ctx }) => {
-      const accId = await accountIdOf(ctx.identity!.memberId);
+      const accId = await accountIdOf(ctx.identity!);
       if (accId) await revokeAllSessions(getAppPool().query.bind(getAppPool()), accId);
       return { ok: true };
     }),
 
     loginEvents: protectedProcedure.query(async ({ ctx }) => {
-      const accId = await accountIdOf(ctx.identity!.memberId);
+      const accId = await accountIdOf(ctx.identity!);
       return accId ? myLoginEvents(getAppPool().query.bind(getAppPool()), accId) : [];
     }),
 
     setQuickPin: writeProcedure
       .input(z.object({ pin: z.string().regex(/^\d{4,6}$/) }))
       .mutation(async ({ ctx, input }) => {
-        await setQuickPin(deps(), { memberId: ctx.identity!.memberId, pin: input.pin });
+        await withIdentityDeps(ctx.identity!, (scoped) =>
+          setQuickPin(scoped, { memberId: ctx.identity!.memberId, pin: input.pin }));
         return { ok: true };
       }),
 
     /** 伙伴域：我的授权（伙伴联系人视角） */
     myPartnerGrants: protectedProcedure.query(async ({ ctx }) => {
-      const accId = await accountIdOf(ctx.identity!.memberId);
+      const accId = await accountIdOf(ctx.identity!);
       if (!accId) return [];
       const p = await getAppPool().query(`SELECT id FROM partners WHERE contact_account_id=$1 AND status='active'`, [accId]);
       if (!p.rows[0]) return [];
-      return listGrantsForPartner(getAppPool().query.bind(getAppPool()), p.rows[0].id as string);
+      return withIdentityQuery(ctx.identity!, (q) => listGrantsForPartner(q, p.rows[0].id as string));
     }),
   }),
 
@@ -185,20 +218,25 @@ export const accountsRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         assertOwnerOrManager(ctx.identity!.role);
-        const r = await inviteMember(deps(), {
+        if (ctx.identity!.role === "manager" && (input.role === "owner" || input.role === "manager")) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "管理员只能邀请普通成员或只读成员" });
+        }
+        const r = await withIdentityDeps(ctx.identity!, (scoped) => inviteMember(scoped, {
           workspaceId: ctx.identity!.workspaceId, phone: input.phone, name: input.name,
           role: input.role, invitedBy: ctx.identity!.memberId,
-        });
+        }));
         return r;
       }),
 
     remove: writeProcedure
       .input(z.object({ memberId: z.string() }))
       .mutation(async ({ ctx, input }) => {
-        assertOwnerOrManager(ctx.identity!.role);
+        if (ctx.identity!.role !== "owner") throw new TRPCError({ code: "FORBIDDEN", message: "移除成员仅限工作区负责人" });
         if (input.memberId === ctx.identity!.memberId) throw new TRPCError({ code: "BAD_REQUEST", message: "不能移除自己" });
-        await removeMember(deps(), { workspaceId: ctx.identity!.workspaceId, memberId: input.memberId });
-        await loginEvent(getAppPool().query.bind(getAppPool()), { kind: "member.removed", workspaceId: ctx.identity!.workspaceId, detail: { memberId: input.memberId, by: ctx.identity!.memberNo } });
+        await withIdentityDeps(ctx.identity!, async (scoped) => {
+          await removeMember(scoped, { workspaceId: ctx.identity!.workspaceId, memberId: input.memberId });
+          await loginEvent(scoped.q, { kind: "member.removed", workspaceId: ctx.identity!.workspaceId, detail: { memberId: input.memberId, by: ctx.identity!.memberNo } });
+        });
         return { ok: true };
       }),
 
@@ -208,22 +246,24 @@ export const accountsRouter = router({
         permissions: z.record(z.string(), z.unknown()).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        assertOwnerOrManager(ctx.identity!.role);
-        await updateMemberRole(deps(), { workspaceId: ctx.identity!.workspaceId, ...input });
+        if (ctx.identity!.role !== "owner") throw new TRPCError({ code: "FORBIDDEN", message: "修改角色仅限工作区负责人" });
+        if (input.memberId === ctx.identity!.memberId) throw new TRPCError({ code: "BAD_REQUEST", message: "不能修改自己的负责人角色" });
+        await withIdentityDeps(ctx.identity!, (scoped) =>
+          updateMemberRole(scoped, { workspaceId: ctx.identity!.workspaceId, ...input }));
         return { ok: true };
       }),
 
     approvalPolicies: protectedProcedure.query(async ({ ctx }) =>
-      listApprovalPolicies(getAppPool().query.bind(getAppPool()), ctx.identity!.workspaceId)),
+      withIdentityQuery(ctx.identity!, (q) => listApprovalPolicies(q, ctx.identity!.workspaceId))),
 
     applyApprovalTemplate: writeProcedure
       .input(z.object({ archetype: z.enum(["single", "unmanned", "group-store"]) }))
       .mutation(async ({ ctx, input }) => {
         assertOwnerOrManager(ctx.identity!.role);
-        return applyApprovalTemplate(deps(), {
+        return withIdentityDeps(ctx.identity!, (scoped) => applyApprovalTemplate(scoped, {
           workspaceId: ctx.identity!.workspaceId,
           archetype: input.archetype as Archetype, updatedBy: ctx.identity!.memberId,
-        });
+        }));
       }),
 
     createApiKey: writeProcedure
@@ -233,20 +273,20 @@ export const accountsRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         assertOwnerOrManager(ctx.identity!.role);
-        return createApiKey(deps(), {
+        return withIdentityDeps(ctx.identity!, (scoped) => createApiKey(scoped, {
           workspaceId: ctx.identity!.workspaceId, name: input.name, capabilities: input.capabilities,
           rateLimit: input.rateLimit, ttlDays: input.ttlDays, createdBy: ctx.identity!.memberId,
-        });
+        }));
       }),
 
     apiKeys: protectedProcedure.query(async ({ ctx }) =>
-      listApiKeys(getAppPool().query.bind(getAppPool()), ctx.identity!.workspaceId)),
+      withIdentityQuery(ctx.identity!, (q) => listApiKeys(q, ctx.identity!.workspaceId))),
 
     revokeApiKey: writeProcedure
       .input(z.object({ keyId: z.string() }))
       .mutation(async ({ ctx, input }) => {
         assertOwnerOrManager(ctx.identity!.role);
-        await revokeApiKey(getAppPool().query.bind(getAppPool()), ctx.identity!.workspaceId, input.keyId);
+        await withIdentityQuery(ctx.identity!, (q) => revokeApiKey(q, ctx.identity!.workspaceId, input.keyId));
         return { ok: true };
       }),
 
@@ -259,27 +299,28 @@ export const accountsRouter = router({
 
     issueGrant: writeProcedure
       .input(z.object({
-        partnerId: z.string(), workspaces: z.array(z.string()).default([]),
+        partnerId: z.string(), workspaces: z.array(z.string()).min(1),
         capabilities: z.array(z.enum(PARTNER_CAPABILITIES)).min(1),
         ttlDays: z.number().int().min(1).max(730),
       }))
       .mutation(async ({ ctx, input }) => {
         if (ctx.identity!.role !== "owner") throw new TRPCError({ code: "FORBIDDEN", message: "伙伴授权仅 owner 可签发" });
-        return issueGrant(deps(), {
+        return withIdentityDeps(ctx.identity!, (scoped) => issueGrant(scoped, {
           partnerId: input.partnerId, tenantId: ctx.identity!.tenantId,
           workspaces: input.workspaces, capabilities: input.capabilities,
           ttlDays: input.ttlDays, issuedBy: ctx.identity!.memberId,
-        });
+        }));
       }),
 
     grants: protectedProcedure.query(async ({ ctx }) =>
-      listGrantsForTenant(getAppPool().query.bind(getAppPool()), ctx.identity!.tenantId)),
+      withIdentityQuery(ctx.identity!, (q) => listGrantsForTenant(q, ctx.identity!.tenantId))),
 
     revokeGrant: writeProcedure
-      .input(z.object({ grantId: z.string(), reason: z.string().max(200) }))
+      .input(z.object({ grantId: z.string(), reason: z.string().trim().min(2).max(200) }))
       .mutation(async ({ ctx, input }) => {
         if (ctx.identity!.role !== "owner") throw new TRPCError({ code: "FORBIDDEN", message: "吊销仅 owner 可操作" });
-        await revokeGrant(deps(), input.grantId, input.reason);
+        await withIdentityDeps(ctx.identity!, (scoped) =>
+          revokeGrant(scoped, input.grantId, input.reason, ctx.identity!.tenantId));
         return { ok: true };
       }),
 
@@ -290,11 +331,11 @@ export const accountsRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         assertOwnerOrManager(ctx.identity!.role);
-        return issueWorkorderPass(deps(), {
+        return withIdentityDeps(ctx.identity!, (scoped) => issueWorkorderPass(scoped, {
           phone: input.phone, name: input.name, tenantId: ctx.identity!.tenantId,
           workspaceId: ctx.identity!.workspaceId, ticketId: input.ticketId,
           ttlHours: input.ttlHours, issuedBy: ctx.identity!.memberId,
-        });
+        }));
       }),
 
     linkTenant: writeProcedure
@@ -305,26 +346,31 @@ export const accountsRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         if (ctx.identity!.role !== "owner") throw new TRPCError({ code: "FORBIDDEN", message: "集团层级仅集团 owner 可维护" });
-        await linkTenant(deps(), { parentTenantId: ctx.identity!.tenantId, ...input });
+        await withIdentityDeps(ctx.identity!, (scoped) =>
+          linkTenant(scoped, { parentTenantId: ctx.identity!.tenantId, ...input }));
         return { ok: true };
       }),
 
     childTenants: protectedProcedure.query(async ({ ctx }) =>
-      childTenants(getAppPool().query.bind(getAppPool()), ctx.identity!.tenantId)),
+      // 集团视图要读取子租户名称；parentTenantId 来自签名身份，owner 查询只按该父租户聚合。
+      childTenants(ownerQuery, ctx.identity!.tenantId)),
   }),
 
   inbox: router({
     /** 统一待办：跨 membership 聚合（审批/告警/工单占位——按店分组返回工作区清单与各自待办计数） */
     unified: protectedProcedure.query(async ({ ctx }) => {
-      const accId = await accountIdOf(ctx.identity!.memberId);
+      const accId = await accountIdOf(ctx.identity!);
       if (!accId) return { groups: [] };
-      const ships = await listMemberships(getAppPool().query.bind(getAppPool()), accId);
+      const ships = await listMemberships(ownerQuery, accId);
       const groups = [];
       for (const m of ships) {
         // 各工作区待办计数（审批卡 pending；告警/工单由行业包数据面补充，结构先行）
-        const approvals = await getAppPool().query(
+        const approvals = await withWorkspace(getAppPool(), {
+          tenantId: m.tenant_id as string,
+          workspaceId: m.workspace_id as string,
+        }, async (_db, client) => client.query(
           `SELECT count(*)::int AS c FROM approvals WHERE workspace_id=$1 AND status='pending'`,
-          [m.workspace_id]).catch(() => ({ rows: [{ c: 0 }] }));
+          [m.workspace_id])).catch(() => ({ rows: [{ c: 0 }] }));
         groups.push({
           workspaceId: m.workspace_id, slug: m.slug, workspaceName: m.workspace_name,
           tenantName: m.tenant_name, role: m.role, industry: m.industry,
@@ -342,7 +388,9 @@ function assertOwnerOrManager(role: string): void {
   }
 }
 
-async function accountIdOf(memberId: string): Promise<string | undefined> {
-  const r = await getAppPool().query(`SELECT account_id FROM members WHERE id=$1`, [memberId]);
-  return r.rows[0]?.account_id as string | undefined;
+async function accountIdOf(identity: Identity): Promise<string | undefined> {
+  return withIdentityQuery(identity, async (q) => {
+    const r = await q(`SELECT account_id FROM members WHERE id=$1 AND workspace_id=$2`, [identity.memberId, identity.workspaceId]);
+    return r.rows[0]?.account_id as string | undefined;
+  });
 }

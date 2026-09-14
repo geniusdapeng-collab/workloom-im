@@ -15,23 +15,23 @@ export interface ApprovalPolicyRow {
   delegation?: Record<string, unknown>;
 }
 
-/** 三套业态默认审批模板（PRD §5.2） */
+/** 三套组织形态默认审批模板（PRD §5.2） */
 export const APPROVAL_TEMPLATES: Record<Archetype, ApprovalPolicyRow[]> = {
-  /** 民宿/单体一人店：一切归 owner */
+  /** 单组织小团队：经营与资金事项由负责人裁决 */
   single: [
     { actionClass: "daily", fenceLevel: "auto", approverRule: {} },
     { actionClass: "business", fenceLevel: "review", approverRule: { role: "owner" } },
     { actionClass: "finance", fenceLevel: "review", approverRule: { role: "owner", secondFactor: true } },
     { actionClass: "redline", fenceLevel: "block", approverRule: { exportViaTicket: true } },
   ],
-  /** 无人酒店：经营敏感委托数字 CEO 授权带，资金远程 owner 必审 */
+  /** 少人值守组织：经营敏感事项使用授权带，资金事项由负责人复核 */
   unmanned: [
     { actionClass: "daily", fenceLevel: "auto", approverRule: {} },
     { actionClass: "business", fenceLevel: "review", approverRule: { digitalCeo: { band: "default" }, fallback: { role: "owner" } } },
     { actionClass: "finance", fenceLevel: "review", approverRule: { role: "owner", secondFactor: true, remote: true } },
     { actionClass: "redline", fenceLevel: "block", approverRule: { exportViaTicket: true } },
   ],
-  /** 集团门店：店长→区域→品牌分级 */
+  /** 多层级集团：一线负责人→区域负责人→集团负责人分级 */
   "group-store": [
     { actionClass: "daily", fenceLevel: "auto", approverRule: {} },
     { actionClass: "business", fenceLevel: "review", approverRule: { role: "manager", escalate: { role: "region-manager", over: "store-threshold" } } },

@@ -8,6 +8,8 @@ readonly: false
 night_shift: true
 high_risk: false
 fence_bindings: ['R-PL10']
+coverage:
+  - { eventPrefix: "renewal.", label: 续费运营 }
 skills: ['care-outreach']
 tools:
   - { name: tenants.read, access: read, desc: 读取客户档案/订阅到期日/用量 }

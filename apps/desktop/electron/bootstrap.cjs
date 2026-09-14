@@ -114,7 +114,10 @@ async function bootstrap(opts) {
   const NODE_BIN = IS_WIN ? path.join(supportDir, "node", "node.exe") : path.join(supportDir, "node", "bin", "node");
   const PGBIN = path.join(supportDir, "pg", "bin");
   const pgBin = (n) => path.join(PGBIN, IS_WIN ? `${n}.exe` : n);
+  const children = [];
+  let pgStartedByBootstrap = false;
 
+  try {
   say(`== WorkLoom 织元 · 引导启动（resources=${resourcesDir}）==`);
 
   /* ---------- 0. 载荷装配（版本变化才覆盖） ---------- */
@@ -220,6 +223,7 @@ async function bootstrap(opts) {
     // 输出走文件句柄——postmaster 继承管道会假死，v2.1.2 实证）
     const r = runToLog(pgBin("pg_ctl"), pgCtlArgs(["-l", path.join(logDir, "pg.log"), "-o", `-p ${PG_PORT} -c listen_addresses=127.0.0.1`, "-w", "-t", "60", "start"]), path.join(logDir, "pgctl.log"));
     if (r.code !== 0) throw new Error(`PostgreSQL 启动失败（详见 logs/pg.log 与 logs/pgctl.log）`);
+    pgStartedByBootstrap = true;
     let up = false;
     for (let i = 0; i < 40 && !up; i++) { up = pgUp(); if (!up) await sleep(1000); }
     if (!up) throw new Error("PostgreSQL 40s 内未就绪");
@@ -236,8 +240,19 @@ async function bootstrap(opts) {
   }
 
   /* ---------- 1.5 NATS JetStream（内嵌事件总线；缺失降级 memory 不阻断） ---------- */
-  const children = [];
-  const serverEnv = { ...process.env };
+  // 自包含桌面包按生产信任模型运行：稳定 Bundle 必须使用独立于 Bundle 载荷的公钥环验签。
+  // 公钥环是 electron extraResource（可受应用签名保护）；私钥只存在于发布 CI，绝不随客户端分发。
+  const serverEnv = { ...process.env, NODE_ENV: "production" };
+  const bundleTrustFile = path.join(resourceRoot, "bundle-trust.json");
+  if (fs.existsSync(bundleTrustFile)) {
+    const trustText = fs.readFileSync(bundleTrustFile, "utf-8");
+    try { JSON.parse(trustText); } catch { throw new Error("Bundle 独立公钥环格式无效，拒绝启动"); }
+    serverEnv.BUNDLE_VERIFICATION_KEYS = trustText;
+    delete serverEnv.BUNDLE_TRUST_PATH;
+    say("✓ Bundle 独立公钥环已装载");
+  } else {
+    say("⚠ Bundle 独立公钥环缺失；任何稳定行业包都将失败关闭");
+  }
   const NATS_BIN = path.join(supportDir, "nats", IS_WIN ? "nats-server.exe" : "nats-server");
   if (fs.existsSync(NATS_BIN)) {
     const listening = await httpOk(`http://127.0.0.1:${NATS_PORT}/`) || run(IS_WIN ? "netstat" : "lsof", IS_WIN ? ["-ano"] : ["-nP", `-iTCP:${NATS_PORT}`, "-sTCP:LISTEN"]).out.includes(String(NATS_PORT));
@@ -324,6 +339,14 @@ async function bootstrap(opts) {
     say("== 已停止 ==");
   };
   return { stop, webUrl };
+  } catch (error) {
+    // 失败重试前必须回收本次派生的服务，避免端口占用导致下一次启动继续失败。
+    for (const child of children) killTree(child);
+    if (pgStartedByBootstrap && fs.existsSync(path.join(PGDATA, "postmaster.pid"))) {
+      runToLog(pgBin("pg_ctl"), ["-D", PGDATA, "stop", "-m", "fast"], path.join(logDir, "pgctl.log"));
+    }
+    throw error;
+  }
 }
 
 /* ---------------- CLI（CI 冒烟） ---------------- */

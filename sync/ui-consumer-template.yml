@@ -1,0 +1,32 @@
+name: workloom-ui-contract
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ui-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      WORKLOOM_DIR: __REPO_DIR__
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: corepack enable && corepack prepare pnpm@10.14.0 --activate
+      - run: pnpm -C "$WORKLOOM_DIR" install --frozen-lockfile
+      - name: 禁止 UI 分叉并校验三端版本
+        run: node "$WORKLOOM_DIR/scripts/verify-ui-consumer.mjs" --repo "$WORKLOOM_DIR"
+      - name: 三端类型与生产构建
+        run: |
+          pnpm -C "$WORKLOOM_DIR" -r --if-present typecheck
+          pnpm -C "$WORKLOOM_DIR/apps/web" build
+          pnpm -C "$WORKLOOM_DIR/apps/webb" build
+          pnpm -C "$WORKLOOM_DIR/apps/webc" build

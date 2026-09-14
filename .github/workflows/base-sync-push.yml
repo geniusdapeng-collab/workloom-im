@@ -1,64 +1,75 @@
 # ============================================================
-# WorkLoom IM · 基座能力父→子自动推送（base-sync push）
+# WorkLoom IM · 基座能力父→子升级 PR（base-sync）
 #
-# 触发：main 分支上基座能力路径发生变更（paths 过滤，行业演示能力变更不触发）
-# 行为：对 sync/child-repos.json 订阅清单逐仓执行基座对齐并推送
-# 范围：唯一事实源 sync/base-scope.json——只推基座能力，行业属性/演示能力永不同步
-#
-# 运行形态：
-#   ① 配置 SYNC_TOKEN secret（repo 权限 PAT）→ 全自动推送
-#   ② 未配置 → dry-run 输出同步计划 + Summary 提醒（机制仍在，降级为半自动）
+# 自动触发：仅接收 main push 对应的 ci-gate 成功事件，并检出该次门禁的精确 SHA。
+# 自动行为：逐仓生成固定命名的升级分支和可审计 PR；永不直推、永不自动合并 main。
+# 手动触发：只允许 dry-run，用于核对同步范围，不能绕过 ci-gate。
+# 无凭据：强制 dry-run，不产生任何下游写操作。
 # ============================================================
-name: base-sync-push
+name: base-sync-upgrade-pr
 
 on:
-  push:
+  workflow_run:
+    workflows: ["ci-gate"]
+    types: [completed]
     branches: [main]
-    paths:
-      - "packages/base/**"
-      - "packages/runtime/**"
-      - "packages/shared/**"
-      - "packages/db/**"
-      - "apps/server/src/**"
-      - "apps/desktop/**"
-      - "apps/web/src/lib/**"
-      - "scripts/**"
-      - "sync/**"
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: base-sync-${{ github.event.workflow_run.head_sha || github.run_id }}
+  cancel-in-progress: false
+
 jobs:
-  sync:
+  sync-pr:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - name: 检出已通过门禁的精确基座提交
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Node 24
         uses: actions/setup-node@v4
         with:
           node-version: 24
 
-      - name: 基座能力推送到全部子仓
+      - name: 为全部行业仓生成升级 PR
+        id: sync
         env:
           SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+          BASE_SYNC_GATE_STATUS: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion || 'manual-dry-run' }}
+          BASE_SYNC_GATE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
+          BASE_SYNC_GATE_URL: ${{ github.event_name == 'workflow_run' && format('https://github.com/{0}/actions/runs/{1}', github.repository, github.event.workflow_run.id) || '' }}
         run: |
-          if [ -z "$SYNC_TOKEN" ]; then
-            echo "⚠️ 未配置 SYNC_TOKEN secret——降级为 dry-run（只输出同步计划，不推送）"
-            echo "   配置后即为全自动：Settings → Secrets and variables → Actions → New repository secret"
-            node sync/base-sync.mjs push --base . --dry-run
-          else
-            node sync/base-sync.mjs push --base .
+          set -euo pipefail
+          EXTRA_ARGS=""
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "手动触发只执行 dry-run，不能绕过 ci-gate。"
+            EXTRA_ARGS="--dry-run"
+          elif [ -z "$SYNC_TOKEN" ]; then
+            echo "未配置 SYNC_TOKEN，强制降级为 dry-run；不会推分支或创建 PR。"
+            EXTRA_ARGS="--dry-run"
           fi
+          node sync/base-sync.mjs push --base . --json $EXTRA_ARGS | tee /tmp/base-sync-report.json
 
       - name: 同步报告（Job Summary）
         if: always()
         run: |
-          echo "## WorkLoom IM 基座同步报告" >> $GITHUB_STEP_SUMMARY
-          echo "- 基座提交：$(git rev-parse --short HEAD)" >> $GITHUB_STEP_SUMMARY
-          echo "- 同步范围：sync/base-scope.json（仅基座能力）" >> $GITHUB_STEP_SUMMARY
-          echo "- 订阅子仓：$(node -e "console.log(JSON.parse(require('fs').readFileSync('sync/child-repos.json','utf8')).children.length)") 个" >> $GITHUB_STEP_SUMMARY
+          echo "## WorkLoom IM 基座升级 PR 报告" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 基座提交：$(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 自动写入前提：main 的 ci-gate 成功且 SHA 精确匹配" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 下游策略：只推独立升级分支并创建 PR；禁止直推或自动合并 main" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 同步范围：sync/base-scope.json（行业 Bundle、主题、投影和种子数据除外）" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f /tmp/base-sync-report.json ]; then cat /tmp/base-sync-report.json >> "$GITHUB_STEP_SUMMARY"; else echo '{"status":"未生成报告"}' >> "$GITHUB_STEP_SUMMARY"; fi
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

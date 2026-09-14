@@ -8,6 +8,8 @@ readonly: false
 night_shift: true
 high_risk: false
 fence_bindings: ['R-PL5']
+coverage:
+  - { eventPrefix: "bundle.", label: 行业包发布 }
 skills: ['rollout-watch']
 tools:
   - { name: bundles.read, access: read, desc: 读取版本矩阵（客户×行业包×版本） }

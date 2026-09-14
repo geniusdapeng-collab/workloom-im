@@ -17,6 +17,7 @@ const RODS: Array<{ key: Gesture; icon: string; name: string; sub: string; cls: 
 export function TriGestureBar({
   expired = false,
   canApprove = true,
+  busy = false,
   onGesture,
   onRefresh,
 }: {
@@ -24,6 +25,8 @@ export function TriGestureBar({
   expired?: boolean;
   /** 无审批权 → 整组隐藏（非置灰；L5.1 服务端另有强制鉴权） */
   canApprove?: boolean;
+  /** 提交中锁定全部手势，防止同一审批被重复裁决。 */
+  busy?: boolean;
   onGesture?: (g: Gesture) => void;
   onRefresh?: () => void;
 }) {
@@ -31,11 +34,11 @@ export function TriGestureBar({
   if (expired) {
     return (
       <div className="flex items-center gap-3 rounded-lg border border-warn/40 bg-warn/5 px-4 py-2.5">
-        <span className="text-body text-warn">快照已过期，审批杆已锁定（E5.3）</span>
+        <span className="text-body text-warn">审批依据已更新，操作已锁定，请刷新后重新确认</span>
         <button
           type="button"
           onClick={onRefresh}
-          className="cursor-pointer rounded-md border border-holo/40 bg-holo/8 px-3 py-1 text-caption font-bold text-holo"
+          className="cursor-pointer rounded-md border border-holo/40 bg-holo/8 px-3 py-1 text-body font-bold text-holo"
         >
           刷新最新快照
         </button>
@@ -48,12 +51,14 @@ export function TriGestureBar({
         <button
           key={r.key}
           type="button"
+          disabled={busy}
+          aria-busy={busy || undefined}
           onClick={() => onGesture?.(r.key)}
-          className={`cursor-pointer rounded-lg border bg-card px-3 py-2.5 text-center transition-colors ${r.cls} ${r.hover}`}
+          className={`cursor-pointer rounded-lg border bg-card px-3 py-2.5 text-center transition-colors disabled:cursor-wait disabled:opacity-50 ${r.cls} ${r.hover}`}
         >
           <div className="text-lg leading-none">{r.icon}</div>
           <div className="mt-1 text-body font-black">{r.name}</div>
-          <div className="mt-0.5 text-micro text-ink3">{r.sub}</div>
+          <div className="mt-0.5 text-body text-ink3">{busy ? "正在提交…" : r.sub}</div>
         </button>
       ))}
     </div>

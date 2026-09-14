@@ -8,6 +8,7 @@ readonly: true
 night_shift: true
 high_risk: false
 fence_bindings: []
+coverage: []
 skills: []
 tools:
   - { name: competitor.crawl, access: read, desc: 竞对数据采集（频次自律 ≥3s） }

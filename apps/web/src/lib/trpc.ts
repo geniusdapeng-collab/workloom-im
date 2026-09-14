@@ -14,11 +14,13 @@ export function getToken(): string | null {
 }
 export function setToken(token: string): void {
   localStorage.setItem(TOKEN_KEY, token);
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("workloom:identity-changed"));
 }
 export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_KEY);
   localStorage.removeItem(GUEST_KEY);
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("workloom:identity-changed"));
 }
 
 const REFRESH_KEY = "workloom.accounts.refresh";
@@ -92,7 +94,8 @@ const DEMO_MEMBER = (import.meta.env.VITE_DEMO_MEMBER as string | undefined) ?? 
 export const DEV_DEMO_MEMBER = DEMO_MEMBER;
 export async function ensureDemoLogin(memberNo?: string): Promise<void> {
   if (memberNo) {
-    if (await validateStoredSession()) return;
+    if (!isGuest() && await validateStoredSession()) return;
+    if (isGuest()) clearToken();
     const r = await trpc.auth.loginAs.mutate({ workspaceSlug: DEMO_WORKSPACE, memberNo });
     setToken(r.token);
     validatedToken = r.token;

@@ -1,9 +1,9 @@
 /**
  * service · 对话（接口对齐 packages/base/service-dialog 签名；表结构为底座迁移版）
  * 意图流水线（M8：与 packages/base/service-dialog/intents.ts 同一张规则表 ruleBasedIntent）：
- *   complaint（投诉）> biz_query（订单/会员/房价/工单进度）> service_request（报修服务类，产 ticketDraft）
+ *   complaint（投诉）> 已验证行业适配器业务查询 / 通用工单进度 > service_request（产 ticketDraft）
  *   > kb_qa（KB 检索三档分流）> chat（规则未命中兜底）
- *   疑问句（几点/时间/吗/呢/怎么/如何）优先 kb_qa 不建单；「修/修一下/坏了」直连 service_request。
+ *   疑问句（几点/时间/吗/呢/怎么/如何）优先 kb_qa；行业写操作只由已验证适配器识别。
  * 置信度三档（H5：检索 score 归一化 0..1，复用 base scoreChunkFallback）：
  *   ≥0.72 直接作答（带引用）；0.45–0.72 作答但附「可能不完全准确」提示；<0.45 诚实拒答 + ticketDraft。
  * 命中 KB 必带 citations，无据不答（诚实拒答）。
@@ -15,9 +15,14 @@ import { searchKB, type KbHit } from "./kb.js";
 import { llmCall } from "./llm.js";
 import { serviceTx, svcQuery } from "./events.js";
 import type { Channel } from "./channels.js";
+import {
+  projectBusinessDialogMatch,
+  type BusinessTool,
+  type ServiceFrontBusinessAdapter,
+} from "./adapters/business.js";
 
 export type Intent = "chat" | "kb_qa" | "biz_query" | "service_request" | "complaint";
-export type BizToolName = "query_order" | "query_member" | "query_catalog" | "query_ticket";
+export type BizToolName = BusinessTool | "query_ticket";
 
 export interface DialogResult {
   conversationId: string;
@@ -39,38 +44,43 @@ function newId(prefix: string): string {
 
 /* ================= 意图（M8：复用 base 同一张规则表） ================= */
 
-/** 工单进度查询（server 侧特有 biz_query 子类，先于规则表判定） */
+/** 工单进度属于基座公共能力，不依赖行业适配器。 */
 const RE_TICKET_STATUS = /工单.*(进度|状态|怎么样)|进度.*工单/;
-const RE_ORDER = /订单|预订|订房|入住记录|房费|账单/;
-const RE_MEMBER = /会员|积分|等级|权益|余额/;
-const RE_CATALOG = /房价|房型|多少钱|价格/;
-/**
- * 客房价格查询直连（server 侧目录查询子类，先于规则表判定）：
- * 「豪华大床房多少钱一晚」= 房型目录业务查询（query_catalog）——判定锚是**房型名词**，
- * 与「面膜多少钱」「加床一张多少钱」类通用询价严格区分（后者无房型词，仍走 kb_qa 查 FAQ，
- * M8 评测口径 R04/A16/A19/A24 不破坏；base 规则表保持行业无关，D17/D18 不受影响）。
- */
-const RE_ROOM_RATE = /房价|房型|大床房|双床房|单人房|标准间|套房|海景房|钟点房/;
 
-export function classify(text: string): { intent: Intent; tool?: BizToolName } {
+export function classify(
+  text: string,
+  businessAdapter?: ServiceFrontBusinessAdapter | null,
+): { intent: Intent; tool?: BizToolName; answer?: string; params?: Record<string, unknown> } {
   if (RE_TICKET_STATUS.test(text)) return { intent: "biz_query", tool: "query_ticket" };
-  if (RE_ROOM_RATE.test(text)) return { intent: "biz_query", tool: "query_catalog" };
   const ruled = ruleBasedIntent(text);
   if (ruled === "complaint") return { intent: "complaint" };
-  if (ruled === "service_request") return { intent: "service_request" };
-  if (ruled === "biz_query") {
-    if (RE_MEMBER.test(text)) return { intent: "biz_query", tool: "query_member" };
-    if (RE_CATALOG.test(text)) return { intent: "biz_query", tool: "query_catalog" };
-    return { intent: "biz_query", tool: "query_order" };
+  const industryMatch = projectBusinessDialogMatch(businessAdapter?.classify(text) ?? null);
+  if (industryMatch) {
+    return {
+      intent: "biz_query",
+      tool: industryMatch.tool,
+      answer: industryMatch.answer,
+      params: industryMatch.params,
+    };
   }
+  // 通用疑问句优先知识问答；行业适配器不能仅因句中出现履约动词就误建单。
+  // 明确的行业业务查询已在上方由 classify 精确识别，因此不受此优先级影响。
   if (ruled === "kb_qa") return { intent: "kb_qa" };
+  // 行业履约意图由活动 Bundle 适配器识别，基座规则不保存行业词表。
+  if (businessAdapter?.ticketKind?.(text)) return { intent: "service_request" };
+  if (ruled === "service_request") return { intent: "service_request" };
+  // 通用规则只能判断“像业务查询”，不能猜测行业工具；未启用适配器时回到有据可查的知识库。
+  if (ruled === "biz_query") return { intent: "kb_qa" };
   return { intent: "kb_qa" }; // 规则未命中：默认先查知识库（低置信走诚实拒答三档）
 }
 
-/** service_request 文本 → 工单类型（修/坏类 → repair；送/拿/打扫类 → delivery；其余 other） */
-export function ticketKindOf(text: string): "repair" | "delivery" | "other" {
-  if (/维修|修|坏|故障|漏水|不制冷|不制热|空调|热水|马桶/.test(text)) return "repair";
-  if (/送|拿|打扫|换床单|加一|多要|再来/.test(text)) return "delivery";
+/** service_request → 通用工单类型；行业细分由已验证适配器优先提供。 */
+export function ticketKindOf(
+  text: string,
+  businessAdapter?: ServiceFrontBusinessAdapter | null,
+): "repair" | "delivery" | "other" {
+  const industryKind = businessAdapter?.ticketKind?.(text);
+  if (industryKind === "repair" || industryKind === "delivery" || industryKind === "other") return industryKind;
   return "other";
 }
 
@@ -136,6 +146,7 @@ function citationsOf(hits: KbHit[]): Array<{ documentTitle: string; heading: str
 
 export async function handleMessage(input: {
   workspaceId: string; cUserId: string; channel: Channel; text: string; conversationId?: string;
+  businessAdapter?: ServiceFrontBusinessAdapter | null;
 }): Promise<DialogResult> {
   await ensureServiceSchema();
   const t0 = Date.now();
@@ -144,18 +155,16 @@ export async function handleMessage(input: {
   const conversationId = await ensureConversation(input);
   await logMessage({ workspaceId: input.workspaceId, conversationId, role: "user", content: input.text });
 
-  const cls = classify(input.text);
+  const cls = classify(input.text, input.businessAdapter);
   let result: Omit<DialogResult, "conversationId" | "latencyMs" | "mock">;
 
   if (cls.intent === "biz_query") {
     const tool = cls.tool!;
-    const answers: Record<BizToolName, string> = {
-      query_order: "为您查询到以下订单：",
-      query_member: "为您查询到会员信息：",
-      query_catalog: "为您查询到房型价格：",
-      query_ticket: "为您查询到工单进度：",
+    const answer = tool === "query_ticket" ? "正在为您查询工单进度。" : cls.answer ?? "正在为您查询相关信息。";
+    result = {
+      intent: "biz_query", answer, confidence: 0.95, citations: [],
+      toolCall: { tool, params: cls.params ?? {} },
     };
-    result = { intent: "biz_query", answer: answers[tool], confidence: 0.95, citations: [], toolCall: { tool, params: {} } };
   } else if (cls.intent === "complaint") {
     result = {
       intent: "complaint",
@@ -165,7 +174,7 @@ export async function handleMessage(input: {
       ticketDraft: { kind: "complaint", title: input.text.slice(0, 40), payload: { text: input.text } },
     };
   } else if (cls.intent === "service_request") {
-    const kind = ticketKindOf(input.text);
+    const kind = ticketKindOf(input.text, input.businessAdapter);
     result = {
       intent: "service_request",
       answer: "好的，我可以为您生成服务工单，相关部门会尽快处理。请确认是否提交？",
@@ -192,7 +201,7 @@ export async function handleMessage(input: {
         },
       };
     } else if (top) {
-      // top-2 合并：次命中与首命中共享非弱词 token 且自身 ≥0.45 时并入（跨块事实，如「早餐多少钱」）
+      // top-2 合并：次命中与首命中共享非弱词 token 且自身 ≥0.45 时并入（跨知识块事实）
       const WEAK = new Set(["时间", "免费", "收费", "可以", "服务", "商品", "店铺", "半天", "一份", "一瓶", "东西", "地方", "怎么", "如何", "一下", "价格", "多少钱", "订单", "买家", "顾客", "客服", "工作", "两张", "一张", "几位", "一些"]);
       const norm = (t: string) => t.toLowerCase().replace(/(?<=[a-z0-9])-(?=[a-z0-9])/g, "");
       const topHay = norm(`${top.heading}\n${top.content}`);
