@@ -2,9 +2,9 @@ import { defineConfig } from "@playwright/test";
 
 const reuseExistingServer = !process.env.CI;
 
-// Playwright 的 webServer 探活遵循 HTTP(S)_PROXY。部分 CI runner 会注入代理却
-// 没有完整的 NO_PROXY，导致已在回环地址启动的服务被误判为 120 秒超时。
-// 合并而非覆盖 runner 既有白名单，并同时写入大小写键以兼容不同代理实现。
+// 浏览器及应用请求仍可能遵循 HTTP(S)_PROXY：合并而非覆盖 runner 既有白名单，
+// 并同时写入大小写键以兼容不同代理实现。webServer 自身使用 port（原始 TCP）
+// 探活，避免 URL 探针被代理、健康接口内容或重定向影响。
 const noProxy = Array.from(new Set(
   [process.env.NO_PROXY, process.env.no_proxy, "127.0.0.1", "localhost"]
     .flatMap((value) => value?.split(",") ?? [])
@@ -41,26 +41,53 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: "SERVER_PORT=8877 SERVICE_C_WORKSPACE_ID=ws-aipm-demo SERVICE_C_DEMO_AUTH=true pnpm -C apps/server start",
-      url: "http://127.0.0.1:8877/health",
+      name: "base-api",
+      command: "pnpm -C apps/server start",
+      env: {
+        SERVER_HOST: "127.0.0.1",
+        SERVER_PORT: "8877",
+        SERVICE_C_WORKSPACE_ID: "ws-aipm-demo",
+        SERVICE_C_DEMO_AUTH: "true",
+      },
+      port: 8877,
+      stdout: "pipe",
       reuseExistingServer,
       timeout: 120_000,
     },
     {
-      command: "VITE_ENABLE_UI_DIAGNOSTICS=true WEB_PORT=3100 SERVER_PORT=8877 pnpm -C apps/web dev -- --host 127.0.0.1 --strictPort",
-      url: "http://127.0.0.1:3100",
+      name: "b-pc",
+      command: "pnpm -C apps/web dev --host 127.0.0.1 --strictPort",
+      env: {
+        VITE_ENABLE_UI_DIAGNOSTICS: "true",
+        WEB_PORT: "3100",
+        SERVER_PORT: "8877",
+      },
+      port: 3100,
+      stdout: "pipe",
       reuseExistingServer,
       timeout: 120_000,
     },
     {
-      command: "WEBB_PORT=3101 SERVER_PORT=8877 pnpm -C apps/webb dev -- --host 127.0.0.1 --strictPort",
-      url: "http://127.0.0.1:3101",
+      name: "b-mobile",
+      command: "pnpm -C apps/webb dev --host 127.0.0.1 --strictPort",
+      env: {
+        WEBB_PORT: "3101",
+        SERVER_PORT: "8877",
+      },
+      port: 3101,
+      stdout: "pipe",
       reuseExistingServer,
       timeout: 120_000,
     },
     {
-      command: "WEBC_PORT=3102 SERVER_PORT=8877 pnpm -C apps/webc dev -- --host 127.0.0.1 --strictPort",
-      url: "http://127.0.0.1:3102",
+      name: "c-mobile",
+      command: "pnpm -C apps/webc dev --host 127.0.0.1 --strictPort",
+      env: {
+        WEBC_PORT: "3102",
+        SERVER_PORT: "8877",
+      },
+      port: 3102,
+      stdout: "pipe",
       reuseExistingServer,
       timeout: 120_000,
     },
