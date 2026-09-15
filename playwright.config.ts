@@ -22,6 +22,9 @@ export default defineConfig({
   snapshotPathTemplate: "{testDir}/{testFilePath}-snapshots/{arg}-{platform}{ext}",
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
+  failOnFlakyTests: Boolean(process.env.CI),
+  // 普通 CI 只读已提交基线；显式 `playwright --update-snapshots` 仍可生成待审候选。
+  updateSnapshots: process.env.CI ? "none" : "missing",
   retries: process.env.CI ? 1 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI
