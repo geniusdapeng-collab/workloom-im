@@ -8,7 +8,7 @@
  */
 import { Icon, Overlay, TopContextBar } from "@workloom/ui";
 import type { CSSProperties, ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { EmergencyBrake, NightStatusPill } from "../components/hud";
 import { SimBanner } from "../components/SimBanner";
 import { SkillDistBanner } from "../components/SkillDistBanner";
@@ -82,7 +82,9 @@ export function Bridge({
   const [rightVisible, setRightVisible] = useState(true);
   const [leftWidth, setLeftWidth] = useState(() => Number(localStorage.getItem("workloom.pc.panel.left-width")) || 236);
   const [rightWidth, setRightWidth] = useState(() => Number(localStorage.getItem("workloom.pc.panel.right-width")) || 264);
-  const [containerWidth, setContainerWidth] = useState(1200);
+  // ResizeObserver 首次回报前按最窄安全布局渲染，避免在嵌套工作区中先塞入
+  // 512px 固定侧栏、下一帧再收起所造成的首帧横向溢出与视觉闪动。
+  const [containerWidth, setContainerWidth] = useState(0);
   const [drawer, setDrawer] = useState<"left" | "right" | null>(null);
   const shellRef = useRef<HTMLDivElement>(null);
   const community = plan === "community";
@@ -94,12 +96,12 @@ export function Bridge({
   const leftInGrid = leftVisible && !narrow;
   const rightInGrid = rightVisible && !compact;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const node = shellRef.current;
     if (!node) return;
     const observer = new ResizeObserver(([entry]) => setContainerWidth(entry?.contentRect.width ?? node.clientWidth));
-    observer.observe(node);
     setContainerWidth(node.clientWidth);
+    observer.observe(node);
     return () => observer.disconnect();
   }, []);
 
