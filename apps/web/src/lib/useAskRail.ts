@@ -15,7 +15,9 @@ export function sharedLayoutPixels(variable: string): number {
 export function useAskRailPadding(): number {
   const [railW, setRailW] = useState(
     () => (window as unknown as { __askRailW?: number }).__askRailW
-      ?? sharedLayoutPixels("--wl-assistant-expanded"),
+      ?? sharedLayoutPixels(window.matchMedia("(max-width: 820px)").matches
+        ? "--wl-assistant-compact"
+        : "--wl-assistant-expanded"),
   );
   useEffect(() => {
     const onRail = (e: Event) => setRailW((e as CustomEvent<{ width: number }>).detail.width);
@@ -32,7 +34,9 @@ export function useAskRailPadding(): number {
 export function useSideNavWidth(): number {
   const [width, setWidth] = useState(
     () => (window as unknown as { __sideNavW?: number }).__sideNavW
-      ?? sharedLayoutPixels("--wl-sidebar-expanded"),
+      ?? (window.matchMedia("(max-width: 820px)").matches
+        ? 0
+        : sharedLayoutPixels("--wl-sidebar-expanded")),
   );
   useEffect(() => {
     const onWidth = (event: Event) => setWidth((event as CustomEvent<{ width: number }>).detail.width);

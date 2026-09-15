@@ -273,7 +273,7 @@ function TicketDetail({
             </div>
 
             {/* 进度时间线（节点动画） */}
-            <h3 className="mb-2 mt-5 text-body font-medium text-ink2">处理进度（每 10s 自动刷新）</h3>
+            <h3 className="mb-2 mt-5 text-body font-medium text-ink2">处理进度（每 10 秒自动刷新）</h3>
             <div className="space-y-0">
               {timeline.map((it, i) => {
                 const last = i === timeline.length - 1;

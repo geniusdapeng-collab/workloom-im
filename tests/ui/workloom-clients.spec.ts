@@ -285,6 +285,29 @@ test("PC 工作区首帧按真实容器宽度采用安全布局", async ({ page 
   // 故意延迟 ResizeObserver，证明首帧安全布局依赖同步 clientWidth 测量，
   // 而不是碰巧等到了异步 observer 回调或测试重试。
   await page.addInitScript(() => {
+    type FirstShellFrame = {
+      hostPaddingRight: number;
+      assistantWidth: number;
+      documentWidth: number;
+      viewportWidth: number;
+    };
+    const state = window as unknown as { __workloomFirstShellFrame?: FirstShellFrame };
+    document.addEventListener("DOMContentLoaded", () => {
+      const observer = new MutationObserver(() => {
+        const host = document.querySelector<HTMLElement>(".wl-page-host");
+        if (!host || state.__workloomFirstShellFrame) return;
+        const assistant = document.querySelector<HTMLElement>('[data-wl-managed-surface="assistant-rail"]');
+        state.__workloomFirstShellFrame = {
+          hostPaddingRight: Number.parseFloat(getComputedStyle(host).paddingRight),
+          assistantWidth: assistant?.getBoundingClientRect().width ?? 0,
+          documentWidth: document.documentElement.scrollWidth,
+          viewportWidth: document.documentElement.clientWidth,
+        };
+        observer.disconnect();
+      });
+      observer.observe(document.documentElement, { childList: true, subtree: true });
+    }, { once: true });
+
     const NativeResizeObserver = window.ResizeObserver;
     class DelayedResizeObserver {
       private readonly native: ResizeObserver;
@@ -301,6 +324,18 @@ test("PC 工作区首帧按真实容器宽度采用安全布局", async ({ page 
   });
 
   await page.goto("http://127.0.0.1:3100/night");
+  const firstShellFrame = await page.waitForFunction(() => (
+    window as unknown as { __workloomFirstShellFrame?: unknown }
+  ).__workloomFirstShellFrame).then((handle) => handle.jsonValue() as Promise<{
+    hostPaddingRight: number;
+    assistantWidth: number;
+    documentWidth: number;
+    viewportWidth: number;
+  }>);
+  expect(firstShellFrame.hostPaddingRight).toBeLessThanOrEqual(64);
+  expect(firstShellFrame.assistantWidth).toBeLessThanOrEqual(64);
+  expect(firstShellFrame.documentWidth).toBeLessThanOrEqual(firstShellFrame.viewportWidth + 2);
+
   const grid = page.locator(".wl-bridge-grid--managed");
   await grid.waitFor({ state: "visible" });
 

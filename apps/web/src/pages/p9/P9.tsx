@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { ensureDemoLogin, trpc } from "../../lib/trpc";
-import { COMMON_STATUS_TEXT, OBJECT_TYPE_TEXT, RULE_RESULT_TEXT, actionText, actorText, dictText, payloadText, shortId, versionText } from "../../lib/display";
+import { COMMON_STATUS_TEXT, OBJECT_TYPE_TEXT, RULE_RESULT_TEXT, actionText, actorText, dictText, latencyText, payloadText, shortId, versionText } from "../../lib/display";
 import { Bridge } from "../../shell/Bridge";
 import {
   AgentActionMessage,
@@ -208,7 +208,7 @@ export default function P9() {
       {pauseInfo && (
         <div className={`mt-3 rounded-lg border p-3 ${pauseInfo.withinSla ? "border-warn/40 bg-warn/5" : "border-alert/55 bg-alert/8"}`}>
           <div className="text-body font-bold text-warn">制动回执</div>
-          <div className="mt-1 font-orb text-h2 font-bold text-ink">{pauseInfo.elapsedMs}ms</div>
+          <div className="mt-1 font-orb text-h2 font-bold text-ink">{latencyText(pauseInfo.elapsedMs)}</div>
           <div className="text-body text-ink3">{pauseInfo.withinSla ? "在 60 秒目标内完成" : "超过 60 秒目标，需立即复核"}</div>
         </div>
       )}
