@@ -8,6 +8,8 @@ readonly: false
 night_shift: true
 high_risk: false
 fence_bindings: ['R-PL9']
+coverage:
+  - { eventPrefix: "effect.", label: 策略效果 }
 skills: ['strategy-forge']
 tools:
   - { name: strategies.read, access: read, desc: 读取在线策略与灰度进度 }

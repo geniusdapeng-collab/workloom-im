@@ -8,6 +8,8 @@ readonly: false
 night_shift: true
 high_risk: false
 fence_bindings: ['R-PM12']
+coverage:
+  - { eventPrefix: "kb.", label: 知识治理 }
 skills: ['kb-fresh', 'learning-digest']
 tools:
   - { name: kb.read, access: read, desc: 读取知识库全量条目 }

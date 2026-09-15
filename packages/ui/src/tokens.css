@@ -1,0 +1,117 @@
+/**
+ * WorkLoom 三端共享语义令牌。
+ *
+ * 行业 Bundle 只能覆盖明确标记为 brand 的变量；风险、状态、可访问性、布局和
+ * 组件变量由基座拥有。B 端默认深色、C 端默认浅色，但两者使用同一语义层。
+ */
+:root,
+[data-wl-theme="light"] {
+  color-scheme: light;
+  --wl-color-bg: #f7f8fb;
+  --wl-color-surface: #ffffff;
+  --wl-color-surface-raised: #ffffff;
+  --wl-color-surface-muted: #f0f2f6;
+  --wl-color-text: #172033;
+  --wl-color-text-muted: #667085;
+  --wl-color-border: #d9dee8;
+  --wl-color-focus: #2563eb;
+  --wl-color-action: #b42318;
+  --wl-color-action-text: #ffffff;
+  --wl-color-success: #18794e;
+  --wl-color-warning: #a15c00;
+  --wl-color-danger: #c92a2a;
+  --wl-color-info: #175cd3;
+  --wl-color-positive: var(--wl-color-success);
+  --wl-color-negative: var(--wl-color-danger);
+  --wl-color-uncertain: var(--wl-color-warning);
+  --wl-chart-series-1: var(--wl-brand-primary);
+  --wl-chart-series-2: var(--wl-color-info);
+  --wl-chart-series-3: var(--wl-color-success);
+  --wl-overlay-backdrop: rgb(15 23 42 / 0.56);
+  --wl-brand-primary: var(--wl-color-action);
+  --wl-brand-on-primary: var(--wl-color-action-text);
+  --wl-brand-accent: var(--wl-color-info);
+  --wl-font-sans: "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", system-ui, sans-serif;
+  --wl-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  --wl-font-numeric: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  --wl-text-display: clamp(2rem, 4vw, 2.75rem);
+  --wl-text-h1: 1.375rem;
+  --wl-text-h2: 1rem;
+  --wl-text-body: 0.875rem;
+  --wl-text-caption: 0.875rem;
+  --wl-text-micro: 0.875rem;
+  --wl-text-kpi: 1.75rem;
+  --wl-line-body: 1.65;
+  --wl-motion-fast: 120ms;
+  --wl-motion-normal: 180ms;
+  --wl-motion-slow: 320ms;
+  --wl-motion-ambient: 90s;
+  --wl-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --wl-ease-emphasized: cubic-bezier(0.2, 0, 0, 1.2);
+  --wl-radius-sm: 8px;
+  --wl-radius-md: 12px;
+  --wl-radius-lg: 16px;
+  --wl-space-1: 4px;
+  --wl-space-2: 8px;
+  --wl-space-3: 12px;
+  --wl-space-4: 16px;
+  --wl-space-5: 20px;
+  --wl-space-6: 24px;
+  --wl-control-min-height: 40px;
+  --wl-touch-target: 44px;
+  --wl-sidebar-expanded: 248px;
+  --wl-sidebar-compact: 72px;
+  --wl-assistant-expanded: 320px;
+  --wl-assistant-compact: 56px;
+  --wl-panel-side: 264px;
+  --wl-panel-list: 236px;
+  --wl-content-max: 1600px;
+  --wl-z-nav: 20;
+  --wl-z-assistant: 30;
+  --wl-z-floating: 200;
+  --wl-z-drawer: 400;
+  --wl-z-fullscreen: 500;
+  --wl-z-dialog: 600;
+  --wl-z-emergency: 700;
+  --wl-z-toast: 800;
+}
+
+[data-wl-theme="dark"] {
+  color-scheme: dark;
+  --wl-color-bg: #0e1118;
+  --wl-color-surface: #171b24;
+  --wl-color-surface-raised: #202633;
+  --wl-color-surface-muted: #292f3b;
+  --wl-color-text: #f3f5f8;
+  --wl-color-text-muted: #aab3c2;
+  --wl-color-border: #394150;
+  --wl-color-focus: #7cb6ff;
+  --wl-color-action: #ff786c;
+  --wl-color-action-text: #171b24;
+  --wl-color-success: #62c998;
+  --wl-color-warning: #f2b84b;
+  --wl-color-danger: #ff7d7d;
+  --wl-color-info: #7cb6ff;
+  --wl-overlay-backdrop: rgb(0 0 0 / 0.68);
+}
+
+[data-wl-contrast="high"] {
+  --wl-color-border: currentColor;
+  --wl-color-focus: #ffd400;
+}
+
+:where(:focus-visible) {
+  outline: 3px solid var(--wl-color-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

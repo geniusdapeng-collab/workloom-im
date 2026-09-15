@@ -9,6 +9,7 @@
 | 资产 | 位置 | 防线 |
 |---|---|---|
 | 保护清单单一事实源 | `safety/protected-paths.json` | 事前（防误删误改硬边界） |
+| 迁移与账本代码分级 | `packages/db/migrations/**` 仅可新增；`packages/base/workdata/**` 禁删且 C3 双人复核 | 事前（既守住不可篡改纪律，也允许运行时代码向后兼容维护） |
 | 变更分级器（C0-C3，就高不就低） | `platform-ops/src/safety/change-classifier.ts` | 事前 |
 | 保护清单闸（deny/require/冷静期/带外检测） | `platform-ops/src/safety/protected-paths.ts` | 事前 + 事中 |
 | 变更闸门流水线（G1-G6 + hotfix 快轨） | `platform-ops/src/safety/change-gate.ts` | 事前 |

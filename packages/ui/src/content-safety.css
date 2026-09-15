@@ -1,0 +1,113 @@
+/**
+ * WorkLoom 三端内容安全基线。
+ * 负责动态中文、长标题、200% 缩放与窄视口下的容器收缩；具体组件可在此基础上
+ * 使用 line-clamp，但不得恢复会把正文或按钮挤出容器的固定画布行为。
+ */
+
+#root,
+[data-workloom-client] {
+  min-width: 0;
+  max-width: 100%;
+}
+
+#root *,
+#root *::before,
+#root *::after,
+[data-workloom-client] *,
+[data-workloom-client] *::before,
+[data-workloom-client] *::after {
+  box-sizing: border-box;
+}
+
+#root :where(.flex, .grid) > *,
+[data-workloom-client] :where(.flex, .grid) > * {
+  min-width: 0;
+}
+
+#root :where(button, a, [role="button"]),
+[data-workloom-client] :where(button, a, [role="button"]) {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+#root :where(button),
+[data-workloom-client] :where(button) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.35;
+  text-align: center;
+}
+
+#root :where(h1, h2, h3, h4, p, label, td, th, dd, figcaption, [data-client-text]),
+[data-workloom-client] :where(h1, h2, h3, h4, p, label, td, th, dd, figcaption, [data-client-text]) {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+#root :where(input, textarea, select),
+[data-workloom-client] :where(input, textarea, select) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+#root :where(img, svg, video, canvas),
+[data-workloom-client] :where(img, svg, video, canvas) {
+  max-inline-size: 100%;
+}
+
+#root :where(pre, code, .font-mono),
+[data-workloom-client] :where(pre, code, .font-mono) {
+  min-width: 0;
+  max-inline-size: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+#root :where(pre),
+[data-workloom-client] :where(pre) {
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.wl-text-safe {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.wl-text-ellipsis {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wl-button-safe {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (pointer: coarse) {
+  [data-workloom-client$="-mobile"] :where(button, a[href], [role="button"]) {
+    min-block-size: var(--wl-touch-target);
+    touch-action: manipulation;
+  }
+}
+
+@media (max-width: 480px) {
+  .wl-action-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .wl-action-row > :where(button, a, [role="button"]) {
+    width: 100%;
+  }
+}

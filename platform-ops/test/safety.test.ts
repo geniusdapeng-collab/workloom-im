@@ -23,6 +23,7 @@ const DOC: ProtectedPathsDoc = {
   version: "t", entries: [
     { id: "fence-engine", label: "围栏引擎", paths: ["packages/base/fence-engine/**", "bundles/*/fences/**"], minLevel: "C3", rules: ["no-delete", "loosen-needs-cooling"], approvers: 2 },
     { id: "migrations", label: "迁移", paths: ["packages/db/migrations/**"], minLevel: "C3", rules: ["append-only"], approvers: 2 },
+    { id: "workdata-core", label: "事件账本运行时代码", paths: ["packages/base/workdata/**"], minLevel: "C3", rules: ["no-delete"], approvers: 2 },
     { id: "sync", label: "同步机制", paths: ["sync/**"], minLevel: "C3", rules: ["no-delete"], approvers: 2 },
     { id: "safety-self", label: "安全自身", paths: ["safety/**", "platform-ops/src/safety/**"], minLevel: "C3", rules: ["no-delete", "sandbox-required"], approvers: 2 },
   ],
@@ -88,6 +89,16 @@ describe("P1 保护清单闸", () => {
     expect(aggregateVerdicts(v1).action).toBe("deny");
     const v2 = guardDiff(DOC, [{ path: "packages/db/migrations/0021_x.sql", kind: "modified" }]);
     expect(aggregateVerdicts(v2).action).toBe("deny");
+  });
+  it("事件账本运行时代码允许维护但必须 C3 双人复核，删除仍拒绝", () => {
+    const modified = aggregateVerdicts(guardDiff(DOC, [
+      { path: "packages/base/workdata/recall.ts", kind: "modified" },
+    ]));
+    expect(modified).toMatchObject({ action: "require", entry: "workdata-core", minLevel: "C3", approvers: 2 });
+    const deleted = aggregateVerdicts(guardDiff(DOC, [
+      { path: "packages/base/workdata/recall.ts", kind: "deleted" },
+    ]));
+    expect(deleted.action).toBe("deny");
   });
   it("新增迁移文件放行；围栏净删除触发 24h 冷静期", () => {
     const v1 = guardDiff(DOC, [{ path: "packages/db/migrations/0099_new.sql", kind: "added" }]);

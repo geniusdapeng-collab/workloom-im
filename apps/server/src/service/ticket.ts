@@ -39,14 +39,14 @@ export interface TicketEvent {
   detail: Record<string, unknown>; createdAt: string;
 }
 
-/** 部门路由表（kind → 受理部门；可按工作区配置化扩展） */
+/** 基座兜底路由；行业部门名必须由已验证的服务前台适配器显式传入。 */
 export const DEPT_ROUTE: Record<string, string> = {
-  complaint: "客服部",
-  repair: "工程部",
-  delivery: "客房部",
-  service_request: "客房部",
-  consult: "前厅部",
-  other: "前厅部",
+  complaint: "客户服务团队",
+  repair: "服务支持团队",
+  delivery: "服务支持团队",
+  service_request: "服务支持团队",
+  consult: "客户服务团队",
+  other: "客户服务团队",
 };
 
 /** SLA 时限（小时，按 kind；演示口径） */

@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "baseRepository": "geniusdapeng-collab/workloom-im",
+  "releasePolicy": "base-first-stable-only",
+  "ui": {
+    "package": "@workloom/ui",
+    "contractVersion": "2.0.0",
+    "candidateVersion": "0.1.0",
+    "latestStableVersion": "0.1.0",
+    "requiredClientPackages": [
+      "apps/web/package.json",
+      "apps/webb/package.json",
+      "apps/webc/package.json"
+    ],
+    "allowedIndustryOverrides": [
+      "--wl-brand-primary",
+      "--wl-brand-on-primary",
+      "--wl-brand-accent"
+    ],
+    "sourceDirectory": "packages/ui",
+    "distribution": "registry-and-upgrade-pr"
+  },
+  "clientFoundation": {
+    "schemaVersion": "workloom.client-foundation/v1",
+    "stateFile": ".workloom-client-foundation.json",
+    "candidateVersion": "0.1.0",
+    "latestStableVersion": "0.1.0",
+    "stableSourceRefPattern": "refs/tags/ui-v{version}",
+    "distribution": "stable-tag-upgrade-pr",
+    "maxManagedFiles": 500,
+    "managedRoots": [
+      "apps/web",
+      "apps/webb",
+      "apps/webc"
+    ],
+    "requiredEntries": [
+      "apps/web/src/main.tsx",
+      "apps/webb/src/main.tsx",
+      "apps/webc/src/main.tsx",
+      "apps/webc/public/service-front.config.json"
+    ],
+    "allowedIndustryExtensionPaths": [
+      "apps/*/src/extensions/**",
+      "apps/*/src/projections/**",
+      "apps/*/src/config/industry/**",
+      "apps/*/src/theme/industry/**",
+      "apps/*/public/industry/**"
+    ],
+    "ignoredRuntimePaths": [
+      "apps/*/dist/**",
+      "apps/*/node_modules/**",
+      "apps/*/.vite/**",
+      "apps/*/.DS_Store"
+    ],
+    "protectedRootFiles": [
+      "product.manifest.json",
+      "electron-builder.yml"
+    ]
+  }
+}

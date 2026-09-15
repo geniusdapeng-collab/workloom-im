@@ -8,6 +8,8 @@ readonly: false
 night_shift: true          # 夜班窗口内自动上线（M4）
 high_risk: false
 fence_bindings: [R1, R2]   # 航道许可：涨幅≤8%自动 / 保底价熔断（F2.10 未声明即禁写）
+coverage:
+  - { eventPrefix: "price.", label: 收益定价 }
 skills: [revenue-manager]
 tools:
   - { name: pms.price.read, access: read,  desc: 读取 PMS 房价/房态 }

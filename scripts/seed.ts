@@ -17,7 +17,7 @@
  *  - GUC 一律 set_config(..., is_local=true) 且包在显式事务内（L2：不留会话级残留）；
  *  - 验收：写入后回读 100 条事件逐条过 zod，五元字段完整率必须 100%（附录 H-1）。
  */
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
@@ -26,14 +26,23 @@ import YAML from "yaml";
 // 此前种子用 JSON.stringify 键序算哈希，与生产 canonicalJson 口径不一致，
 // 种子 100 条事件用生产验证器重算全部不符（链上两种算法混杂）
 // P0-3 续：种子 ID 走 E-SEED- 前缀，zod 经 safeParseReplayAwareEvent 占位缝校验
-import { eventHash, safeParseReplayAwareEvent } from "@workloom/base/workdata";
+import {
+  eventHash,
+  reconcileEventStorageSequenceForSeed,
+  safeParseReplayAwareEvent,
+} from "@workloom/base/workdata";
+import { resolveHotelSeedBundle } from "./hotel-seed-preflight.js";
+import {
+  loadVerifiedBundleManifest,
+  loadVerifiedBundleWorkforcePresets,
+} from "@workloom/base/bundles";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, "..");
-// 行业包目录：默认 ai-pm（基座出厂示例包，方案 V4）；其他行业版以 BUNDLE_DIR 指定
-const BUNDLE_DIR = process.env.BUNDLE_DIR
-  ? join(REPO_ROOT, process.env.BUNDLE_DIR)
-  : join(REPO_ROOT, "bundles/ai-pm");
+// 本脚本含酒店专属业务对象与夹具，必须由调用方显式选择并先通过 Bundle 门禁。
+// 校验发生在建立数据库连接前，缺失/错选/摘要异常都不会留下半成品。
+const BUNDLE_DIR = resolveHotelSeedBundle(REPO_ROOT, process.env.BUNDLE_DIR);
+const BUNDLE_MANIFEST = loadVerifiedBundleManifest("hotel", join(REPO_ROOT, "bundles"));
 
 const DATABASE_URL =
   process.env.DATABASE_URL ?? "postgres://postgres:workloom@localhost:5432/workloom";
@@ -106,30 +115,6 @@ function demoTimeline(): Date[] {
 
 /* ================= Bundle 资产读取 ================= */
 
-interface Preset {
-  preset_key: string;
-  name: string;
-  version: string;
-  kind: string;
-  description: string;
-  readonly: boolean;
-  night_shift: boolean;
-  high_risk: boolean;
-  fence_bindings: string[];
-  skills: string[];
-  tools: Array<{ name: string; access: string; desc: string }>;
-  prompt: unknown;
-  write_back: string[];
-}
-
-function loadPresets(): Preset[] {
-  const dir = join(BUNDLE_DIR, "presets");
-  return readdirSync(dir)
-    .filter((f) => f.endsWith(".yml"))
-    .sort()
-    .map((f) => YAML.parse(readFileSync(join(dir, f), "utf-8")) as Preset);
-}
-
 interface FenceRule {
   rule_id: string;
   name: string;
@@ -141,9 +126,10 @@ interface FenceRule {
 }
 
 function loadFences(): FenceRule[] {
-  const fencesFile = readdirSync(join(BUNDLE_DIR, "fences")).find((f) => f.endsWith(".yml"))!;
-  const doc = YAML.parse(readFileSync(join(BUNDLE_DIR, "fences", fencesFile), "utf-8"));
-  return (doc?.rules ?? []) as FenceRule[];
+  return BUNDLE_MANIFEST.workloom.provides.fences.flatMap((assetPath) => {
+    const doc = YAML.parse(readFileSync(join(BUNDLE_DIR, assetPath), "utf-8"));
+    return (doc?.rules ?? []) as FenceRule[];
+  });
 }
 
 interface SkillDoc {
@@ -154,11 +140,10 @@ interface SkillDoc {
 }
 
 function loadSkills(): SkillDoc[] {
-  const dir = join(BUNDLE_DIR, "skills");
-  return readdirSync(dir)
-    .sort()
-    .map((d) => {
-      const raw = readFileSync(join(dir, d, "SKILL.md"), "utf-8");
+  return BUNDLE_MANIFEST.workloom.provides.skills
+    .map((assetPath) => {
+      const directoryName = assetPath.split("/").at(-2) ?? assetPath;
+      const raw = readFileSync(join(BUNDLE_DIR, assetPath), "utf-8");
       const m = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
       const fm = YAML.parse(m?.[1] ?? "{}");
       const bindMap: Record<string, string[]> = {
@@ -167,10 +152,10 @@ function loadSkills(): SkillDoc[] {
         "channel-reconciler": ["R4", "R5"],
       };
       return {
-        name: String(fm.name ?? d),
+        name: String(fm.name ?? directoryName),
         description: String(fm.description ?? ""),
         body: (m?.[2] ?? "").trim(),
-        fenceBindings: bindMap[String(fm.name ?? d)] ?? [],
+        fenceBindings: bindMap[String(fm.name ?? directoryName)] ?? [],
       };
     });
 }
@@ -184,7 +169,13 @@ function yunqiArchive(): Record<string, unknown> {
       version: 1,
       mode: "trial",
       identity: { name: "公司CEO", persona: "稳健经营型" },
-      autonomy: { price_band: [0.85, 1.15], procurement_cap: 5000, campaign_cap: 2000 },
+      autonomy: {
+        ranges: { "price-change-ratio": { label: "价格调整比例", lower: 0.85, upper: 1.15, anchor: 1 } },
+        caps: {
+          procurement: { label: "采购金额上限", limit: 5000 },
+          campaign: { label: "营销支出上限", limit: 2000 },
+        },
+      },
       escalate: ["修改保底价/安全禁区相关", "单月累计让利超上限", "围栏规则放宽（任何放宽）", "新渠道/新平台上线", "对外公开承诺（赔偿/免费/声明）", "宪章变更"],
       briefing: { daily: "08:30", weekly: "Mon 09:00", monthly: "1st 10:00", channel: "both" },
       circuit_breaker: { window_days: 14, kpi_floor: { occ: 0.7 }, tightened: false },
@@ -279,7 +270,11 @@ const ROOM_TYPES = [
 const CHANNELS = ["美团", "携程", "飞猪"] as const;
 
 /** 生成一条剧本事件（按序号轮转场景，保证 R1–R6 均有命中样本） */
-function makeEvent(i: number, time: Date, presets: Preset[]): SeedEvent {
+function makeEvent(
+  i: number,
+  time: Date,
+  presets: ReturnType<typeof loadVerifiedBundleWorkforcePresets>,
+): SeedEvent {
   const id = `E-SEED-${EVENT_BASE + i}`;
   const scene = i % 10;
   const baseCtx = {
@@ -484,7 +479,7 @@ function makeEvent(i: number, time: Date, presets: Preset[]): SeedEvent {
 /* ================= 主流程 ================= */
 
 async function main(): Promise<void> {
-  const presets = loadPresets();
+  const presets = loadVerifiedBundleWorkforcePresets("hotel", join(REPO_ROOT, "bundles"));
   const fences = loadFences();
   const skillsDocs = loadSkills();
   console.log(`✓ Bundle 资产读取：${presets.length} preset / ${fences.length} 围栏 / ${skillsDocs.length} 技能`);
@@ -494,6 +489,11 @@ async function main(): Promise<void> {
   await owner.connect();
 
   const q = (text: string, params: unknown[]) => owner.query(text, params);
+  // 修复旧版种子曾显式写 biz_events.seq 留下的序列落后；只前进、不改写事件。
+  const sequenceState = await reconcileEventStorageSequenceForSeed(owner);
+  if (sequenceState.repaired) {
+    console.log(`✓ 事件账本物理序列已从 ${sequenceState.nextBefore} 向前校准到 ${sequenceState.nextAfter}`);
+  }
 
   // 租户 / 工作区
   await q(
@@ -549,6 +549,7 @@ async function main(): Promise<void> {
           description: p.description,
           night_shift: p.night_shift,
           high_risk: p.high_risk,
+          coverage: p.coverage,
           tools: p.tools,
           prompt: p.prompt,
           write_back: p.write_back,
@@ -817,6 +818,9 @@ async function main(): Promise<void> {
   for (const [idx, row] of reviewEvents.rows.entries()) {
     const p = row.payload as SeedEvent;
     const status = idx === 0 ? "pending" : "approved";
+    const beforeValue = Number((p.decision.before as Record<string, unknown> | null)?.price);
+    const afterValue = Number((p.decision.after as Record<string, unknown> | null)?.price);
+    const hasChangeRatio = Number.isFinite(beforeValue) && beforeValue !== 0 && Number.isFinite(afterValue);
     await gw.query(
       `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, gesture, snapshot, decided_by, decided_at)
        VALUES ($1,$2,$3,$4,'inapp',$5,$6,$7,$8,$9)
@@ -833,10 +837,11 @@ async function main(): Promise<void> {
         JSON.stringify({
           before: p.decision.before ?? null,
           after: p.decision.after ?? null,
-          // D21：裁决判据字段（action/params/base_price）——公司CEO 可据此裁决而非保守全上浮
+          // D21：行业包命名的通用裁决判据；基座只比较声明的 key/value。
           action: p.decision.action,
           params: p.decision.params ?? {},
-          base_price: (p.decision.before as Record<string, unknown> | null)?.price ?? null,
+          autonomy_range_key: hasChangeRatio ? "price-change-ratio" : undefined,
+          autonomy_range_value: hasChangeRatio ? afterValue / beforeValue : undefined,
           expires_at: iso(new Date(Date.now() + 24 * 3600 * 1000)), // G6：24h
         }),
         status === "approved" ? "MEM-001" : null,
@@ -1046,7 +1051,7 @@ async function main(): Promise<void> {
   for (const n of notifs) {
     await svcQ(
       `INSERT INTO c_notifications (workspace_id, c_user_id, channel, kind, payload, driver, status, created_at)
-       SELECT $1,$2,'h5',$3,$4::jsonb,'mock','delivered',$5
+       SELECT $1,$2,'h5',$3,$4::jsonb,'mock','pending',$5
        WHERE NOT EXISTS (SELECT 1 FROM c_notifications WHERE c_user_id=$2 AND kind=$3 AND payload->>'text'=$6)`,
       [WS_ID, n[1], n[2], JSON.stringify({ text: n[3], mock: true }), new Date(Date.now() - n[4] * 60000).toISOString(), n[3]],
     );
@@ -1170,16 +1175,22 @@ async function main(): Promise<void> {
       new Date(Date.now() - 45 * 86400000).toISOString(), new Date(Date.now() - 86400000).toISOString()],
   );
   await svcQ(
-    `INSERT INTO demo_members (workspace_id, member_id, name, tier, points)
+    `INSERT INTO demo_members (workspace_id, member_id, name, phone, tier, points)
      VALUES
-       ($1, 'M-PLAT-20888', '王总', '白金卡', 26800),
-       ($1, 'M-GOLD-31520', '李女士', '金卡', 9800)
-     ON CONFLICT (workspace_id, member_id) DO NOTHING`,
+       ($1, 'M-1001', '张伟', '13800000001', '金卡', 2680),
+       ($1, 'M-1002', '刘芳', '13800000002', '银卡', 860),
+       ($1, 'M-PLAT-20888', '王总', NULL, '白金卡', 26800),
+       ($1, 'M-GOLD-31520', '李女士', NULL, '金卡', 9800)
+     ON CONFLICT (workspace_id, member_id) DO UPDATE
+       SET phone=COALESCE(demo_members.phone, EXCLUDED.phone)`,
     [WS_ID],
   );
   await svcQ(
     `INSERT INTO demo_orders (workspace_id, order_id, member_id, room_type, check_in, check_out, amount_fen, status)
      VALUES
+       ($1, 'O-20260820-001', 'M-1001', '豪华大床房', '2026-08-21', '2026-08-23', 117600, '已确认'),
+       ($1, 'O-20260818-002', 'M-1001', '行政双床房', '2026-08-18', '2026-08-19', 68800, '已完成'),
+       ($1, 'O-20260822-003', 'M-1002', '山景大床房', '2026-08-25', '2026-08-26', 52800, '已确认'),
        ($1, 'YQ-20260824-108', 'M-PLAT-20888', '行政大床房', $2, $3, 326400, '在住'),
        ($1, 'YQ-20260822-076', 'M-GOLD-31520', '亲子主题房', $4, $5, 197600, '在住'),
        ($1, 'YQ-20260810-033', 'M-PLAT-20888', '行政大床房', $6, $7, 108800, '已退房')
@@ -1280,7 +1291,7 @@ async function main(): Promise<void> {
   for (const n of notifs2) {
     await svcQ(
       `INSERT INTO c_notifications (workspace_id, c_user_id, channel, kind, payload, driver, status, created_at)
-       SELECT $1,$2,'wechat-mini',$3,$4::jsonb,'mock','delivered',$5
+       SELECT $1,$2,'wechat-mini',$3,$4::jsonb,'mock','pending',$5
        WHERE NOT EXISTS (SELECT 1 FROM c_notifications WHERE c_user_id=$2 AND kind=$3 AND payload->>'text'=$6)`,
       [WS_ID, n[1], n[2], JSON.stringify({ text: n[3], mock: true }), new Date(Date.now() - n[4] * 60000).toISOString(), n[3]],
     );

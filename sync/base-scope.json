@@ -1,6 +1,61 @@
 {
-  "version": 3,
-  "description": "WorkLoom IM 基座能力同步范围声明——base-sync 引擎的唯一事实源。只有基座能力（include）会从基座受控分发到子仓；行业属性与演示能力（exclude）永不同步。requiredRootAssets 无视行业代码的 pathPrefix，始终安装并校验在 Git 仓库根目录。修改本文件即修改同步边界，需基座 owner 评审。",
+  "version": 9,
+  "description": "WorkLoom IM 基座能力同步范围声明——base-sync 引擎的唯一事实源。文件型公共能力按 include/exclude 受控分发；三端组件/视觉语言通过 @workloom/ui 稳定制品下发，三端应用壳/导航/布局/状态/API 接线通过同一 ui-v* 稳定标签和逐文件指纹升级 PR 下发。行业属性与演示能力永不同步。requiredRootAssets 无视行业代码的 pathPrefix，始终安装并校验在 Git 仓库根目录。修改本文件即修改同步边界，需基座 owner 评审。",
+
+  "registryCapabilities": [
+    {
+      "package": "@workloom/ui",
+      "source": "packages/ui/**",
+      "consumers": ["apps/web", "apps/webb", "apps/webc"],
+      "distribution": "stable-registry-upgrade-pr",
+      "consumerGate": "scripts/verify-ui-consumer.mjs",
+      "migration": "two-phase-required",
+      "comment": "第一阶段先补齐三个真实生产客户端与产品身份配置，第二阶段再锁定稳定制品并运行消费门禁；缺少 apps/webb 等客户端时必须报告迁移未完成，禁止按三端合规处理。"
+    }
+  ],
+
+  "clientFoundationCapability": {
+    "source": "apps/web/** + apps/webb/** + apps/webc/**",
+    "configuration": "sync/base-capabilities.json#clientFoundation",
+    "installer": "sync/client-foundation.mjs",
+    "stateFile": ".workloom-client-foundation.json",
+    "distribution": "stable-tag-upgrade-pr",
+    "conflictPolicy": "previous-source-sha256-fail-close",
+    "industryExtensionPaths": [
+      "apps/*/src/extensions/**",
+      "apps/*/src/projections/**",
+      "apps/*/src/config/industry/**",
+      "apps/*/src/theme/industry/**",
+      "apps/*/public/industry/**"
+    ],
+    "comment": "这些路径仍显式排除普通 base-sync，避免双通道覆盖。新行业用 adopt.sh --new-industry 从 latest stable 一次生成三端；存量仓只经 ui-upgrade-pr 波次 PR 更新。"
+  },
+
+  "uiGovernanceCapability": {
+    "installer": "sync/install-ui-governance.mjs",
+    "stateFile": ".workloom-ui-governance.json",
+    "dependency": "npm:typescript@5.9.3",
+    "managedFiles": [
+      "scripts/verify-ui-consumer.mjs",
+      "scripts/ui-governance-rules.mjs"
+    ],
+    "distribution": "stable-upgrade-pr-only",
+    "comment": "消费 verifier、AST 规则和固定解析器是同一个稳定治理单元；不得再由普通 base-sync 提前覆盖，否则治理 state 会与实际脚本失配，并阻断后续稳定升级。"
+  },
+
+  "protectedChildAssets": {
+    "files": [
+      "electron-builder.yml",
+      "product.manifest.json"
+    ],
+    "identityFields": [
+      "appId",
+      "productName",
+      "ports",
+      "publish"
+    ],
+    "comment": "桌面应用标识、产品名、端口和发布身份属于部署实例资产；base-sync 不得整文件覆盖。新行业应由 product.manifest.json 显式配置，存量仓先完成身份迁移再接收稳定基座升级。"
+  },
 
   "requiredRootAssets": {
     "files": [
@@ -30,6 +85,79 @@
 
   "preCommitSecretScanner": "scripts/secret-scan.mjs",
 
+  "acceptedBaseSecretScanFindings": {
+    ".env.example": {
+      "sha256": "860df8059d1d37289d4c333e0ad8dc603c927753eae11a8c9c45c88954a91817",
+      "findings": [{ "rule": "private-key", "line": 31 }],
+      "reason": "环境示例仅展示带省略号的 Ed25519 PEM 结构，并明确要求私钥只能进入密钥库；不含可用私钥。"
+    },
+    ".github/workflows/ui-release.yml": {
+      "sha256": "383dbe25ec7ad4aa25f7aa47ae76dfb808b946bf46cfed8a754fb9464b8d4576",
+      "findings": [
+        { "rule": "credential-in-url", "line": 52 },
+        { "rule": "literal-sensitive-assignment", "line": 52 },
+        { "rule": "credential-in-url", "line": 53 },
+        { "rule": "credential-in-url", "line": 54 }
+      ],
+      "reason": "UI 发布门禁连接串是临时 GitHub Actions PostgreSQL 服务的公开测试值，不用于任何外部或生产数据库。"
+    },
+    "apps/server/src/service/adapters/business-registry.pg.test.ts": {
+      "sha256": "d8d66b9414ef7c29de5eea4d6a34f31eadd5a0bbf2a2d35f9ca731be0a5f7889",
+      "findings": [
+        { "rule": "credential-in-url", "line": 8 },
+        { "rule": "credential-in-url", "line": 9 },
+        { "rule": "credential-in-url", "line": 10 }
+      ],
+      "reason": "活库适配器契约仅使用仓库 docker-compose 的本机测试库默认值，不用于任何外部或生产数据库。"
+    },
+    "apps/server/src/service/channels-state.test.ts": {
+      "sha256": "226b697a961afc3237e3cec3ae99144a5f099a7122c79139dff0a1c57a82027f",
+      "findings": [{ "rule": "literal-sensitive-assignment", "line": 14 }],
+      "reason": "C 端 H5 签名负向测试使用明确标记为 test 的固定夹具，不是运行凭据。"
+    },
+    "apps/server/src/service/eval-source.pg.test.ts": {
+      "sha256": "8d6c315bd802dafa2cefc25ef0279c4635d3ae0c10af3c612e1796db247b9402",
+      "findings": [
+        { "rule": "credential-in-url", "line": 8 },
+        { "rule": "credential-in-url", "line": 9 }
+      ],
+      "reason": "仅用于可选 PG 契约测试的仓库内公开本机开发库默认连接串；生产值仍只能来自环境变量。"
+    },
+    "apps/server/src/service/h5-session-auth.test.ts": {
+      "sha256": "de726630d410434cd02bab6094a3dd35d356c4b2cc4537d386f26c88e597256a",
+      "findings": [{ "rule": "literal-sensitive-assignment", "line": 4 }],
+      "reason": "H5 正式鉴权负向测试使用明确标记为 production-test 的固定夹具，不是运行凭据。"
+    },
+    "apps/server/src/service/onboarding-continuity.pg.test.ts": {
+      "sha256": "b3a750faa5e89890143dce8d72f1d8140d463d91a857e56faa1f024833c07834",
+      "findings": [{ "rule": "literal-sensitive-assignment", "line": 117 }],
+      "reason": "落地向导秘密不落库测试使用 sk-never-store 负向哨兵，验证该字段会被剔除。"
+    },
+    "apps/server/src/service/onboarding-continuity.test.ts": {
+      "sha256": "0873f0fedc697713b16038a6ac804bac9b9d5f9fda96c854751666b1d8c3ceda",
+      "findings": [{ "rule": "literal-sensitive-assignment", "line": 44 }],
+      "reason": "落地向导秘密不持久化单测使用 sk-must-not-persist 负向哨兵，验证该字段会被剔除。"
+    },
+    "scripts/hotel-seed-preflight.test.ts": {
+      "sha256": "a26d099d842fce9431613451decab4bda0240f5dac04a6d8f859626ffb3d5692",
+      "findings": [{ "rule": "literal-sensitive-assignment", "line": 22 }],
+      "reason": "种子预检负向测试连接固定的 127.0.0.1:1 不可达地址，用户名和密码均为 invalid。"
+    },
+    "scripts/seed-aipm.ts": {
+      "sha256": "18886aebc5eb856fd5d983e0508aeb9213b1fc0c838cba02262bc79a9e253471",
+      "findings": [
+        { "rule": "credential-in-url", "line": 29 },
+        { "rule": "credential-in-url", "line": 31 }
+      ],
+      "reason": "AI 产品经理示例种子只使用仓库 docker-compose 的本机 owner / gateway 测试默认值；生产值只能来自环境变量。"
+    },
+    "scripts/release-gate.ts": {
+      "sha256": "7607c5730a95e6dee0ba7dd335bba776a7a17d1148a5fa375127eb0eaaa0e982",
+      "findings": [{ "rule": "credential-in-url", "line": 22 }],
+      "reason": "发布门禁新增的 owner 连接串是仓库 docker-compose 中公开的本机测试库默认值；生产连接仍只能来自环境变量。"
+    }
+  },
+
   "adoptMigrations": {
     "AGENTS.repo.md": {
       "strategy": "replace-if-identical-to-base",
@@ -40,19 +168,69 @@
     }
   },
 
+  "dependencyClosure": {
+    "relativeImports": "fail-closed",
+    "allowedExcludedTargets": [
+      {
+        "importer": "apps/server/src/index.ts",
+        "target": "apps/server/src/trpc/router.ts",
+        "reason": "服务组合根由行业仓保留路由装配，公共启动器只依赖其稳定导出。"
+      },
+      {
+        "importer": "apps/server/src/index.ts",
+        "target": "apps/server/src/service/gateway.ts",
+        "reason": "C 端网关包含行业业务适配器装配，由行业仓保留实现。"
+      },
+      {
+        "importer": "apps/server/src/service/channels.ts",
+        "target": "apps/server/src/service/store.ts",
+        "reason": "行业服务数据表与迁移链由子仓维护，通道层只依赖稳定存储接口。"
+      },
+      {
+        "importer": "apps/server/src/service/contract.test.ts",
+        "target": "apps/server/src/service/gateway.ts",
+        "reason": "公共 C 端契约测试刻意验证行业仓自己的网关组合根。"
+      },
+      {
+        "importer": "apps/server/src/service/eval.ts",
+        "target": "apps/server/src/service/dialog.ts",
+        "reason": "考试院调用行业仓保留的对话编排实现，不复制任何行业语义。"
+      },
+      {
+        "importer": "apps/server/src/service/eval.ts",
+        "target": "apps/server/src/service/adapters/business-registry.ts",
+        "reason": "考试院通过行业仓保留的业务适配器注册表运行行业题目。"
+      },
+      {
+        "importer": "apps/server/src/service/h5-session-auth.test.ts",
+        "target": "apps/server/src/service/gateway.ts",
+        "reason": "公共 H5 鉴权负向测试刻意验证行业仓自己的网关组合根。"
+      },
+      {
+        "importer": "packages/db/src/client.ts",
+        "target": "packages/db/src/schema.ts",
+        "reason": "数据库客户端消费子仓自有 schema；行业迁移链不得被基座整文件覆盖。"
+      },
+      {
+        "importer": "packages/db/src/index.ts",
+        "target": "packages/db/src/schema.ts",
+        "reason": "公共 DB 导出保留子仓自有 schema 与迁移链。"
+      }
+    ],
+    "comment": "所有随 base-sync 下发的 JS/TS 文件，其相对 import/export/require 目标也必须下发；确需由子仓保留实现的缝必须逐对登记并说明原因。"
+  },
+
   "include": [
     "packages/base/**",
+    "packages/industry-contract/**",
     "packages/runtime/**",
     "packages/shared/**",
     "packages/db/**",
     "apps/server/src/**",
     "apps/server/package.json",
     "apps/desktop/**",
-    "apps/web/src/lib/**",
-    "apps/web/package.json",
     "scripts/**",
-    "docker-compose.yml",
-    "electron-builder.yml"
+    "docker-compose.yml"
   ],
 
   "exclude": [
@@ -63,7 +241,12 @@
     "vendor/**",
     "design-system/**",
     "apps/site/**",
+    "apps/web/**",
+    "apps/webb/**",
     "apps/webc/**",
+
+    "electron-builder.yml",
+    "product.manifest.json",
 
     "apps/web/src/App.tsx",
     "apps/web/src/shell/**",
@@ -84,18 +267,16 @@
     "apps/server/src/service/store.ts",
     "apps/server/src/service/gateway.ts",
     "apps/server/src/service/ticket.ts",
+    "apps/server/src/service/dialog.test.ts",
+    "apps/server/src/service/inspection-adapter.ts",
+    "apps/server/src/service/inspection-adapter.test.ts",
     "apps/server/src/service/adapters/**",
+    "apps/server/src/industry/**",
 
-    "packages/base/captain/charter.ts",
-    "packages/base/captain/decision.ts",
-    "packages/base/captain/loop.ts",
-    "packages/base/captain/board.ts",
-    "packages/base/captain/captain.test.ts",
-    "packages/base/tenancy/auth.ts",
-    "packages/base/bundles/assembly.ts",
     "packages/base/bundles/bundles.test.ts",
-    "packages/base/bundles/segment.ts",
-
+    "packages/base/bundles/eval-questions.test.ts",
+    "packages/base/fence-engine/fence-engine.test.ts",
+    "packages/base/overlay/overlay.test.ts",
     "packages/db/src/schema.ts",
     "packages/db/migrations/**",
 
@@ -112,6 +293,17 @@
     "scripts/twin-genie.ts",
     "scripts/audit-scan.ts",
     "scripts/hardcode-scan.mjs",
+    "scripts/bundle-governance.test.ts",
+    "scripts/generate-client-projections.mts",
+    "scripts/hotel-seed-preflight.ts",
+    "scripts/hotel-seed-preflight.test.ts",
+    "scripts/suite.ts",
+    "scripts/verify-seed-aipm-idempotence.ts",
+    "scripts/verify-ui-consumer.mjs",
+    "scripts/verify-ui-consumer.test.mjs",
+    "scripts/ui-governance-rules.mjs",
+    "scripts/ui-governance-rules.test.mjs",
+    "scripts/verify-ui-governance.mjs",
     "scripts/pack-macos.sh",
     "scripts/install-im-channels.sh",
     "scripts/skill-forge.mts",
@@ -147,11 +339,6 @@
       "mergeKeys": ["include"],
       "comment": "基座版为底；子仓独有的 include 目录（如 audit-core 试验田）必须保留"
     },
-    "apps/web/package.json": {
-      "strategy": "json-merge-keep-child-extra",
-      "mergeKeys": ["dependencies", "devDependencies"],
-      "comment": "基座版为底；子仓独有依赖保留"
-    },
     "apps/server/package.json": {
       "strategy": "json-merge-keep-child-extra",
       "mergeKeys": ["dependencies", "devDependencies"],
@@ -177,6 +364,7 @@
     ],
     "blacklistNote": "以 ^ 开头=路径前缀匹配；其余=子串匹配。^bundles/ 只锚定仓库根的行业包目录，不误伤 packages/base/bundles（基座 bundle 加载器）",
     "maxFilesPerSync": 200,
-    "comment": "推送前硬校验：待同步文件路径命中黑名单或数量超限即中止——宁可漏报不可污染"
+    "maxFilesPerAdopt": 450,
+    "comment": "推送前硬校验：待同步文件路径命中黑名单或数量超限即中止。常规同步最多 200 项；仅新行业显式 adopt 的首次完整装配可放宽至 450 项，仍须先通过依赖闭包与零写入预检。"
   }
 }

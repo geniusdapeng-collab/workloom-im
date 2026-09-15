@@ -8,6 +8,8 @@ readonly: false
 night_shift: true
 high_risk: false
 fence_bindings: ['R-PM7']
+coverage:
+  - { eventPrefix: "release.", label: 发布护航 }
 skills: ['release-notes', 'github-pulse']
 tools:
   - { name: repo.read, access: read, desc: 读取仓库脉搏 }

@@ -8,6 +8,8 @@ readonly: false
 night_shift: false
 high_risk: false
 fence_bindings: ['R-PM6']
+coverage:
+  - { eventPrefix: "documents.", label: 文档交付 }
 skills: ['prd-forge', 'release-notes']
 tools:
   - { name: documents.read, access: read, desc: 读取文档库 }

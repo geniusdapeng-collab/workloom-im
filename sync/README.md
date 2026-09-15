@@ -2,7 +2,7 @@
 
 `base-sync` 把 WorkLoom IM 的公共能力安全分发给行业仓，同时保护行业仓自有代码。同步边界的唯一事实源是 `sync/base-scope.json`。
 
-## 两类同步资产
+## 三类基座资产
 
 ### 根级必备资产
 
@@ -19,9 +19,40 @@
 
 ### 公共基座文件
 
-`include` 选中公共包、运行时和共享服务；`exclude`、仓级 `extraExclude`、锚点合并与污染守卫共同保护行业 bundle、种子、页面、迁移链、平台运维代码及行业依赖。
+`include` 选中公共包、运行时、`packages/industry-contract` 和共享服务；`exclude`、仓级 `extraExclude`、锚点合并与污染守卫共同保护行业 bundle、种子、页面、迁移链、平台运维代码及行业依赖。
+
+Bundle 装配运行时、组合投影与客群装配加载器属于公共基座，必须随 base-sync 下发；只有依赖基座示例包内容的仓内集成测试保留为基座专属。可分发的组合投影回归测试使用临时 Bundle 夹具，不读取 `ai-pm`、酒店或其他具体行业资产。
 
 `AGENTS.md` 不在普通复制范围内，避免整文件覆盖子仓约定。根级必备资产也不受 `docs/**` 排除或行业 `pathPrefix` 影响。
+
+### 稳定 UI 制品与三端客户端基座
+
+`packages/ui` 是 B 端 PC、B 端移动和 C 端移动三端基础组件、设计令牌、图标与交互原语的唯一源码。`apps/web`、`apps/webb`、`apps/webc` 则是同样属于基座的三端应用基础层，统一承载应用壳、左侧/底部导航、布局、状态接线和客户端 API 契约。两者都不走普通 base-sync：前者发布为稳定 `@workloom/ui`，后者由 `sync/client-foundation.mjs` 从同一不可变 `ui-v*` 稳定标签读取。`base-scope.json` 完整排除三个 app 根，防止普通文件同步和客户端基座形成双写通道。
+
+`ui-v*` 只表示共享 UI 与三端客户端基座的稳定版本，不代表任何行业 Bundle 已进入 stable。UI 标签流水线只校验仓内候选 Bundle 的契约、摘要和投影一致性，不读取 Bundle 发布私钥，也不临时生成签名或公钥环。行业 Bundle 的 stable 清单、Ed25519 签名、公钥环和可追溯制品由独立发布生命周期产生；桌面生产构建仍必须消费经过签名的 Bundle。
+
+行业仓的 `.workloom-client-foundation.json` 保存上一稳定版每个受管文件的 SHA-256 与模式。升级先把目标文件和旧来源指纹逐一比较，发现行业仓直接修改、删除或放入非白名单客户端文件即 fail closed，整次计划零写入；不会用“新版看起来更像基座”作为覆盖依据。行业差异只允许放在 Bundle、投影和下列显式扩展路径：
+
+C 端的 `apps/webc/public/service-front.config.json` 是必备受管加载壳，只能指向 `apps/webc/public/industry/service-front.config.json`。后者由当前仓的默认 Bundle 生成，位于行业扩展白名单内，不进入稳定客户端快照；因此新行业自动获得最新版加载能力，但不会继承 WorkLoom IM 的 AI 产品经理品牌、入口或种子文案。
+
+- `apps/*/src/extensions/**`
+- `apps/*/src/projections/**`
+- `apps/*/src/config/industry/**`
+- `apps/*/src/theme/industry/**`
+- `apps/*/public/industry/**`
+
+`product.manifest.json` 和 `electron-builder.yml` 是仓根受保护身份资产，永不进入客户端快照；脚手架要求行业仓先显式提供独立 `productId`、非基座 `appId`、端口偏移、仓库名和三个客户端入口，应用前后再逐字节验真。
+
+存量行业仓必须分两阶段迁移：
+
+1. 先补齐独立产品身份；存量仓若已有三端文件，把行业差异迁入 Bundle/投影/配置/extension，再建立可信旧版指纹。缺少任一真实生产入口时，不得声称“三端合规”。
+2. 再接收稳定 UI + 三端客户端基座升级 PR。三个客户端必须同时锁定相同精确版本、受管文件指纹零漂移并通过消费门禁，才可进入行业仓验收。
+
+所有行业基座目录还必须固定 `packageManager: pnpm@10.14.0`，在 `pnpm-workspace.yaml` 通过 `onlyBuiltDependencies` 明确允许桌面原生依赖，并提供可直接执行的 `product:verify` 与 `bundle:governance`。治理器只依赖随 base-sync 下发的 `packages/industry-contract`，不得读取未在行业仓保留的 `packages/ui` 源码。
+
+`electron-builder.yml` 与 `product.manifest.json` 是下游部署实例的受保护身份资产。它们显式位于 `exclude`，base-sync 不做整文件复制，也不覆盖 `appId`、`productName`、端口或发布身份。新行业必须从最新版基座模板生成自己的 manifest；存量行业先完成产品身份迁移，再进入第二阶段。
+
+当前 `apps/server/src/industry/**` 明确排除，避免 `apps/server/src/**` 的宽范围把酒店 catalog 等行业语义下发到其他经营体。现有 business registry 适配层仍位于已排除的 `apps/server/src/service/adapters/**`，且实现会引用行业 catalog，因此本版不把它伪装成可自动下发的通用能力。后续须先把“无行业语义的注册接口/运行时”与“各行业 catalog 实现”物理拆分并补兼容测试，再单独扩大同步范围。
 
 ## 命令
 
@@ -58,7 +89,7 @@ node sync/base-sync.mjs push --base . --dry-run --required-only
 - `--extra-exclude a,b`：追加仓级排除规则；
 - `--push`：pull 提交后直接推 `HEAD:main`，仅保留为受控人工入口，自动化默认采用 PR。
 
-默认 pull 会自动提交，因此开始前要求目标仓库完全干净；存在任何非本次改动就会在写入前拒绝。必须在有意保留脏工作树时使用 `--no-commit`，随后由操作者人工审查和白名单暂存。引擎只允许显式白名单暂存。`--adopt` 是 `adopt.sh` 的受限内部开关，只能与 `pull --required-only --no-commit` 组合。
+默认 pull 会自动提交，因此开始前要求目标仓库完全干净；存在任何非本次改动就会在写入前拒绝。必须在有意保留脏工作树时使用 `--no-commit`，随后由操作者人工审查和白名单暂存。引擎只允许显式白名单暂存。`--adopt` 是 `adopt.sh` 的受限内部开关，只能与 `pull --no-commit` 组合：存量治理接入附加 `--required-only`，新行业接入则执行完整公共基座同步。
 
 本地 `--base-dir` 必须是基座 Git 根，且本次会读取的受控源文件必须由当前 HEAD 跟踪并逐字节一致；无关的本地改动不阻塞。远程 clone 固定使用 `main`、`--single-branch`，并验证 `HEAD == refs/heads/main`。来源或目标路径任一段为 symlink（包括 dangling symlink）、越界路径或不规范 `pathPrefix` 都会被拒绝。
 
@@ -67,23 +98,43 @@ node sync/base-sync.mjs push --base . --dry-run --required-only
 ```bash
 bash sync/adopt.sh /path/to/new-industry
 bash sync/adopt.sh /path/to/workroom-tiger --path-prefix governance/
+
+# 新开行业：先创建独立 product.manifest.json，再一次生成最新版稳定三端
+bash sync/adopt.sh /path/to/new-industry --new-industry
+
+# 全流程零写入预演；省略 --version 时只能选择 latestStableVersion
+bash sync/adopt.sh /path/to/new-industry --new-industry --dry-run
 ```
 
 `adopt.sh` 支持普通 clone 和 `.git` 为文件的 linked worktree。执行顺序是：
 
-1. 验证普通 clone/linked worktree、规范化 `pathPrefix`、基座脚本来源和全部路径边界；
-2. 安装根级产品上下文、AGENTS 受控块与静态 heartbeat，并在写 state 前逐项复验、执行密钥扫描；
+1. 验证普通 clone/linked worktree、规范化 `pathPrefix`、基座脚本来源、全部路径边界和行业仓预置的产品/工程身份契约；
+2. 存量治理接入只安装根级产品上下文、AGENTS 受控块与静态 heartbeat；新行业先对完整同步计划做零写入预检，再安装公共运行时、行业契约与公共服务；两种模式都在写 state 前逐项复验并执行密钥扫描；
 3. 若仓库由 workloom-im fork/template 派生，仅在内容与基座逐字节相同时，把父仓专属 `AGENTS.repo.md` 替换为通用待填写 scaffold，并删除父仓专属 `.github/workflows/base-sync-push.yml`；未知或已定制内容绝不覆盖，其他 workflow 不受影响；
-4. 写入带 `pathPrefix` 的根级 state，再运行独立 detect 与四项接入资产密钥扫描。
+4. 写入带 `pathPrefix` 的根级 state，再运行独立 detect 与接入资产密钥扫描；新行业的 state 必须明确证明 `full` 同步，不能用 `required-only` 冒充；
+5. `--new-industry` 模式从 `base-capabilities.json.clientFoundation.latestStableVersion` 对应的 `ui-v*` 标签一次安装 PC/B移动/C移动，建立受管文件指纹，锁定同版 `@workloom/ui`，安装生产边界/消费门禁与 CI 工作流，并在结束前复验完整接入契约。候选版、未发布版、版本错位、缺工程依赖和基座默认产品身份全部阻断。
 
-脚本不暂存、不提交、不推送。审查根级接入资产和可选的两项精确派生迁移后，由操作者白名单提交，并把新仓登记进 `sync/child-repos.json`。任何扫描或安装失败都会回滚本次写入，不把受阻内容留在目标工作树。
+新行业第一次写入前会创建跨阶段事务快照，覆盖 Git index、原有 staged/unstaged/untracked 文件、full/UI/client/governance state、工作流与 lockfile；任一安装或最终 verifier 失败都会恢复接入前状态。多文件治理安装器自身也采用局部事务，所有目标路径拒绝 symlink（含仓外逃逸）。为避免 `pnpm` 改写无法逐字节快照的已有依赖树，`--new-industry` 要求行业基座目录下所有层级均不存在 `node_modules`；这是新仓一次接入的 fail-close 前置条件，存量仓升级流程不受此约束。
+
+脚本不暂存、不提交、不推送，也不把缺少 `apps/webb` 的二端仓登记成三端产品。新行业模式在任何写入前依次完成工程契约、完整基座计划和客户端基座 dry-run；存量治理接入仍只安装根资产。审查公共基座、根级接入资产、三端基座 state 和可选的两项精确派生迁移后，由操作者白名单提交，再把新仓登记进 `sync/child-repos.json`。
+
+## 存量八仓按波次升级
+
+`sync/ui-upgrade-pr.mjs --rollout` 每次都先要求执行提交固定在同版本 `ui-v*` 标签，以 npm 11.6.2 / pnpm 10.14.0 从标签隔离生成本地 `npm pack`，并将其 `dist.integrity` 与 registry 的 `@workloom/ui@<版本>` 精确比较；只确认版本号不授予 rollout 权限。完整性一致后才加载客户端基座，并只在临时 clone 中做指纹升级、lockfile 更新和消费门禁。验证通过才推送 `chore/workloom-ui-v<版本>` 独立分支并创建 PR，永不直推 `main`。W1 → W5 顺序是可执行门禁；更晚波次不能越过未完成前序。dry-run 同样执行制品完整性核验，并在临时 clone 中运行真实迁移和门禁，但不写远端仓、分支或 PR。
+
+每个脚手架/升级 PR 还安装 `scripts/verify-client-foundation-consumer.mjs` 与 `workloom-ui-contract` 工作流。后续任何 PR 或 main 推送都会重新计算全部受管摘要、三端入口、UI 同版关系与扩展白名单；不是只在中央 rollout 当时检查一次。
+
+没有 `.workloom-client-foundation.json` 的存量仓不会被猜测覆盖：与目标稳定标签逐字节相同的文件可建立初始指纹；任何不同内容都以 `UNTRACKED_MANAGED_FILE` 阻断，要求人工先把合法行业差异迁入白名单扩展路径。已登记 state 后，`MANAGED_FILE_MODIFIED`、`MANAGED_FILE_DELETED`、非法客户端路径同样阻断整个 PR。
 
 ## 自动化与凭据
 
+- `@workloom/ui` 只发布到 npmjs 公共 Registry。包首次创建必须由 `@workloom` scope 管理员在本地交互登录并通过 2FA，发布经门禁生成的唯一 tarball，随后立即注销；不得把 npm 登录令牌粘贴到聊天、源码或日志。首发后在 npm 包设置中把 Trusted Publisher 精确绑定到 `geniusdapeng-collab/workloom-im` 的 `ui-release.yml` 和 `production` environment，后续版本由独立最小权限 job 以 GitHub Actions OIDC 短期身份发布，并启用 provenance，不再保存长期 `NPM_TOKEN`；
+- GitHub 仓库必须把 `production` environment 配置为 required reviewers + 受保护部署分支/标签，并用 ruleset 限制 `ui-v*` 标签创建。workflow 还会把发布/续跑对象固定到不可变提交并验证其属于 `origin/main` 历史；代码内祖先校验不能替代仓库侧保护规则；
+- 八个公开下游仓的只读 preflight 永远无 token 执行。npm 发布身份与八仓写入身份严格分离；跨仓升级继续使用最小权限 GitHub App installation token 或经审计的人工本地凭据，且只在实际 rollout step 注入，编排器不会把它继承给 pnpm/npm/verifier 子进程。绝不把 npm 凭据复用为 GitHub 凭据，也不以个人 PAT 充当长期自动化秘密；
 - 父仓 plan 在不接触跨仓凭据时先执行 YAML、密钥扫描器和同步引擎测试；PR 事件停在本地验证；
 - 可选 fan-out 只使用限定到清单仓库的短期 GitHub App installation token：先做 private-safe 跨仓 dry-run，再以精确 `base_sha` 和 `mode=required-only|full` 发送 `repository_dispatch`，并仅对 GitHub 标记为 `disabled_inactivity` 的 heartbeat 做恢复与运行监控；未配置 App 时公开九仓仍由各自 schedule 工作；
 - 子仓 heartbeat 先以公开只读、无 token 的方式把基座 `main` 固定为不可变提交，再执行该提交里的引擎；同步阶段显式拒绝残留认证 header；
-- 发生变更后，子仓在注入写令牌前执行 `pnpm install --frozen-lockfile --ignore-scripts`，并按脚本存在性运行 typecheck/test，且要求验证后工作树干净；最后才用本仓短期、最小权限 `GITHUB_TOKEN` 推同仓分支并创建 PR；
+- 发生变更后，子仓在注入写令牌前执行 `pnpm install --frozen-lockfile --ignore-scripts`，并按脚本存在性运行 typecheck/test；heartbeat 同时输出三端迁移状态：缺端或未锁定稳定制品时明确标记为未合规，已接入 UI 清单时必须通过消费门禁；验证后要求工作树干净，最后才用本仓短期、最小权限 `GITHUB_TOKEN` 推同仓分支并创建 PR；
 - Git 远端 URL 永不拼入令牌。确需命令行认证时，引擎只通过临时 Git 环境配置传递 HTTP header，并对错误做二次脱敏；
 - 成功、失败和 dry-run 路径都会清理临时 clone。
 
@@ -101,6 +152,8 @@ bash sync/adopt.sh /path/to/workroom-tiger --path-prefix governance/
 
 state 只用于审计和加速理解，不是“已对齐”的证明。`detect` 总会重新读取基座与目标文件；SHA 相同但上下文缺失、被改写或标记异常仍会返回退出码 `2`。反过来，内容已一致但根级 state 缺失或过期也会以独立的 `stateDrift` 返回退出码 `2`，从而触发一次 state-only pull。标记缺失时可安全追加，标记残缺、重复或顺序错误时 fail closed，等待人工修复。
 
+客户端目录另有 `.workloom-client-foundation.json`，记录稳定版本、标签、不可变提交、三端映射、行业扩展白名单和逐文件 SHA-256。该 state 同样不是自我证明：`inspect` 会重新读取每个受管文件并检查额外路径；升级会同时用旧 state 和新稳定标签做双向验真。
+
 ## 提交与失败边界
 
 - 同步计划在落盘前完成污染黑名单和单次文件数检查；
@@ -114,9 +167,10 @@ state 只用于审计和加速理解，不是“已对齐”的证明。`detect`
 ## 测试
 
 ```bash
-node --test sync/base-sync.test.mjs
+node --test sync/base-sync.test.mjs sync/client-foundation.test.mjs sync/set-ui-version.test.mjs sync/ui-upgrade-pr.test.mjs
 bash -n sync/adopt.sh
 node --check sync/base-sync.mjs
+node --check sync/client-foundation.mjs
 ```
 
-测试覆盖 AGENTS 三态迁移与 report、同 SHA 文件验真、Tiger 根级落点、旧 state 迁移、静态 heartbeat 自升级、来源 HEAD 约束、白名单提交、脏树拒绝、`--required-only --no-commit`、required-only push、lockfile/密钥扫描事务回滚、凭据脱敏、源/目标/dangling/pathPrefix symlink 对抗、临时 clone 全路径清理、linked worktree 跨仓前缀接入，以及父仓专属文件的精确派生清理。
+测试覆盖 AGENTS 三态迁移与 report、同 SHA 文件验真、Tiger 根级落点、旧 state 迁移、静态 heartbeat 自升级、来源 HEAD 约束、白名单提交、脏树拒绝、`--required-only --no-commit`、required-only push、lockfile/密钥扫描事务回滚、凭据脱敏、源/目标/dangling/pathPrefix symlink 对抗、相对依赖闭包与子仓依赖缝、临时 clone 全路径清理、linked worktree 跨仓前缀接入、父仓专属文件的精确派生清理，以及最小新行业 full 接入、三端 scaffold、latest-stable-only、稳定标签取源、dry-run、更新/新增/删除、旧摘要冲突关闭、扩展路径白名单和产品身份保护。

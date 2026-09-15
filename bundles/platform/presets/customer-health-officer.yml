@@ -8,6 +8,8 @@ readonly: false
 night_shift: true
 high_risk: false
 fence_bindings: ['R-PL10']
+coverage:
+  - { eventPrefix: "health.", label: 客户健康 }
 skills: ['health-scan']
 tools:
   - { name: tenants.read, access: read, desc: 读取客户全景档案与使用信号 }

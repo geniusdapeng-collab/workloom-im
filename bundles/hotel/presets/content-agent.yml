@@ -8,6 +8,8 @@ readonly: false
 night_shift: false
 high_risk: false
 fence_bindings: [R3]       # 新渠道首次发布必审
+coverage:
+  - { eventPrefix: "content.", label: 内容发布 }
 skills: []
 tools:
   - { name: content.draft, access: write,  desc: 生成内容草稿 }

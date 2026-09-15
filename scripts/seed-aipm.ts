@@ -6,51 +6,57 @@
  *      业务种子（需求池/竞档/指标/反馈/文档/评测中心/prompt版本库/失败案例库进知识库）/ 审批样例 / 晨报 /
  *      夜班编排 / bundle_installs 装配台账登记（一键清空依据）
  */
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import pg from "pg";
 import YAML from "yaml";
+import {
+  appendEventIdempotent,
+  gatewayAppendOnClient,
+  reconcileEventStorageSequenceForSeed,
+} from "@workloom/base/workdata";
+import {
+  bundleEvalQuestionId,
+  loadVerifiedBundleManifest,
+  loadVerifiedBundleEvalQuestions,
+  loadVerifiedBundleWorkforcePresets,
+} from "@workloom/base/bundles";
 
 import { fileURLToPath } from "node:url";
 const REPO_ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..");
 const BUNDLE_DIR = join(REPO_ROOT, "bundles/ai-pm");
+const BUNDLE_MANIFEST = loadVerifiedBundleManifest("ai-pm", join(REPO_ROOT, "bundles"));
 const DATABASE_URL = process.env.DATABASE_URL ?? "postgres://postgres:workloom@localhost:5432/workloom";
+const GATEWAY_URL = process.env.DATABASE_GATEWAY_URL
+  ?? "postgres://workloom_gateway:workloom_dev_gateway@localhost:5432/workloom";
 
 const TENANT_ID = "demo";
 const WS_ID = "ws-aipm-demo";
 const WS_SLUG = "ai-pm-demo";
 const WS_NAME = "织元产品部（AI 产品经理示例团队）";
 
-interface Preset {
-  preset_key: string; name: string; version: string; kind: string;
-  description: string; readonly: boolean; night_shift: boolean; high_risk: boolean;
-  fence_bindings: string[]; skills: string[];
-  tools: Array<{ name: string; access: string; desc: string }>;
-  prompt: Record<string, unknown>;
-}
 interface FenceRule { rule_id: string; name: string; level: string; match: Record<string, unknown>; when?: Record<string, unknown>; note?: string }
 interface SkillDoc { name: string; description: string; body: string; fenceBindings: string[] }
 
-function loadPresets(): Preset[] {
-  const dir = join(BUNDLE_DIR, "presets");
-  return readdirSync(dir).filter((f) => f.endsWith(".yml")).map((f) => YAML.parse(readFileSync(join(dir, f), "utf-8")) as Preset);
-}
 function loadFences(): FenceRule[] {
-  const file = readdirSync(join(BUNDLE_DIR, "fences")).find((f) => f.endsWith(".yml"))!;
-  const doc = YAML.parse(readFileSync(join(BUNDLE_DIR, "fences", file), "utf-8")) as { fences: FenceRule[] };
-  return doc.fences;
+  return BUNDLE_MANIFEST.workloom.provides.fences.flatMap((assetPath) => {
+    const doc = YAML.parse(readFileSync(join(BUNDLE_DIR, assetPath), "utf-8")) as { fences?: FenceRule[]; rules?: FenceRule[] };
+    return doc.fences ?? doc.rules ?? [];
+  });
 }
 function loadSkills(): SkillDoc[] {
-  const dir = join(BUNDLE_DIR, "skills");
-  return readdirSync(dir).map((d) => {
-    const raw = readFileSync(join(dir, d, "SKILL.md"), "utf-8");
+  return BUNDLE_MANIFEST.workloom.provides.skills.map((assetPath) => {
+    const directoryName = assetPath.split("/").at(-2) ?? assetPath;
+    const raw = readFileSync(join(BUNDLE_DIR, assetPath), "utf-8");
     const m = /^---\n([\s\S]*?)\n---/.exec(raw);
-    const fm = m ? (YAML.parse(m[1]!) as { name: string; description: string }) : { name: d, description: "" };
+    const fm = m ? (YAML.parse(m[1]!) as { name: string; description: string }) : { name: directoryName, description: "" };
     return { name: fm.name, description: fm.description, body: raw, fenceBindings: [] };
   });
 }
 function loadSeed<T>(file: string): T {
-  return JSON.parse(readFileSync(join(BUNDLE_DIR, "seeds", file), "utf-8")) as T;
+  const assetPath = BUNDLE_MANIFEST.workloom.provides.seeds.find((path) => path.split("/").at(-1) === file);
+  if (!assetPath) throw new Error(`AI 产品经理行业包未声明种子资产：${file}`);
+  return JSON.parse(readFileSync(join(BUNDLE_DIR, assetPath), "utf-8")) as T;
 }
 
 const MEMBERS = [
@@ -59,8 +65,10 @@ const MEMBERS = [
   { id: "MEM-003", name: "运营同学", role: "readonly" },
 ];
 
-async function main(): Promise<void> {
-  const presets = loadPresets();
+export async function seedAiPm(): Promise<void> {
+  // 清单、摘要/签名与题集 Schema 必须在建立数据库连接前全部通过。
+  const evalPack = loadVerifiedBundleEvalQuestions("ai-pm", join(REPO_ROOT, "bundles"));
+  const presets = loadVerifiedBundleWorkforcePresets("ai-pm", join(REPO_ROOT, "bundles"));
   const fences = loadFences();
   const skillsDocs = loadSkills();
   console.log(`✓ ai-pm Bundle 资产：${presets.length} preset / ${fences.length} 围栏 / ${skillsDocs.length} 技能`);
@@ -68,6 +76,10 @@ async function main(): Promise<void> {
   const owner = new pg.Client({ connectionString: DATABASE_URL });
   await owner.connect();
   const q = (text: string, params: unknown[]) => owner.query(text, params);
+  const sequenceState = await reconcileEventStorageSequenceForSeed(owner);
+  if (sequenceState.repaired) {
+    console.log(`✓ 事件账本物理序列已从 ${sequenceState.nextBefore} 向前校准到 ${sequenceState.nextAfter}`);
+  }
 
   await q(`INSERT INTO tenants (id, name, plan) VALUES ($1,$2,'pro') ON CONFLICT (id) DO NOTHING`, [TENANT_ID, "织元演示租户"]);
   await q(
@@ -93,10 +105,77 @@ async function main(): Promise<void> {
        ON CONFLICT (id) DO NOTHING`,
       [`agt-${p.preset_key}`, WS_ID, p.preset_key, p.name, p.version, p.kind, p.readonly,
        JSON.stringify(p.fence_bindings), JSON.stringify(p.skills),
-       JSON.stringify({ description: p.description, night_shift: p.night_shift, high_risk: p.high_risk, tools: p.tools, prompt: p.prompt })],
+       JSON.stringify({
+         description: p.description,
+         night_shift: p.night_shift,
+         high_risk: p.high_risk,
+         coverage: p.coverage,
+         tools: p.tools,
+         prompt: p.prompt,
+       })],
     );
   }
   console.log(`✓ Agent 实例 ×${presets.length}（产品总监领队的 AI 产品研发团队）`);
+
+  // 示例团队也必须具备可运行的「档案 + 阶段 + 目标」三要素，不能出现首页看似
+  // 就绪、首个任务却因缺档案被拒绝的断点。档案内容来自 ai-pm Bundle 种子，
+  // 并明确标记为模拟数据；宪章仅为 shadow，允许演示推理与简报留痕但不执行
+  // 真实外部动作。若用户已通过向导建立档案，重跑种子绝不覆盖其真实配置。
+  const profileSeed = loadSeed<{ archive: Record<string, unknown>; forbidden: string[] }>("profile.json");
+  await q(
+    `INSERT INTO profiles (workspace_id, tenant_id, industry, archive, forbidden, pii_vault)
+     VALUES ($1,$2,'ai-pm',$3,$4,NULL)
+     ON CONFLICT (workspace_id) DO NOTHING`,
+    [WS_ID, TENANT_ID, JSON.stringify(profileSeed.archive), JSON.stringify(profileSeed.forbidden)],
+  );
+
+  // Bundle 专属存量迁移：仅处理本 Bundle 自带、仍明确标记为 simulated 的示例档案。
+  // 真实用户档案继续由发布门禁拦截并要求所属行业包显式迁移；基座不会猜测其行业字段。
+  const nextAutonomy = (profileSeed.archive.charter as { autonomy: unknown }).autonomy;
+  await owner.query("BEGIN");
+  try {
+    await owner.query("SELECT set_config('app.tenant_id', $1, true)", [TENANT_ID]);
+    await owner.query("SELECT set_config('app.workspace_id', $1, true)", [WS_ID]);
+    const migrated = await owner.query(
+      `UPDATE profiles p
+          SET archive = jsonb_set(p.archive, '{charter,autonomy}', $3::jsonb, true),
+              updated_at = now()
+         FROM workspaces w
+        WHERE p.workspace_id=$1 AND p.tenant_id=$2
+          AND w.id=p.workspace_id AND w.tenant_id=p.tenant_id
+          AND w.bundle_id='ai-pm' AND w.is_example=true
+          AND p.industry='ai-pm' AND p.archive->>'dataMode'='simulated'
+          AND NOT (
+            (p.archive #> '{charter,autonomy}') ? 'ranges'
+            AND (p.archive #> '{charter,autonomy}') ? 'caps'
+          )
+        RETURNING p.workspace_id`,
+      [WS_ID, TENANT_ID, JSON.stringify(nextAutonomy)],
+    );
+    if ((migrated.rowCount ?? 0) > 0) {
+      await gatewayAppendOnClient(owner as unknown as pg.PoolClient, {
+        tenantId: TENANT_ID,
+        workspaceId: WS_ID,
+        actor: { id: "system", type: "system" },
+      }, {
+        who: { type: "system", id: "system", version: "ai-pm-bundle/v3" },
+        context: { tenant_id: TENANT_ID, workspace_id: WS_ID, time: new Date().toISOString(), channel: "inapp" },
+        object: { type: "bundle_migration", id: "ai-pm-charter-autonomy-v1" },
+        decision: {
+          action: "bundle.profile.migrate",
+          after: { bundle: "ai-pm", contract: "autonomy-ranges-caps/v1" },
+          basis: ["AI 产品经理示例 Bundle 的旧自治字段已迁移为通用 ranges/caps 契约"],
+        },
+        rule_impact: [],
+      });
+      console.log("✓ AI 产品经理示例档案迁移：旧自治字段 → ranges/caps（事件账本已留痕）");
+    }
+    await owner.query("COMMIT");
+  } catch (error) {
+    await owner.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  }
+  console.log("✓ 示例团队档案（模拟数据；影子模式不执行真实外部动作）");
 
   for (const r of fences) {
     await q(
@@ -175,56 +254,87 @@ async function main(): Promise<void> {
 
   // —— 审批样例（方案 §12 approvals.json） ——
   const approvals = loadSeed<{ items: Array<{ title: string; from: string; kind: string }> }>("approvals.json");
-  for (const [i, a] of approvals.items.entries()) {
-    const evId = `ev-seed-aipm-apr-${i}`;
-    await q(
-      `INSERT INTO biz_events (event_id, tenant_id, workspace_id, seq, payload, prev_hash, hash)
-       VALUES ($1,$2,$3,(SELECT COALESCE(MAX(seq),0)+1 FROM biz_events WHERE workspace_id=$3),$4,'',$5)
-       ON CONFLICT DO NOTHING`,
-      [evId, TENANT_ID, WS_ID,
-       JSON.stringify({
-         who: { type: "agent", id: a.from },
-         context: { tenant_id: TENANT_ID, workspace_id: WS_ID, time: new Date().toISOString(), channel: "inapp" },
-         object: { type: "approval", id: `apr-seed-aipm-${i}` },
-         decision: { action: a.kind, after: { title: a.title } },
-         rule_impact: [{ result: "review" }],
-       }),
-       `seedhash-${evId}`],
-    );
-    await q(
-      `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, gesture, snapshot, decided_by, decided_at)
-       VALUES ($1,$2,$3,$4,'inapp','pending',NULL,$5,NULL,NULL)
-       ON CONFLICT (event_id, channel) DO NOTHING`,
-      [`apr-seed-aipm-${i}`, TENANT_ID, WS_ID, evId,
-       JSON.stringify({ action: a.kind, after: { title: a.title }, expires_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString() })],
-    );
+  const gateway = new pg.Pool({ connectionString: GATEWAY_URL, max: 1 });
+  try {
+    for (const [i, a] of approvals.items.entries()) {
+      const approvalId = `apr-seed-aipm-${i}`;
+      const evId = `E-SEED-AIPM-APR-${i}`;
+      const eventTime = new Date(Date.UTC(2026, 7, 16, 9, i)).toISOString();
+      await appendEventIdempotent(gateway, { tenantId: TENANT_ID, workspaceId: WS_ID }, {
+        event_id: evId,
+        who: { type: "agent", id: a.from, version: "seed/v1" },
+        context: { tenant_id: TENANT_ID, workspace_id: WS_ID, time: eventTime, channel: "inapp" },
+        object: { type: "approval", id: approvalId },
+        decision: { action: a.kind, after: { title: a.title } },
+        rule_impact: [{
+          rule_id: a.kind === "reply-draft" ? "R-PM5" : "R-PM1",
+          version: "v1",
+          result: "review",
+        }],
+      } as never);
+      await q(
+        `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, gesture, snapshot, decided_by, decided_at)
+         VALUES ($1,$2,$3,$4,'inapp','pending',NULL,$5,NULL,NULL)
+         ON CONFLICT (approval_id) DO NOTHING`,
+        [approvalId, TENANT_ID, WS_ID, evId,
+         JSON.stringify({ action: a.kind, after: { title: a.title }, expires_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString() })],
+      );
+    }
+  } finally {
+    await gateway.end();
   }
   console.log(`✓ 审批样例 ×${approvals.items.length}（pending）`);
 
   // 晨报由夜班节拍运行时真实生成（night-shift/captain，系统无静态晨报表）——不在种子内伪造
   console.log("✓ 晨报：运行时夜班生成（种子不伪造）");
 
-  // —— 行业考题（考试院 ai-pm 科目；eval/questions.json → eval_questions） ——
-  try {
-    const evalPack = JSON.parse(readFileSync(join(BUNDLE_DIR, "eval/questions.json"), "utf-8")) as { questions: Array<Record<string, unknown>> };
-    for (const [i, qu] of evalPack.questions.entries()) {
-      await q(
-        `INSERT INTO eval_questions
-           (id, workspace_id, subject, structure, primary_dimensions, red_line, difficulty, source, tags, scenario, assertions, judge_rubric, holdout)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,'seed',$8,$9,$10,$11,false)
-         ON CONFLICT (id) DO NOTHING`,
-        [
-          `evq-aipm-seed-${i}`, WS_ID, qu.subject, qu.structure,
-          JSON.stringify(qu.primary_dimensions), qu.red_line, qu.difficulty,
-          JSON.stringify(qu.tags ?? []), JSON.stringify(qu.scenario),
-          JSON.stringify(qu.assertions ?? []), qu.judgeRubric ? JSON.stringify(qu.judgeRubric) : null,
-        ],
-      );
-    }
-    console.log(`✓ 行业考题 ×${evalPack.questions.length}`);
-  } catch (e) {
-    console.log("  （行业考题注入跳过：", (e as Error).message.slice(0, 60), "）");
+  // Bundle 声明的夜班任务必须真正进入公共触发器表，不能只停留在介绍 JSON。
+  const nightJobs = loadSeed<{ jobs: Array<{ time: string; task: string; owner: string }> }>("night-jobs.json");
+  for (const [index, job] of nightJobs.jobs.entries()) {
+    const match = /^(\d{2}):(\d{2})$/.exec(job.time);
+    if (!match) throw new Error(`night-jobs.json 时间格式无效：${job.time}`);
+    const schedule = `${Number(match[2])} ${Number(match[1])} * * *`;
+    await q(
+      `INSERT INTO triggers (id, workspace_id, name, kind, schedule, action, enabled, created_by)
+       VALUES ($1,$2,$3,'cron',$4,$5,true,'system:seed-aipm')
+       ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, schedule=EXCLUDED.schedule,
+         action=EXCLUDED.action, enabled=true, updated_at=now()`,
+      [`tg-aipm-night-${index}`, WS_ID, job.task, schedule,
+       JSON.stringify({ dispatch: job.owner, template: "night.bundle-job", task: job.task })],
+    );
   }
+  await q(
+    `INSERT INTO triggers (id, workspace_id, name, kind, schedule, action, enabled, created_by)
+     VALUES ('tg-aipm-brief-0830',$1,'每日运行简报','cron','30 8 * * *',$2,true,'system:seed-aipm')
+     ON CONFLICT (id) DO UPDATE SET action=EXCLUDED.action, enabled=true, updated_at=now()`,
+    [WS_ID, JSON.stringify({ beat: "daily" })],
+  );
+  console.log(`✓ 自动化触发器 ×${nightJobs.jobs.length + 1}（Bundle 夜班任务 + 每日运行简报）`);
+
+  // —— 行业考题：只消费已验证 Bundle 声明的题集 ——
+  for (const [i, qu] of evalPack.questions.entries()) {
+    await q(
+      `INSERT INTO eval_questions
+         (id, workspace_id, subject, structure, primary_dimensions, red_line, difficulty, source, tags, scenario, assertions, judge_rubric, holdout)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        bundleEvalQuestionId(WS_ID, evalPack.bundleId, i, qu), WS_ID, qu.subject, qu.structure,
+        JSON.stringify(qu.primaryDimensions), qu.redLine, qu.difficulty, qu.source,
+        JSON.stringify(qu.tags), JSON.stringify(qu.scenario),
+        JSON.stringify(qu.assertions), qu.judgeRubric ? JSON.stringify(qu.judgeRubric) : null,
+        qu.holdout ?? false,
+      ],
+    );
+  }
+  // 早期种子题使用全局固定题号，升级后保留历史答卷引用但退出抽题池；新题号
+  // 绑定工作区与题面摘要，避免跨租户主键冲突。只退休本演示工作区的保留前缀。
+  await q(
+    `UPDATE eval_questions SET status='retired'
+     WHERE workspace_id=$1 AND id LIKE 'evq-aipm-seed-%' AND status='active'`,
+    [WS_ID],
+  );
+  console.log(`✓ 行业考题 ×${evalPack.questions.length}（已验证 Bundle）`);
 
   // —— bundle_installs 装配台账（一键清空的精确卸载依据，方案 V4 §3） ——
   await q(
@@ -246,4 +356,6 @@ async function main(): Promise<void> {
   console.log(`\n✅ ai-pm 示例包装配完成：${WS_NAME}——打开客户端即见 AI 产品经理团队在岗`);
 }
 
-main().catch((e) => { console.error("seed-aipm 失败:", e); process.exit(1); });
+if (resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) {
+  seedAiPm().catch((e) => { console.error("seed-aipm 失败:", e); process.exit(1); });
+}

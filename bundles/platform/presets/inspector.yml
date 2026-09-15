@@ -8,6 +8,8 @@ readonly: false
 night_shift: true
 high_risk: false
 fence_bindings: ['R-PL2']
+coverage:
+  - { eventPrefix: "inspection.", label: 平台巡检 }
 skills: ['incident-playbook']
 tools:
   - { name: inspection.read, access: read, desc: 读取巡检检项（事件库积压/队列深度/模型路由延迟/存储水位/实例在线率） }

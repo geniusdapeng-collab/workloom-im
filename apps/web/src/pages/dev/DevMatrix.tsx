@@ -4,6 +4,7 @@
  * 页面本身即走查工具——对照 PRD 状态规格表逐屏对账时逐格核验。
  */
 import type { ReactNode } from "react";
+import { Icon } from "@workloom/ui";
 import {
   AchievementBadge,
   AgentActionMessage,
@@ -21,7 +22,7 @@ import {
   QuestCard,
   RadarAlertCard,
   RadarAllClear,
-  SkeletonBlock,
+  Skeleton,
   SquadRing,
   SubCallMessage,
   SystemDivider,
@@ -52,7 +53,10 @@ function Section({ name, spec, children }: { name: string; spec: string; childre
 
 export default function DevMatrix() {
   return (
-    <div className="space-y-2">
+    <div data-wl-authorized-diagnostics="ui-component-matrix" className="space-y-2">
+      <p className="rounded border border-line bg-bg800 px-3 py-2 text-body text-ink2">
+        仅限本地开发环境并显式开启诊断开关后使用；本页术语仅用于组件验收。
+      </p>
       <div className="mb-4 flex items-baseline gap-3">
         <h2 className="text-h1 font-black tracking-wider">HUD 组件状态矩阵</h2>
         <span className="text-caption tracking-[.2em] text-ink3">/dev · DEV MATRIX · F2</span>
@@ -166,10 +170,10 @@ export default function DevMatrix() {
       </Section>
 
       <Section name="空态 / 骨架屏 / 告警条" spec="§5.10">
-        <Cell label="EmptyState（星云晕染+副官语气）+ SkeletonBlock（流光 1.4s）">
+        <Cell label="EmptyState + Skeleton（共享基座状态）">
           <div className="space-y-2">
-            <EmptyState icon="🌌" title="一切平静" hint="派遣第一条主线任务，团队即刻开工" actionLabel="开始第一个任务 ▶" />
-            <SkeletonBlock lines={3} />
+            <EmptyState icon={<Icon name="star" size={24} />} title="一切平静" hint="派遣第一条主线任务，团队即刻开工" actionLabel="开始第一个任务" />
+            <Skeleton count={3} label="组件内容正在加载" />
           </div>
         </Cell>
         <Cell label="BannerAlert 三级（红/琥珀/青）">

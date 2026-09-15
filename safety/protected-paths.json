@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "仙女座运维安全保障机制 · 保护清单单一事实源（对焦方案 §2.3）。仓库侧 CI 与运行时共用本表：diff 命中即按策略拦截/升级审批。本表自身的变更按 self 条目策略执行（C3 双人复核——改保险丝须另一把保险丝同意）。",
   "entries": [
     {
@@ -13,12 +13,21 @@
     },
     {
       "id": "migrations",
-      "label": "事件库与迁移",
-      "paths": ["packages/db/migrations/**", "packages/base/workdata/**"],
+      "label": "数据库迁移",
+      "paths": ["packages/db/migrations/**"],
       "minLevel": "C3",
       "rules": ["append-only"],
       "approvers": 2,
       "note": "已有迁移文件任何修改即拒（sha256 账本纪律），只允许新增文件"
+    },
+    {
+      "id": "workdata-core",
+      "label": "事件账本运行时代码",
+      "paths": ["packages/base/workdata/**"],
+      "minLevel": "C3",
+      "rules": ["no-delete"],
+      "approvers": 2,
+      "note": "账本运行时代码允许向后兼容维护，但禁止删除；变更必须双人复核并通过全量账本测试"
     },
     {
       "id": "sync-mechanism",

@@ -8,6 +8,7 @@ readonly: true             # L9.1：只读 preset 不加载任何写工具
 night_shift: true
 high_risk: false
 fence_bindings: []         # 只读，无写动作需绑定
+coverage: []               # 只读岗位不认领可写事件域
 skills: []
 tools:
   - { name: channel.status.read, access: read, desc: 渠道状态检查 }
