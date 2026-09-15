@@ -14,6 +14,7 @@ import {
   shortId,
 } from "../../lib/display";
 import { Bridge } from "../../shell/Bridge";
+import { Icon } from "@workloom/ui";
 
 interface ThreadRow {
   id: string;
@@ -171,7 +172,7 @@ export default function Observability({ view }: { view: "events" | "models" }) {
           <div className="space-y-3"><Skeleton count={3} label="运行指标正在加载" /><Skeleton count={3} label="告警数据正在加载" /><Skeleton count={3} label="事件数据正在加载" /></div>
         ) : visibleEvents.length === 0 ? (
           <EmptyState
-            icon={view === "events" ? "📒" : "🧭"}
+            icon={<Icon name={view === "events" ? "ledger" : "model"} size={24} />}
             title={view === "events" ? "暂无可见事件" : "暂无模型调用记录"}
             hint={view === "events" ? "运行一条任务后，执行证据会出现在这里。" : "先配置模型并执行任务，路由证据会写入事件账本。"}
             actionLabel={view === "models" ? "去配置模型" : "前往任务工作台"}

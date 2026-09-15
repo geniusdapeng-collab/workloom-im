@@ -6,12 +6,14 @@
  *      快照过期时三杆整体禁用并刷新（E5.3）
  */
 
+import { Icon, type IconName } from "@workloom/ui";
+
 export type Gesture = "approve" | "edit" | "reject";
 
-const RODS: Array<{ key: Gesture; icon: string; name: string; sub: string; cls: string; hover: string }> = [
-  { key: "approve", icon: "✓", name: "推进", sub: "采纳", cls: "border-go/50 text-go", hover: "hover:bg-go/10" },
-  { key: "edit", icon: "✎", name: "校准", sub: "编辑后采纳", cls: "border-holo/50 text-holo", hover: "hover:bg-holo/10" },
-  { key: "reject", icon: "✗", name: "制动", sub: "驳回", cls: "border-alert/55 text-alert", hover: "hover:bg-alert/10" },
+const RODS: Array<{ key: Gesture; icon: IconName; name: string; sub: string; cls: string; hover: string }> = [
+  { key: "approve", icon: "check", name: "推进", sub: "采纳", cls: "border-go/50 text-go", hover: "hover:bg-go/10" },
+  { key: "edit", icon: "edit", name: "校准", sub: "编辑后采纳", cls: "border-holo/50 text-holo", hover: "hover:bg-holo/10" },
+  { key: "reject", icon: "error", name: "制动", sub: "驳回", cls: "border-alert/55 text-alert", hover: "hover:bg-alert/10" },
 ];
 
 export function TriGestureBar({
@@ -56,7 +58,7 @@ export function TriGestureBar({
           onClick={() => onGesture?.(r.key)}
           className={`cursor-pointer rounded-lg border bg-card px-3 py-2.5 text-center transition-colors disabled:cursor-wait disabled:opacity-50 ${r.cls} ${r.hover}`}
         >
-          <div className="text-lg leading-none">{r.icon}</div>
+          <Icon name={r.icon} size={18} className="mx-auto" />
           <div className="mt-1 text-body font-black">{r.name}</div>
           <div className="mt-0.5 text-body text-ink3">{busy ? "正在提交…" : r.sub}</div>
         </button>

@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
-import { AsyncState } from "@workloom/ui";
+import { AsyncState, EmptyState, Skeleton, clientIdentifierText } from "@workloom/ui";
 import { api } from "../lib/api";
 import { getConfigState } from "../lib/config";
 import type { NotificationItem } from "../lib/types";
 import { ServiceNoticeCard } from "../components/cards";
-import { EmptyState, Skeleton } from "@workloom/ui";
 import { PageHeader, PullToRefresh } from "../components/common";
 
 export default function MessagesPage() {
@@ -55,7 +54,7 @@ export default function MessagesPage() {
                   <ServiceNoticeCard
                     kind={n.kind}
                     title={p.title ?? "服务通知"}
-                    detail={p.detail ?? (p.ticketId ? `工单号 ${p.ticketId}` : undefined)}
+                    detail={p.detail ?? (p.ticketId ? `工单${clientIdentifierText(p.ticketId)}` : undefined)}
                     createdAt={n.createdAt}
                     read={n.read}
                     deliveryState={n.deliveryState}

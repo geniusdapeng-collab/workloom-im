@@ -1,6 +1,7 @@
 /**
- * 配置驱动模板化：企业接入只需替换 public/service-front.config.json
- * - 启动时 fetch 配置；失败/缺字段 → 中性安全态（不注入任何行业能力）
+ * 配置驱动模板化：基座只管理 public/service-front.config.json 加载壳，行业
+ * 内容由 Bundle 生成到 public/industry/service-front.config.json。
+ * - 启动时先验加载壳、再读取行业投影；任一步失败 → 中性安全态
  * - 主题色运行时注入 CSS 变量（Tailwind v4 @theme 令牌全部走 var()，改色零改码）
  * - 文案支持 {brand} / {agent} 占位符
  */
@@ -8,6 +9,14 @@
 import { accessibleForeground, clientChineseText, parseHexColor, validateLightBrandTheme } from "@workloom/ui";
 
 export type TabKey = "chat" | "service" | "tickets" | "messages" | "me";
+
+export const FRONT_CONFIG_SHELL_PATH = "service-front.config.json";
+export const INDUSTRY_FRONT_CONFIG_PATH = "industry/service-front.config.json";
+
+export interface FrontConfigShell {
+  schemaVersion: "workloom.service-front-shell/v1";
+  industryProjectionPath: typeof INDUSTRY_FRONT_CONFIG_PATH;
+}
 
 export interface QuickReply {
   label: string;
@@ -143,10 +152,20 @@ function nonEmptyString(value: unknown): value is string {
 
 /** 普通客户端配置文案必须已完成中文本地化，并通过共享机器字段拦截。 */
 function displayText(value: unknown): value is string {
-  if (!nonEmptyString(value) || clientChineseText(value, "") !== value.trim()) return false;
-  const safeTerm = /^(?:AI|API|H5|OAuth|SLA|URL|WorkLoom)$/i;
+  if (!nonEmptyString(value)) return false;
   const withoutTemplates = value.replaceAll("{brand}", "").replaceAll("{agent}", "");
+  if (clientChineseText(withoutTemplates, "") !== withoutTemplates.trim()) return false;
+  const safeTerm = /^(?:3D|AI|API|B|C|DSL|GEO|H5|IM|KPI|LLM|MVP|OAuth|PC|RLS|ROI|SLA|URL|WorkLoom)$/i;
   return [...withoutTemplates.matchAll(/[A-Za-z][A-Za-z0-9._-]*/g)].every(([token]) => safeTerm.test(token));
+}
+
+const EMOJI_GRAPHEME = /^\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier})?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier})?)*$/u;
+
+/** 品牌与服务图符只允许一个汉字或一个 emoji 字素，禁止机器字段伪装成图标。 */
+function displayGlyph(value: unknown): value is string {
+  if (!nonEmptyString(value)) return false;
+  const text = value.trim();
+  return /^[\u3400-\u9fff]$/u.test(text) || EMOJI_GRAPHEME.test(text);
 }
 
 export function validateFrontConfig(value: unknown): value is FrontConfig {
@@ -157,7 +176,7 @@ export function validateFrontConfig(value: unknown): value is FrontConfig {
     ||
     !displayText(raw.brandName)
     || !displayText(raw.agentName)
-    || !nonEmptyString(raw.logoText)
+    || !displayGlyph(raw.logoText)
     || !displayText(raw.welcomeText)
     || !raw.theme
     || validateLightBrandTheme(raw.theme).length > 0
@@ -199,10 +218,19 @@ export function validateFrontConfig(value: unknown): value is FrontConfig {
     nonEmptyString(item?.kind)
     && displayText(item.title)
     && displayText(item.desc)
-    && nonEmptyString(item.icon)
+    && displayGlyph(item.icon)
     && displayText(item.sla)
     && (item.titlePlaceholder === undefined || displayText(item.titlePlaceholder)),
   );
+}
+
+/** 受管加载壳只允许访问约定的行业扩展目录，禁止远程 URL、绝对路径和路径穿越。 */
+export function validateFrontConfigShell(value: unknown): value is FrontConfigShell {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const raw = value as Partial<FrontConfigShell>;
+  return raw.schemaVersion === "workloom.service-front-shell/v1"
+    && raw.industryProjectionPath === INDUSTRY_FRONT_CONFIG_PATH
+    && Object.keys(raw).length === 2;
 }
 
 function useSafeConfig(message: string): void {
@@ -210,18 +238,28 @@ function useSafeConfig(message: string): void {
   loadState = { ready: false, source: "safe", message };
 }
 
-/** 启动加载：配置完整有效才启用；任何失败都进入中性、不可误操作的安全态。 */
+/** 启动加载：受管壳与行业投影都完整有效才启用；任何失败都进入中性安全态。 */
 export async function loadConfig(): Promise<FrontConfig> {
   try {
-    const res = await fetch("service-front.config.json", { cache: "no-cache" });
-    if (!res.ok) {
-      useSafeConfig(`服务配置加载失败（${res.status}）`);
+    const shellResponse = await fetch(FRONT_CONFIG_SHELL_PATH, { cache: "no-cache" });
+    if (!shellResponse.ok) {
+      useSafeConfig(`服务配置入口加载失败（${shellResponse.status}）`);
     } else {
-      const raw: unknown = await res.json();
-      if (!validateFrontConfig(raw)) useSafeConfig("服务配置不完整或格式错误");
-      else {
-        current = raw;
-        loadState = { ready: true, source: "remote" };
+      const shell: unknown = await shellResponse.json();
+      if (!validateFrontConfigShell(shell)) {
+        useSafeConfig("服务配置入口不完整或格式错误");
+      } else {
+        const projectionResponse = await fetch(shell.industryProjectionPath, { cache: "no-cache" });
+        if (!projectionResponse.ok) {
+          useSafeConfig(`行业服务配置加载失败（${projectionResponse.status}）`);
+        } else {
+          const projection: unknown = await projectionResponse.json();
+          if (!validateFrontConfig(projection)) useSafeConfig("行业服务配置不完整或格式错误");
+          else {
+            current = projection;
+            loadState = { ready: true, source: "remote" };
+          }
+        }
       }
     }
   } catch {

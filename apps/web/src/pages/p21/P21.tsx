@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { ensureDemoLogin, trpc } from "../../lib/trpc";
 import { RejectDialog } from "../../components/RejectDialog";
 import { actionText, actorText, payloadText, shortId } from "../../lib/display";
-import { clientValueText } from "@workloom/ui";
+import { Icon, Input, clientChineseText, clientValueText } from "@workloom/ui";
 import { Bridge } from "../../shell/Bridge";
 
 const StatusPill = ({ tone, children }: { tone: "ok" | "warn" | "info"; children: React.ReactNode }) => (
@@ -30,7 +30,10 @@ type CeoMode = "disabled" | "shadow" | "trial" | "suspended" | "active";
 interface Charter {
   mode: CeoMode;
   identity: { name: string };
-  autonomy: { price_band: [number, number]; procurement_cap: number; campaign_cap: number };
+  autonomy: {
+    ranges: Record<string, { label: string; lower: number; upper: number; anchor: number }>;
+    caps: Record<string, { label: string; limit: number }>;
+  };
   circuit_breaker: { tightened: boolean };
   grant: { granted_by: string; granted_at: string; trial_ends_at: string | null; retain_until: string | null; disclosure_version: string } | null;
 }
@@ -46,7 +49,7 @@ interface BriefRow { event_id: string; created_at: string; payload: { decision: 
 
 interface ChairmanItem {
   approval_id: string; event_id: string;
-  snapshot: { action?: string; params?: Record<string, unknown>; base_price?: number; ceo_escalated?: boolean; ceo_rationale?: string };
+  snapshot: { action?: string; params?: Record<string, unknown>; ceo_escalated?: boolean; ceo_rationale?: string };
   payload: { decision: { action: string; basis?: string[] }; who: { id: string } };
 }
 
@@ -79,13 +82,13 @@ export default function P21() {
   // 授权向导
   const [clauses, setClauses] = useState<Record<string, boolean>>({});
   const [identityOk, setIdentityOk] = useState(false);
-  const [priceBand, setPriceBand] = useState<[number, number]>([0.85, 1.15]);
-  const [procCap, setProcCap] = useState(5000);
-  const [campCap, setCampCap] = useState(2000);
+  const [autonomyDraft, setAutonomyDraft] = useState<Charter["autonomy"]>({ ranges: {}, caps: {} });
 
   const load = async () => {
     await ensureDemoLogin();
-    setState(await trpc.captain.state.query() as unknown as StateResp);
+    const nextState = await trpc.captain.state.query() as unknown as StateResp;
+    setState(nextState);
+    setAutonomyDraft(structuredClone(nextState.charter.autonomy));
     setBriefs(await trpc.captain.briefings.query({ limit: 8 }) as unknown as BriefRow[]);
     setScore(await trpc.captain.scorecard.query() as unknown as Scorecard);
     setQueue(await trpc.captain.chairmanQueue.query() as unknown as ChairmanItem[]);
@@ -137,7 +140,7 @@ export default function P21() {
     try {
       const r = await trpc.captain.grant.mutate({
         clauses: Object.keys(clauses).filter((k) => clauses[k]),
-        autonomy: { price_band: priceBand, procurement_cap: procCap, campaign_cap: campCap },
+        autonomy: autonomyDraft,
         shadowDays: 3, trialDays: 7, identityConfirmed: identityOk,
       }) as { mode: CeoMode };
       setMsg(`授权签署完成 → ${MODE_LABEL[r.mode]}（已留痕，不可篡改）`);
@@ -238,13 +241,32 @@ export default function P21() {
                 </label>
               ))}
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div>③ 价格带<br />
-                <input className="w-full rounded border border-line bg-panel px-2 py-1" value={priceBand[0]} onChange={(e) => setPriceBand([Number(e.target.value), priceBand[1]])} aria-label="价格带下限" />～
-                <input className="w-full rounded border border-line bg-panel px-2 py-1" value={priceBand[1]} onChange={(e) => setPriceBand([priceBand[0], Number(e.target.value)])} aria-label="价格带上限" />
+            <div>
+              <div className="mb-2 text-body text-ink3">③ 自治边界（由当前行业包声明）</div>
+              {Object.keys(autonomyDraft.ranges).length + Object.keys(autonomyDraft.caps).length === 0 && (
+                <div className="rounded border border-line bg-panel p-3 text-ink3">
+                  当前行业包未声明量化自治边界；未声明的量化动作将保守上浮，请先在行业包中完成配置。
+                </div>
+              )}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {Object.entries(autonomyDraft.ranges).map(([key, range]) => (
+                  <div className="rounded border border-line bg-panel p-3" key={key}>
+                    <div className="mb-2 font-medium text-ink">{clientValueText(range.label)}</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input label="下限" optionalLabel="" type="number" step="any" value={range.lower}
+                        onChange={(e) => setAutonomyDraft((draft) => ({ ...draft, ranges: { ...draft.ranges, [key]: { ...range, lower: Number(e.target.value) } } }))} />
+                      <Input label="上限" optionalLabel="" type="number" step="any" value={range.upper}
+                        onChange={(e) => setAutonomyDraft((draft) => ({ ...draft, ranges: { ...draft.ranges, [key]: { ...range, upper: Number(e.target.value) } } }))} />
+                    </div>
+                  </div>
+                ))}
+                {Object.entries(autonomyDraft.caps).map(([key, cap]) => (
+                  <div className="rounded border border-line bg-panel p-3" key={key}>
+                    <Input label={clientValueText(cap.label)} optionalLabel="" type="number" min={0} step="any" value={cap.limit}
+                      onChange={(e) => setAutonomyDraft((draft) => ({ ...draft, caps: { ...draft.caps, [key]: { ...cap, limit: Number(e.target.value) } } }))} />
+                  </div>
+                ))}
               </div>
-              <div>采购上限<br /><input className="w-full rounded border border-line bg-panel px-2 py-1" value={procCap} onChange={(e) => setProcCap(Number(e.target.value))} aria-label="采购上限" /></div>
-              <div>营销上限<br /><input className="w-full rounded border border-line bg-panel px-2 py-1" value={campCap} onChange={(e) => setCampCap(Number(e.target.value))} aria-label="营销上限" /></div>
             </div>
             <div className="text-ink3">④ 试用计划：影子 3 天 → 试用 7 天（边界自动降一档）→ 到期降级仅汇报（绝不自动续期）</div>
             <label className="flex items-center gap-2">
@@ -274,7 +296,6 @@ export default function P21() {
                   </div>
                   <div className="text-body text-ink2">
                     关键参数：{payloadText(snap.params ?? {}, 180)}
-                    {snap.base_price ? ` · 基准价 ¥${snap.base_price}` : ""}
                   </div>
                   {snap.ceo_rationale && <div className="mt-1 text-body text-holo">负责人意见：{clientValueText(snap.ceo_rationale)}</div>}
                   {basis.length > 0 && (
@@ -284,8 +305,8 @@ export default function P21() {
                     </details>
                   )}
                   <div className="wl-action-row mt-2 flex flex-wrap gap-2">
-                    <button onClick={() => void decide(q.approval_id, "approve")} className="rounded border border-go/50 px-3 py-1 text-body text-go hover:bg-go/10">✓ 批准</button>
-                    <button onClick={() => void decide(q.approval_id, "reject")} className="rounded border border-warn/50 px-3 py-1 text-body text-warn hover:bg-warn/10">✕ 驳回</button>
+                    <button onClick={() => void decide(q.approval_id, "approve")} className="inline-flex items-center gap-1 rounded border border-go/50 px-3 py-1 text-body text-go hover:bg-go/10"><Icon name="check" size={14} />批准</button>
+                    <button onClick={() => void decide(q.approval_id, "reject")} className="inline-flex items-center gap-1 rounded border border-warn/50 px-3 py-1 text-body text-warn hover:bg-warn/10"><Icon name="error" size={14} />驳回</button>
                   </div>
                 </div>
               );
@@ -301,7 +322,9 @@ export default function P21() {
             const action = b.payload.decision.action;
             const after = (b.payload.decision.after ?? {}) as Record<string, unknown>;
             const params = (b.payload.decision.params ?? {}) as Record<string, unknown>;
-            const text = String(after.text ?? "");
+            const text = after.text === undefined || after.text === null || after.text === ""
+              ? ""
+              : clientChineseText(after.text, "简报内容暂时无法显示。");
             const dry = params.dry_run === true;
             return (
               <div key={b.event_id} className="rounded-lg border border-line bg-card p-3">
@@ -318,8 +341,8 @@ export default function P21() {
                 )}
                 {(action === "ceo.decision" || action === "initiative.launch") && (
                   <div className="mt-1.5 flex flex-wrap gap-2">
-                    <button onClick={() => void feedback(b.event_id, "up")} className="rounded border border-go/40 px-2 py-0.5 text-body text-go hover:bg-go/10">👍 有帮助</button>
-                    <button onClick={() => void feedback(b.event_id, "down")} className="rounded border border-warn/40 px-2 py-0.5 text-body text-warn hover:bg-warn/10">👎 需改进</button>
+                    <button onClick={() => void feedback(b.event_id, "up")} className="inline-flex items-center gap-1 rounded border border-go/40 px-2 py-0.5 text-body text-go hover:bg-go/10"><Icon name="like" size={14} />有帮助</button>
+                    <button onClick={() => void feedback(b.event_id, "down")} className="inline-flex items-center gap-1 rounded border border-warn/40 px-2 py-0.5 text-body text-warn hover:bg-warn/10"><Icon name="dislike" size={14} />需改进</button>
                   </div>
                 )}
               </div>

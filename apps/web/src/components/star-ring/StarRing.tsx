@@ -18,7 +18,13 @@ import { useLocation, useNavigate } from "react-router";
 import { ensureDemoLogin, trpc } from "../../lib/trpc";
 import { AgentActionMessage, HumanBubble } from "../hud/messages";
 import { AIFeedback } from "../AIFeedback";
-import { clientChineseText, clientIdentifierText, isNavigationActive } from "@workloom/ui";
+import {
+  Icon,
+  clientChineseText,
+  clientIdentifierText,
+  isNavigationActive,
+  useManagedSurface,
+} from "@workloom/ui";
 import { NAV_ENTRIES } from "../../shell/NavMenu";
 import { COMMON_STATUS_TEXT, dictText, THREAD_MODE_TEXT } from "../../lib/display";
 import { sharedLayoutPixels } from "../../lib/useAskRail";
@@ -57,14 +63,7 @@ interface DispatchResult {
 }
 
 function ClapperIcon({ size = 24 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
-      <rect x="2" y="7" width="20" height="13" rx="2.5" fill="#2a1500" />
-      <path d="M3.2 5.4 20.6 3.2l.5 2.6L3.7 8z" fill="#2a1500" />
-      <path d="M6.4 4.9l2 2.2M10.6 4.5l2 2.2M14.8 4l2 2.2" stroke="#ffb545" strokeWidth="1.1" />
-      <path d="M10.2 11.4v5.6l4.8-2.8z" fill="#ffb545" />
-    </svg>
-  );
+  return <Icon name="play" size={size} />;
 }
 
 /** 布局事件：通知 Bridge 预留右侧空间（同时在 window 落一份当前值，供后挂载的页面初始化读取） */
@@ -87,6 +86,17 @@ export function StarRing() {
   const msgSeq = useRef(0);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const collapsedTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const railSurface = useManagedSurface<HTMLDivElement>({
+    open: !hidden && !collapsed,
+    kind: "assistant-rail",
+    onDismiss: () => setCollapsed(true),
+    modal: compactViewport,
+    focusOnOpen: compactViewport,
+    restoreFocusOnClose: compactViewport,
+    initialFocusRef: inputRef,
+    returnFocusRef: collapsedTriggerRef,
+  });
 
   const chips = CONTEXT_CHIPS.find(([p]) => pathname.startsWith(p))?.[1] ?? DEFAULT_CHIPS;
   const pageLabel = NAV_ENTRIES.find((entry) => isNavigationActive(entry, pathname))?.title ?? "当前页面";
@@ -177,7 +187,7 @@ export function StarRing() {
     setInput("");
     try {
       await ensureDemoLogin();
-      const r = (await trpc.threads.dispatch.mutate({ title: text, presetKey: "frontdesk-agent" })) as DispatchResult;
+      const r = (await trpc.threads.dispatch.mutate({ title: text })) as DispatchResult;
       if (r.kind === "clarify") {
         pushMsg({
           role: "agent", action: "航线待确认", receipt: "unverified", refId: r.threadId,
@@ -185,7 +195,14 @@ export function StarRing() {
         });
       } else if (isQuestion(text)) {
         if (r.mode === "ask" && r.answer) {
-          pushMsg({ role: "agent", action: "AI 助手 · 应答", receipt: "synced", refId: r.threadId, text: r.answer, prompt: text });
+          pushMsg({
+            role: "agent",
+            action: "AI 助手 · 应答",
+            receipt: "synced",
+            refId: r.threadId,
+            text: clientChineseText(r.answer, "应答内容暂时无法显示，请稍后再试。"),
+            prompt: text,
+          });
         } else {
           pushMsg({
             role: "agent", action: "已转立项处理", receipt: "unverified", refId: r.threadId,
@@ -253,19 +270,23 @@ export function StarRing() {
   if (collapsed) {
     return (
       <div className="fixed inset-y-0 right-0 flex w-[var(--wl-assistant-compact)] flex-col items-center gap-3 border-l border-line bg-bg900/95 py-3 backdrop-blur-md" style={{ zIndex: "var(--wl-z-assistant)" }}>
-        <button
-          type="button"
-          onClick={() => setCollapsed(false)}
-          title="展开 AI 助手"
-          className="relative flex h-11 w-11 cursor-pointer items-center justify-center rounded-full gold-grad shadow-[0_0_24px_rgba(255,160,60,.5)]"
-        >
-          <ClapperIcon />
+        <div className="relative flex h-[calc(var(--wl-assistant-compact)-8px)] w-[calc(var(--wl-assistant-compact)-8px)] shrink-0 items-center justify-center">
+          <button
+            ref={collapsedTriggerRef}
+            type="button"
+            onClick={() => setCollapsed(false)}
+            title="展开 AI 助手"
+            aria-label="展开 AI 助手"
+            className="flex h-[calc(var(--wl-assistant-compact)-12px)] w-[calc(var(--wl-assistant-compact)-12px)] cursor-pointer items-center justify-center rounded-full gold-grad shadow-[0_0_24px_rgba(255,160,60,.5)]"
+          >
+            <ClapperIcon />
+          </button>
           {pendingCount > 0 && (
-            <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full border border-alert/70 bg-alert px-1 font-orb text-body font-bold text-ink shadow-[0_0_10px_rgba(255,77,109,.7)]">
+            <span className="pointer-events-none absolute right-0 top-0 flex h-5 min-w-5 items-center justify-center rounded-full border border-alert/70 bg-alert px-1 font-orb text-body font-bold text-ink shadow-[0_0_10px_rgba(255,77,109,.7)]">
               {pendingCount}
             </span>
           )}
-        </button>
+        </div>
         <div className="text-body tracking-[.25em] text-gold [writing-mode:vertical-rl]">AI 助手</div>
         <div className="flex-1" />
         <button
@@ -273,8 +294,9 @@ export function StarRing() {
           onClick={() => setCollapsed(false)}
           className="cursor-pointer rounded border border-line px-1.5 py-1 text-body text-ink3 hover:border-gline hover:text-gold"
           title="展开（⌘K）"
+          aria-label="展开 AI 助手"
         >
-          ⇤
+          <Icon name="chevron" size={16} />
         </button>
       </div>
     );
@@ -283,9 +305,9 @@ export function StarRing() {
   /* ---------- 展开态：320px 通栏对话框 ---------- */
   const rail = (
     <div
-      role={compactViewport ? "dialog" : undefined}
-      aria-modal={compactViewport ? true : undefined}
-      aria-label="AI 助手"
+      {...(!compactViewport ? railSurface : {})}
+      role={!compactViewport ? "complementary" : undefined}
+      aria-label={!compactViewport ? "AI 助手" : undefined}
       className="fixed inset-y-0 right-0 flex flex-col border-l border-gline/60 bg-bg900/95 shadow-[-20px_0_60px_rgba(0,0,0,.45)] backdrop-blur-md"
       style={{
         zIndex: "var(--wl-z-assistant)",
@@ -314,8 +336,9 @@ export function StarRing() {
         <span className="flex-1" />
         <button type="button" onClick={() => setCollapsed(true)}
           title="收起为图标条"
+          aria-label="收起 AI 助手"
           className="cursor-pointer rounded border border-line px-2 py-0.5 text-body text-ink3 hover:bg-card">
-          ⇥
+          <Icon className="rotate-180" name="chevron" size={16} />
         </button>
       </div>
 
@@ -365,7 +388,7 @@ export function StarRing() {
             onClick={() => void send(c)}
             className="cursor-pointer rounded-md border border-holo/35 bg-holo/5 px-2 py-0.5 text-body text-holo transition-colors hover:border-gline hover:text-gold"
           >
-            ⚡ {c}
+            <Icon name="lightning" size={13} /> {c}
           </button>
         ))}
       </div>
@@ -376,10 +399,17 @@ export function StarRing() {
   );
 
   return compactViewport ? (
-    <>
-      <button type="button" aria-label="收起 AI 助手" className="fixed inset-0 cursor-default bg-black/45" style={{ zIndex: "calc(var(--wl-z-assistant) - 1)" }} onClick={() => setCollapsed(true)} />
+    <div
+      {...railSurface}
+      role="dialog"
+      aria-modal="true"
+      aria-label="AI 助手"
+      className="fixed inset-0"
+      style={{ zIndex: "var(--wl-z-assistant)" }}
+    >
+      <button type="button" aria-label="收起 AI 助手" className="absolute inset-0 cursor-default bg-black/45" onClick={() => setCollapsed(true)} />
       {rail}
-    </>
+    </div>
   ) : rail;
 }
 

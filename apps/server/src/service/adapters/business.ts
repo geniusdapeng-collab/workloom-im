@@ -7,6 +7,7 @@
  * 后才会调用实现。
  */
 import type pg from "pg";
+import type { KbSearchLexicon } from "@workloom/base/service-kb";
 
 export const BUSINESS_TOOLS = ["query_order", "query_member", "query_catalog"] as const;
 export type BusinessTool = (typeof BUSINESS_TOOLS)[number];
@@ -97,6 +98,8 @@ export class BusinessAdapterError extends Error {
 
 export interface ServiceFrontBusinessAdapter {
   readonly id: string;
+  /** 仅在该适配器由已验证活动 Bundle 选中后注入知识检索；基座没有行业默认词表。 */
+  readonly kbLexicon?: KbSearchLexicon;
   classify(text: string): BusinessDialogMatch | null;
   ticketKind?(text: string): string | null;
   departmentForTicket?(kind: string): string | null;

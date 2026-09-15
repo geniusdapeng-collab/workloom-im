@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MateLive2D, type MateMood, type MateGesture } from "./loommate/MateLive2D";
 import { VoiceEngine } from "../voice/VoiceEngine";
 import { mateScriptOf, type BundleWelcomeProjection, type MateScript } from "./welcomeScripts";
+import { Icon } from "@workloom/ui";
 
 /** 织伴仪式音色（清晰优先；段间由真实 TTS 完成事件衔接） */
 const CEREMONY_VOICE = {
@@ -238,7 +239,7 @@ export function MateWelcome({ welcome, onBridge, onSkipAll }: {
               animation: "mw-line-in .5s ease both",
             }}>{line}</div>
           ))}
-          <div style={{ marginTop: 12, color: "#68707a", fontSize: 14, letterSpacing: 2 }}>单击画面快进 ›</div>
+          <div style={{ marginTop: 12, color: "#68707a", fontSize: 14, letterSpacing: 2, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>单击画面快进 <Icon name="chevron" size={13} /></div>
         </div>
       )}
 
@@ -252,7 +253,7 @@ export function MateWelcome({ welcome, onBridge, onSkipAll }: {
             background: "rgba(21,24,28,.72)", border: "1px solid rgba(214,220,228,.28)",
             borderRadius: 10, padding: "10px 20px",
           }}
-        >跳过开场，直接进入 ›</button>
+        >跳过开场，直接进入 <Icon name="chevron" size={13} style={{ display: "inline" }} /></button>
       )}
     </div>
   );

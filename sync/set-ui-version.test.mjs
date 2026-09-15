@@ -23,26 +23,34 @@ describe("UI 稳定版本接入", () => {
     assert.equal(resolveUiVersion(manifest, undefined, true), "0.1.0");
   });
 
-  it("只更新实际存在的客户端并写入可审计状态", () => {
+  it("默认只允许 latestStableVersion，拒绝任意显式版本", () => {
+    const stableManifest = { ...manifest, ui: { ...manifest.ui, latestStableVersion: "1.2.3" } };
+    assert.equal(resolveUiVersion(stableManifest), "1.2.3");
+    assert.equal(resolveUiVersion(stableManifest, "1.2.3"), "1.2.3");
+    assert.throws(() => resolveUiVersion(stableManifest, "1.2.4"), /不是当前稳定版/);
+  });
+
+  it("存量迁移只有显式关闭三端要求时才可分步写状态", () => {
     const repo = mkdtempSync(join(tmpdir(), "workloom-ui-adopt-"));
     mkdirSync(join(repo, "apps/web"), { recursive: true });
     writeFileSync(join(repo, "apps/web/package.json"), '{"dependencies":{"industry-only":"1.0.0"}}\n');
-    const touched = setUiVersion({ repo, version: "1.2.3", manifest });
+    const touched = setUiVersion({ repo, version: "1.2.3", manifest, requireAll: false });
     assert.deepEqual(touched, ["apps/web/package.json"]);
     const packageJson = JSON.parse(readFileSync(join(repo, "apps/web/package.json"), "utf8"));
     assert.equal(packageJson.dependencies["@workloom/ui"], "1.2.3");
     assert.equal(packageJson.dependencies["industry-only"], "1.0.0");
     const state = JSON.parse(readFileSync(join(repo, ".workloom-ui.json"), "utf8"));
     assert.equal(state.updatePolicy, "upgrade-pr-only");
+    assert.equal(state.releaseChannel, "stable");
     assert.deepEqual(state.allowedIndustryOverrides, manifest.ui.allowedIndustryOverrides);
   });
 
-  it("新行业严格模式要求三个生产客户端齐备", () => {
+  it("新行业默认要求三个生产客户端齐备", () => {
     const repo = mkdtempSync(join(tmpdir(), "workloom-ui-strict-"));
     mkdirSync(join(repo, "apps/web"), { recursive: true });
     writeFileSync(join(repo, "apps/web/package.json"), "{}\n");
     assert.throws(
-      () => setUiVersion({ repo, version: "1.2.3", manifest, requireAll: true }),
+      () => setUiVersion({ repo, version: "1.2.3", manifest }),
       /三个生产客户端/,
     );
   });

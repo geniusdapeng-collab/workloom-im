@@ -47,7 +47,7 @@ export function savedWorkspace() {
 
 export async function restoreSession(): Promise<boolean> {
   if (sessionStorage.getItem(ACCESS_KEY)) {
-    try { await trpc.members.me.query(); return true; } catch { sessionStorage.removeItem(ACCESS_KEY); }
+    try { await trpc.access.me.query(); return true; } catch { sessionStorage.removeItem(ACCESS_KEY); }
   }
   if (localStorage.getItem(GUEST_KEY) === "1") {
     try {

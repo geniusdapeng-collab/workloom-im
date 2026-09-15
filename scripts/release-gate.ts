@@ -11,8 +11,13 @@
  * 用法：pnpm release:gate（需要 server 运行于 SERVER_BASE，默认 http://localhost:8787）
  */
 import pg from "pg";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { charterSchema } from "@workloom/base/captain";
 
 const BASE = process.env.SERVER_BASE ?? "http://localhost:8787";
+const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const APP_URL = process.env.DATABASE_APP_URL ?? "postgres://workloom_app:workloom_dev_app@localhost:5432/workloom";
 const OWNER_URL = process.env.DATABASE_URL ?? "postgres://postgres:workloom@localhost:5432/workloom";
 const REQUESTED_WORKSPACE_ID = process.env.RELEASE_WORKSPACE_ID?.trim() || null;
@@ -72,6 +77,70 @@ const LLM_PROVIDER = process.env.LLM_PROVIDER ?? "mock";
 const envLabel = LLM_PROVIDER === "mock" ? "沙箱环境（内置 AI 模型驱动）" : `线上环境（独立模型服务：${LLM_PROVIDER}）`;
 console.log(`\n════════ WorkLoom 发布前核心链路校验门禁 ════════`);
 console.log(`环境适配：${envLabel} ｜ 目标：${BASE}\n`);
+
+// 三端导航、布局、状态与客户端 API 接线属于基座发布物，不得只发布 UI 包后
+// 让行业仓人工复制。这里在业务链路前验证双制品同版和唯一分发通道。
+await check("G-B0", "三端客户端同版分发契约", async () => {
+  const productPath = [REPO_ROOT, dirname(REPO_ROOT), dirname(dirname(REPO_ROOT))]
+    .map((directory) => join(directory, "product.manifest.json"))
+    .find((path) => existsSync(path));
+  assert(productPath, "缺少受保护产品身份 product.manifest.json");
+  const product = JSON.parse(readFileSync(productPath, "utf8"));
+  if (product.role === "base") {
+    const capabilities = JSON.parse(readFileSync(join(REPO_ROOT, "sync/base-capabilities.json"), "utf8"));
+    const uiPackage = JSON.parse(readFileSync(join(REPO_ROOT, "packages/ui/package.json"), "utf8"));
+    const scope = JSON.parse(readFileSync(join(REPO_ROOT, "sync/base-scope.json"), "utf8"));
+    const foundation = capabilities.clientFoundation;
+    assert(capabilities.releasePolicy === "base-first-stable-only", "基座发布策略不是 base-first-stable-only");
+    assert(foundation?.distribution === "stable-tag-upgrade-pr", "三端客户端基座未登记稳定标签 PR 分发");
+    assert(foundation?.candidateVersion === uiPackage.version, "客户端基座候选版与 @workloom/ui 不同版");
+    assert(foundation?.latestStableVersion === capabilities.ui?.latestStableVersion, "客户端基座与 @workloom/ui 稳定版错位");
+    for (const root of ["apps/web", "apps/webb", "apps/webc"]) {
+      assert(foundation.managedRoots?.includes(root), `客户端基座缺少 ${root}`);
+      assert(scope.exclude?.includes(`${root}/**`), `${root} 未排除普通 base-sync，存在双通道覆盖`);
+    }
+    for (const path of ["sync/client-foundation.mjs", ...foundation.requiredEntries]) {
+      assert(existsSync(join(REPO_ROOT, path)), `基座发布物缺少 ${path}`);
+    }
+    const taggedVersion = (process.env.GITHUB_REF_NAME ?? "").match(/^ui-v(.+)$/)?.[1];
+    if (taggedVersion) {
+      assert(foundation.latestStableVersion === taggedVersion, `标签 ${taggedVersion} 与客户端稳定版 ${foundation.latestStableVersion ?? "未登记"} 不一致`);
+    }
+    return `PC/B移动/C移动候选版 ${foundation.candidateVersion} · 稳定版 ${foundation.latestStableVersion ?? "尚未发布"}`;
+  }
+  const clientState = JSON.parse(readFileSync(join(REPO_ROOT, ".workloom-client-foundation.json"), "utf8"));
+  const uiState = JSON.parse(readFileSync(join(REPO_ROOT, ".workloom-ui.json"), "utf8"));
+  assert(clientState.updatePolicy === "upgrade-pr-only", "行业产品客户端基座更新策略无效");
+  assert(clientState.version === uiState.version, "行业产品客户端基座与共享 UI 不同版");
+  assert(existsSync(join(REPO_ROOT, "scripts/verify-client-foundation-consumer.mjs")), "缺少三端客户端基座消费门禁");
+  return `行业产品 ${product.productId} · 三端稳定版 ${clientState.version}`;
+});
+
+// 宪章从旧的固定业务字段升级为 Bundle 命名的 ranges/caps 后，基座不得
+// 猜测行业含义并自动改写。稳定发布前扫描全部存量档案；发现旧契约即阻断，
+// 由对应行业 Bundle 先完成可审计迁移，再继续发布。
+await check("G-B1", "存量治理宪章兼容性", async () => {
+  const owner = new pg.Client({ connectionString: OWNER_URL });
+  await owner.connect();
+  try {
+    const rows = await owner.query<{ workspace_id: string; charter: unknown }>(
+      `SELECT workspace_id, archive->'charter' AS charter
+       FROM profiles
+       WHERE archive ? 'charter'
+       ORDER BY workspace_id`,
+    );
+    const incompatible = rows.rows
+      .filter((row: { workspace_id: string; charter: unknown }) => !charterSchema.safeParse(row.charter).success)
+      .map((row: { workspace_id: string }) => row.workspace_id);
+    assert(
+      incompatible.length === 0,
+      `发现 ${incompatible.length} 个旧版/非法宪章：${incompatible.slice(0, 10).join("、")}；请由对应行业 Bundle 先迁移 archive.charter，基座拒绝猜测行业字段`,
+    );
+    return `已扫描 ${rows.rowCount ?? rows.rows.length} 个宪章档案，全部符合通用 ranges/caps 契约`;
+  } finally {
+    await owner.end();
+  }
+});
 
 // 健康前置
 await check("G-00", "服务健康前置", async () => {

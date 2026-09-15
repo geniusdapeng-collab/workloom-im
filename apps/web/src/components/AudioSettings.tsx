@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { AudioEngine, type AudioMode } from "../audio/AudioEngine";
 import { VoiceEngine, type VoiceGate } from "../voice/VoiceEngine";
-import { Button, Overlay } from "@workloom/ui";
+import { Button, Icon, Overlay } from "@workloom/ui";
 
 export function AudioSettings() {
   const [open, setOpen] = useState(false);
@@ -28,7 +28,7 @@ export function AudioSettings() {
         aria-haspopup="dialog"
         aria-expanded={open}
       >
-        <span aria-hidden>⚙ </span>视听
+        <Icon name="configuration" size={14} /> 视听
       </button>
       <Overlay
         open={open}

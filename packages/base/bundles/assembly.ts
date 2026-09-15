@@ -32,7 +32,9 @@ import {
   canonicalBundleArtifactPayload,
   formatContractError,
   parseBundleManifest,
+  parseWorkforcePresets,
   type BundleManifest,
+  type WorkforcePreset,
 } from "@workloom/industry-contract";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -359,6 +361,53 @@ export function readVerifiedBundleJsonAsset(
   return asset;
 }
 
+function workforceAssetIssues(error: unknown, assetPaths: string[]): string[] {
+  return formatContractError(error).map((message) => {
+    const matched = /^(\d+)(?:\.([^：]+))?：(.*)$/u.exec(message);
+    if (!matched) return message;
+    const assetPath = assetPaths[Number(matched[1])] ?? `第 ${Number(matched[1]) + 1} 个岗位资产`;
+    return `${assetPath}${matched[2] ? `（${matched[2]}）` : ""}：${matched[3]}`;
+  });
+}
+
+function parseBundleWorkforcePresets(
+  manifest: BundleManifest,
+  slug: string,
+  root: string,
+): WorkforcePreset[] {
+  const assetPaths = manifest.workloom.provides.presets;
+  const values = assetPaths.map((assetPath) => {
+    try {
+      return YAML.parse(readFileSync(verifiedAssetPath(slug, assetPath, root), "utf-8")) as unknown;
+    } catch (error) {
+      throw new BundleError(
+        "INVALID_INPUT",
+        `行业包「${slug}」岗位资产无法解析：${assetPath}（${String(error)}）`,
+      );
+    }
+  });
+  try {
+    return parseWorkforcePresets(values);
+  } catch (error) {
+    throw new BundleError(
+      "INVALID_INPUT",
+      `行业包「${slug}」岗位契约无效：${workforceAssetIssues(error, assetPaths).join("；")}`,
+    );
+  }
+}
+
+/**
+ * 读取经过 Bundle 完整性门禁与公共岗位 Schema 双重校验的班组资产。
+ * runtime、投影和种子入口共用此函数，禁止对岗位字段各自猜默认值。
+ */
+export function loadVerifiedBundleWorkforcePresets(
+  slug: string,
+  root = bundlesRoot(),
+): WorkforcePreset[] {
+  const manifest = loadVerifiedBundleManifest(slug, root);
+  return parseBundleWorkforcePresets(manifest, slug, root);
+}
+
 /**
  * 三端只消费这一份经过契约、兼容性与完整性校验的 UI 投影。
  * 禁止客户端自行读取 bundle.json、猜测当前行业，或在失败时回退到某个示例行业。
@@ -377,30 +426,10 @@ export interface BundleUiProjection {
 
 function presetActorTerminology(manifest: BundleManifest, slug: string, root: string): Record<string, string> {
   const labels: Record<string, string> = {};
-  for (const assetPath of manifest.workloom.provides.presets) {
-    const path = verifiedAssetPath(slug, assetPath, root);
-    let value: unknown;
-    try {
-      value = YAML.parse(readFileSync(path, "utf-8"));
-    } catch (error) {
-      throw new BundleError("INVALID_INPUT", `行业包「${slug}」岗位清单不可解析：${assetPath}（${String(error)}）`);
-    }
-    if (!value || typeof value !== "object") {
-      throw new BundleError("INVALID_INPUT", `行业包「${slug}」岗位清单不是对象：${assetPath}`);
-    }
-    const preset = value as { preset_key?: unknown; name?: unknown };
-    if (typeof preset.preset_key !== "string" || typeof preset.name !== "string") {
-      throw new BundleError("INVALID_INPUT", `行业包「${slug}」岗位清单缺少岗位标识或中文岗位名：${assetPath}`);
-    }
-    const key = preset.preset_key.trim();
-    const name = preset.name.trim();
-    if (!/^[a-z][a-z0-9-]{1,79}$/.test(key) || !/[\u3400-\u9fff]/u.test(name)) {
-      throw new BundleError("INVALID_INPUT", `行业包「${slug}」岗位标识或中文岗位名无效：${assetPath}`);
-    }
+  for (const preset of parseBundleWorkforcePresets(manifest, slug, root)) {
+    const key = preset.preset_key;
+    const name = preset.name;
     const terminologyKey = `actor.${key}`;
-    if (labels[terminologyKey]) {
-      throw new BundleError("INVALID_INPUT", `行业包「${slug}」重复声明岗位标识：${key}`);
-    }
     labels[terminologyKey] = name;
   }
   return labels;
@@ -487,15 +516,6 @@ export function listSelfServiceBundles(root = bundlesRoot()): SelfServiceBundleR
   };
 }
 
-interface PresetYml {
-  preset_key?: string;
-  name?: string;
-  version?: string;
-  readonly?: boolean;
-  fence_bindings?: string[];
-  tools?: Array<{ name: string }>;
-}
-
 interface FenceYml {
   version?: string;
   rules?: Array<{ rule_id: string; is_baseline?: boolean }>;
@@ -527,7 +547,7 @@ export interface BundleDiskAssets {
   archiveSchema: { properties?: Record<string, unknown>; required?: string[] } | null;
   objectsJson: { objects?: Array<{ type: string; label: string }> } | null;
   stagesJson: { stages?: Array<{ id: string; label: string }> } | null;
-  presets: PresetYml[];
+  presets: WorkforcePreset[];
   fenceFiles: string[];
   fencePacks: FenceYml[];
   uiCases: UiCasesJson | null;
@@ -553,10 +573,6 @@ function loadBundleDiskAssets(dir: string, slug: string): BundleDiskAssets {
   const readDeclaredJson = <T,>(assetPath: string | undefined): T | null => assetPath
     ? readJson<T>(verifiedAssetPath(slug, assetPath, bundleRoot))
     : null;
-  const presetAssets = provides.presets.map((assetPath) => ({
-    assetPath,
-    value: YAML.parse(readFileSync(verifiedAssetPath(slug, assetPath, bundleRoot), "utf-8")) as PresetYml,
-  }));
   const fenceAssets = provides.fences.map((assetPath) => ({
     assetPath,
     value: YAML.parse(readFileSync(verifiedAssetPath(slug, assetPath, bundleRoot), "utf-8")) as FenceYml,
@@ -568,7 +584,7 @@ function loadBundleDiskAssets(dir: string, slug: string): BundleDiskAssets {
     archiveSchema: readDeclaredJson(schemaPath("/archive.schema.json")),
     objectsJson: readDeclaredJson(schemaPath("/objects.json")),
     stagesJson: readDeclaredJson(schemaPath("/stages.json")),
-    presets: presetAssets.map(({ value }) => value).filter((preset) => preset?.preset_key),
+    presets: parseBundleWorkforcePresets(bj, slug, bundleRoot),
     fenceFiles: fenceAssets.map(({ assetPath }) => assetPath.split("/").at(-1) ?? assetPath),
     fencePacks: fenceAssets.map(({ value }) => value).filter((fence) => fence?.version),
     uiCases: readDeclaredJson(uiCasesPath),

@@ -11,6 +11,7 @@ import {
   canonicalBundleArtifactPayload,
   formatContractError,
   parseBundleManifest,
+  WorkforcePresetCollectionSchema,
   type BundleManifest,
 } from "../packages/industry-contract/src/index.ts";
 import { BASE_NAVIGATION, NAVIGATION_GROUP_ORDER, type IconName } from "../packages/ui/src/navigation.ts";
@@ -153,68 +154,24 @@ function verifyPresetAssets(directory: string, label: string, manifest: BundleMa
     if (!declaredSet.has(path)) errors.push(`${label}：岗位资产未在清单声明：${path}`);
   }
 
-  const seenKeys = new Set<string>();
-  const seenCoveragePrefixes = new Map<string, string>();
+  const documents: Array<{ assetPath: string; value: unknown }> = [];
   for (const assetPath of declared) {
     const absolute = resolve(directory, assetPath);
     if (!absolute.startsWith(`${directory}${sep}`) || !existsSync(absolute)) continue;
-    let value: unknown;
     try {
-      value = YAML.parse(readFileSync(absolute, "utf8"));
+      documents.push({ assetPath, value: YAML.parse(readFileSync(absolute, "utf8")) });
     } catch (error) {
       errors.push(`${label}：岗位资产无法解析：${assetPath}（${String(error)}）`);
-      continue;
     }
-    if (!value || typeof value !== "object") {
-      errors.push(`${label}：岗位资产必须是对象：${assetPath}`);
-      continue;
-    }
-    const preset = value as Record<string, unknown>;
-    const presetKey = typeof preset.preset_key === "string" ? preset.preset_key.trim() : "";
-    const name = typeof preset.name === "string" ? preset.name.trim() : "";
-    if (!/^[a-z][a-z0-9-]{1,79}$/.test(presetKey)) errors.push(`${label}：${assetPath} 缺少合法岗位标识`);
-    else if (seenKeys.has(presetKey)) errors.push(`${label}：重复岗位标识 ${presetKey}`);
-    else seenKeys.add(presetKey);
-    if (!name || !/\p{Script=Han}/u.test(name)) errors.push(`${label}：${assetPath} 必须声明中文岗位名`);
-    if (typeof preset.readonly !== "boolean" || typeof preset.night_shift !== "boolean") {
-      errors.push(`${label}：${assetPath} 必须显式声明只读属性与夜班属性`);
-    }
-    if (!Array.isArray(preset.fence_bindings)) errors.push(`${label}：${assetPath} 必须显式声明围栏绑定数组`);
-    if (preset.readonly === false && Array.isArray(preset.fence_bindings) && preset.fence_bindings.length === 0) {
-      errors.push(`${label}：${assetPath} 是可写岗位但没有围栏绑定`);
-    }
-    const tools = Array.isArray(preset.tools) ? preset.tools : [];
-    const writeTools = tools.filter((tool) => tool && typeof tool === "object"
-      && (tool as Record<string, unknown>).access === "write");
-    if (preset.readonly === true && writeTools.length > 0) {
-      errors.push(`${label}：${assetPath} 是只读岗位但声明了写工具`);
-    }
-    if (preset.readonly === false && writeTools.length === 0) {
-      errors.push(`${label}：${assetPath} 是可写岗位但没有可执行写工具`);
-    }
-    if (!Array.isArray(preset.coverage)) {
-      errors.push(`${label}：${assetPath} 必须显式声明岗位覆盖数组（只读岗位也必须写 coverage: []）`);
-    } else {
-      if (preset.readonly === false && preset.coverage.length === 0) {
-        errors.push(`${label}：${assetPath} 是可写岗位但没有任何事件覆盖声明`);
-      }
-      for (const item of preset.coverage) {
-        if (!item || typeof item !== "object") {
-          errors.push(`${label}：${assetPath} 的岗位覆盖项必须是对象`);
-          continue;
-        }
-        const row = item as Record<string, unknown>;
-        const prefix = typeof row.eventPrefix === "string" ? row.eventPrefix.trim()
-          : typeof row.event_prefix === "string" ? row.event_prefix.trim() : "";
-        const coverageLabel = typeof row.label === "string" ? row.label.trim() : "";
-        if (!/^[a-z][a-z0-9_-]*(?:\.[a-z0-9_-]+)*\.$/.test(prefix) || !/\p{Script=Han}/u.test(coverageLabel)) {
-          errors.push(`${label}：${assetPath} 的岗位覆盖声明必须包含以点结尾的事件前缀与中文名称`);
-          continue;
-        }
-        const previous = seenCoveragePrefixes.get(prefix);
-        if (previous) errors.push(`${label}：事件前缀 ${prefix} 被 ${previous} 与 ${assetPath} 重复认领`);
-        else seenCoveragePrefixes.set(prefix, assetPath);
-      }
+  }
+
+  const workforce = WorkforcePresetCollectionSchema.safeParse(documents.map((item) => item.value));
+  if (!workforce.success) {
+    for (const issue of workforce.error.issues) {
+      const [rawIndex, ...fieldPath] = issue.path;
+      const source = typeof rawIndex === "number" ? documents[rawIndex]?.assetPath : undefined;
+      const field = fieldPath.length > 0 ? `（${fieldPath.join(".")}）` : "";
+      errors.push(`${label}：${source ?? "岗位资产"}${field}：${issue.message}`);
     }
   }
 }

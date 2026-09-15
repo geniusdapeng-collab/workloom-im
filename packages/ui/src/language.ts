@@ -160,11 +160,30 @@ function normalizeKey(key: string): string {
 const RAW_MACHINE_TEXT = /\b(?:bundle_id|bundleId|event_id|fence_bindings|preset_key|reasonEnum|request_id|tenant_id|workspace_id|SELECT|INSERT|UPDATE|DELETE|FROM|WHERE|Internal Server Error)\b/i;
 const ENGINEERING_TEXT = /(?:^|[^A-Za-z0-9])(?:P|F|E|L)\d+(?:\.\d+)?(?:$|[^A-Za-z0-9])/;
 const SAFE_UNAVOIDABLE_TERM = /^(?:AI|API|H5|OAuth|SLA|URL|WorkLoom)$/i;
+const RAW_FIELD_TOKEN = /(?:^|[^A-Za-z0-9])(?:[a-z][a-z0-9]*_[a-z0-9_]+|[a-z][a-z0-9]*[A-Z][A-Za-z0-9]*|[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+)(?=$|[^A-Za-z0-9])/;
+const CLIENT_LATIN_TOKEN = /(?:[A-Za-z][A-Za-z0-9]*|[0-9]+[A-Za-z][A-Za-z0-9]*)(?:[.-][A-Za-z0-9]+)*/g;
+const SAFE_CLIENT_LATIN_TERMS = new Set([
+  "3D", "AI", "API", "B", "C", "DSL", "GEO", "H5", "IM", "KPI", "LLM", "MVP", "OAuth",
+  "PC", "RLS", "ROI", "SLA", "URL", "WorkLoom",
+]);
+
+function hasUnknownLatinTerm(text: string): boolean {
+  const tokens = text.match(CLIENT_LATIN_TOKEN) ?? [];
+  return tokens.some((token) =>
+    !SAFE_CLIENT_LATIN_TERMS.has(token)
+    && !/^v\d+(?:\.\d+)*$/i.test(token)
+    // 用户可核对的业务编号不是代码字段；仅允许大写短前缀 + 数字段，
+    // 小写内部主键、snake_case、camelCase 仍会被前置规则拦截。
+    && !/^(?:[A-Z]{1,8}-?\d{1,20}|[A-Z]{1,8}(?:-\d{1,20}){2,})$/.test(token),
+  );
+}
 
 function unsafeMachineText(text: string): boolean {
   return RAW_MACHINE_TEXT.test(text)
+    || RAW_FIELD_TOKEN.test(text)
     || ENGINEERING_TEXT.test(text)
-    || /^[\[{][\s\S]*[\]}]$/.test(text);
+    || /^[\[{][\s\S]*[\]}]$/.test(text)
+    || (/[㐀-鿿]/.test(text) && hasUnknownLatinTerm(text));
 }
 
 export function isKnownClientField(key: string): boolean {
@@ -181,7 +200,7 @@ export function clientFieldLabel(key: string, options: ClientFieldOptions = {}):
 
 export function clientStatusLabel(value: string): string {
   const normalized = normalizeKey(value);
-  return STATUS_LABELS[normalized] ?? (/[一-鿿]/.test(value) ? value : "状态待确认");
+  return STATUS_LABELS[normalized] ?? (/[一-鿿]/.test(value) && !unsafeMachineText(value) ? value.trim() : "状态待确认");
 }
 
 /**

@@ -29,14 +29,14 @@ import {
 } from "../../components/hud";
 import { MEMBER_ROLE_TEXT, OBJECT_TYPE_TEXT, THREAD_MODE_TEXT, actorText, dictText, shortId, versionText } from "../../lib/display";
 import { CreditsPanel } from "../../components/CreditsPanel";
-import { clientChineseText, clientValueText } from "@workloom/ui";
+import { Icon, clientChineseText, clientValueText } from "@workloom/ui";
+import { useNavigationAccess } from "../../shell/NavigationAccess";
 
 /* ---------- 类型（与 server router 对齐） ---------- */
 interface ThreadRow {
   id: string; title: string; mode: string; status: string;
   progress_done: number; progress_total: number; agent_id: string | null; created_at: string;
 }
-interface Me { identity: { plan: string; name: string; role: string }; capabilities: { quest: boolean; nightShift: boolean; inspection: boolean } }
 interface ProfileResp { archive?: Record<string, unknown>; stage: string | null; name: string }
 
 const THREAD_DOT: Record<string, string> = {
@@ -45,12 +45,12 @@ const THREAD_DOT: Record<string, string> = {
 };
 
 export default function P1() {
+  const { entries, subject, plan: accessPlan, capabilities, canAction } = useNavigationAccess();
   const [params] = useSearchParams();
   const demo = params.get("demo"); // 演示走查强制态（数据接线不变）
 
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [me, setMe] = useState<Me | null>(null);
   const [threads, setThreads] = useState<ThreadRow[]>([]);
   const [night, setNight] = useState<{ configured: boolean; run?: { id: string; status: string; fenceSnapshot: string | null; stats: { done: number; pending: number; need_human: number; credits_used: number } | null } } | null>(null);
   const [insp, setInsp] = useState<{ lastRunAt: string | null; totalChecks: number; okCount: number; attention: Array<{ eventId: string; severity: string; summary: string; objectType: string; objectId?: string }> } | null>(null);
@@ -68,21 +68,25 @@ export default function P1() {
   const [draft, setDraft] = useState("");
   const [dispatchState, setDispatchState] = useState<"empty" | "typing" | "routing">("empty");
   const [clarify, setClarify] = useState<string | null>(null);
+  const canViewInbox = entries.some((entry) => entry.route === "/inbox");
+  const canViewNight = entries.some((entry) => entry.route === "/night");
+  const canViewMembers = entries.some((entry) => entry.route === "/members");
+  const canInspect = capabilities.inspection !== false;
+  const canDispatch = canAction("task.dispatch");
 
   const load = useCallback(async () => {
     try {
       await ensureDemoLogin();
-      const [meR, th, ni, ins, ap, prof, ag, mb] = await Promise.all([
-        trpc.members.me.query() as Promise<Me>,
+      const [th, ni, ins, ap, prof, ag, mb] = await Promise.all([
         trpc.threads.list.query() as Promise<ThreadRow[]>,
-        trpc.nightShift.current.query() as Promise<typeof night>,
-        trpc.inspection.status.query() as Promise<typeof insp>,
-        trpc.approvals.list.query({ status: "pending" }) as Promise<unknown[]>,
+        canViewNight ? trpc.nightShift.current.query() as Promise<typeof night> : Promise.resolve(null),
+        canInspect ? trpc.inspection.status.query() as Promise<typeof insp> : Promise.resolve(null),
+        canViewInbox ? trpc.approvals.list.query({ status: "pending" }) as Promise<unknown[]> : Promise.resolve([]),
         trpc.workspace.profile.query() as Promise<ProfileResp>,
         trpc.workspace.agents.query() as Promise<typeof agents>,
-        trpc.members.list.query() as Promise<typeof members>,
+        canViewMembers ? trpc.members.list.query() as Promise<typeof members> : Promise.resolve([]),
       ]);
-      setMe(meR); setThreads(th); setNight(ni); setInsp(ins);
+      setThreads(th); setNight(ni); setInsp(ins);
       setPendingCount(ap.length); setProfile(prof); setAgents(ag ?? []); setMembers(mb ?? []);
       setError(null);
     } catch (e) {
@@ -91,23 +95,23 @@ export default function P1() {
     } finally {
       setReady(true);
     }
-  }, []);
+  }, [canInspect, canViewInbox, canViewMembers, canViewNight]);
 
   useEffect(() => {
     void load();
     const t1 = setInterval(() => { // 线程/夜班 5s（F3.4）
       trpc.threads.list.query().then((r) => setThreads(r as ThreadRow[])).catch(() => undefined);
-      trpc.nightShift.current.query().then((r) => setNight(r as typeof night)).catch(() => undefined);
+      if (canViewNight) trpc.nightShift.current.query().then((r) => setNight(r as typeof night)).catch(() => undefined);
     }, 5000);
     const t2 = setInterval(() => { // 其余 10s（D6）
-      trpc.inspection.status.query().then((r) => setInsp(r as typeof insp)).catch(() => undefined);
-      trpc.approvals.list.query({ status: "pending" }).then((r) => setPendingCount((r as unknown[]).length)).catch(() => undefined);
+      if (canInspect) trpc.inspection.status.query().then((r) => setInsp(r as typeof insp)).catch(() => undefined);
+      if (canViewInbox) trpc.approvals.list.query({ status: "pending" }).then((r) => setPendingCount((r as unknown[]).length)).catch(() => undefined);
     }, 10000);
     return () => { clearInterval(t1); clearInterval(t2); };
-  }, [load]);
+  }, [canInspect, canViewInbox, canViewNight, load]);
 
   /* ---------- 派生状态 ---------- */
-  const plan = demo === "p1_community" ? "community" : (me?.identity.plan ?? "pro");
+  const plan = demo === "p1_community" ? "community" : (accessPlan ?? "community");
   const isCommunity = plan === "community";
   const nightConfigured = !!night?.configured;
   const pillState: NightPillState = !nightConfigured
@@ -128,7 +132,7 @@ export default function P1() {
 
   /* ---------- 派遣（P1E1：含糊→反问不建任务 F3.2；成功→完成后态新线程顶部 0/y 蓝呼吸 F3.4） ---------- */
   const dispatch = useCallback(async (text: string, presetKey?: string) => {
-    if (!text.trim()) return;
+    if (!canDispatch || !text.trim()) return;
     const selectedAgent = presetKey ?? agents[0]?.preset_key;
     if (!selectedAgent) {
       setError("当前没有可接单的数字员工，请先在团队中心完成装配。");
@@ -142,7 +146,7 @@ export default function P1() {
         presetKey: selectedAgent,
       });
       if (r.kind === "clarify") {
-        setClarify(r.question ?? "请补充目标与时间"); // 反问澄清，不留任务
+        setClarify(clientChineseText(r.question, "请补充目标与时间")); // 反问澄清，不留任务
       } else {
         setDraft("");
         await load(); // 完成后态：新线程出现列表顶部
@@ -154,7 +158,7 @@ export default function P1() {
       // #18 修复：用 text.trim() 判断而非闭包旧值 draft（setDraft 异步，闭包内 draft 未更新）
       setDispatchState(text.trim() ? "typing" : "empty");
     }
-  }, [agents, load]);
+  }, [agents, canDispatch, load]);
 
   /* ---------- 状态变体 ---------- */
   const isLoading = demo === "p1_loading" || !ready;
@@ -164,24 +168,24 @@ export default function P1() {
   const left = (
     <>
       <div className="mb-2 px-1 text-body tracking-[.2em] text-ink3">任务会话</div>
-      {!isCommunity && nightConfigured && (
+      {!isCommunity && canViewNight && nightConfigured && (
         <div className="mb-1.5 cursor-pointer rounded-lg border border-holo/35 bg-holo/5 px-3 py-2.5">
           <div className="flex items-center justify-between">
-            <span className="text-body text-holo">📌 夜班中心频道</span>
+            <span className="inline-flex items-center gap-1 text-body text-holo"><Icon name="pin" size={13} />夜班中心频道</span>
             <span className={`inline-block h-1.5 w-1.5 rounded-full ${night?.run?.status === "running" ? "bg-holo animate-pulse-hud" : "bg-ink3"}`} />
           </div>
           <div className="mt-0.5 text-body text-ink2">夜班班组实时协作</div>
         </div>
       )}
-      {nightConfigured && night?.run?.stats && (
+      {canViewNight && nightConfigured && night?.run?.stats && (
         <div className="mb-1.5 cursor-pointer rounded-lg border border-gline bg-gold/5 px-3 py-2.5">
-          <div className="text-body text-gold">📌 昨夜日报</div>
+          <div className="inline-flex items-center gap-1 text-body text-gold"><Icon name="pin" size={13} />昨夜日报</div>
           <div className="mt-0.5 text-body text-ink2">
-            ✓{night.run.stats.done} ◆{night.run.stats.pending} ▲{night.run.stats.need_human}
+            完成 {night.run.stats.done} · 待审批 {night.run.stats.pending} · 求援 {night.run.stats.need_human}
           </div>
         </div>
       )}
-      {pendingCount > 0 && (
+      {canViewInbox && pendingCount > 0 && (
         <div className="mb-1.5 cursor-pointer rounded-lg border border-warn/40 bg-warn/5 px-3 py-2.5">
           <div className="flex items-center justify-between">
             <span className="text-body text-warn">待办 · 审批请求</span>
@@ -230,7 +234,7 @@ export default function P1() {
         )}
       </div>
       {/* 夜班班组状态卡（社区版隐藏，F7.2） */}
-      {!isCommunity && (
+      {!isCommunity && canViewNight && (
         <div className="mb-3 rounded-lg border border-line bg-card p-3">
           <div className="mb-1.5 text-body font-bold text-holo">夜班中心</div>
           <NightStatusPill state={pillState} window="22:00–08:00" onClick={() => { window.location.href = "/night"; }} />
@@ -238,7 +242,7 @@ export default function P1() {
         </div>
       )}
       {/* 在线成员（人机混编 P1E6） */}
-      <div className="mb-3 rounded-lg border border-line bg-card p-3">
+      {(canViewMembers || agents.length > 0) && <div className="mb-3 rounded-lg border border-line bg-card p-3">
         <div className="mb-1.5 text-body font-bold text-holo">在线成员 · {members.length + agents.length}</div>
         <div className="space-y-1">
           {members.map((m) => (
@@ -257,9 +261,9 @@ export default function P1() {
             </div>
           ))}
         </div>
-      </div>
+      </div>}
       {/* 渠道巡检状态 */}
-      {me?.capabilities.inspection !== false && (
+      {canInspect && (
         <div className="rounded-lg border border-line bg-card p-3">
           <div className="mb-1.5 text-body font-bold text-holo">渠道巡检</div>
           <div className="font-orb text-h2 font-bold text-ink">{insp ? `${insp.okCount}/${insp.totalChecks}` : "—"}</div>
@@ -281,7 +285,7 @@ export default function P1() {
 
         {/* v3.0 积分账本（三池余额 + 加油包；P1 商业化产品化） */}
         <details className="mb-3 rounded-lg border border-line/60 bg-white/[0.02] px-3 py-2">
-          <summary className="cursor-pointer text-body text-ink3">💎 积分账本与加油包（三池余额 / 消耗流水）</summary>
+          <summary className="cursor-pointer text-body text-ink3"><Icon name="ledger" size={14} className="inline" /> 积分账本与加油包（三池余额 / 消耗流水）</summary>
           <div className="pt-2"><CreditsPanel /></div>
         </details>
 
@@ -303,11 +307,11 @@ export default function P1() {
           <div className="flex-1 space-y-3.5">
             <SystemDivider
               time={new Date().toTimeString().slice(0, 5)}
-              summary={`${profile?.name ?? "演示工作区"} · ${me?.identity.name ?? ""} 已上线（演示身份）`}
+              summary={`${profile?.name ?? "演示工作区"} · ${subject?.name ?? ""} 已上线`}
             />
 
             {/* P1E3 交接班卡（夜班未启用 → 空态「去配置」F4.8） */}
-            {!isCommunity && (
+            {!isCommunity && canViewNight && (
               night?.run?.stats ? (
                 <HandoffCard
                   data={{
@@ -330,7 +334,7 @@ export default function P1() {
             </div>
 
             {/* P1E4 巡检雷达推送（同事件幂等/按严重度排序/无异常显正常——服务端 L9.3 保证） */}
-            {me?.capabilities.inspection !== false && (
+            {canInspect && (
               <div className="space-y-2">
                 {(insp?.attention.length ?? 0) === 0 ? (
                   <RadarAllClear />
@@ -340,11 +344,11 @@ export default function P1() {
                       key={a.eventId}
                       severity={a.severity === "high" ? "p0" : a.severity === "medium" ? "p1" : "p2"}
                       eventId={a.eventId}
-                      title={a.summary}
+                      title={clientChineseText(a.summary, "发现一项需要关注的巡检异常")}
                       source={dictText(OBJECT_TYPE_TEXT, a.objectType)}
-                      onDispatch={() => {
+                      onDispatch={canDispatch ? () => {
                         void trpc.inspection.dispatch.mutate({ anomalyEventId: a.eventId }).then(() => load());
-                      }}
+                      } : undefined}
                     />
                   ))
                 )}
@@ -366,7 +370,7 @@ export default function P1() {
 
             {isEmpty && (
               <EmptyState
-                icon="🌌"
+                icon={<Icon name="star" size={24} />}
                 title="今夜风平浪静"
                 hint="还没有会话、待办与异常——选择一位数字员工或说出第一句话，团队即刻开工"
               />
@@ -385,7 +389,7 @@ export default function P1() {
 
         {/* 底部航线设定台（P1E1）+ 快捷目标（P1E7；社区版隐藏 Quest 类 F7.2） */}
         <div className="mt-4 space-y-2">
-          {!isCommunity && (
+          {canDispatch && !isCommunity && (
             <div className="flex flex-wrap gap-1.5">
               {quickGoals.map((g) => (
                 <button
@@ -394,19 +398,19 @@ export default function P1() {
                   onClick={() => void dispatch(g.text, g.preset)}
                   className="cursor-pointer rounded-md border border-line bg-card px-2.5 py-1 text-body text-ink2 transition-colors hover:border-gline hover:text-gold"
                 >
-                  ⚡ {g.label}
+                  <Icon name="lightning" size={13} className="inline" /> {g.label}
                 </button>
               ))}
             </div>
           )}
-          <DispatchBar
+          {canDispatch && <DispatchBar
             state={dispatchState}
             value={draft}
             chips={[profile?.name ?? "当前工作区", `阶段：${clientValueText(profile?.stage)}`]}
             onCancelRoute={() => setDispatchState(draft ? "typing" : "empty")}
             onChange={(v) => { setDraft(v); setDispatchState(v ? "typing" : "empty"); }}
             onSubmit={() => void dispatch(draft)}
-          />
+          />}
         </div>
       </div>
     </Bridge>

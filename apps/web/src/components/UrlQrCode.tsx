@@ -169,6 +169,7 @@ export function UrlQrCode({ value, size = 112 }: { value: string; size?: number 
   ))).join(""), [matrix]);
   return (
     <svg
+      data-wl-custom-graphic="generated-qr-code"
       viewBox={`0 0 ${SIZE + 8} ${SIZE + 8}`}
       width={size}
       height={size}

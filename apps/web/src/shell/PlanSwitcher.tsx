@@ -4,7 +4,9 @@
  * → 重签 JWT → 整页重载，各页权限态即时生效（隐藏非置灰 E2.6；越版调用 403+升级提示 H-10）
  */
 import { useEffect, useRef, useState } from "react";
-import { ensureDemoLogin, setToken, trpc } from "../lib/trpc";
+import { setToken, trpc } from "../lib/trpc";
+import { useNavigationAccess } from "./NavigationAccess";
+import { Icon } from "@workloom/ui";
 
 const PLAN_LABEL: Record<string, string> = {
   community: "社区版", pro: "专业版", teams: "团队版", vpc: "专有部署版",
@@ -12,20 +14,15 @@ const PLAN_LABEL: Record<string, string> = {
 const PLAN_ORDER = ["community", "pro", "teams", "vpc"] as const;
 
 export function PlanSwitcher({ onPlan }: { onPlan?: (plan: string) => void }) {
-  const [plan, setPlan] = useState<string | null>(null);
+  const { plan, canAction } = useNavigationAccess();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    void (async () => {
-      await ensureDemoLogin();
-      const me = await trpc.members.me.query() as { identity: { plan: string } };
-      setPlan(me.identity.plan);
-      onPlan?.(me.identity.plan);
-    })();
-  }, [onPlan]);
+    if (plan) onPlan?.(plan);
+  }, [onPlan, plan]);
 
   useEffect(() => {
     if (!open) return;
@@ -63,19 +60,19 @@ export function PlanSwitcher({ onPlan }: { onPlan?: (plan: string) => void }) {
     <div ref={ref} className="relative">
       <button
         type="button"
-        onClick={() => setOpen(!open)}
-        title="点击切换演示版本，权限范围会即时更新"
+        onClick={() => { if (canAction("tenant.plan.manage")) setOpen(!open); }}
+        title={canAction("tenant.plan.manage") ? "点击切换演示版本，权限范围会即时更新" : "当前身份只能查看版本"}
         aria-haspopup="menu"
         aria-expanded={open}
-        className={`cursor-pointer rounded-full border px-2.5 py-1 text-body font-bold transition ${
+        className={`rounded-full border px-2.5 py-1 text-body font-bold transition ${canAction("tenant.plan.manage") ? "cursor-pointer" : "cursor-default"} ${
           plan === "community"
             ? "border-line text-ink3 hover:border-gline"
             : "border-gold/50 bg-gold/8 text-goldhi hover:border-gold"
         }`}
       >
-        {PLAN_LABEL[plan] ?? "版本待确认"} ▾
+        <span className="inline-flex items-center gap-1">{PLAN_LABEL[plan] ?? "版本待确认"}{canAction("tenant.plan.manage") && <Icon name="chevron" size={12} className="rotate-90" />}</span>
       </button>
-      {open && (
+      {open && canAction("tenant.plan.manage") && (
         <div className="absolute right-0 top-8 z-30 w-44 max-w-[calc(100vw-1rem)] rounded-lg border border-line bg-bg950/95 p-1.5 shadow-[0_12px_40px_rgba(0,0,0,.6)] backdrop-blur-md" role="menu" aria-label="切换演示版本">
           <div className="px-2 pb-1 pt-1 text-body tracking-[.15em] text-ink3">版本切换演示</div>
           {PLAN_ORDER.map((p) => (
@@ -96,7 +93,7 @@ export function PlanSwitcher({ onPlan }: { onPlan?: (plan: string) => void }) {
               </span>
             </button>
           ))}
-          {err && <div className="px-2 py-1 text-body text-alert">✗ {err}</div>}
+          {err && <div className="flex items-start gap-1 px-2 py-1 text-body text-alert"><Icon name="error" size={13} className="mt-0.5 shrink-0" />{err}</div>}
         </div>
       )}
     </div>

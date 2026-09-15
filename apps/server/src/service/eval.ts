@@ -7,6 +7,7 @@
  *  - 硬轨零 token；软题 L3 阅卷 P1 接入（judgeRubric 已入库待用）。
  */
 import { randomUUID } from "node:crypto";
+import type pg from "pg";
 import { getGatewayPool } from "@workloom/db";
 import { svcQuery, serviceTx } from "./events.js";
 import { handleMessage } from "./dialog.js";
@@ -681,8 +682,8 @@ export async function runCandidateOnboardingExam(
 export async function listExams(workspaceId: string, limit = 20): Promise<ExamSummary[]> {
   const rows = await svcQuery<Record<string, unknown> & { id: string }>(
     workspaceId,
-    `SELECT * FROM eval_exams ORDER BY started_at DESC LIMIT $2`,
-    [limit],
+    `SELECT * FROM eval_exams WHERE workspace_id=$1 ORDER BY started_at DESC LIMIT $2`,
+    [workspaceId, limit],
   );
   return rows.map((e) => ({
     id: e.id as string,
@@ -703,10 +704,10 @@ export async function listExams(workspaceId: string, limit = 20): Promise<ExamSu
 export async function listCandidateResults(workspaceId: string, examId: string) {
   return svcQuery<Record<string, unknown>>(
     workspaceId,
-    `SELECT agent_id, role_title, dimension_scores, declared_skills, installed_skills, installed_tools,
+     `SELECT agent_id, role_title, dimension_scores, declared_skills, installed_skills, installed_tools,
             passed, red_line_hit, failure_reasons
      FROM eval_candidate_results WHERE workspace_id=$1 AND exam_id=$2 ORDER BY created_at, agent_id`,
-    [examId],
+    [workspaceId, examId],
   );
 }
 
@@ -720,28 +721,51 @@ export async function listAnswers(workspaceId: string, examId: string) {
   return svcQuery<Record<string, unknown>>(workspaceId,
     `SELECT a.*, q.subject, q.structure, q.red_line, q.tags, q.scenario
      FROM eval_answers a JOIN eval_questions q ON q.id = a.question_id
-     WHERE a.exam_id=$2 ORDER BY a.created_at`,
-    [examId]);
+     WHERE a.workspace_id=$1 AND a.exam_id=$2 ORDER BY a.created_at`,
+    [workspaceId, examId]);
 }
 
 /* ---------------- 设置 ---------------- */
 
+async function getSettingsOn(client: pg.PoolClient, workspaceId: string) {
+  const rows = await client.query<Record<string, unknown>>(
+    `SELECT * FROM eval_settings WHERE workspace_id=$1`,
+    [workspaceId],
+  );
+  if (rows.rows[0]) return rows.rows[0];
+  // 懒初始化默认设置；调用方事务失败时必须与后续业务写一起回滚。
+  await client.query(
+    `INSERT INTO eval_settings (workspace_id) VALUES ($1) ON CONFLICT DO NOTHING`,
+    [workspaceId],
+  );
+  const again = await client.query<Record<string, unknown>>(
+    `SELECT * FROM eval_settings WHERE workspace_id=$1`,
+    [workspaceId],
+  );
+  return again.rows[0];
+}
+
 export async function getSettings(workspaceId: string) {
-  const rows = await svcQuery<Record<string, unknown>>(workspaceId,
-    `SELECT * FROM eval_settings WHERE workspace_id=current_setting('app.workspace_id', true)`);
-  if (rows[0]) return rows[0];
-  // 懒初始化默认设置
-  await svcQuery(workspaceId,
-    `INSERT INTO eval_settings (workspace_id) VALUES (current_setting('app.workspace_id', true)) ON CONFLICT DO NOTHING`);
-  const again = await svcQuery<Record<string, unknown>>(workspaceId,
-    `SELECT * FROM eval_settings WHERE workspace_id=current_setting('app.workspace_id', true)`);
-  return again[0];
+  return serviceTx(workspaceId, (client) => getSettingsOn(client, workspaceId));
+}
+
+/** 事务内更新晋升门禁；供“业务状态 + 五元事件”共用同一 COMMIT。 */
+export async function setPromotionGateOn(
+  client: pg.PoolClient,
+  workspaceId: string,
+  enabled: boolean,
+) {
+  const result = await client.query<Record<string, unknown>>(
+    `INSERT INTO eval_settings (workspace_id, promotion_gate)
+     VALUES ($1,$2)
+     ON CONFLICT (workspace_id) DO UPDATE
+       SET promotion_gate=EXCLUDED.promotion_gate, updated_at=now()
+     RETURNING *`,
+    [workspaceId, enabled],
+  );
+  return result.rows[0];
 }
 
 export async function setPromotionGate(workspaceId: string, enabled: boolean) {
-  await svcQuery(workspaceId,
-    `UPDATE eval_settings SET promotion_gate=$2, updated_at=now()
-     WHERE workspace_id=current_setting('app.workspace_id', true)`,
-    [enabled]);
-  return getSettings(workspaceId);
+  return serviceTx(workspaceId, (client) => setPromotionGateOn(client, workspaceId, enabled));
 }

@@ -6,6 +6,7 @@ import {
   findDiagnosticIsolationRisks,
   findEntryStyleRisks,
   findIconAccessibilityRisks,
+  findSharedIconRisks,
   findStylesheetLayoutRisks,
   findTypographyRisks,
   findViewportRisks,
@@ -26,9 +27,28 @@ if (manifest.ui.candidateVersion !== uiPackage.version) errors.push("共享 UI �
 if (manifest.ui.latestStableVersion && manifest.ui.latestStableVersion !== uiPackage.version) {
   errors.push("latestStableVersion 只能指向当前已验收并将发布的包版本");
 }
-
-const ignored = scope.anchorMerge?.["apps/web/package.json"]?.ignoreDependencyKeys ?? [];
-if (!ignored.includes(manifest.ui.package)) errors.push("base-sync 必须忽略共享 UI workspace 依赖，避免向行业仓写入候选源码版本");
+if (manifest.clientFoundation?.candidateVersion !== uiPackage.version) {
+  errors.push("三端客户端基座候选版本必须与共享 UI 包版本一致");
+}
+if (manifest.clientFoundation?.latestStableVersion !== manifest.ui.latestStableVersion) {
+  errors.push("三端客户端基座与共享 UI 的 latestStableVersion 必须一致");
+}
+if (manifest.clientFoundation?.distribution !== "stable-tag-upgrade-pr") {
+  errors.push("三端客户端基座必须通过稳定标签升级 PR 分发");
+}
+if (!Number.isInteger(manifest.clientFoundation?.maxManagedFiles) || manifest.clientFoundation.maxManagedFiles > 2000) {
+  errors.push("三端客户端基座缺少合理的受管文件数上限");
+}
+const foundationCapability = scope.clientFoundationCapability;
+if (foundationCapability?.distribution !== "stable-tag-upgrade-pr") {
+  errors.push("base-scope 未登记三端客户端基座稳定标签分发能力");
+}
+if (foundationCapability?.conflictPolicy !== "previous-source-sha256-fail-close") {
+  errors.push("三端客户端基座必须采用旧来源 SHA-256 冲突关闭策略");
+}
+for (const clientRoot of ["apps/web", "apps/webb", "apps/webc"]) {
+  if (!scope.exclude.includes(`${clientRoot}/**`)) errors.push(`${clientRoot} 必须排除普通 base-sync，防止双通道覆盖`);
+}
 const registryCapability = scope.registryCapabilities?.find?.((entry) => entry.package === manifest.ui.package);
 if (!registryCapability) errors.push("base-scope 未把共享 UI 声明为 registry 基座能力");
 else {
@@ -84,7 +104,9 @@ for (const required of [
   "packages/ui/src/content-safety.css",
   "packages/ui/src/language.ts",
   "sync/set-ui-version.mjs",
+  "sync/client-foundation.mjs",
   "sync/ui-upgrade-pr.mjs",
+  "scripts/verify-client-foundation-consumer.mjs",
 ]) {
   if (!existsSync(join(root, required))) errors.push(`缺少 UI 基座治理文件：${required}`);
 }
@@ -134,6 +156,21 @@ function clientStyleFiles(directory) {
   return rows;
 }
 
+function allClientComponentFiles(directory) {
+  const absolute = join(root, directory);
+  const rows = [];
+  for (const entry of readdirSync(absolute, { withFileTypes: true })) {
+    const relative = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === "__tests__") continue;
+      rows.push(...allClientComponentFiles(relative));
+    } else if (entry.name.endsWith(".tsx") && !entry.name.endsWith(".test.tsx")) {
+      rows.push(relative);
+    }
+  }
+  return rows;
+}
+
 const languageRisks = [];
 for (const filePath of [
   ...clientFiles("apps/web/src"),
@@ -148,6 +185,28 @@ for (const filePath of [
     languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.text.slice(0, 72)}）`);
   }
   for (const risk of findTypographyRisks(source)) {
+    languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.text.slice(0, 72)}）`);
+  }
+  for (const risk of findIconAccessibilityRisks(source)) {
+    languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.text.slice(0, 72)}）`);
+  }
+  for (const risk of findSharedIconRisks(source, filePath)) {
+    languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.text.slice(0, 72)}）`);
+  }
+}
+const regularClientFiles = new Set([
+  ...clientFiles("apps/web/src"),
+  ...clientFiles("apps/webb/src"),
+  ...clientFiles("apps/webc/src"),
+]);
+for (const filePath of [
+  ...allClientComponentFiles("apps/web/src"),
+  ...allClientComponentFiles("apps/webb/src"),
+  ...allClientComponentFiles("apps/webc/src"),
+]) {
+  if (regularClientFiles.has(filePath)) continue;
+  const source = readFileSync(join(root, filePath), "utf8");
+  for (const risk of findSharedIconRisks(source, filePath)) {
     languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.text.slice(0, 72)}）`);
   }
   for (const risk of findIconAccessibilityRisks(source)) {

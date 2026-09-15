@@ -10,6 +10,16 @@ export {
   type ClientFieldOptions,
 } from "./language";
 export {
+  AVATAR_MODELS,
+  SKILL_ICON_NAMES,
+  avatarModelOf,
+  avatarPresentationOf,
+  skillIconOf,
+  type AvatarModel,
+  type AvatarPresentation,
+  type SkillIconName,
+} from "./entity-presentation";
+export {
   BASE_NAVIGATION,
   NAVIGATION_GROUP_LABELS,
   NAVIGATION_GROUP_ORDER,
@@ -25,6 +35,12 @@ export {
   type WorkLoomClient,
 } from "./navigation";
 export { Icon, type IconProps } from "./icons";
+export {
+  useManagedSurface,
+  type ManagedSurfaceBindings,
+  type ManagedSurfaceKind,
+  type ManagedSurfaceOptions,
+} from "./managed-surface";
 export {
   accessibleForeground,
   colorContrastRatio,
@@ -129,6 +145,7 @@ export {
   AppShell,
   BottomTabs,
   ResizablePanel,
+  SectionNavigation,
   SideNav,
   SideNavigation,
   SplitView,
@@ -141,6 +158,8 @@ export {
   type BottomTabsProps,
   type ResizablePanelProps,
   type ResizablePanelSide,
+  type SectionNavigationItem,
+  type SectionNavigationProps,
   type SideNavigationProps,
   type SplitViewProps,
   type TopContextBarProps,

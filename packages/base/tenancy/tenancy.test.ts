@@ -9,7 +9,7 @@ import {
   PlanForbidden,
   requireCapability,
 } from "./capabilities.js";
-import { signDemoToken, verifyToken, type Identity } from "./auth.js";
+import { signDemoToken, verifySessionToken, verifyToken, type Identity } from "./auth.js";
 
 describe("版本能力矩阵（F7.2 唯一口径）", () => {
   it("社区版：无 Quest preset / 无夜班 / 无巡检，事件保留 7 天", () => {
@@ -82,6 +82,19 @@ describe("演示身份 JWT", () => {
     const tampered = token.slice(0, -4) + "AAAA";
     expect(await verifyToken(tampered)).toBeNull();
     expect(await verifyToken("not-a-jwt")).toBeNull();
+  });
+
+  it("伙伴令牌不能混入成员保护过程", async () => {
+    const { signPartnerToken } = await import("../accounts/tokens.js");
+    const token = await signPartnerToken({
+      kind: "partner",
+      partnerId: "ptr-1",
+      contactAccountId: "acc-1",
+      name: "交付伙伴",
+      grants: [{ grantId: "grt-1", tenantId: "tenant-demo", workspaces: ["ws-yunqi"], capabilities: ["report.view"] }],
+    });
+    expect(await verifyToken(token)).toBeNull();
+    expect(await verifySessionToken(token)).toMatchObject({ kind: "partner", partnerId: "ptr-1" });
   });
 });
 

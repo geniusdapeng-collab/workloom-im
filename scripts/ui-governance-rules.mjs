@@ -40,6 +40,13 @@ const SAFE_DISPLAY_FORMATTERS = new Set([
   "shortId", "versionText",
 ]);
 const AUTHORIZED_DIAGNOSTIC_FILE = /apps\/web\/src\/pages\/p25\/P25\.tsx$/;
+const CUSTOM_GRAPHICS = Object.freeze({
+  "agent-avatar": { file: /apps\/web\/src\/components\/AgentAvatar\.tsx$/, accessible: "image" },
+  "generated-qr-code": { file: /apps\/web\/src\/components\/UrlQrCode\.tsx$/, accessible: "image" },
+  "live-character": { file: /apps\/web\/src\/components\/loommate\/MateLive2D\.tsx$/, accessible: "nested" },
+  "hologram-figure": { file: /apps\/web\/src\/pages\/p0\/P0\.tsx$/, accessible: "decorative" },
+});
+const FUNCTIONAL_GLYPH = /[\p{Extended_Pictographic}✓✗✕⚠⛔○◆◇▲▼✎✦✧❖▶◀■□▍◈⌃⌄⋯⧉↻⚙▾▴›‹＋]/gu;
 
 function stripComments(source) {
   let result = "";
@@ -209,6 +216,13 @@ export function findRawDynamicValueRisks(source, fileName = "client.tsx") {
     // 比较值只控制渲染，不等于把值显示出来。
     if (/^(?:[\w?.]+)\s*(?:===?|!==?|>=?|<=?)\s*/.test(inspectable.trim())) return;
     const trimmed = inspectable.trim();
+    // 裸变量（例如 {workspaceId}）没有属性链，必须在属性链的快速返回前判定；
+    // 否则最直接的底层标识泄露反而会绕过后续检查。
+    const bare = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)$/)?.[1];
+    if (bare && RAW_DYNAMIC_FIELD.has(bare)) {
+      add(expression, offset, bare);
+      return;
+    }
     const directChain = /^[A-Za-z_$][\w$]*(?:(?:\?\.|\.)[A-Za-z_$][\w$]*)+(?:\s*\?\?\s*[^;]+)?$/.test(trimmed);
     const directMethod = /^[A-Za-z_$][\w$]*(?:(?:\?\.|\.)[A-Za-z_$][\w$]*)+\.(?:slice|replace)\([^;]*\)$/.test(trimmed);
     if (!directChain && !directMethod) return;
@@ -216,8 +230,6 @@ export function findRawDynamicValueRisks(source, fileName = "client.tsx") {
       const name = match[1];
       if (name && RAW_DYNAMIC_FIELD.has(name)) add(expression, offset + (match.index ?? 0), name);
     }
-    const bare = inspectable.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)$/)?.[1];
-    if (bare && RAW_DYNAMIC_FIELD.has(bare)) add(expression, offset, bare);
   };
 
   for (const match of clean.matchAll(/>[^<\n]*\{([^{}\n]+)\}[^<\n]*</g)) {
@@ -324,6 +336,93 @@ function allOpeningTags(source) {
 }
 
 /**
+ * 三端业务代码只能消费共享 Icon。只有机器可读二维码、数字员工形象、动态角色与
+ * 首页全息人物可以保留自绘 SVG，且必须逐个声明用途与辅助技术语义。
+ */
+export function findSharedIconRisks(source, fileName = "client.tsx") {
+  const clean = stripComments(source);
+  const normalizedFile = fileName.replaceAll("\\", "/");
+  const risks = [];
+  const approvedRanges = [];
+  const approvedMarkers = new Set();
+
+  for (const tag of openingTags(source, /<svg\b/g)) {
+    const marker = tag.text.match(/\bdata-wl-custom-graphic\s*=\s*["']([^"']+)["']/)?.[1];
+    const contract = marker ? CUSTOM_GRAPHICS[marker] : undefined;
+    const closing = clean.indexOf("</svg>", tag.end);
+    if (!contract || !contract.file.test(normalizedFile)) {
+      risks.push({
+        line: sourceLineAt(clean, tag.offset),
+        rule: "客户端不得自建功能 SVG；请使用 @workloom/ui Icon，特殊图形须登记用途",
+        text: marker ? `未授权图形 ${marker}` : "svg",
+      });
+      continue;
+    }
+    if (closing < 0) {
+      risks.push({ line: sourceLineAt(clean, tag.offset), rule: "特殊 SVG 图形缺少闭合标签", text: marker });
+      continue;
+    }
+    if (contract.accessible === "image" && (!/\brole\s*=\s*["']img["']/.test(tag.text) || !/\baria-label\s*=/.test(tag.text))) {
+      risks.push({ line: sourceLineAt(clean, tag.offset), rule: "有信息含义的特殊图形必须声明 role=img 与中文可访问名称", text: marker });
+    }
+    if (contract.accessible === "decorative" && !/\baria-hidden\s*=/.test(tag.text)) {
+      risks.push({ line: sourceLineAt(clean, tag.offset), rule: "装饰性特殊图形必须对辅助技术隐藏", text: marker });
+    }
+    if (contract.accessible === "nested") {
+      if (!/\baria-hidden\s*=/.test(tag.text)) {
+        risks.push({ line: sourceLineAt(clean, tag.offset), rule: "角色内部矢量必须对辅助技术隐藏", text: marker });
+      }
+      if (!/\brole\s*=\s*["']img["'][\s\S]{0,180}\baria-label\s*=|\baria-label\s*=[\s\S]{0,180}\brole\s*=\s*["']img["']/.test(clean)) {
+        risks.push({ line: sourceLineAt(clean, tag.offset), rule: "动态角色外层必须提供 role=img 与中文可访问名称", text: marker });
+      }
+    }
+    approvedMarkers.add(marker);
+    approvedRanges.push([tag.offset, closing + "</svg>".length]);
+  }
+
+  // 允许自绘图形把复杂矢量片段拆成同文件子组件，但片段必须位于显式登记的 g 容器内，
+  // 且文件中必须存在同用途、已通过辅助技术校验的根 SVG。不能借此放行文件内其他 path。
+  for (const tag of openingTags(source, /<g\b/g)) {
+    const marker = tag.text.match(/\bdata-wl-custom-graphic-part\s*=\s*["']([^"']+)["']/)?.[1];
+    if (!marker) continue;
+    const contract = CUSTOM_GRAPHICS[marker];
+    const closing = clean.indexOf("</g>", tag.end);
+    if (!contract || !contract.file.test(normalizedFile) || !approvedMarkers.has(marker)) {
+      risks.push({
+        line: sourceLineAt(clean, tag.offset),
+        rule: "特殊 SVG 子图形必须与已登记的根图形同文件同用途",
+        text: marker,
+      });
+      continue;
+    }
+    if (closing < 0) {
+      risks.push({ line: sourceLineAt(clean, tag.offset), rule: "特殊 SVG 子图形缺少闭合标签", text: marker });
+      continue;
+    }
+    approvedRanges.push([tag.offset, closing + "</g>".length]);
+  }
+
+  for (const match of clean.matchAll(/<path\b/g)) {
+    const offset = match.index ?? 0;
+    if (approvedRanges.some(([start, end]) => offset >= start && offset < end)) continue;
+    risks.push({
+      line: sourceLineAt(clean, offset),
+      rule: "客户端不得维护独立 path 图标；请使用 @workloom/ui Icon",
+      text: "path",
+    });
+  }
+
+  for (const match of clean.matchAll(FUNCTIONAL_GLYPH)) {
+    risks.push({
+      line: sourceLineAt(clean, match.index ?? 0),
+      rule: "客户端不得用表情或字体符号充当功能图标/状态编码；请使用共享 Icon 并保留文字语义",
+      text: match[0],
+    });
+  }
+  return risks;
+}
+
+/**
  * Prevent the two recurring readability regressions reported in review:
  * arbitrary 9–13px client text and compact typography on body/actionable content.
  * Caption/micro tokens remain available only on explicitly marked, non-actionable
@@ -376,11 +475,12 @@ export function findTypographyRisks(source) {
       });
     }
   }
-  for (const match of clean.matchAll(/^(?=.*\b(?:truncate|whitespace-nowrap)\b)(?!.*\btitle\s*=).*$/gm)) {
+  for (const tag of tags.filter((candidate) => /\b(?:truncate|whitespace-nowrap)\b/.test(candidate.text))) {
+    if (/\btitle\s*=/.test(tag.text)) continue;
     risks.push({
-      line: sourceLineAt(clean, match.index ?? 0),
+      line: sourceLineAt(clean, tag.offset),
       rule: "截断或强制单行内容必须提供完整文本提示，关键动态内容应直接换行",
-      text: match[0].trim().slice(0, 72),
+      text: tag.text.trim().slice(0, 72),
     });
   }
   return risks;
@@ -420,9 +520,19 @@ export function findStylesheetLayoutRisks(source) {
 export function findIconAccessibilityRisks(source) {
   const clean = stripComments(source);
   const risks = [];
+
+  for (const tag of openingTags(source, /<IconButton\b/g)) {
+    const labelText = tag.text.match(/\blabel\s*=\s*["']([^"']*)["']/)?.[1];
+    if (labelText && /[\u3400-\u9fff]/.test(labelText)) continue;
+    risks.push({
+      line: sourceLineAt(clean, tag.offset),
+      rule: "共享 IconButton 必须提供中文 label，并由组件同步生成 aria-label 与 title",
+      text: labelText || "IconButton",
+    });
+  }
+
   for (const tag of interactiveOpeningTags(source)) {
     if (!tag.text.startsWith("<button")) continue;
-    if (/\b(?:aria-label|title)\s*=/.test(tag.text)) continue;
     const closing = clean.indexOf("</button>", tag.end);
     if (closing < 0) continue;
     const inner = clean.slice(tag.end, closing);
@@ -437,9 +547,17 @@ export function findIconAccessibilityRisks(source) {
       && !/[一-鿿A-Za-z0-9]/.test(withoutMarkup);
     const iconOnly = /<Icon\b/.test(inner) && !hasDynamicText && !/<span\b/.test(inner) && withoutMarkup.length === 0;
     if (!emojiOnly && !iconOnly) continue;
+    const hasAriaLabel = /\baria-label\s*=/.test(tag.text);
+    const hasTitle = /\btitle\s*=/.test(tag.text);
+    const ariaLabelText = tag.text.match(/\baria-label\s*=\s*(?:["']([^"']*)["']|\{([^}]*)\})/)?.slice(1).find(Boolean) ?? "";
+    const titleText = tag.text.match(/\btitle\s*=\s*(?:["']([^"']*)["']|\{([^}]*)\})/)?.slice(1).find(Boolean) ?? "";
+    const chineseNames = /[\u3400-\u9fff]/.test(ariaLabelText) && /[\u3400-\u9fff]/.test(titleText);
+    if (hasAriaLabel && hasTitle && chineseNames) continue;
     risks.push({
       line: sourceLineAt(clean, tag.offset),
-      rule: "仅含图标或表情的交互必须提供可访问名称",
+      rule: !hasAriaLabel || !hasTitle
+        ? "纯图标按钮必须同时提供中文 aria-label 与 title"
+        : "纯图标按钮的 aria-label 与 title 必须使用中文可读名称",
       text: withoutMarkup || "Icon",
     });
   }

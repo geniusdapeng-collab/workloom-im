@@ -9,7 +9,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { ensureDemoLogin, trpc } from "../../lib/trpc";
-import { AsyncState, clientValueText } from "@workloom/ui";
+import { AsyncState, clientChineseText, clientValueText } from "@workloom/ui";
 import { versionText } from "../../lib/display";
 import { useNavigationAccess } from "../../shell/NavigationAccess";
 
@@ -57,7 +57,8 @@ const svc = () => trpc.overlay as unknown as {
 };
 
 export default function P26() {
-  const { bundle: currentBundle, bundleStatus, reload: reloadBundle } = useNavigationAccess();
+  const { bundle: currentBundle, bundleStatus, reload: reloadBundle, canAction } = useNavigationAccess();
+  const canConfigure = canAction("workspace.configure");
   const bundle = currentBundle?.bundleId ?? "";
   const baseVersion = currentBundle?.bundleVersion ?? "";
   const [active, setActive] = useState<OverlayDoc | null>(null);
@@ -94,6 +95,7 @@ export default function P26() {
   useEffect(() => { void load().catch(() => undefined); }, [load]);
 
   const act = async (key: string, fn: () => Promise<unknown>, ok: string) => {
+    if (!canConfigure) return;
     setBusy(key); setToast("");
     try { await fn(); if (ok) setToast(ok); await load(); }
     catch (err) {
@@ -111,10 +113,11 @@ export default function P26() {
     a.href = URL.createObjectURL(blob);
     a.download = `overlay-${bundle}-v${r.doc.overlay_version}.json`;
     a.click();
-    setToast("✅ 定制快照已导出（您的资产，随时带走）");
+    setToast("定制快照已导出（您的资产，随时带走）");
   };
 
   const doL1 = async () => {
+    if (!canConfigure) return;
     const intents: Array<Record<string, unknown>> = [];
     if (l1Tone.trim()) intents.push({ kind: "tone", tone: l1Tone.trim() });
     if (l1FaqQ.trim() && l1FaqA.trim()) intents.push({ kind: "faq", question: l1FaqQ.trim(), answer: l1FaqA.trim() });
@@ -165,14 +168,14 @@ export default function P26() {
 
       {/* 当前行业配置 + 客户视角状态 */}
       <div className="mb-5 flex flex-wrap items-center gap-3">
-        <span className="rounded-lg border border-gold bg-gold/10 px-4 py-2 text-sm font-semibold text-gold">{currentBundle.bundleName}</span>
+        <span className="rounded-lg border border-gold bg-gold/10 px-4 py-2 text-sm font-semibold text-gold">{clientChineseText(currentBundle.bundleName, "当前行业配置")}</span>
         <span className="ml-auto rounded-full bg-bg850 px-3 py-1 text-body text-ink2">{clientValueText(myStatus)}</span>
       </div>
 
       {toast && <div className="mb-4 rounded-lg border border-gline bg-bg850 px-4 py-2 text-sm text-ink">{toast}</div>}
 
       {/* 快速录入：说人话就能定制 */}
-      <section className="mb-6 rounded-xl border border-gold/30 bg-bg900 p-5">
+      {canConfigure && <section className="mb-6 rounded-xl border border-gold/30 bg-bg900 p-5">
         <h2 className="mb-1 text-base font-bold text-ink">说人话就能定制 <span className="text-body font-normal text-ink3">（快速配置 · 三条最常用的先跑通）</span></h2>
         <p className="mb-3 text-body text-ink3">填哪条算哪条，提交后自动生成定制草稿，过考试、进灰度、再全量——改坏了随时一键回滚。</p>
         <div className="grid gap-3 md:grid-cols-3">
@@ -199,7 +202,7 @@ export default function P26() {
             </button>
           </div>
         </div>
-      </section>
+      </section>}
 
       {/* 当前生效定制 */}
       <section className="mb-6 rounded-xl border border-line bg-bg900 p-5">
@@ -223,11 +226,11 @@ export default function P26() {
               ))}
             </div>
             <div className="wl-action-row flex flex-wrap gap-2">
-              <button onClick={() => void act("rollback", () => svc().rollback.mutate({ baseBundle: bundle }), "✅ 已一键回滚到上一版")}
+              {canConfigure && <button onClick={() => void act("rollback", () => svc().rollback.mutate({ baseBundle: bundle }), "已一键回滚到上一版")}
                 disabled={busy !== ""}
                 className="rounded-lg border border-alert/50 px-4 py-2 text-sm font-semibold text-alert hover:bg-alert/10 disabled:opacity-50">
                 一键回滚
-              </button>
+              </button>}
               <button onClick={() => void doExport()} disabled={busy !== ""}
                 className="rounded-lg border border-line px-4 py-2 text-sm font-semibold text-ink2 hover:text-ink disabled:opacity-50">
                 导出快照
@@ -273,21 +276,21 @@ export default function P26() {
                 <span className={`font-bold ${STATUS[v.status]?.cls ?? "text-ink3"}`}>{STATUS[v.status]?.text ?? "状态待确认"}</span>
                 <span className="text-body text-ink3">{new Date(v.updated_at).toLocaleString("zh-CN")}</span>
                 <span className="ml-auto flex gap-2">
-                  {v.status === "draft" && (
+                  {canConfigure && v.status === "draft" && (
                     <button onClick={() => void act(`c${v.overlay_version}`,
                       async () => {
                         const r = await svc().toCanary.mutate({ baseBundle: bundle, overlayVersion: v.overlay_version });
                         if (!r.exam.pass) throw new Error(`考试闸未通过：${r.exam.failures[0]}`);
-                      }, "✅ 考试通过，已进入灰度")}
+                      }, "考试通过，已进入灰度")}
                       disabled={busy !== ""}
                       className="rounded border border-warn/50 px-2.5 py-1 text-body font-semibold text-warn hover:bg-warn/10 disabled:opacity-50">
                       {busy === `c${v.overlay_version}` ? "考试中…" : "考试并进灰度"}
                     </button>
                   )}
-                  {v.status === "canary" && (
+                  {canConfigure && v.status === "canary" && (
                     <button onClick={() => void act(`a${v.overlay_version}`,
                       () => svc().toActive.mutate({ baseBundle: bundle, overlayVersion: v.overlay_version }),
-                      "✅ 已全量生效")}
+                      "已全量生效")}
                       disabled={busy !== ""}
                       className="rounded border border-go/50 px-2.5 py-1 text-body font-semibold text-go hover:bg-go/10 disabled:opacity-50">
                       转全量

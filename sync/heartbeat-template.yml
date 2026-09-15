@@ -211,14 +211,16 @@ jobs:
           elif [ ! -f product.manifest.json ]; then
             UI_STATUS="第一阶段产品身份迁移未完成（缺少 product.manifest.json）；不得继承基座 appId/productName/端口/发布身份"
             echo "::warning title=产品身份迁移未完成::$UI_STATUS"
-          elif [ ! -f .workloom-ui.json ]; then
-            UI_STATUS="第二阶段稳定 UI 制品升级未完成；三端尚未锁定 @workloom/ui 稳定版本"
+          elif [ ! -f .workloom-ui.json ] || [ ! -f .workloom-client-foundation.json ]; then
+            UI_STATUS="第二阶段稳定 UI/客户端基座升级未完成；三端尚未同时锁定组件与应用壳版本"
             echo "::warning title=稳定 UI 升级未完成::$UI_STATUS"
           else
             test -f scripts/verify-ui-consumer.mjs || { echo "缺少共享 UI 消费门禁脚本"; exit 1; }
+            test -f scripts/verify-client-foundation-consumer.mjs || { echo "缺少三端客户端基座消费门禁脚本"; exit 1; }
             node scripts/verify-ui-consumer.mjs --repo .
-            UI_STATUS="共享 UI 消费门禁已通过"
-            CHECKS="$CHECKS, scripts/verify-ui-consumer.mjs"
+            node scripts/verify-client-foundation-consumer.mjs --repo .
+            UI_STATUS="共享 UI 与三端客户端基座消费门禁已通过"
+            CHECKS="$CHECKS, scripts/verify-ui-consumer.mjs, scripts/verify-client-foundation-consumer.mjs"
           fi
 
           REPO_ROOT="$(git rev-parse --show-toplevel)"

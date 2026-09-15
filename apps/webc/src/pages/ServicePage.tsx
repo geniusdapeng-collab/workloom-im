@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ApiError, api } from "../lib/api";
 import { getConfig, getConfigState, type ServiceEntry } from "../lib/config";
 import type { ActionReceipt, ActionState } from "../lib/types";
-import { EmptyState, clientIdentifierText } from "@workloom/ui";
+import { EmptyState, Icon, clientIdentifierText } from "@workloom/ui";
 import { PageHeader, chineseMessage } from "../components/common";
 
 export default function ServicePage({ prefill }: { prefill: string | null }) {
@@ -67,11 +67,9 @@ export default function ServicePage({ prefill }: { prefill: string | null }) {
         <PageHeader title={actionState === "demo" ? "演示记录" : "工单已受理"} />
         <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-8 py-6 text-center">
           <div className="flex h-16 w-16 animate-pop items-center justify-center rounded-full border border-go/50 bg-go/10">
-            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#3dffb2" strokeWidth="2.5">
-              <path d="M20 6L9 17l-5-5" />
-            </svg>
+            <Icon name="check" size={30} stroke="#3dffb2" strokeWidth="2.5" />
           </div>
-          <h2 className="mt-4 break-words text-[17px] font-semibold text-ink">工单已真实写入并受理</h2>
+          <h2 className="mt-4 break-words text-[1.0625rem] font-semibold text-ink">工单已真实写入并受理</h2>
           <p className="mt-2 max-w-full break-words text-body text-gold">工单{clientIdentifierText(receipt?.resourceId)}</p>
           <p className="mt-2 break-words text-body text-ink2">
             {entry?.title} · {entry?.sla}
@@ -92,7 +90,7 @@ export default function ServicePage({ prefill }: { prefill: string | null }) {
           <button
             type="button"
             onClick={() => setStep("home")}
-            className="pressable mt-8 h-10 w-full rounded-full bg-gold text-[14px] font-medium text-ongold"
+            className="pressable mt-8 min-h-10 w-full rounded-full bg-gold px-4 py-2 text-[0.875rem] font-medium leading-snug text-ongold"
           >
             返回服务大厅
           </button>
@@ -158,7 +156,7 @@ export default function ServicePage({ prefill }: { prefill: string | null }) {
             type="button"
             onClick={() => void submit()}
             disabled={!title.trim() || actionState === "pending"}
-            className="pressable min-h-11 w-full rounded-full bg-gold px-5 py-2.5 text-[14px] font-medium leading-snug text-ongold disabled:opacity-40"
+            className="pressable min-h-11 w-full rounded-full bg-gold px-5 py-2.5 text-[0.875rem] font-medium leading-snug text-ongold disabled:opacity-40"
           >
             {actionState === "pending" ? "正在提交，请勿关闭页面…" : actionState === "failed" ? "重新提交" : "提交工单"}
           </button>
@@ -178,7 +176,7 @@ export default function ServicePage({ prefill }: { prefill: string | null }) {
           />
         </div>
       ) : (
-        <div className="grid flex-1 grid-cols-2 content-start gap-3 overflow-y-auto px-4 py-4">
+        <div className="grid flex-1 grid-cols-1 content-start gap-3 overflow-y-auto px-4 py-4 min-[360px]:grid-cols-2">
           {entries.map((s, i) => (
           <button
             key={s.kind}
@@ -187,10 +185,10 @@ export default function ServicePage({ prefill }: { prefill: string | null }) {
             className="pressable flex animate-fadein flex-col items-start gap-2 rounded-2xl border border-line bg-card p-4 text-left active:border-gline active:bg-bg700"
             style={{ animationDelay: `${i * 60}ms` }}
           >
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gold/10 text-[16px] font-semibold text-gold">
+            <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-gold/10 text-center text-[1rem] font-semibold text-gold" aria-hidden>
               {s.icon}
             </span>
-            <span className="break-words text-[14px] font-medium text-ink">{s.title}</span>
+            <span className="break-words text-[0.875rem] font-medium text-ink">{s.title}</span>
             <span className="break-words text-body leading-relaxed text-ink3">{s.desc}</span>
             <span className="mt-auto break-words text-body text-gold">{s.sla}</span>
           </button>

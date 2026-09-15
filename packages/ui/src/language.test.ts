@@ -16,6 +16,7 @@ describe("客户端中文显示边界", () => {
     expect(clientStatusLabel("pending_review")).toBe("待审核");
     expect(clientStatusLabel("backend_new_state")).toBe("状态待确认");
     expect(clientStatusLabel("人工确认中")).toBe("人工确认中");
+    expect(clientStatusLabel("订单 orderStatus 更新中")).toBe("状态待确认");
   });
 
   it("普通模式不泄露未知底层字段", () => {
@@ -43,6 +44,10 @@ describe("客户端中文显示边界", () => {
     expect(clientValueText("2026-09-15 10:30")).toBe("2026-09-15 10:30");
     expect(clientValueText("AI")).toBe("AI");
     expect(clientValueText("用户填写的说明")).toBe("用户填写的说明");
+    expect(clientValueText("业务编号 A-1001")).toBe("业务编号 A-1001");
+    expect(clientValueText("订单 private_field 更新")).toBe("信息待确认");
+    expect(clientValueText("订单 orderStatus 更新")).toBe("信息待确认");
+    expect(clientValueText("订单 order.status 更新")).toBe("信息待确认");
   });
 
   it("内部主键只展示可核对的脱敏尾号", () => {
@@ -59,5 +64,10 @@ describe("客户端中文显示边界", () => {
     expect(clientChineseText('{"说明":"中文但仍是原始 JSON"}', "信息待确认")).toBe("信息待确认");
     expect(clientChineseText("请核对 workspace_id", "请核对工作区")).toBe("请核对工作区");
     expect(clientChineseText("服务异常：Internal Server Error", "服务暂时不可用")).toBe("服务暂时不可用");
+    expect(clientChineseText("订单 private_field 已更新", "订单信息已更新")).toBe("订单信息已更新");
+    expect(clientChineseText("订单 orderStatus 已更新", "订单信息已更新")).toBe("订单信息已更新");
+    expect(clientChineseText("订单 order.status 已更新", "订单信息已更新")).toBe("订单信息已更新");
+    expect(clientChineseText("WorkLoom IM 的 AI 服务已连接", "服务已连接")).toBe("WorkLoom IM 的 AI 服务已连接");
+    expect(clientChineseText("3D 汇报空间已就绪", "汇报空间已就绪")).toBe("3D 汇报空间已就绪");
   });
 });

@@ -32,7 +32,10 @@ import {
   safeParseReplayAwareEvent,
 } from "@workloom/base/workdata";
 import { resolveHotelSeedBundle } from "./hotel-seed-preflight.js";
-import { loadVerifiedBundleManifest } from "@workloom/base/bundles";
+import {
+  loadVerifiedBundleManifest,
+  loadVerifiedBundleWorkforcePresets,
+} from "@workloom/base/bundles";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, "..");
@@ -112,27 +115,6 @@ function demoTimeline(): Date[] {
 
 /* ================= Bundle 资产读取 ================= */
 
-interface Preset {
-  preset_key: string;
-  name: string;
-  version: string;
-  kind: string;
-  description: string;
-  readonly: boolean;
-  night_shift: boolean;
-  high_risk: boolean;
-  fence_bindings: string[];
-  skills: string[];
-  tools: Array<{ name: string; access: string; desc: string }>;
-  prompt: unknown;
-  write_back: string[];
-}
-
-function loadPresets(): Preset[] {
-  return BUNDLE_MANIFEST.workloom.provides.presets
-    .map((assetPath) => YAML.parse(readFileSync(join(BUNDLE_DIR, assetPath), "utf-8")) as Preset);
-}
-
 interface FenceRule {
   rule_id: string;
   name: string;
@@ -187,7 +169,13 @@ function yunqiArchive(): Record<string, unknown> {
       version: 1,
       mode: "trial",
       identity: { name: "公司CEO", persona: "稳健经营型" },
-      autonomy: { price_band: [0.85, 1.15], procurement_cap: 5000, campaign_cap: 2000 },
+      autonomy: {
+        ranges: { "price-change-ratio": { label: "价格调整比例", lower: 0.85, upper: 1.15, anchor: 1 } },
+        caps: {
+          procurement: { label: "采购金额上限", limit: 5000 },
+          campaign: { label: "营销支出上限", limit: 2000 },
+        },
+      },
       escalate: ["修改保底价/安全禁区相关", "单月累计让利超上限", "围栏规则放宽（任何放宽）", "新渠道/新平台上线", "对外公开承诺（赔偿/免费/声明）", "宪章变更"],
       briefing: { daily: "08:30", weekly: "Mon 09:00", monthly: "1st 10:00", channel: "both" },
       circuit_breaker: { window_days: 14, kpi_floor: { occ: 0.7 }, tightened: false },
@@ -282,7 +270,11 @@ const ROOM_TYPES = [
 const CHANNELS = ["美团", "携程", "飞猪"] as const;
 
 /** 生成一条剧本事件（按序号轮转场景，保证 R1–R6 均有命中样本） */
-function makeEvent(i: number, time: Date, presets: Preset[]): SeedEvent {
+function makeEvent(
+  i: number,
+  time: Date,
+  presets: ReturnType<typeof loadVerifiedBundleWorkforcePresets>,
+): SeedEvent {
   const id = `E-SEED-${EVENT_BASE + i}`;
   const scene = i % 10;
   const baseCtx = {
@@ -487,7 +479,7 @@ function makeEvent(i: number, time: Date, presets: Preset[]): SeedEvent {
 /* ================= 主流程 ================= */
 
 async function main(): Promise<void> {
-  const presets = loadPresets();
+  const presets = loadVerifiedBundleWorkforcePresets("hotel", join(REPO_ROOT, "bundles"));
   const fences = loadFences();
   const skillsDocs = loadSkills();
   console.log(`✓ Bundle 资产读取：${presets.length} preset / ${fences.length} 围栏 / ${skillsDocs.length} 技能`);
@@ -557,6 +549,7 @@ async function main(): Promise<void> {
           description: p.description,
           night_shift: p.night_shift,
           high_risk: p.high_risk,
+          coverage: p.coverage,
           tools: p.tools,
           prompt: p.prompt,
           write_back: p.write_back,
@@ -825,6 +818,9 @@ async function main(): Promise<void> {
   for (const [idx, row] of reviewEvents.rows.entries()) {
     const p = row.payload as SeedEvent;
     const status = idx === 0 ? "pending" : "approved";
+    const beforeValue = Number((p.decision.before as Record<string, unknown> | null)?.price);
+    const afterValue = Number((p.decision.after as Record<string, unknown> | null)?.price);
+    const hasChangeRatio = Number.isFinite(beforeValue) && beforeValue !== 0 && Number.isFinite(afterValue);
     await gw.query(
       `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, gesture, snapshot, decided_by, decided_at)
        VALUES ($1,$2,$3,$4,'inapp',$5,$6,$7,$8,$9)
@@ -841,10 +837,11 @@ async function main(): Promise<void> {
         JSON.stringify({
           before: p.decision.before ?? null,
           after: p.decision.after ?? null,
-          // D21：裁决判据字段（action/params/base_price）——公司CEO 可据此裁决而非保守全上浮
+          // D21：行业包命名的通用裁决判据；基座只比较声明的 key/value。
           action: p.decision.action,
           params: p.decision.params ?? {},
-          base_price: (p.decision.before as Record<string, unknown> | null)?.price ?? null,
+          autonomy_range_key: hasChangeRatio ? "price-change-ratio" : undefined,
+          autonomy_range_value: hasChangeRatio ? afterValue / beforeValue : undefined,
           expires_at: iso(new Date(Date.now() + 24 * 3600 * 1000)), // G6：24h
         }),
         status === "approved" ? "MEM-001" : null,

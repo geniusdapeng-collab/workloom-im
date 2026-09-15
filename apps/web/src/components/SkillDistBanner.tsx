@@ -9,7 +9,7 @@
  * 挂载点：与 SimBanner 同位（P0 经营主页 + Bridge 工作台顶栏下方）。
  */
 import { useEffect, useState } from "react";
-import { clientChineseText } from "@workloom/ui";
+import { Icon, clientChineseText } from "@workloom/ui";
 import { ensureDemoLogin, trpc } from "../lib/trpc";
 import { versionText } from "../lib/display";
 
@@ -64,7 +64,7 @@ export function SkillDistBanner() {
   if (pending > 0) {
     return (
       <div className="relative z-30 flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-amber-500/50 bg-amber-100/80 px-4 py-2 text-body text-amber-800 backdrop-blur">
-        <span aria-hidden>🔐</span>
+        <Icon name="lock" size={16} />
         <span className="min-w-0 flex-1">
           官方技能更新有 <b>{pending}</b> 项涉及<b>新工具或新权限</b>，按治理纪律需要你拍板后才生效。
         </span>
@@ -82,7 +82,7 @@ export function SkillDistBanner() {
   const more = loaded.length > 2 ? ` 等 ${loaded.length} 个` : "";
   return (
     <div className="relative z-30 flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-teal-500/40 bg-teal-50/90 px-4 py-2 text-body text-teal-800 backdrop-blur">
-      <span aria-hidden>✨</span>
+      <Icon name="star" size={16} />
       <span className="min-w-0 flex-1">
         夜班已自动更新 {loaded.length} 个技能：{names}{more}——全程留痕可回溯、可一键回滚。
       </span>
@@ -98,7 +98,7 @@ export function SkillDistBanner() {
         aria-label="今日不再提示"
         title="今日不再提示"
       >
-        ✕
+        <Icon name="close" size={15} />
       </button>
     </div>
   );

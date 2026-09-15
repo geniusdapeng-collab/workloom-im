@@ -10,7 +10,7 @@
  */
 import { useRef, useState } from "react";
 import { ensureDemoLogin, trpc } from "../../lib/trpc";
-import { AsyncState, clientValueText } from "@workloom/ui";
+import { AsyncState, clientChineseText, clientValueText } from "@workloom/ui";
 import { useNavigationAccess } from "../../shell/NavigationAccess";
 
 /* ---------------- 类型（与服务端对齐） ---------------- */
@@ -39,7 +39,7 @@ const svc = () => trpc.overlay as unknown as {
 };
 
 export default function P27() {
-  const { bundle, bundleStatus, reload } = useNavigationAccess();
+  const { bundle, bundleStatus, reload, canAction } = useNavigationAccess();
   const [tab, setTab] = useState<"chat" | "doc">("chat");
   const bundleId = bundle?.bundleId ?? "";
   const baseVersion = bundle?.bundleVersion ?? "";
@@ -124,6 +124,9 @@ export default function P27() {
   if (bundleStatus === "unconfigured" || !bundle || !bundleId || !baseVersion) {
     return <AsyncState status="empty" title="尚未安装行业配置" description="请先完成行业配置，再录入专属规则与资料。" />;
   }
+  if (!canAction("workspace.configure")) {
+    return <AsyncState status="forbidden" title="当前身份不能录入配置" description="配置草稿会改变工作区资产，需要管理员授予配置权限。" />;
+  }
 
   return (
     <div className="mx-auto max-w-[820px] px-6 py-8 text-ink">
@@ -141,7 +144,7 @@ export default function P27() {
             {label}
           </button>
         ))}
-        <span className="ml-auto self-center text-ink3">当前配置：{bundle.bundleName}</span>
+        <span className="ml-auto self-center text-ink3">当前配置：{clientChineseText(bundle.bundleName, "当前行业配置")}</span>
       </div>
 
       {err && <div role="alert" className="mt-3 rounded border border-alert/50 bg-alert/10 px-3 py-2 text-body text-alert">{err}</div>}

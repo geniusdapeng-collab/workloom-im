@@ -9,6 +9,7 @@
  */
 import { useState } from "react";
 import { trpc } from "../lib/trpc";
+import { Icon, clientChineseText } from "@workloom/ui";
 
 const TIER_TEXT: Record<string, string> = {
   L1: "基础能力档",
@@ -62,7 +63,12 @@ export function AIFeedback({ scene, action, prompt, originalText, fromTier = "L2
           scene, action, prompt, fromTier,
           fingerprint: `${scene}:${prompt.slice(0, 40)}`,
         })) as EscalateResult;
-        setUpgraded(r);
+        setUpgraded({
+          ...r,
+          text: r.text === null
+            ? null
+            : clientChineseText(r.text, "升级回答内容暂时无法显示。"),
+        });
         setVoted("down");
       }
     } catch {
@@ -85,7 +91,7 @@ export function AIFeedback({ scene, action, prompt, originalText, fromTier = "L2
           } disabled:opacity-50`}
           title="满意"
           aria-label="这条回答有帮助"
-        >👍</button>
+        ><Icon name="like" size={16} /></button>
         <button
           type="button"
           disabled={busy || voted !== null}
@@ -95,7 +101,7 @@ export function AIFeedback({ scene, action, prompt, originalText, fromTier = "L2
           } disabled:opacity-50`}
           title="不满意——换更强大脑重答"
           aria-label="这条回答没有帮助，使用更强能力重新回答"
-        >👎</button>
+        ><Icon name="dislike" size={16} /></button>
         {busy && <span className="animate-pulse">更强大脑思考中…</span>}
         {voted === "up" && <span className="text-emerald-300/80">已收到，感谢反馈</span>}
         {err && <span className="text-rose-300/80">{err}</span>}
@@ -110,7 +116,7 @@ export function AIFeedback({ scene, action, prompt, originalText, fromTier = "L2
               : <span className="rounded bg-amber-500/15 px-1.5 text-amber-300">按倍率实扣</span>}
           </div>
           {upgraded.text ? (
-            <div className="whitespace-pre-wrap text-body text-ink">{upgraded.text}</div>
+            <div className="whitespace-pre-wrap text-body text-ink">{clientChineseText(upgraded.text, "升级回答内容暂时无法显示。")}</div>
           ) : (
             <div className="text-body text-ink3">
               {upgraded.suggestHuman
@@ -120,7 +126,7 @@ export function AIFeedback({ scene, action, prompt, originalText, fromTier = "L2
           )}
           <details className="mt-1 text-body text-ink3">
             <summary className="cursor-pointer">查看原回答（{tierText(fromTier)}）</summary>
-            <div className="mt-1 whitespace-pre-wrap opacity-70">{originalText}</div>
+            <div className="mt-1 whitespace-pre-wrap opacity-70">{clientChineseText(originalText, "原回答内容暂时无法显示。")}</div>
           </details>
         </div>
       )}

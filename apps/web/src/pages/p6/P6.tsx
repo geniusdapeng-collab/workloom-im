@@ -16,12 +16,15 @@ import { ensureDemoLogin, trpc } from "../../lib/trpc";
 import { Bridge } from "../../shell/Bridge";
 import { BannerAlert, EmptyState, Skeleton } from "../../components/hud";
 import { OBJECT_TYPE_TEXT, actionText, dictText, shortId, versionText } from "../../lib/display";
-import { clientValueText } from "@workloom/ui";
+import { Icon, clientChineseText, clientValueText, skillIconOf, type SkillIconName } from "@workloom/ui";
+import { useNavigationAccess } from "../../shell/NavigationAccess";
 
 interface SkillRow {
   id: string; level: "official" | "team" | "industry"; bundle: string | null;
   name: string; version: string; description: string;
   fence_bindings: string[]; desensitized: boolean;
+  /** Bundle/受控分发元数据；客户端只消费命名图标，不解析行业字段。 */
+  dist_meta?: { presentation?: { icon?: string } } | null;
 }
 interface SkillUsage {
   calls30: number; adopted30: number; rejected30: number; adoptionRate: number | null;
@@ -36,51 +39,45 @@ interface Suggestion {
 
 /** 稀有度视觉口径（§6 设计规范：官方=金 / 团队=银 / 行业共享=铜） */
 const RARITY = {
-  official: { border: "border-gold/60", tag: "传说 · 官方", cls: "text-gold", icon: "✦" },
-  team: { border: "border-[#C0C8E8]/50", tag: "精良 · 团队", cls: "text-[#C0C8E8]", icon: "✧" },
-  industry: { border: "border-[#a8b2be]/50", tag: "共享 · 行业", cls: "text-[#a8b2be]", icon: "❖" },
+  official: { border: "border-gold/60", tag: "传说 · 官方", cls: "text-gold" },
+  team: { border: "border-[#C0C8E8]/50", tag: "精良 · 团队", cls: "text-[#C0C8E8]" },
+  industry: { border: "border-[#a8b2be]/50", tag: "共享 · 行业", cls: "text-[#a8b2be]" },
 } as const;
 
-/** 展示名（官方技能 description 首句为中文名，如「收益管理专家。…」；团队/行业直接用 name） */
+/** 展示名（官方技能 description 首句可声明中文名；团队/行业直接用 name） */
 function displayName(s: SkillRow): string {
   const m = /^([^。]{2,12})。/.exec(s.description);
-  if (m?.[1]) return m[1];
-  return /[一-鿿]/.test(s.name) ? s.name : "未命名技能";
+  if (m?.[1]) return clientChineseText(m[1], "未命名技能");
+  return clientChineseText(s.name, "未命名技能");
 }
 /** 展示描述（去掉首句中文名部分） */
 function displayDesc(s: SkillRow): string {
   const m = /^[^。]{2,12}。(.+)$/.exec(s.description);
   const description = m?.[1] ?? s.description;
-  return /[一-鿿]/.test(description) ? description : "技能说明待补充";
+  return clientChineseText(description, "技能说明待补充");
 }
 
 function suggestionActionText(value: string): string {
-  return /[一-鿿]/.test(value) ? value : actionText(value);
+  return clientChineseText(value, actionText(value));
 }
 
 function suggestionObjectText(value: string): string {
   return dictText(OBJECT_TYPE_TEXT, value);
 }
 
-/** 技能图标（按名称语义映射，演示口径） */
-function skillIcon(s: SkillRow): string {
-  if (/收益|revenue/i.test(s.id + s.name)) return "📈";
-  if (/差评|危机|crisis/i.test(s.id + s.name)) return "🚒";
-  if (/对账|reconcil/i.test(s.id + s.name)) return "🧾";
-  if (/复盘|weekly|review/i.test(s.id + s.name)) return "📊";
-  if (/旺季|满房|peak/i.test(s.id + s.name)) return "🏔";
-  return "🛠";
+/** 技能图标：显式分发元数据优先；缺省按 id 稳定分配，不猜测行业语义。 */
+function skillIcon(s: SkillRow): SkillIconName {
+  return skillIconOf(s.id, s.dist_meta?.presentation?.icon);
 }
 
 export default function P6() {
+  const { canAction, plan } = useNavigationAccess();
   const nav = useNavigate();
   const location = useLocation();
   const isCreate = location.pathname.endsWith("/create");
   const prefill = (location.state ?? null) as { name?: string; trigger?: string; fromSuggestion?: string } | null;
 
   const [ready, setReady] = useState(false);
-  const [role, setRole] = useState("owner");
-  const [plan, setPlan] = useState("pro");
   const [skills, setSkills] = useState<SkillRow[]>([]);
   const [installs, setInstalls] = useState<InstallRow[]>([]);
   const [usage, setUsage] = useState<Record<string, SkillUsage>>({});
@@ -100,8 +97,7 @@ export default function P6() {
       setSuggSlow(false);
       if (slowTimer.current) clearTimeout(slowTimer.current);
       slowTimer.current = setTimeout(() => setSuggSlow(true), 10_000);
-      const [meR, sk, ins, usg, sug] = await Promise.all([
-        trpc.members.me.query() as Promise<{ identity: { role: string; plan: string } }>,
+      const [sk, ins, usg, sug] = await Promise.all([
         trpc.skills.list.query() as Promise<SkillRow[]>,
         trpc.skills.installs.query() as Promise<InstallRow[]>,
         trpc.skills.usage.query() as Promise<Record<string, SkillUsage>>,
@@ -109,8 +105,6 @@ export default function P6() {
       ]);
       if (slowTimer.current) clearTimeout(slowTimer.current);
       setSuggSlow(false);
-      setRole(meR.identity.role);
-      setPlan(meR.identity.plan);
       setSkills(sk);
       setInstalls(ins);
       setUsage(usg);
@@ -127,7 +121,7 @@ export default function P6() {
     return () => clearInterval(t);
   }, [load]);
 
-  const canManage = role === "owner" || role === "manager";
+  const canManage = canAction("skill.manage");
   const showIndustry = plan !== "community"; // F7.2：社区版不显示行业共享区（隐藏非置灰）
   const installedSet = useMemo(() => new Set(installs.map((i) => i.skill_id)), [installs]);
   const officials = skills.filter((s) => s.level === "official");
@@ -204,12 +198,12 @@ export default function P6() {
     return (
       <div key={s.id} className={`rounded-msg border-2 bg-card p-3.5 ${r.border}`}>
         <div className="flex items-center justify-between">
-          <span className={`text-body font-bold ${r.cls}`}>{r.icon} {r.tag}{s.level === "team" ? ` v${s.version.replace(/\.0$/, "")}` : ""}</span>
+          <span className={`text-body font-bold ${r.cls}`}>{r.tag}{s.level === "team" ? ` · ${versionText(s.version)}` : ""}</span>
           {s.level === "industry" && s.desensitized && (
-            <span className="text-body text-go">已脱敏 ✓</span> /* L8.1 共享前必须脱敏 */
+            <span className="inline-flex items-center gap-1 text-body text-go">已脱敏 <Icon name="check" size={13} /></span> /* L8.1 共享前必须脱敏 */
           )}
         </div>
-        <div className="mt-1.5 text-[22px]">{skillIcon(s)}</div>
+        <div className="mt-1.5 text-holo"><Icon name={skillIcon(s)} size={22} /></div>
         <h4 className="mt-1.5 text-body font-bold text-ink">{displayName(s)}</h4>
         <div className="mt-1 text-body leading-relaxed text-ink2">{displayDesc(s)}</div>
         {/* 绑定围栏可见（P6E2） */}
@@ -241,7 +235,7 @@ export default function P6() {
         <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
           {installed ? (
             <>
-              <span className="rounded border border-go/40 px-2 py-0.5 text-body text-go">✓ 已装备</span>
+              <span className="inline-flex items-center gap-1 rounded border border-go/40 px-2 py-0.5 text-body text-go"><Icon name="check" size={13} />已装备</span>
               {(u?.boundAgents ?? []).map((a) => (
                 <button
                   key={a.id}
@@ -249,7 +243,7 @@ export default function P6() {
                   onClick={() => nav(`/agents/${a.id}`)}
                   className="cursor-pointer rounded border border-line bg-bg800/60 px-2 py-0.5 text-body text-ink2 hover:border-holo/50"
                 >
-                  {a.name} →
+                  {clientChineseText(a.name, "数字员工")} →
                 </button>
               ))}
               {canManage && (
@@ -271,12 +265,12 @@ export default function P6() {
                 onClick={() => void install(s.id)}
                 className="cursor-pointer rounded-md border border-gline bg-bg800/60 px-2.5 py-1 text-body font-bold text-goldhi hover:border-gold/60 disabled:opacity-40"
               >
-                ⚙ 装备到船员
+                <Icon name="configuration" size={14} className="inline" /> 装备到船员
               </button>
             )
           )}
         </div>
-        {err && <div className="mt-2 rounded border border-alert/50 bg-alert/8 px-2 py-1 text-body text-alert">✗ 拒绝安装：{err}</div>}
+        {err && <div className="mt-2 flex items-start gap-1 rounded border border-alert/50 bg-alert/8 px-2 py-1 text-body text-alert"><Icon name="error" size={13} className="mt-0.5 shrink-0" />拒绝安装：{err}</div>}
       </div>
     );
   };
@@ -291,9 +285,9 @@ export default function P6() {
         <>
           <div className="mb-2 px-1 text-body tracking-[.2em] text-ink3">技能分类</div>
           {[
-            ["#sec-official", "✦ 官方技能", `金边 · ${officials.length}`],
-            ["#sec-team", "✧ 团队技能", `银边 · ${teams.length}`],
-            ...(showIndustry ? [["#sec-industry", "❖ 行业共享", `铜边 · ${industries.length}`] as const] : []),
+            ["#sec-official", "官方技能", `金边 · ${officials.length}`],
+            ["#sec-team", "团队技能", `银边 · ${teams.length}`],
+            ...(showIndustry ? [["#sec-industry", "行业共享", `铜边 · ${industries.length}`] as const] : []),
           ].map(([href, label, meta]) => (
             <a
               key={href}
@@ -361,7 +355,7 @@ export default function P6() {
             {suggestions.length > 0 && (
               <div className="mb-3 rounded-lg border border-holo/35 bg-card px-4 py-3">
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className="text-[18px]" aria-hidden>🤖</span>
+                  <Icon name="agents" size={18} />
                   <div className="flex-1">
                     <b className="text-body text-ink">AI 副官建议</b>
                     {suggestions.length > 1 && (
@@ -380,14 +374,14 @@ export default function P6() {
                         onClick={() => void confirmTrigger(suggestions[0]!)}
                         className="cursor-pointer rounded-md gold-grad px-3 py-1.5 text-body font-bold text-ongold disabled:opacity-40"
                       >
-                        ⚡ 一键固化为定时任务
+                        <Icon name="lightning" size={14} className="inline" /> 一键固化为定时任务
                       </button>
                       <button
                         type="button"
-                        onClick={() => nav("/skills/create", { state: { name: suggestions[0]!.actionCategory, trigger: `出现「${suggestions[0]!.objectType}」类 ${suggestions[0]!.actionCategory} 任务时（高频样本 ${suggestions[0]!.count} 次）`, fromSuggestion: suggestions[0]!.key } })}
+                        onClick={() => nav("/skills/create", { state: { name: suggestionActionText(suggestions[0]!.actionCategory), trigger: `出现「${suggestionObjectText(suggestions[0]!.objectType)}」类 ${suggestionActionText(suggestions[0]!.actionCategory)} 任务时（高频样本 ${suggestions[0]!.count} 次）`, fromSuggestion: suggestions[0]!.key } })}
                         className="cursor-pointer rounded-md border border-gline px-3 py-1.5 text-body font-bold text-goldhi hover:border-gold/60"
                       >
-                        🛠 生成装备草稿
+                        <Icon name="customize" size={14} className="inline" /> 生成装备草稿
                       </button>
                       <button
                         type="button"
@@ -409,9 +403,9 @@ export default function P6() {
                     {canManage && (
                       <>
                         <button type="button" disabled={busy === `sug-${s.key}`} onClick={() => void confirmTrigger(s)}
-                          className="cursor-pointer rounded border border-gline px-2 py-0.5 text-body font-bold text-goldhi hover:border-gold/60 disabled:opacity-40">⚡ 固化</button>
-                        <button type="button" onClick={() => nav("/skills/create", { state: { name: s.actionCategory, trigger: `出现「${s.objectType}」类 ${s.actionCategory} 任务时（高频样本 ${s.count} 次）`, fromSuggestion: s.key } })}
-                          className="cursor-pointer rounded border border-line px-2 py-0.5 text-body text-ink2 hover:border-gline">🛠 草稿</button>
+                          className="cursor-pointer rounded border border-gline px-2 py-0.5 text-body font-bold text-goldhi hover:border-gold/60 disabled:opacity-40"><Icon name="lightning" size={13} className="inline" /> 固化</button>
+                        <button type="button" onClick={() => nav("/skills/create", { state: { name: suggestionActionText(s.actionCategory), trigger: `出现「${suggestionObjectText(s.objectType)}」类 ${suggestionActionText(s.actionCategory)} 任务时（高频样本 ${s.count} 次）`, fromSuggestion: s.key } })}
+                          className="cursor-pointer rounded border border-line px-2 py-0.5 text-body text-ink2 hover:border-gline"><Icon name="customize" size={13} className="inline" /> 草稿</button>
                         <button type="button" disabled={busy === `sug-${s.key}`} onClick={() => void rejectSug(s)}
                           className="cursor-pointer rounded border border-line px-2 py-0.5 text-body text-ink3 hover:border-alert/40 hover:text-alert disabled:opacity-40">驳回</button>
                       </>
@@ -475,7 +469,7 @@ export default function P6() {
                 onClick={() => nav("/skills/create")}
                 className="cursor-pointer rounded-md gold-grad px-4 py-2.5 text-body font-bold text-ongold"
               >
-                🛠 打造新装备（零代码）
+                <Icon name="customize" size={15} className="inline" /> 打造新装备（零代码）
               </button>
             )}
           </>
@@ -514,7 +508,10 @@ function SkillWizard({
     if (!ready) return;
     void (async () => {
       const rules = await trpc.fence.rules.query() as Array<{ rule_id: string; name: string; status: string }>;
-      setRuleOptions(rules.filter((r) => r.status === "active").map((r) => ({ rule_id: r.rule_id, name: r.name })));
+      setRuleOptions(rules.filter((r) => r.status === "active").map((r) => ({
+        rule_id: r.rule_id,
+        name: clientChineseText(r.name, "关联围栏"),
+      })));
     })();
   }, [ready]);
 
@@ -663,9 +660,9 @@ function SkillWizard({
                     className={`cursor-pointer rounded border px-2 py-0.5 text-body ${
                       fences.includes(r.rule_id) ? "border-holo/60 bg-holo/10 text-holo" : "border-line text-ink3 hover:border-holo/40"
                     }`}
-                    title={r.name}
+                    title={clientChineseText(r.name, "关联围栏")}
                   >
-                    {r.name}
+                    {clientChineseText(r.name, "关联围栏")}
                   </button>
                 ))}
               </div>
@@ -680,7 +677,7 @@ function SkillWizard({
                     onClick={() => void doForge()}
                     className="cursor-pointer rounded-md gold-grad px-4 py-2 text-body font-bold text-ongold disabled:opacity-40"
                   >
-                    ✓ 确认创建（进版本管理 v1）
+                    <Icon name="check" size={15} className="inline" /> 确认创建（进版本管理 v1）
                   </button>
                   <button
                     type="button"
@@ -698,7 +695,7 @@ function SkillWizard({
                     onClick={() => void doDryRun()}
                     className="cursor-pointer rounded-md gold-grad px-4 py-2 text-body font-bold text-ongold disabled:opacity-40"
                   >
-                    🧪 模拟回放最近 10 条事件
+                    <Icon name="experiment" size={15} className="inline" /> 模拟回放最近 10 条事件
                   </button>
                   <button
                     type="button"
@@ -707,7 +704,7 @@ function SkillWizard({
                     title={dryReport ? "" : "生效前须先完成模拟回放"}
                     className="cursor-pointer rounded-md border border-go/50 px-4 py-2 text-body font-bold text-go disabled:opacity-40"
                   >
-                    ⚙ 安装到本工作区
+                    <Icon name="configuration" size={15} className="inline" /> 安装到本工作区
                   </button>
                 </>
               )}
@@ -723,13 +720,13 @@ function SkillWizard({
             </div>
             {created && (
               <div className="rounded-lg border border-go/40 bg-go/5 p-3">
-                <div className="text-body font-bold text-go">✓ 团队技能已创建并进入版本管理，{versionText(created.version)}</div>
+                <div className="text-body font-bold text-go"><Icon name="check" size={14} className="inline" /> 团队技能已创建并进入版本管理，{versionText(created.version)}</div>
                 {dryReport && (
                   <div className="mt-2 text-body text-ink2">
                     已模拟回放 {dryReport.replayed} 条：
                     {dryReport.perRule.length > 0 ? dryReport.perRule.map((r) => (
                       <div key={r.ruleId} className="mt-1">
-                        {ruleOptions.find((rule) => rule.rule_id === r.ruleId)?.name ?? "关联围栏"}：放行 {r.pass} 条、需复核 {r.wouldReview} 条、阻断 {r.wouldBlock} 条
+                        {clientChineseText(ruleOptions.find((rule) => rule.rule_id === r.ruleId)?.name, "关联围栏")}：放行 {r.pass} 条、需复核 {r.wouldReview} 条、阻断 {r.wouldBlock} 条
                       </div>
                     )) : <span className="text-ink3">（无绑定围栏可回放）</span>}
                   </div>

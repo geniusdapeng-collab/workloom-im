@@ -11,7 +11,7 @@
  */
 import { useEffect, useState } from "react";
 import { trpc } from "../lib/trpc";
-import { Button, Overlay } from "@workloom/ui";
+import { Button, Overlay, clientChineseText } from "@workloom/ui";
 
 export interface RejectDialogResult {
   reasonEnum: string;
@@ -32,7 +32,7 @@ interface EnumDef {
 const FALLBACK_ENUMS: EnumDef[] = [{ code: "other", label: "其他（请补充说明）" }];
 
 function reasonLabelText(value: string | null | undefined): string {
-  return value && /[一-鿿]/.test(value) ? value : "其他原因";
+  return clientChineseText(value, "其他原因");
 }
 
 export function RejectDialog(props: {
@@ -65,7 +65,10 @@ export function RejectDialog(props: {
   }, [open, mode]);
 
   const canSubmit = mode === "reject" ? reasonEnum !== "" : editKind !== "";
-  const heading = props.title ?? (mode === "reject" ? "选择驳回原因" : "说明这次修改");
+  const heading = clientChineseText(
+    props.title,
+    mode === "reject" ? "选择驳回原因" : "说明这次修改",
+  );
 
   return (
     <Overlay

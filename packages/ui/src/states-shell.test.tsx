@@ -5,6 +5,7 @@ import {
   AppShell,
   BottomTabs,
   ResizablePanel,
+  SectionNavigation,
   SideNavigation,
   TopContextBar,
   clampPanelSize,
@@ -94,6 +95,17 @@ describe("共享应用壳", () => {
     expect(html).toContain('aria-label="展开主导航"');
   });
 
+  it("侧边导航对绕过 Bundle 装配的机器字段仍安全兜底", () => {
+    const html = renderToStaticMarkup(
+      <SideNavigation
+        entries={[{ ...ENTRIES[0]!, title: "订单 orderStatus" }]}
+        onNavigate={() => undefined}
+      />,
+    );
+    expect(html).toContain("未命名页面");
+    expect(html).not.toContain("orderStatus");
+  });
+
   it("移动底栏与上下文栏允许长中文自然呈现", () => {
     const html = renderToStaticMarkup(
       <>
@@ -109,6 +121,21 @@ describe("共享应用壳", () => {
     expect(html).toContain("个人与偏好");
     expect(html).toContain('aria-current="page"');
     expect(html).toContain('aria-label="个人与偏好，12 项提醒"');
+  });
+
+  it("页内分区复用左侧纵向导航且保留当前页语义", () => {
+    const html = renderToStaticMarkup(
+      <SectionNavigation
+        label="考试院分区"
+        items={[{ id: "report", label: "成绩单" }, { id: "questions", label: "超长中文行业题库名称", badge: 18 }]}
+        activeId="questions"
+        onSelect={() => undefined}
+      />,
+    );
+    expect(html).toContain('aria-label="考试院分区"');
+    expect(html).toContain('aria-current="page"');
+    expect(html).toContain("超长中文行业题库名称");
+    expect(html).toContain("wl-section-navigation__item");
   });
 
   it("应用壳提供跳转入口和明确的主要内容区域", () => {

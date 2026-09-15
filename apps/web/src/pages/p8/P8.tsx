@@ -24,7 +24,7 @@ import { displayNameOf, setAliasLocal } from "../../lib/naming";
 import { AgentAvatarOf } from "../../components/AgentAvatar";
 import { FENCE_LEVEL_TEXT, RULE_RESULT_TEXT, actionText, capabilityText, dictText, shortId, versionText } from "../../lib/display";
 import { Bridge } from "../../shell/Bridge";
-import { Button, Overlay, clientChineseText } from "@workloom/ui";
+import { Button, Icon, Overlay, clientChineseText } from "@workloom/ui";
 import {
   BannerAlert,
   EmptyState,
@@ -33,6 +33,7 @@ import {
   Skeleton,
   XpBar,
 } from "../../components/hud";
+import { useNavigationAccess } from "../../shell/NavigationAccess";
 
 /* ---------- 类型（与 server roster router 投影对齐） ---------- */
 type Rank = "青铜" | "白银" | "黄金" | "铂金" | "星钻";
@@ -139,7 +140,7 @@ function HumanCard({ h }: { h: HumanRow }) {
 }
 
 /** Agent 成员卡（P8E1：方头像+版本角标 · LV+段位 · 战绩条 · 工时投影 · 夜班青脉冲） */
-function AgentCard({ a, onOpen }: { a: AgentRow; onOpen: (id: string) => void }) {
+function AgentCard({ a, canManage, onOpen }: { a: AgentRow; canManage: boolean; onOpen: (id: string) => void }) {
   const invalid = a.status === "invalid";
   const displayName = displayNameOf({ presetKey: a.presetKey, roleName: a.name });
   const [aliasOpen, setAliasOpen] = useState(false);
@@ -148,6 +149,7 @@ function AgentCard({ a, onOpen }: { a: AgentRow; onOpen: (id: string) => void })
   const [aliasError, setAliasError] = useState("");
 
   const saveAlias = async () => {
+    if (!canManage) return;
     setAliasBusy(true);
     setAliasError("");
     try {
@@ -180,7 +182,7 @@ function AgentCard({ a, onOpen }: { a: AgentRow; onOpen: (id: string) => void })
           <div className={`flex h-10 w-10 items-center justify-center rounded-md border-2 ${
             invalid ? "border-alert/60 bg-alert/10" : "border-line bg-bg700"
           }`}>
-            <AgentAvatarOf name={a.name} presetKey={a.presetKey} size={30} ring={false} />
+            <AgentAvatarOf name={displayName} presetKey={a.presetKey} size={30} ring={false} />
           </div>
           <span className="absolute -right-1.5 -bottom-1 rounded border border-line bg-bg900 px-1 font-mono text-body text-ink3">
             {versionText(a.version)}
@@ -189,19 +191,19 @@ function AgentCard({ a, onOpen }: { a: AgentRow; onOpen: (id: string) => void })
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-body font-bold text-ink">
             <span className="min-w-0 break-words">{displayName}</span>
-            <button
+            {canManage && <button
               type="button"
               title="设置显示别名；岗位名称不会改变"
               className="shrink-0 rounded border border-line px-1.5 py-0.5 text-body text-ink3 hover:border-gline hover:text-ink"
               onClick={() => setAliasOpen(true)}
-            >修改别名</button>
+            >修改别名</button>}
             {a.online && (
               <span className="inline-block h-2 w-2 shrink-0 animate-pulse rounded-full bg-holo shadow-[0_0_8px_rgba(77,150,255,.8)]" title="夜班窗口内自动上线" />
             )}
           </div>
           <div className="break-words text-body text-ink3">
             {invalid
-              ? `✗ 校验失败：${clientChineseText(a.invalidReason, "围栏绑定缺失")}`
+              ? `校验失败：${clientChineseText(a.invalidReason, "围栏绑定缺失")}`
               : a.readonly
                 ? "只读岗位 · 无写入工具"
                 : a.fenceBindings.length > 0
@@ -227,7 +229,7 @@ function AgentCard({ a, onOpen }: { a: AgentRow; onOpen: (id: string) => void })
           </div>
           <div className="mt-2 flex items-center gap-1 overflow-hidden">
             {a.fenceBindings.slice(0, 2).map((r, index) => <FenceBindingTag key={r} label={`关联围栏 ${index + 1}`} />)}
-            {a.skills.length > 0 && <span className="ml-auto shrink-0 text-body text-ink3">🎒 {a.skills.length} 技能包</span>}
+            {a.skills.length > 0 && <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-body text-ink3"><Icon name="package" size={13} />{a.skills.length} 技能包</span>}
           </div>
           <div className="mt-2 flex gap-3 border-t border-line/60 pt-2 text-body text-ink3">
             <span><b className="font-orb text-holo">{a.stats.actions30}</b> 动作</span>
@@ -245,7 +247,7 @@ function AgentCard({ a, onOpen }: { a: AgentRow; onOpen: (id: string) => void })
         <Button variant="quiet" onClick={() => onOpen(a.id)}>查看成员档案</Button>
       </div>
       <Overlay
-        open={aliasOpen}
+        open={canManage && aliasOpen}
         title={`修改「${displayName}」的显示别名`}
         description="留空并保存可恢复岗位名称；这不会改变岗位能力和权限。"
         onClose={() => { if (!aliasBusy) { setAliasOpen(false); setAliasError(""); } }}
@@ -271,20 +273,16 @@ function AgentCard({ a, onOpen }: { a: AgentRow; onOpen: (id: string) => void })
 
 /* ================= 默认态 p8 ================= */
 function RosterHome() {
+  const { canAction } = useNavigationAccess();
   const nav = useNavigate();
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
-  const [role, setRole] = useState("owner");
   const [data, setData] = useState<RosterList | null>(null);
 
   const load = useCallback(async () => {
     try {
       await ensureDemoLogin();
-      const [meR, list] = await Promise.all([
-        trpc.members.me.query() as Promise<{ identity: { role: string } }>,
-        trpc.roster.list.query() as Promise<RosterList>,
-      ]);
-      setRole(meR.identity.role);
+      const list = await trpc.roster.list.query() as RosterList;
       setData(list);
       setFailed(false);
     } catch {
@@ -300,7 +298,7 @@ function RosterHome() {
     return () => clearInterval(t);
   }, [load]);
 
-  const canManage = role === "owner" || role === "manager"; // E2.6：非管理员无「加装/编辑」入口（隐藏非置灰）
+  const canManage = canAction("agent.manage");
   const humans = data?.humans ?? [];
   const agents = data?.agents ?? [];
   const onlineAgents = agents.filter((a) => a.online).length;
@@ -367,10 +365,10 @@ function RosterHome() {
         ) : humans.length === 0 && agents.length === 0 ? (
           /* 空态（§2.2：新工作区仅行业 Bundle 官方 preset，无其他成员卡片） */
           <EmptyState
-            icon="👥"
+            icon={<Icon name="team" size={24} />}
             title="新工作区暂无成员卡片"
             hint="从装配中心启用行业官方员工包后，成员会显示在这里。"
-            actionLabel={canManage ? "＋ 加装成员岗位" : undefined}
+            actionLabel={canManage ? "加装成员岗位" : undefined}
             onAction={canManage ? () => nav("/assembly") : undefined}
           />
         ) : (
@@ -384,7 +382,7 @@ function RosterHome() {
               数字员工 · {agents.length} 个岗位 · 夜班岗位在 {data?.nightWindow.range} 自动上线
             </div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {agents.map((a) => <AgentCard key={a.id} a={a} onOpen={(id) => nav(`/agents/${encodeURIComponent(id)}`)} />)}
+              {agents.map((a) => <AgentCard key={a.id} a={a} canManage={canManage} onOpen={(id) => nav(`/agents/${encodeURIComponent(id)}`)} />)}
             </div>
 
             {/* P8E3 加装员工（→P7 装配台；E2.6 非管理员隐藏） */}
@@ -395,7 +393,7 @@ function RosterHome() {
                   onClick={() => nav("/assembly")}
                   className="cursor-pointer rounded-lg gold-grad px-4 py-2 text-body font-black text-ongold"
                 >
-                  ＋ 加装数字员工岗位
+                  <span className="inline-flex items-center gap-1"><Icon name="partner" size={15} aria-hidden="true" />加装数字员工岗位</span>
                 </button>
                 <span className="text-body text-ink3">未声明关联围栏的数字员工，其写操作会被系统阻断。</span>
               </div>
@@ -409,9 +407,9 @@ function RosterHome() {
 
 /* ================= 档案态 p8_agent ================= */
 function AgentProfilePage({ agentId }: { agentId: string }) {
+  const { canAction } = useNavigationAccess();
   const nav = useNavigate();
   const [ready, setReady] = useState(false);
-  const [role, setRole] = useState("owner");
   const [p, setP] = useState<Profile | null>(null);
   const [roster, setRoster] = useState<AgentRow[]>([]);
   const [banner, setBanner] = useState<{ level: "alert" | "warn" | "info"; text: string } | null>(null);
@@ -421,12 +419,10 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
 
   const load = useCallback(async () => {
     await ensureDemoLogin();
-    const [meR, prof, list] = await Promise.all([
-      trpc.members.me.query() as Promise<{ identity: { role: string } }>,
+    const [prof, list] = await Promise.all([
       trpc.roster.profile.query({ agentId }) as Promise<Profile | null>,
       trpc.roster.list.query() as Promise<RosterList>,
     ]);
-    setRole(meR.identity.role);
     setP(prof);
     setRoster(list.agents);
     setReady(true);
@@ -459,7 +455,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
     }
   }, [goal, p, nav]);
 
-  const canDispatch = role !== "readonly"; // E2.6：只读成员隐藏派遣入口
+  const canDispatch = canAction("task.dispatch");
 
   /* 左栏：船员列表（点击切换档案） */
   const left = (
@@ -523,7 +519,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
         {!ready ? (
           <><Skeleton count={2} height={40} label="成员摘要正在加载" /><Skeleton count={8} label="成员详情正在加载" /></>
         ) : !p ? (
-          <EmptyState icon="🛰" title="成员不存在或已停用" hint="返回团队成员选择其他成员" actionLabel="← 返回团队成员" onAction={() => nav("/agents")} />
+          <EmptyState icon={<Icon name="agents" size={24} />} title="成员不存在或已停用" hint="返回团队成员选择其他成员" actionLabel="← 返回团队成员" onAction={() => nav("/agents")} />
         ) : (
           <>
             <div className="mb-3 flex flex-wrap items-baseline gap-3">
@@ -575,8 +571,8 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
                         <span className="min-w-0 flex-1 break-words text-ink2">
                           {f.declared ? `${clientChineseText(f.name, "关联围栏")} ${versionText(f.version)}` : "声明悬空：规则不存在"}
                         </span>
-                        <span className={`shrink-0 text-body ${f.declared ? "text-go" : "text-alert"}`}>
-                          {f.declared ? `已声明 · ${dictText(FENCE_LEVEL_TEXT, f.level)}${f.isBaseline ? " 🔒" : ""}` : "✗ 标红"}
+                        <span className={`inline-flex shrink-0 items-center gap-1 text-body ${f.declared ? "text-go" : "text-alert"}`}>
+                          {f.declared ? <>{f.isBaseline && <Icon name="lock" size={13} />}已声明 · {dictText(FENCE_LEVEL_TEXT, f.level)}</> : <><Icon name="error" size={13} />标红</>}
                         </span>
                       </div>
                     ))}
@@ -598,7 +594,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
                         title="前往技能中心"
                         className="flex w-full min-w-0 cursor-pointer flex-wrap items-center gap-2 rounded-lg border border-line bg-bg800/40 px-2.5 py-1.5 text-left text-body hover:border-gline"
                       >
-                        <span className="min-w-0 flex-1 break-words text-ink2"><span aria-hidden="true">🎒</span> {clientChineseText(s.name, "技能能力")} <span className="text-body text-ink3">{versionText(s.version)}</span></span>
+                        <span className="flex min-w-0 flex-1 items-center gap-1 break-words text-ink2"><Icon name="package" size={13} className="shrink-0" /> {clientChineseText(s.name, "技能能力")} <span className="text-body text-ink3">{versionText(s.version)}</span></span>
                         <span className={`shrink-0 text-body ${s.installed ? "text-go" : "text-warn"}`}>
                           {s.installed ? `已装备 · ${s.fence_bindings.length} 条关联围栏` : "未安装"}
                         </span>
@@ -646,7 +642,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
                       onClick={() => void dispatch()}
                       className="mt-2 cursor-pointer rounded-lg gold-grad px-4 py-2 text-body font-black text-ongold disabled:opacity-40"
                     >
-                      💬 发消息并派遣任务
+                      <Icon name="send" size={15} className="inline" /> 发消息并派遣任务
                     </button>
                   </div>
                 )}
@@ -672,7 +668,7 @@ function AgentProfilePage({ agentId }: { agentId: string }) {
                           {e.ruleResults.length > 0 && <span className="ml-1 text-body text-warn">{e.ruleResults.map((result) => dictText(RULE_RESULT_TEXT, result)).join("、")}</span>}
                         </span>
                         <span className={`shrink-0 text-body ${e.receiptSynced ? "text-go" : "text-warn"}`}>
-                          {e.receiptSynced ? "✓ 回执" : "未核实"}
+                          {e.receiptSynced && <Icon name="check" size={13} className="inline" />} {e.receiptSynced ? "回执" : "未核实"}
                         </span>
                       </button>
                     ))}

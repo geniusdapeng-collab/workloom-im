@@ -3,7 +3,7 @@
  * 结构：2–4 套候选并列（方案摘要 / 影响面 / 预估积分 / 命中围栏）
  * 铁律：采用动作写事件（F3.7）；越围栏方案强制双人确认（转 P4，不就地放行）
  */
-import { clientValueText } from "@workloom/ui";
+import { Icon, clientValueText } from "@workloom/ui";
 
 export interface PlanOption {
   id: string;
@@ -46,7 +46,7 @@ export function PlanCompareCard({
             {p.overFence && <div className="mt-1 text-body text-warn">超出围栏 · 采用前须前往审批中心双人确认</div>}
             <div className="mt-2">
               {adoptedId === p.id ? (
-                <span className="text-body font-bold text-go">✓ 已采用（已写事件）</span>
+                <span className="inline-flex items-center gap-1 text-body font-bold text-go"><Icon name="check" size={14} />已采用（已写事件）</span>
               ) : (
                 <button
                   type="button"

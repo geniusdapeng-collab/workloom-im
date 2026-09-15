@@ -5,7 +5,7 @@
  */
 import type { ReactNode } from "react";
 import { EventIdChip } from "./EventIdChip";
-import { clientChineseText } from "@workloom/ui";
+import { Icon, clientChineseText, type IconName } from "@workloom/ui";
 import { versionText } from "../../lib/display";
 
 /** 人类消息：右侧气泡，金边，圆角右上直角（§5.6） */
@@ -22,10 +22,10 @@ export function HumanBubble({ children, time }: { children: ReactNode; time?: st
 
 export type ReceiptState = "synced" | "unverified" | "failed";
 
-const RECEIPT_META: Record<ReceiptState, { icon: string; label: string; cls: string }> = {
-  synced: { icon: "✓", label: "已生效", cls: "border-go/45 text-go" },
-  unverified: { icon: "⚠", label: "未核实", cls: "border-warn/45 text-warn" },
-  failed: { icon: "✗", label: "失败", cls: "border-alert/55 text-alert" },
+const RECEIPT_META: Record<ReceiptState, { icon: IconName; label: string; cls: string }> = {
+  synced: { icon: "check", label: "已生效", cls: "border-go/45 text-go" },
+  unverified: { icon: "warning", label: "未核实", cls: "border-warn/45 text-warn" },
+  failed: { icon: "error", label: "失败", cls: "border-alert/55 text-alert" },
 };
 
 /** Agent 行动消息：左侧气泡（左上直角 4px 表「对方消息」§4.1） */
@@ -58,8 +58,8 @@ export function AgentActionMessage({
           <span className="text-body font-bold text-ink">{clientChineseText(sender, "数字员工")}</span>
           {version && <span className="text-body text-ink3">{versionText(version)}</span>}
           <EventIdChip id={eventId} />
-          <span className={`rounded border px-1.5 py-0.5 text-body font-bold ${rm.cls}`}>
-            {rm.icon} {rm.label}
+          <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-body font-bold ${rm.cls}`}>
+            <Icon name={rm.icon} size={13} /> {rm.label}
           </span>
         </div>
         <div className="text-body font-semibold text-holo">{action}</div>
@@ -101,8 +101,8 @@ export function SubCallMessage({
           <span className="text-ink2">↳ 子调用</span>
           <span className="font-bold text-holo">@{clientChineseText(target, "数字员工")}</span>
           {version && <span className="text-body text-ink3">{versionText(version)}</span>}
-          <span className={`rounded border px-1.5 py-0.5 text-body font-bold ${rm.cls}`}>
-            {rm.icon} {rm.label}
+          <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-body font-bold ${rm.cls}`}>
+            <Icon name={rm.icon} size={13} /> {rm.label}
           </span>
         </div>
         {children && <div className="text-body leading-relaxed text-ink2">{children}</div>}

@@ -6,7 +6,7 @@ import { businessCardsOf } from "../lib/business-display";
 import type { BusinessCard, Citation } from "../lib/types";
 import { CitationCard, CatalogCard, MemberCard, OrderCard, TicketNoticeCard } from "../components/cards";
 import { DemoBadge, chineseMessage } from "../components/common";
-import { clientIdentifierText } from "@workloom/ui";
+import { Input, clientChineseText, clientIdentifierText } from "@workloom/ui";
 
 interface Msg {
   id: string;
@@ -33,6 +33,22 @@ const nextId = () => `m${++seq}`;
 
 const CACHE_LIMIT = 20;
 
+function safeAiText(value: unknown): string {
+  return clientChineseText(value, "本条答复包含无法安全展示的技术内容，请重新提问或转人工处理。");
+}
+
+function safeCitations(value: unknown): Citation[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.slice(0, 20).map((item) => {
+    const citation = item && typeof item === "object" ? item as Partial<Citation> : {};
+    return {
+      documentTitle: clientChineseText(citation.documentTitle, "参考资料"),
+      heading: clientChineseText(citation.heading, "相关章节"),
+      content: clientChineseText(citation.content, "引用内容暂无法安全展示"),
+    };
+  });
+}
+
 function cacheKey(): string {
   const config = getConfig();
   return `webc.chat.msgs.v4:${config.workspaceKey || "安全模式"}:${config.projection.manifestDigest}`;
@@ -42,13 +58,24 @@ function loadCache(): Msg[] {
   try {
     const raw = sessionStorage.getItem(cacheKey());
     if (!raw) return [];
-    const arr = JSON.parse(raw) as Msg[];
-    return Array.isArray(arr) ? arr.slice(-CACHE_LIMIT).map((m) => ({
-      ...m,
-      cards: businessCardsOf(m.cards),
-      shown: m.text.length,
-      failed: false,
-    })) : [];
+    const arr = JSON.parse(raw) as unknown;
+    return Array.isArray(arr) ? arr.slice(-CACHE_LIMIT).flatMap((item): Msg[] => {
+      if (!item || typeof item !== "object") return [];
+      const m = item as Partial<Msg>;
+      if ((m.role !== "user" && m.role !== "ai") || typeof m.text !== "string" || typeof m.id !== "string" || typeof m.ts !== "number") return [];
+      const safeText = m.role === "ai" ? safeAiText(m.text) : m.text;
+      return [{
+        ...m,
+        id: m.id,
+        role: m.role,
+        text: safeText,
+        ts: m.ts,
+        citations: m.role === "ai" ? safeCitations(m.citations) : undefined,
+        cards: businessCardsOf(m.cards),
+        shown: safeText.length,
+        failed: false,
+      }];
+    }) : [];
   } catch {
     return [];
   }
@@ -154,8 +181,8 @@ export default function ChatPage({
       const res = await api.chat({ conversationId, text });
       setConversationId(res.conversationId);
       appendAi({
-        text: res.answer,
-        citations: res.citations,
+        text: safeAiText(res.answer),
+        citations: safeCitations(res.citations),
         cards: res.cards,
         lowConfidence: res.confidence < 0.5 || Boolean(res.ticket),
         ticketTitle: res.ticket
@@ -262,7 +289,7 @@ export default function ChatPage({
       <div className="border-b border-line bg-gradient-to-b from-bg700/60 to-bg800 px-4 pb-3 pt-4">
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="break-words text-[17px] font-semibold leading-snug text-ink">
+            <h1 className="break-words text-[1.0625rem] font-semibold leading-snug text-ink">
               {cfg.brandName} <span className="text-gold">· AI 服务前台</span>
             </h1>
             <p className="mt-1 flex flex-wrap items-center gap-1.5 text-body text-ink2">
@@ -270,7 +297,7 @@ export default function ChatPage({
               <span className="break-words">{configReady ? sessionStatus : "服务配置待恢复"}</span> {demoMode && <DemoBadge />}
             </p>
           </div>
-          <div className="flex h-10 w-10 items-center justify-center rounded-full border border-gline bg-gold/10 font-orb text-[15px] text-gold">
+          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-gline bg-gold/10 text-center font-orb text-[0.9375rem] text-gold" aria-hidden>
             {cfg.logoText}
           </div>
         </div>
@@ -441,11 +468,15 @@ export default function ChatPage({
       {/* 输入栏 */}
       <div className="border-t border-line bg-bg800 px-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
         <div className="flex items-center gap-2">
-          <input
+          <Input
+            label="咨询内容"
+            hideLabel
+            optionalLabel=""
+            wrapperClassName="min-w-0 flex-1"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") void send();
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) void send();
             }}
             placeholder={configReady ? "请输入您的需求…" : "服务配置异常，暂不可发送"}
             disabled={!configReady}

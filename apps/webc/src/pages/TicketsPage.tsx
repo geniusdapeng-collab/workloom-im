@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ApiError, api } from "../lib/api";
 import { getConfig, getConfigState } from "../lib/config";
 import type { ActionReceipt, ActionState, Ticket, TimelineItem } from "../lib/types";
-import { EmptyState, Skeleton, StatusChip } from "@workloom/ui";
+import { EmptyState, Icon, Skeleton, StatusChip } from "@workloom/ui";
 import { PageHeader, PullToRefresh, chineseMessage, formatTime } from "../components/common";
 import { AsyncState, Button, Overlay, clientChineseText, clientIdentifierText } from "@workloom/ui";
 
@@ -101,12 +101,12 @@ export default function TicketsPage({ refreshKey }: { refreshKey: number }) {
                 className="pressable w-full animate-fadein rounded-2xl border border-line bg-card p-3.5 text-left active:bg-bg700"
                 style={{ animationDelay: `${i * 50}ms` }}
               >
-                <div className="flex min-w-0 items-center justify-between gap-2">
-                  <span className="text-body text-ink3">{kindLabel(t.kind)}</span>
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                  <span className="min-w-0 break-words text-body text-ink3">{kindLabel(t.kind)}</span>
                   <StatusChip status={t.statusText ?? t.status} />
                 </div>
                 <p className="mt-1.5 break-words text-body font-medium text-ink">{t.title}</p>
-                <div className="mt-2 flex items-center justify-between text-body text-ink3">
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-1 text-body text-ink3">
                   <span className="min-w-0 break-words">{clientIdentifierText(t.id)}</span>
                   <span>{formatTime(t.createdAt)}</span>
                 </div>
@@ -261,11 +261,11 @@ function TicketDetail({
               </div>
             )}
             <div className="animate-fadein rounded-2xl border border-line bg-card p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-body text-ink3">{ticket ? kindLabel(ticket.kind) : "…"}</span>
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                <span className="min-w-0 break-words text-body text-ink3">{ticket ? kindLabel(ticket.kind) : "…"}</span>
                 {ticket && <StatusChip status={ticket.statusText ?? ticket.status} />}
               </div>
-              <p className="mt-1.5 break-words text-[15px] font-semibold text-ink">{ticket?.title ?? "加载中…"}</p>
+              <p className="mt-1.5 break-words text-[0.9375rem] font-semibold text-ink">{ticket?.title ?? "加载中…"}</p>
               <p className="mt-1.5 break-words text-body text-ink3">工单{clientIdentifierText(id)}</p>
               {ticket?.slaDueAt && (
                 <p className="mt-1 text-body text-gold">预计响应：{formatTime(ticket.slaDueAt)} 前</p>
@@ -304,7 +304,7 @@ function TicketDetail({
               <button
                 type="button"
                 onClick={() => setRateOpen(true)}
-                className="pressable mt-2 h-11 w-full animate-fadein rounded-full border border-gline bg-gold/10 text-body font-medium text-gold"
+                className="pressable mt-2 min-h-11 w-full animate-fadein rounded-full border border-gline bg-gold/10 px-4 py-2 text-body font-medium leading-snug text-gold"
               >
                 评价本次服务
               </button>
@@ -353,18 +353,17 @@ function TicketDetail({
                   type="button"
                   onClick={() => setScore(n)}
                   aria-label={`${n} 星`}
+                  title={`${n} 星`}
+                  aria-pressed={n === score}
                   className="pressable p-0.5"
                 >
-                  <svg
-                    width="30"
-                    height="30"
-                    viewBox="0 0 24 24"
+                  <Icon
+                    name="star"
+                    size={30}
                     fill={n <= score ? "var(--color-gold)" : "none"}
                     stroke={n <= score ? "var(--color-gold)" : "var(--color-ink3)"}
                     strokeWidth="1.5"
-                  >
-                    <path d="M12 2l2.4 4.8 5.3.8-3.8 3.7.9 5.3L12 14.1 7.2 16.6l.9-5.3L4.3 7.6l5.3-.8L12 2z" />
-                  </svg>
+                  />
                 </button>
               ))}
             </div>

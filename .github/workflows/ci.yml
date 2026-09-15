@@ -60,6 +60,7 @@ jobs:
       - name: 三端 UI 同源与新行业接入门禁
         run: |
           pnpm product:verify
+          pnpm bundle:governance:test
           pnpm bundle:governance
           pnpm projections:check
           pnpm ui:governance
@@ -67,7 +68,8 @@ jobs:
           pnpm -C packages/industry-contract build
           pnpm -C packages/ui test
           pnpm -C packages/ui build
-          node --test scripts/verify-ui-consumer.test.mjs sync/base-sync.test.mjs sync/set-ui-version.test.mjs sync/ui-upgrade-pr.test.mjs
+          node --test scripts/verify-ui-consumer.test.mjs sync/base-sync.test.mjs sync/client-foundation.test.mjs sync/set-ui-version.test.mjs sync/ui-upgrade-pr.test.mjs
+          node --test apps/desktop/electron/bootstrap.test.cjs
 
       - name: 迁移 + 种子（H-1 完整率 100%）
         run: |

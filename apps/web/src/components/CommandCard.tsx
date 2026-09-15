@@ -57,7 +57,7 @@ export function CommandCard({
       });
       const res = r as { kind?: string; question?: string };
       if (res.kind === "clarify") {
-        setFeedback(`🤔 ${clientChineseText(res.question, "指令不够具体，能再说细一点吗？")}`);
+        setFeedback(clientChineseText(res.question, "指令不够具体，能再说细一点吗？"));
       } else {
         onDispatched(`已派活给 ${targetName}：${title.trim().slice(0, 24)}`);
         onClose();

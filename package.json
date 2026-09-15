@@ -31,6 +31,7 @@
     "capabilities:check": "node scripts/generate-capabilities.mjs --check",
     "product:verify": "node scripts/verify-product-content.mjs",
     "bundle:governance": "tsx scripts/bundle-governance.mts",
+    "bundle:governance:test": "vitest run scripts/bundle-governance.test.ts",
     "bundle:seal": "tsx scripts/bundle-governance.mts --refresh-digests",
     "bundle:release": "tsx scripts/bundle-governance.mts --refresh-digests --release",
     "projections:generate": "tsx scripts/generate-client-projections.mts --write",

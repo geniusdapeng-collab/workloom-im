@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { Button } from "@workloom/ui";
 import { trpc, setToken, setRefreshToken } from "../../lib/trpc";
+import { versionText } from "../../lib/display";
+import { activationBundleSystemText } from "./systemText";
 
 interface ActivationBundle {
   slug: string;
@@ -59,11 +61,12 @@ export default function Activate() {
   useEffect(() => {
     void svc().activationOptions.query()
       .then((result) => {
-        setBundles(result.bundles);
-        setForm((current) => current.industry || result.bundles.length === 0
+        const safeBundles = result.bundles.map(activationBundleSystemText);
+        setBundles(safeBundles);
+        setForm((current) => current.industry || safeBundles.length === 0
           ? current
-          : { ...current, industry: result.bundles[0]!.slug });
-        if (result.bundles.length === 0) setErr("当前没有通过发布校验的自助起步方案，请联系管理员。");
+          : { ...current, industry: safeBundles[0]!.slug });
+        if (safeBundles.length === 0) setErr("当前没有通过发布校验的自助起步方案，请联系管理员。");
       })
       .catch(() => setErr("暂时无法读取可用起步方案，请稍后重试。"))
       .finally(() => setRegistryLoading(false));
@@ -126,7 +129,7 @@ export default function Activate() {
         </label>
         {selected && (
           <div className="min-w-0 rounded-lg border border-neutral-700 bg-neutral-900/70 px-3 py-2 text-sm leading-relaxed text-neutral-400">
-            <div className="break-words font-semibold text-neutral-200">已通过基座兼容与完整性校验 · 版本 {selected.version}</div>
+            <div className="break-words font-semibold text-neutral-200">已通过基座兼容与完整性校验 · {versionText(selected.version)}</div>
             <div className="mt-1 line-clamp-3 break-words">{selected.description}</div>
             <div className="mt-1 break-words">开通后进入配置引导完成装配{selected.serviceFrontEnabled ? "，并可继续配置客户服务前台" : ""}。</div>
           </div>

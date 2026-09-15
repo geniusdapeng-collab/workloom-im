@@ -5,9 +5,10 @@
  * 数据：trpc.service.devtools.*；机床=本机安装的 Codex/Claude Code/Aider（客户本地工具）
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router";
 import { ensureDemoLogin, trpc } from "../../lib/trpc";
 import { VoiceEngine } from "../../voice/VoiceEngine";
-import { AsyncState, Badge, Button, Overlay, clientValueText } from "@workloom/ui";
+import { AsyncState, Badge, Button, Icon, Overlay, SectionNavigation, clientValueText } from "@workloom/ui";
 import { actorText, versionText } from "../../lib/display";
 
 /* ---------------- 类型（与服务端对齐） ---------------- */
@@ -50,6 +51,16 @@ const TOOL_GUIDE: Record<string, string> = {
 const guideOf = (t: ToolEntry) => t.installHint ?? TOOL_GUIDE[t.toolKey] ?? "安装后点「刷新设备探测」";
 
 type Tab = "tasks" | "tools" | "repos" | "releases";
+const TAB_ITEMS: ReadonlyArray<{ id: Tab; label: string }> = [
+  { id: "tasks", label: "任务单" },
+  { id: "tools", label: "织造车间与设备" },
+  { id: "repos", label: "仓库白名单" },
+  { id: "releases", label: "版本时间线" },
+];
+function tabFromSearch(search: string): Tab {
+  const value = new URLSearchParams(search).get("section");
+  return TAB_ITEMS.some((item) => item.id === value) ? value as Tab : "tasks";
+}
 
 /* tRPC 弱类型通道（与 P24 同一模式） */
 const svc = () => trpc.service as unknown as {
@@ -86,11 +97,12 @@ function DevMachines({ tools, tasks }: { tools: ToolEntry[]; tasks: TaskRow[] })
         return (
           <div key={t.toolKey} className={`rounded-xl border p-3 ${online ? "border-gline bg-bg800" : "border-line bg-bg850 opacity-70"}`}>
             <div className="flex items-center gap-2.5">
-              {/* 齿轮：运转时机床亮起 */}
-              <svg width="34" height="34" viewBox="0 0 24 24" className={busy ? "animate-[spin_2.5s_linear_infinite]" : ""}>
-                <path fill={busy ? "var(--gold)" : online ? "var(--steel)" : "var(--ink3)"}
-                  d="M12 8.5A3.5 3.5 0 1 0 12 15.5 3.5 3.5 0 0 0 12 8.5zm0 5.2a1.7 1.7 0 1 1 0-3.4 1.7 1.7 0 0 1 0 3.4zM21 13.4v-2.8l-2.3-.5a7 7 0 0 0-.6-1.5l1.3-2-2-2-2 1.3a7 7 0 0 0-1.5-.6L13.5 3h-2.8l-.5 2.3a7 7 0 0 0-1.5.6l-2-1.3-2 2 1.3 2a7 7 0 0 0-.6 1.5l-2.3.5v2.8l2.3.5c.14.53.34 1.03.6 1.5l-1.3 2 2 2 2-1.3c.47.26.97.46 1.5.6l.5 2.3h2.8l.5-2.3a7 7 0 0 0 1.5-.6l2 1.3 2-2-1.3-2c.26-.47.46-.97.6-1.5l2.3-.5z"/>
-              </svg>
+              <Icon
+                name="customize"
+                size={34}
+                stroke={busy ? "var(--gold)" : online ? "var(--steel)" : "var(--ink3)"}
+                className={busy ? "animate-[spin_2.5s_linear_infinite]" : ""}
+              />
               <div className="min-w-0">
                 <div className="break-words text-body font-semibold text-ink">{t.displayName}</div>
                 <div className="text-body text-ink2">
@@ -117,7 +129,9 @@ function DevMachines({ tools, tasks }: { tools: ToolEntry[]; tasks: TaskRow[] })
 }
 /* ---------------- 主页面 ---------------- */
 export default function P25() {
-  const [tab, setTab] = useState<Tab>("tasks");
+  const { search } = useLocation();
+  const navigate = useNavigate();
+  const [tab, setTab] = useState<Tab>(() => tabFromSearch(search));
   const [tools, setTools] = useState<ToolEntry[]>([]);
   const [repos, setRepos] = useState<RepoRow[]>([]);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
@@ -164,6 +178,14 @@ export default function P25() {
   }, []);
 
   useEffect(() => { void load().catch(() => undefined); }, [load]);
+  useEffect(() => { setTab(tabFromSearch(search)); }, [search]);
+
+  const selectTab = (next: Tab) => {
+    const params = new URLSearchParams(search);
+    params.set("section", next);
+    setTab(next);
+    navigate({ search: `?${params.toString()}` });
+  };
 
   // 有活动任务时 4s 轮询（直播态）
   const hasLive = tasks.some((t) => ["running", "auditing"].includes(t.status));
@@ -213,25 +235,25 @@ export default function P25() {
       </div>
       {toast && <div className="mb-3 break-words rounded-lg border border-gline bg-bg800 px-3 py-2 text-body">{toast}</div>}
 
-      {/* 页签 */}
-      <div className="mb-4 flex flex-wrap gap-1 border-b border-line">
-        {([["tasks", "任务单"], ["tools", "织造车间 · 设备"], ["repos", "仓库白名单"], ["releases", "版本时间线"]] as Array<[Tab, string]>).map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)}
-            className={`px-4 py-2 text-body font-medium ${tab === k ? "border-b-2 border-gold text-ink" : "text-ink2 hover:text-ink"}`}>
-            {label}
-          </button>
-        ))}
+      <div className="wl-section-layout">
+        <SectionNavigation
+          label="开发场域分区"
+          items={TAB_ITEMS}
+          activeId={tab}
+          onSelect={(item) => selectTab(item.id as Tab)}
+        />
+        <section className="min-w-0" aria-label={TAB_ITEMS.find((item) => item.id === tab)?.label}>
+          {tab === "tools" && (
+            <>
+              <DevMachines tools={tools} tasks={tasks} />
+              <CustomToolCard act={act} busy={busy} />
+            </>
+          )}
+          {tab === "repos" && <ReposTab repos={repos} act={act} busy={busy} />}
+          {tab === "tasks" && <TasksTab tasks={tasks} repos={repos} tools={tools} act={act} busy={busy} reload={load} />}
+          {tab === "releases" && <ReleasesTab releases={releases} />}
+        </section>
       </div>
-
-      {tab === "tools" && (
-        <>
-          <DevMachines tools={tools} tasks={tasks} />
-          <CustomToolCard act={act} busy={busy} />
-        </>
-      )}
-      {tab === "repos" && <ReposTab repos={repos} act={act} busy={busy} />}
-      {tab === "tasks" && <TasksTab tasks={tasks} repos={repos} tools={tools} act={act} busy={busy} reload={load} />}
-      {tab === "releases" && <ReleasesTab releases={releases} />}
     </div>
   );
 }
@@ -259,7 +281,7 @@ function CustomToolCard({ act, busy }: { act: (f: () => Promise<unknown>, m: str
     <div className="rounded-xl border border-line bg-bg850 p-4">
       <button onClick={() => setOpen(!open)} className="flex w-full items-center justify-between text-left">
         <div>
-          <div className="text-body font-semibold">＋ 接入新机床（客户自定义 · 标准协议）</div>
+          <div className="flex items-center gap-1 text-body font-semibold"><Icon name="partner" size={15} aria-hidden="true" />接入新机床（客户自定义 · 标准协议）</div>
           <div className="mt-0.5 text-body text-ink2">
             新工具出现时不等厂商适配——只要它电脑上装着、满足三条协议（非交互执行 / 输出可解析 / 指定目录工作），贴一份 YAML 即可受管调用
           </div>
@@ -364,7 +386,7 @@ function TasksTab({ tasks, repos, tools, act, busy, reload }: {
         <div className="break-words text-body text-ink2">流水线：确认拆解 → 派发机床 → 三道关审计 → 您裁决 → 发布</div>
         <button onClick={() => setShowForm(!showForm)}
           className="rounded-lg bg-gradient-to-br from-gold to-gold2 px-3.5 py-1.5 text-body font-semibold text-ongold">
-          {showForm ? "收起" : "＋ 新建开发任务"}
+          {showForm ? "收起" : <span className="inline-flex items-center gap-1"><Icon name="partner" size={15} aria-hidden="true" />新建开发任务</span>}
         </button>
       </div>
       {showForm && <TaskForm repos={repos} tools={tools} act={act} busy={busy} done={() => setShowForm(false)} />}
@@ -423,7 +445,7 @@ function TaskForm({ repos, tools, act, busy, done }: {
               placeholder={`验收标准 ${i + 1}`}
               className="flex-1 rounded-lg border border-line bg-bg900 px-3 py-1.5 text-body outline-none focus:border-steel" />
             {i === acceptance.length - 1 && (
-              <button onClick={() => setAcceptance([...acceptance, ""])} className="rounded-lg border border-line px-2 text-body text-ink2" aria-label="添加一条验收标准">＋</button>
+              <button onClick={() => setAcceptance([...acceptance, ""])} className="rounded-lg border border-line px-2 text-body text-ink2" aria-label="添加一条验收标准" title="添加一条验收标准"><Icon name="partner" size={15} aria-hidden="true" /></button>
             )}
           </div>
         ))}
@@ -600,27 +622,27 @@ function TaskDetailView({ taskId, live, reload: _reload }: { taskId: string; liv
       <div ref={streamRef} className="mb-3 max-h-56 overflow-y-auto rounded-lg bg-bg950 p-3 font-mono text-body leading-relaxed">
         {events.length === 0 && <div className="text-ink3">{live ? "等待机床事件……" : "（本会话无事件记录）"}</div>}
         {events.map((e) => <EventLine key={e.seq} ev={e} />)}
-        {live && <div className="animate-pulse text-gold">▍机床运转中</div>}
+        {live && <div className="animate-pulse text-gold">机床运转中</div>}
       </div>
       {/* 三道关 */}
       {cs && (
         <div className="mb-3 rounded-lg border border-line bg-bg900 p-3">
           <div className="mb-2 text-body font-semibold">
-            三道关审计 {cs.gates_passed ? <span className="text-go">✓ 全过</span> : <span className="text-alert">✗ 未全过</span>}
+            三道关审计 {cs.gates_passed ? <span className="inline-flex items-center gap-1 text-go"><Icon name="check" size={13} />全过</span> : <span className="inline-flex items-center gap-1 text-alert"><Icon name="error" size={13} />未全过</span>}
             <span className="ml-2 font-normal text-ink2">{new Date(cs.created_at).toLocaleString("zh-CN")}</span>
           </div>
           <div className="grid grid-cols-1 gap-2 text-body sm:grid-cols-3">
             <div>
               <div className="mb-1 font-medium text-ink2">① 硬门禁</div>
               {cs.gate_results.hardGates.map((g, i) => (
-                <div key={i} className={g.ok ? "text-go" : "text-alert"} title={g.log}>
-                  {g.ok ? "✓" : "✗"} {g.name}
+                <div key={i} className={`flex items-center gap-1 ${g.ok ? "text-go" : "text-alert"}`} title={g.log}>
+                  <Icon name={g.ok ? "check" : "error"} label={g.ok ? "已通过" : "未通过"} size={13} /> {g.name}
                 </div>
               ))}
             </div>
             <div>
               <div className="mb-1 font-medium text-ink2">② 智能评审{cs.gate_results.llmReview.mock && <span className="text-warn">（降级）</span>}</div>
-              <div className={cs.gate_results.llmReview.ok ? "text-go" : "text-alert"}>{cs.gate_results.llmReview.ok ? "✓ 通过" : "✗ 未过"}</div>
+              <div className={`flex items-center gap-1 ${cs.gate_results.llmReview.ok ? "text-go" : "text-alert"}`}><Icon name={cs.gate_results.llmReview.ok ? "check" : "error"} size={13} />{cs.gate_results.llmReview.ok ? "通过" : "未过"}</div>
               <div className="mt-1 whitespace-pre-wrap text-ink2">{cs.gate_results.llmReview.report.slice(0, 300)}</div>
             </div>
             <div>
@@ -642,7 +664,7 @@ function TaskDetailView({ taskId, live, reload: _reload }: { taskId: string; liv
       {/* 围栏留痕 */}
       {detail.fences.length > 0 && (
         <div className="rounded-lg border border-alert/40 bg-bg900 p-3">
-          <div className="mb-1 text-body font-semibold text-alert"><span aria-hidden>⚠ </span>围栏拦截留痕（{detail.fences.length}）</div>
+          <div className="mb-1 flex items-center gap-1 text-body font-semibold text-alert"><Icon name="warning" size={13} />围栏拦截留痕（{detail.fences.length}）</div>
           {detail.fences.slice(0, 5).map((f) => (
             <div key={f.id} className="font-mono text-body text-ink2">
               [{f.verdict === "allow" ? "已放行" : f.verdict === "review" ? "待复核" : "已阻断"}] {f.cmd.slice(0, 100)} — {f.note ? clientValueText(f.note) : "规则已记录"}
@@ -657,14 +679,14 @@ function TaskDetailView({ taskId, live, reload: _reload }: { taskId: string; liv
 function EventLine({ ev }: { ev: DevEventRow }) {
   const p = ev.payload as Record<string, unknown>;
   switch (ev.type) {
-    case "started": return <div className="text-steel">▶ 会话启动 {p.threadId ? `(线程 ${String(p.threadId).slice(0, 12)}…)` : ""}</div>;
-    case "command_run": return <div className="text-ink2">$ {String(p.cmd ?? "").slice(0, 140)} {p.status === "done" ? <span className="text-go">✓</span> : ""}</div>;
-    case "file_edited": return <div className="text-gold">✎ {String(p.path ?? "")}</div>;
+    case "started": return <div className="flex items-center gap-1 text-steel"><Icon name="play" size={13} />会话启动 {p.threadId ? `(线程 ${String(p.threadId).slice(0, 12)}…)` : ""}</div>;
+    case "command_run": return <div className="text-ink2">$ {String(p.cmd ?? "").slice(0, 140)} {p.status === "done" ? <Icon name="check" size={13} className="inline text-go" /> : ""}</div>;
+    case "file_edited": return <div className="flex items-center gap-1 text-gold"><Icon name="edit" size={13} />{String(p.path ?? "")}</div>;
     case "progress": return <div className="text-ink">{String(p.text ?? "").slice(0, 200)}</div>;
     case "usage": return <div className="text-ink3">… 用量：输入 {String(p.inputTokens ?? "—")} / 输出 {String(p.outputTokens ?? "—")}</div>;
-    case "fence_verdict": return <div className="text-alert">⛔ 围栏[{String(p.verdict)}] {String(p.cmd ?? "").slice(0, 80)} — {String(p.note ?? "")}</div>;
-    case "done": return <div className="text-go">■ 完成:{String(p.summary ?? "").slice(0, 160)}</div>;
-    case "error": return <div className="text-alert">✗ {String(p.message ?? "").slice(0, 160)}</div>;
+    case "fence_verdict": return <div className="flex items-center gap-1 text-alert"><Icon name="brake" size={13} />围栏[{String(p.verdict)}] {String(p.cmd ?? "").slice(0, 80)} — {String(p.note ?? "")}</div>;
+    case "done": return <div className="flex items-center gap-1 text-go"><Icon name="check" size={13} />完成：{String(p.summary ?? "").slice(0, 160)}</div>;
+    case "error": return <div className="flex items-center gap-1 text-alert"><Icon name="error" size={13} />{String(p.message ?? "").slice(0, 160)}</div>;
     default: return null;
   }
 }

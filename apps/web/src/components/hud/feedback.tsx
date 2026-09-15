@@ -5,16 +5,16 @@
  * 告警条：红（危险/熔断）/ 琥珀（提醒/降级）/ 青（信息）三级横幅，左图标右文字，可附行动按钮
  */
 import type { ReactNode } from "react";
-import { Button } from "@workloom/ui";
+import { Button, Icon, type IconName } from "@workloom/ui";
 
 export { EmptyState, Skeleton } from "@workloom/ui";
 
 export type BannerLevel = "alert" | "warn" | "info";
 
-const BANNER_META: Record<BannerLevel, { icon: string; cls: string }> = {
-  alert: { icon: "⛔", cls: "border-alert/50 bg-alert/8 text-alert" },
-  warn: { icon: "⚠", cls: "border-warn/45 bg-warn/8 text-warn" },
-  info: { icon: "🛰", cls: "border-holo/40 bg-holo/6 text-holo" },
+const BANNER_META: Record<BannerLevel, { icon: IconName; cls: string }> = {
+  alert: { icon: "brake", cls: "border-alert/50 bg-alert/8 text-alert" },
+  warn: { icon: "warning", cls: "border-warn/45 bg-warn/8 text-warn" },
+  info: { icon: "radar", cls: "border-holo/40 bg-holo/6 text-holo" },
 };
 
 export function BannerAlert({
@@ -31,7 +31,7 @@ export function BannerAlert({
   const m = BANNER_META[level];
   return (
     <div className={`flex items-center gap-2.5 rounded-lg border px-3.5 py-2.5 text-body ${m.cls}`}>
-      <span>{m.icon}</span>
+      <Icon name={m.icon} size={16} />
       <span className="flex-1">{children}</span>
       {actionLabel && (
         <Button

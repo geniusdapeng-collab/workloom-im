@@ -31,8 +31,9 @@ import {
   type Gesture,
 } from "../../components/hud";
 import { RejectDialog } from "../../components/RejectDialog";
-import { AsyncState, Button, DecisionPackage, Overlay } from "@workloom/ui";
+import { AsyncState, Button, DecisionPackage, Icon, Overlay, Textarea } from "@workloom/ui";
 import { operationFailure, toUiFailure } from "../../lib/ui-state";
+import { useNavigationAccess } from "../../shell/NavigationAccess";
 
 interface BizEvent {
   event_id: string;
@@ -62,10 +63,10 @@ function isConflict(a: ApprovalRow): boolean {
 }
 
 export default function P4() {
+  const { canAction } = useNavigationAccess();
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error" | "forbidden">("loading");
   const [hasSnapshot, setHasSnapshot] = useState(false);
   const [loadMessage, setLoadMessage] = useState("");
-  const [role, setRole] = useState("readonly");
   const [approvals, setApprovals] = useState<ApprovalRow[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [banner, setBanner] = useState<{ level: "alert" | "warn" | "info"; text: string } | null>(null);
@@ -83,12 +84,8 @@ export default function P4() {
     if (!background) setLoadState("loading");
     try {
       await ensureDemoLogin();
-      const [meR, ap] = await Promise.all([
-        trpc.members.me.query() as Promise<{ identity: { role: string } }>,
-        trpc.approvals.list.query() as Promise<ApprovalRow[]>,
-      ]);
+      const ap = await trpc.approvals.list.query() as ApprovalRow[];
       if (requestId !== loadSequence.current) return;
-      setRole(meR.identity.role);
       setApprovals(ap);
       setSelectedId((cur) => {
         const currentPending = ap.some((a) => a.approval_id === cur && a.status === "pending");
@@ -112,7 +109,7 @@ export default function P4() {
     return () => { clearInterval(t); loadSequence.current += 1; };
   }, [load]);
 
-  const canApprove = loadState === "ready" && role !== "readonly";
+  const canApprove = loadState === "ready" && canAction("approval.decide");
   const pending = approvals.filter((a) => a.status === "pending");
   const batchable = pending.filter((a) => !a.snapshot.high_risk && !isConflict(a));
   const conflicts = pending.filter(isConflict);
@@ -258,10 +255,10 @@ export default function P4() {
                   }`}>{tier}</span>
                 </div>
                 <div className="mt-1 flex items-center gap-1.5 text-body text-ink2">
-                  {a.event && <AgentAvatarOf name={a.event.who.id} size={18} ring={false} />}
+                  {a.event && <AgentAvatarOf name={actorText(a.event.who.id)} size={18} ring={false} />}
                   <span>{a.event ? `${actorText(a.event.who.id)} · ${actionText(a.event.decision.action)}` : shortId(a.event_id)}</span>
                 </div>
-                {isConflict(a) && <div className="mt-0.5 text-body text-alert">⚠ 快照已过期</div>}
+                {isConflict(a) && <div className="mt-0.5 inline-flex items-center gap-1 text-body text-alert"><Icon name="warning" size={13} />快照已过期</div>}
               </button>
             ))}
           </div>
@@ -355,12 +352,12 @@ export default function P4() {
         ) : pending.length === 0 && !selected ? (
           /* p4_empty（F5.5） */
           <EmptyState
-            icon="✓"
+            icon={<Icon name="check" size={24} />}
             title="今日待办消息已清空"
             hint={`手势统计：采纳 ${gestureStats.approved} · 编辑后采纳 ${gestureStats.edited} · 驳回 ${gestureStats.rejected}`}
           />
         ) : !selected ? (
-          <EmptyState icon="◆" title="选中左侧待办项" hint="单击队列条目展开原生审批卡" />
+          <EmptyState icon={<Icon name="approval" size={24} />} title="选中左侧待办项" hint="单击队列条目展开原生审批卡" />
         ) : (
           <DecisionPackage
             decision={{
@@ -407,7 +404,16 @@ export default function P4() {
         footer={<><Button variant="quiet" disabled={Boolean(busy)} onClick={() => setEditTarget(null)}>取消</Button><Button variant="primary" busy={busy === `edit-${editTarget?.approval_id}`} disabled={!editText.trim()} onClick={() => void submitEdit()}>确认校准并采纳</Button></>}
       >
         <div className="space-y-3">
-          <label className="block text-body text-ink2">修改后的业务内容<textarea className="mt-1 min-h-28 w-full rounded-lg border border-line bg-bg800 px-3 py-2 text-body text-ink" maxLength={500} value={editText} disabled={Boolean(busy)} onChange={(event) => setEditText(event.target.value)} /></label>
+          <Textarea
+            label="修改后的业务内容"
+            description="最多 500 个字；提交后会与本次校准类型一并写入审批账本。"
+            required
+            className="min-h-28 bg-bg800 text-ink"
+            maxLength={500}
+            value={editText}
+            disabled={Boolean(busy)}
+            onChange={(event) => setEditText(event.target.value)}
+          />
           <fieldset disabled={Boolean(busy)}><legend className="mb-2 text-body text-ink2">本次校准属于</legend><div className="flex flex-wrap gap-2"><Button variant={editKind === "correction" ? "primary" : "secondary"} onClick={() => setEditKind("correction")}>事实或数据纠错</Button><Button variant={editKind === "preference" ? "primary" : "secondary"} onClick={() => setEditKind("preference")}>风格或偏好调整</Button></div></fieldset>
         </div>
       </Overlay>

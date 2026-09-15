@@ -9,6 +9,7 @@
  *   不通 → 渲染本引导页（每 3s 自动重试，后端就绪后自动进入，无需手动刷新）。
  */
 import { useEffect, useState, type ReactNode } from "react";
+import { Icon } from "@workloom/ui";
 
 type GateState = "probing" | "down" | "up";
 
@@ -45,8 +46,9 @@ function CopyCmd({ cmd, children }: { cmd: string; children?: ReactNode }) {
       title="点击复制命令"
     >
       {children ?? cmd}
-      <span style={{ fontSize: 14, color: copied ? "#46b190" : "#68707a" }} aria-hidden={!copied}>
-        {copied ? "✓ 已复制" : "⧉"}
+      <span style={{ fontSize: 14, color: copied ? "#46b190" : "#68707a", display: "inline-flex", alignItems: "center", gap: 4 }}>
+        <Icon name={copied ? "check" : "copy"} size={14} />
+        {copied ? "已复制" : "复制"}
       </span>
     </button>
   );
@@ -84,7 +86,7 @@ function GuidePage() {
     }}>
       <div style={{ maxWidth: 640, width: "100%" }}>
         <div style={{ textAlign: "center", marginBottom: 28 }}>
-          <div style={{ fontSize: 40, marginBottom: 8 }}>◈</div>
+          <div style={{ marginBottom: 8, color: "#d6dce4" }}><Icon name="star" size={40} /></div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "#e8ebef", margin: "0 0 8px" }}>
             WorkLoom 环境未就绪
           </h1>

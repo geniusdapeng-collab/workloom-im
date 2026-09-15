@@ -20,6 +20,8 @@ import {
 } from "../../components/hud";
 import { RejectDialog } from "../../components/RejectDialog";
 import { Link } from "react-router";
+import { useNavigationAccess } from "../../shell/NavigationAccess";
+import { Icon, clientChineseText, type IconName } from "@workloom/ui";
 
 interface NightRun {
   id: string; status: string; fenceSnapshot: string | null;
@@ -33,8 +35,8 @@ interface ApprovalRow {
 type Filter = "all" | "done" | "pending" | "needHuman";
 
 export default function P3() {
+  const { entries, canAction } = useNavigationAccess();
   const [ready, setReady] = useState(false);
-  const [role, setRole] = useState("owner");
   const [nightConfigured, setNightConfigured] = useState(true);
   const [run, setRun] = useState<NightRun | null>(null);
   const [approvals, setApprovals] = useState<ApprovalRow[]>([]);
@@ -42,23 +44,23 @@ export default function P3() {
   const [banner, setBanner] = useState<{ level: "alert" | "warn" | "info"; text: string } | null>(null);
   const [rejectTarget, setRejectTarget] = useState<ApprovalRow | null>(null);
   const [batchArmed, setBatchArmed] = useState(false);
+  const canReadApprovals = entries.some((entry) => entry.route === "/approvals");
+  const canReadNight = entries.some((entry) => entry.route === "/night");
 
   const load = useCallback(async () => {
     try {
       await ensureDemoLogin();
-      const [meR, cur, ap] = await Promise.all([
-        trpc.members.me.query() as Promise<{ identity: { role: string } }>,
-        trpc.nightShift.current.query() as Promise<{ configured: boolean; run?: NightRun }>,
-        trpc.approvals.list.query() as Promise<ApprovalRow[]>,
+      const [cur, ap] = await Promise.all([
+        canReadNight ? trpc.nightShift.current.query() as Promise<{ configured: boolean; run?: NightRun }> : Promise.resolve({ configured: false } as { configured: boolean; run?: NightRun }),
+        canReadApprovals ? trpc.approvals.list.query() as Promise<ApprovalRow[]> : Promise.resolve([]),
       ]);
-      setRole(meR.identity.role);
       setNightConfigured(cur.configured);
       setRun(cur.run ?? null);
       setApprovals(ap);
     } finally {
       setReady(true);
     }
-  }, []);
+  }, [canReadApprovals, canReadNight]);
 
   useEffect(() => {
     void load();
@@ -69,7 +71,8 @@ export default function P3() {
   const stats = run?.stats ?? { done: 0, pending: 0, need_human: 0, credits_used: 0 };
   const pending = approvals.filter((a) => a.status === "pending");
   const expired = approvals.filter((a) => a.status === "expired");
-  const canApprove = role !== "readonly";
+  const canApprove = canAction("approval.decide");
+  const canManageNight = canAction("night.manage");
   // 批量采纳低风险：仅 auto 级（非高危）可批量（G6；review/block 不进入批量）
   const batchable = pending.filter((a) => !a.snapshot.high_risk);
   // 手势统计（完成后态 F5.5）
@@ -138,13 +141,13 @@ export default function P3() {
             <><Skeleton count={2} height={56} label="夜班摘要正在加载" /><Skeleton count={4} label="夜班详情正在加载" /></>
           ) : !nightConfigured ? (
             /* p3_empty：夜班未启用（F4.8） */
-            <EmptyState icon="🌙" title="夜班中心尚未出征" hint="前往规则与权限配置夜班，明早 08:30 日报送达。" actionLabel="去配置 →" />
+            <EmptyState icon={<Icon name="night" size={24} />} title="夜班中心尚未出征" hint="前往规则与权限配置夜班，明早 08:30 日报送达。" actionLabel="去配置 →" />
           ) : (
             <>
               {/* P3E1 三栏计数头（与 P1 交接班卡强一致 F4.4；点击筛选） */}
               <div className="rounded-2xl border border-line bg-card p-3.5">
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="text-body font-black text-goldhi">✦ 昨夜日报</span>
+                  <span className="inline-flex items-center gap-1 text-body font-black text-goldhi"><Icon name="night" size={14} />昨夜日报</span>
                   {run?.fenceSnapshot && <span className="text-body text-holo">围栏快照已锁定</span>}
                 </div>
                 <div className="grid grid-cols-3 gap-2">
@@ -175,10 +178,10 @@ export default function P3() {
               {expired.map((a) => (
                 <div key={a.approval_id} className="rounded-2xl border border-dashed border-warn/50 bg-warn/4 p-3.5">
                   <div className="mb-1 flex items-center justify-between">
-                    <span className="text-body font-bold text-warn">◆ 已超时（虚框标记）</span>
+                    <span className="inline-flex items-center gap-1 text-body font-bold text-warn"><Icon name="warning" size={13} />已超时（虚框标记）</span>
                     <span className="font-mono text-body text-ink3">{shortId(a.approval_id)}</span>
                   </div>
-                  <div className="text-body text-ink2">{a.snapshot.summary ?? "待审事项超过 24 小时未处理"}</div>
+                  <div className="text-body text-ink2">{clientChineseText(a.snapshot.summary, "待审事项超过 24 小时未处理")}</div>
                   <div className="mt-1 text-body text-ink3">高风险事项不会因超时自动放行，请尽快审批。</div>
                 </div>
               ))}
@@ -187,7 +190,7 @@ export default function P3() {
               {(filter === "all" || filter === "pending" ? pending : []).map((a) => (
                 <div key={a.approval_id} className="rounded-2xl border border-warn/40 bg-card p-3.5">
                   <div className="mb-1.5 flex items-center justify-between">
-                    <span className="text-body font-bold text-warn">◆ 待审批</span>
+                    <span className="inline-flex items-center gap-1 text-body font-bold text-warn"><Icon name="approval" size={13} />待审批</span>
                     <span className="font-mono text-body text-ink3">{shortId(a.approval_id)}</span>
                   </div>
                   {a.snapshot.rule_version && (
@@ -202,9 +205,9 @@ export default function P3() {
                   {canApprove && (
                     <div className="grid grid-cols-3 gap-2">
                       {([
-                        { g: "approve" as Gesture, icon: "✓", name: "推进", cls: "border-go/50 text-go" },
-                        { g: "edit" as Gesture, icon: "✎", name: "校准", cls: "border-holo/50 text-holo" },
-                        { g: "reject" as Gesture, icon: "✗", name: "制动", cls: "border-alert/55 text-alert" },
+                        { g: "approve" as Gesture, icon: "check" as IconName, name: "推进", cls: "border-go/50 text-go" },
+                        { g: "edit" as Gesture, icon: "edit" as IconName, name: "校准", cls: "border-holo/50 text-holo" },
+                        { g: "reject" as Gesture, icon: "error" as IconName, name: "制动", cls: "border-alert/55 text-alert" },
                       ]).map((r) => (
                         <button
                           key={r.g}
@@ -212,31 +215,31 @@ export default function P3() {
                           onClick={() => void gesture(a, r.g)}
                           className={`min-h-11 cursor-pointer rounded-xl border bg-bg800/50 text-body font-bold ${r.cls}`}
                         >
-                          {r.icon} {r.name}
+                          <Icon name={r.icon} size={14} className="inline" /> {r.name}
                         </button>
                       ))}
                     </div>
                   )}
                   {/* P3E3 查看决策链路 → P4 */}
-                  <div className="mt-2 text-right">
+                  {canReadApprovals && <div className="mt-2 text-right">
                     <Link to="/approvals" className="text-body text-holo no-underline">查看完整决策链路 →</Link>
-                  </div>
+                  </div>}
                 </div>
               ))}
 
               {/* 求援卡（需介入：夜间未执行任何动作 L4.2） */}
               {(filter === "all" || filter === "needHuman") && stats.need_human > 0 && (
                 <div className="rounded-2xl border border-alert/50 bg-alert/6 p-3.5">
-                  <div className="mb-1 text-body font-bold text-alert">▲ 求援 · 需介入 {stats.need_human} 项</div>
+                  <div className="mb-1 flex items-center gap-1 text-body font-bold text-alert"><Icon name="warning" size={14} />求援 · 需介入 {stats.need_human} 项</div>
                   <div className="text-body text-ink2">夜间未执行任何动作；系统不会在信息不足时猜测，请查看决策链路并处理。</div>
-                  <div className="mt-2 text-right"><Link to="/approvals" className="text-body text-holo no-underline">去审批中心 →</Link></div>
+                  {canReadApprovals && <div className="mt-2 text-right"><Link to="/approvals" className="text-body text-holo no-underline">去审批中心 →</Link></div>}
                 </div>
               )}
 
               {/* 完成后态（F5.5：整包处理完 → 清空提示 + 手势统计） */}
               {pending.length === 0 && (
                 <div className="rounded-2xl border border-go/35 bg-go/5 p-3.5 text-center">
-                  <div className="text-body font-bold text-go">✓ 今日待审已清空</div>
+                  <div className="inline-flex items-center gap-1 text-body font-bold text-go"><Icon name="check" size={14} />今日待审已清空</div>
                   <div className="mt-1 text-body text-ink2">
                     手势统计：采纳 {gestureStats.approved} · 编辑后采纳 {gestureStats.edited} · 驳回 {gestureStats.rejected}
                   </div>
@@ -244,9 +247,9 @@ export default function P3() {
               )}
 
               {/* 底部双键（§4.2：批量推进 + 紧急制动；P3E4 仅低风险可批量 G6） */}
-              {canApprove && (
+              {(canApprove || canManageNight) && (
                 <div className="grid grid-cols-2 gap-2 pb-2">
-                  {batchArmed ? (
+                  {canApprove && (batchArmed ? (
                     <button
                       type="button"
                       onClick={() => void doBatch()}
@@ -263,8 +266,8 @@ export default function P3() {
                     >
                       批量推进（{batchable.length}）
                     </button>
-                  )}
-                  <div className="flex items-stretch"><EmergencyBrake onConfirm={() => void doPause()} /></div>
+                  ))}
+                  {canManageNight && <div className="flex items-stretch"><EmergencyBrake onConfirm={() => void doPause()} /></div>}
                 </div>
               )}
             </>

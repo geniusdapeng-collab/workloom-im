@@ -17,10 +17,16 @@ describe.runIf(RUN_DB)("考试院题源 PG 契约", () => {
   const activeWorkspaceId = `ws-eval-active-${suffix}`;
   const emptyWorkspaceId = `ws-eval-empty-${suffix}`;
   let seedQuestionsIfEmpty: typeof import("./eval.js").seedQuestionsIfEmpty;
+  let listExams: typeof import("./eval.js").listExams;
+  let listCandidateResults: typeof import("./eval.js").listCandidateResults;
+  let listAnswers: typeof import("./eval.js").listAnswers;
+  let getSettings: typeof import("./eval.js").getSettings;
+  let setPromotionGate: typeof import("./eval.js").setPromotionGate;
+  let setPromotionGateOn: typeof import("./eval.js").setPromotionGateOn;
   let expectedQuestionCount = 0;
 
   beforeAll(async () => {
-    ({ seedQuestionsIfEmpty } = await import("./eval.js"));
+    ({ seedQuestionsIfEmpty, listExams, listCandidateResults, listAnswers, getSettings, setPromotionGate, setPromotionGateOn } = await import("./eval.js"));
     const { loadVerifiedBundleEvalQuestions } = await import("@workloom/base/bundles");
     expectedQuestionCount = loadVerifiedBundleEvalQuestions("ai-pm").questions.length;
     await owner.query(`INSERT INTO tenants (id, name, plan) VALUES ($1,$2,'community')`, [tenantId, "考试题源隔离租户"]);
@@ -75,5 +81,29 @@ describe.runIf(RUN_DB)("考试院题源 PG 契约", () => {
     );
     expect(after.rows[0]).toEqual(before.rows[0]);
     expect(after.rows[0]).toEqual({ questions: "0", exams: "0", users: "0", events: "0" });
+  });
+
+  it("考试列表、答卷、候选成绩和晋级门禁均使用显式工作区参数", async () => {
+    expect(await listExams(activeWorkspaceId, 5)).toEqual([]);
+    expect(await listCandidateResults(activeWorkspaceId, `missing-${suffix}`)).toEqual([]);
+    expect(await listAnswers(activeWorkspaceId, `missing-${suffix}`)).toEqual([]);
+
+    const initial = await getSettings(activeWorkspaceId) as { promotion_gate?: boolean };
+    const changed = await setPromotionGate(activeWorkspaceId, !Boolean(initial.promotion_gate)) as { promotion_gate?: boolean };
+    expect(changed.promotion_gate).toBe(!Boolean(initial.promotion_gate));
+  });
+
+  it("晋升门禁与审计事件共用事务，事件失败时状态不会提前提交", async () => {
+    const { serviceTx } = await import("./events.js");
+    const before = await getSettings(activeWorkspaceId) as { promotion_gate?: boolean };
+    const target = !Boolean(before.promotion_gate);
+
+    await expect(serviceTx(activeWorkspaceId, async (client) => {
+      await setPromotionGateOn(client, activeWorkspaceId, target);
+      throw new Error("模拟事件账本写入失败");
+    })).rejects.toThrow("模拟事件账本写入失败");
+
+    const after = await getSettings(activeWorkspaceId) as { promotion_gate?: boolean };
+    expect(Boolean(after.promotion_gate)).toBe(Boolean(before.promotion_gate));
   });
 });

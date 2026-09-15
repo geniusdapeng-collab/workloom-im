@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button, Overlay, clientChineseText, clientIdentifierText, clientValueText } from "@workloom/ui";
+import { Button, Icon, Overlay, clientChineseText, clientIdentifierText, clientValueText } from "@workloom/ui";
 import { ApiError, api, clearCSession, getStoredUser, storeUser } from "../lib/api";
 import { getConfig, getConfigState } from "../lib/config";
 import { resetPrefetch, startPrefetch } from "../lib/prefetch";
@@ -157,19 +157,17 @@ export default function MePage({ onGoChat }: { onGoChat: () => void }) {
             </div>
           ) : (
             <>
-              <div className="flex min-w-0 items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full border border-gline bg-gold/15 font-orb text-[16px] text-gold">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+                <div className="flex min-w-0 flex-[1_1_14rem] items-center gap-3">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-gline bg-gold/15 text-center font-orb text-[1rem] text-gold" aria-hidden>
                     {user?.nickname?.slice(0, 1) ?? cfg.logoText}
                   </div>
                   <div className="min-w-0">
-                    <p className="break-words text-[15px] font-semibold text-ink">
+                    <p className="break-words text-[0.9375rem] font-semibold text-ink">
                       {user?.nickname ?? `${cfg.brandName}用户`}
                     </p>
-                    <p className="mt-0.5 flex items-center gap-1 text-body text-gold">
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2l2.4 4.8 5.3.8-3.8 3.7.9 5.3L12 14.1 7.2 16.6l.9-5.3L4.3 7.6l5.3-.8L12 2z" />
-                      </svg>
+                    <p className="mt-0.5 flex flex-wrap items-center gap-1 text-body text-gold">
+                      <Icon name="star" size={11} fill="currentColor" stroke="none" />
                       {profile.membership
                         ? member ? clientChineseText(member.title, "权益信息待确认") : "权益信息待确认"
                         : profile.labels.identity}
@@ -177,8 +175,8 @@ export default function MePage({ onGoChat }: { onGoChat: () => void }) {
                   </div>
                 </div>
                 {profile.membership ? (
-                  <div className="shrink-0 text-right">
-                    <p className="max-w-[9rem] break-words font-orb text-[20px] text-goldhi">
+                  <div className="max-w-full flex-none text-right">
+                    <p className="max-w-[9rem] break-words font-orb text-[1.25rem] text-goldhi">
                       {member?.metric ? clientValueText(member.metric.value) : "…"}
                     </p>
                     <p className="max-w-[9rem] break-words text-body text-ink3">
@@ -188,7 +186,7 @@ export default function MePage({ onGoChat }: { onGoChat: () => void }) {
                     </p>
                   </div>
                 ) : (
-                  <span className={`shrink-0 rounded-full border px-2.5 py-1 text-body ${user?.authMode === "demo" ? "border-warn/50 bg-warn/10 text-warn" : "border-go/50 bg-go/10 text-go"}`}>
+                  <span className={`max-w-full flex-none rounded-full border px-2.5 py-1 text-body ${user?.authMode === "demo" ? "border-warn/50 bg-warn/10 text-warn" : "border-go/50 bg-go/10 text-go"}`}>
                     {user?.authMode === "demo" ? "演示身份" : "入口已验证"}
                   </span>
                 )}
@@ -206,8 +204,8 @@ export default function MePage({ onGoChat }: { onGoChat: () => void }) {
 
         {/* 身份绑定状态由 Bundle identityPolicy 投影决定，基座默认不展示死入口。 */}
         {profile.identityBinding && <div className="rounded-2xl border border-line bg-card px-4 py-3">
-          <div className="flex min-w-0 items-center justify-between gap-3">
-          <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0 flex-[1_1_12rem]">
             <p className="text-body text-ink">身份绑定</p>
             <p className="mt-0.5 break-words text-body text-ink3">
               {user?.memberId ? `${profile.labels.identity}已关联` : "网页访客身份 · 绑定后可使用专属权益"}
@@ -319,7 +317,7 @@ export default function MePage({ onGoChat }: { onGoChat: () => void }) {
             <p className="text-body text-ink">历史会话</p>
             <p className="mt-0.5 break-words text-body text-ink3">继续与 {cfg.agentName} 的对话</p>
           </div>
-          <span className="text-ink3">›</span>
+          <Icon name="chevron" size={15} className="text-ink3" />
         </button>
 
         {/* 客服电话（配置驱动） */}
@@ -332,11 +330,7 @@ export default function MePage({ onGoChat }: { onGoChat: () => void }) {
               <p className="text-body text-ink">联系客服</p>
               <p className="mt-0.5 text-body text-ink3">{cfg.supportPhone}</p>
             </div>
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-holo/10 text-holo">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
-              </svg>
-            </span>
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-holo/10 text-holo"><Icon name="phone" size={15} /></span>
           </a>
         )}
 
@@ -349,9 +343,9 @@ export default function MePage({ onGoChat }: { onGoChat: () => void }) {
           <p className="text-body font-medium text-ink">{profile.labels.orders}</p>
           <div className="mt-2.5 space-y-2.5">
             {orders.slice(0, 3).map((o) => (
-              <div key={o.id} className="flex items-center justify-between text-body">
+              <div key={o.id} className="flex min-w-0 flex-wrap items-center justify-between gap-1 text-body">
                 <span className="min-w-0 break-words text-ink2">{clientChineseText(o.title, "业务记录")}</span>
-                <span className="shrink-0 pl-2 text-ink3">{clientChineseText(o.statusText, "状态待确认")}</span>
+                <span className="max-w-full break-words text-ink3">{clientChineseText(o.statusText, "状态待确认")}</span>
               </div>
             ))}
             {orders.length === 0 && !loading && (

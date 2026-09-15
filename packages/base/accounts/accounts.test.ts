@@ -234,6 +234,21 @@ d("PG 集成 · 账号全链路（0027 迁移后）", () => {
     expect(ok).toBe(false);
   });
 
+  it("高风险验证码绑定具体动作，且消费后不能重放", async () => {
+    const challenge = await svc.requestCode(deps, {
+      channel: "phone", target: phone, purpose: "danger-confirm:member.remove",
+    });
+    expect(await svc.consumeCode(deps, {
+      channel: "phone", target: phone, purpose: "danger-confirm:api-key.revoke", code: challenge.devCode!,
+    })).toBe(false);
+    expect(await svc.consumeCode(deps, {
+      channel: "phone", target: phone, purpose: "danger-confirm:member.remove", code: challenge.devCode!,
+    })).toBe(true);
+    expect(await svc.consumeCode(deps, {
+      channel: "phone", target: phone, purpose: "danger-confirm:member.remove", code: challenge.devCode!,
+    })).toBe(false);
+  });
+
   it("验证码登录 + 每日限发 5 次", async () => {
     for (let i = 0; i < 5; i++) await svc.requestCode(deps, { channel: "phone", target: phone, purpose: "login" });
     await expect(svc.requestCode(deps, { channel: "phone", target: phone, purpose: "login" }))
@@ -331,7 +346,7 @@ d("PG 集成 · 账号全链路（0027 迁移后）", () => {
     expect(r.passCode).toMatch(/^\d{6}$/);
   });
 
-  it("API 密钥：签发→校验→吊销后拒绝", async () => {
+  it("API 密钥：签发→双密钥轮换→确认切换→吊销", async () => {
     const wsId = (await pool.query(`SELECT id FROM workspaces WHERE slug=$1`, [wsSlug])).rows[0].id;
     const { keyId, plainKey } = await pol.createApiKey(deps, {
       workspaceId: wsId, name: "PMS 对接", capabilities: ["read:orders"], createdBy: "mem-test",
@@ -339,8 +354,38 @@ d("PG 集成 · 账号全链路（0027 迁移后）", () => {
     expect(plainKey.startsWith("wlk_")).toBe(true);
     const id1 = await pol.verifyApiKey(deps.q, plainKey);
     expect(id1).toMatchObject({ workspaceId: wsId, capabilities: ["read:orders"] });
-    await pol.revokeApiKey(deps.q, wsId, keyId);
+    const rotated = await pol.rotateApiKey(deps, {
+      workspaceId: wsId, keyId, overlapMinutes: 5, createdBy: "mem-test",
+    });
+    expect(rotated.plainKey.startsWith("wlk_")).toBe(true);
+    expect(rotated.plainKey).not.toBe(plainKey);
+    expect(await pol.verifyApiKey(deps.q, plainKey)).toMatchObject({ keyId });
+    expect(await pol.verifyApiKey(deps.q, rotated.plainKey)).toMatchObject({ keyId: rotated.keyId });
+
+    const duringRotation = await pol.listApiKeys(deps.q, wsId);
+    expect(duringRotation.find((row) => row.id === keyId)).toMatchObject({ replaced_by: rotated.keyId });
+    expect(duringRotation.find((row) => row.id === rotated.keyId)).toMatchObject({ rotation_of: keyId });
+
+    await pol.completeApiKeyRotation(deps.q, wsId, keyId);
     expect(await pol.verifyApiKey(deps.q, plainKey)).toBeNull();
+    expect(await pol.verifyApiKey(deps.q, rotated.plainKey)).toMatchObject({ keyId: rotated.keyId });
+    await pol.revokeApiKey(deps.q, wsId, rotated.keyId);
+    expect(await pol.verifyApiKey(deps.q, rotated.plainKey)).toBeNull();
+  });
+
+  it("API 密钥：并存窗口到期自动落成失效状态", async () => {
+    const wsId = (await pool.query(`SELECT id FROM workspaces WHERE slug=$1`, [wsSlug])).rows[0].id;
+    const source = await pol.createApiKey(deps, {
+      workspaceId: wsId, name: "自动到期回归", capabilities: ["read:events"], createdBy: "mem-test",
+    });
+    const rotated = await pol.rotateApiKey(deps, {
+      workspaceId: wsId, keyId: source.keyId, overlapMinutes: 5, createdBy: "mem-test",
+    });
+    await pool.query(`UPDATE api_keys SET overlap_expires_at=now()-interval '1 second' WHERE id=$1`, [source.keyId]);
+    expect(await pol.verifyApiKey(deps.q, source.plainKey)).toBeNull();
+    expect(await pol.verifyApiKey(deps.q, rotated.plainKey)).toMatchObject({ keyId: rotated.keyId });
+    const rows = await pol.listApiKeys(deps.q, wsId);
+    expect(rows.find((row) => row.id === source.keyId)?.revoked_at).toBeTruthy();
   });
 
   it("审批模板应用：预填四行且幂等", async () => {

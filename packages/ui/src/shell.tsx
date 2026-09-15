@@ -10,6 +10,7 @@ import {
 } from "react";
 import { IconButton, Select } from "./forms";
 import { Icon } from "./icons";
+import { clientChineseText } from "./language";
 import {
   isNavigationActive,
   NAVIGATION_GROUP_LABELS,
@@ -160,6 +161,7 @@ export function SideNavigation({
               </h2>
               <div className="wl-side-navigation__items">
                 {groupEntries.map((entry) => {
+                  const clientTitle = clientChineseText(entry.title, "未命名页面");
                   const active = activeCapabilityId
                     ? activeCapabilityId === entry.capabilityId
                     : Boolean(activeRoute && isNavigationActive(entry, activeRoute));
@@ -171,15 +173,15 @@ export function SideNavigation({
                         type="button"
                         className={`wl-side-navigation__item ${active ? "wl-side-navigation__item--active" : ""}`.trim()}
                         aria-current={active ? "page" : undefined}
-                        aria-label={collapsed ? entry.title : undefined}
-                        title={collapsed ? entry.title : undefined}
+                        aria-label={collapsed ? clientTitle : undefined}
+                        title={collapsed ? clientTitle : undefined}
                         disabled={disabled}
                         ref={(node) => { itemRefs.current[entry.capabilityId] = node; }}
                         onClick={() => onNavigate(entry)}
                         onKeyDown={(event) => handleKeyDown(event, entry)}
                       >
                         <Icon name={entry.icon} />
-                        <span className={collapsed ? "wl-visually-hidden" : "wl-side-navigation__item-label"}>{entry.title}</span>
+                        <span className={collapsed ? "wl-visually-hidden" : "wl-side-navigation__item-label"}>{clientTitle}</span>
                       </button>
                       {action && <div className="wl-side-navigation__item-action">{action}</div>}
                     </div>
@@ -198,6 +200,69 @@ export function SideNavigation({
 /** PRD 标准短名；复用 SideNavigation，不维护第二套导航实现。 */
 export function SideNav(props: SideNavigationProps) {
   return <SideNavigation {...props} />;
+}
+
+export interface SectionNavigationItem {
+  id: string;
+  label: string;
+  badge?: string | number;
+  disabled?: boolean;
+}
+
+export interface SectionNavigationProps extends Omit<HTMLAttributes<HTMLElement>, "onSelect"> {
+  items: readonly SectionNavigationItem[];
+  activeId: string;
+  onSelect: (item: SectionNavigationItem) => void;
+  label?: string;
+}
+
+/**
+ * PC 页内分区导航。它固定出现在内容左侧，替代重复的顶部横向页签；上下方向键、
+ * Home/End 与主侧栏保持一致，行业包只能投影条目，不能复制导航实现。
+ */
+export function SectionNavigation({ items, activeId, onSelect, label = "页面分区", className = "", ...props }: SectionNavigationProps) {
+  const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, item: SectionNavigationItem) => {
+    const currentIndex = items.findIndex((candidate) => candidate.id === item.id);
+    const focusItem = (target: SectionNavigationItem) => itemRefs.current[target.id]?.focus();
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      focusByOffset(items, currentIndex, 1, focusItem);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      focusByOffset(items, currentIndex, -1, focusItem);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      const target = items.find((candidate) => !candidate.disabled);
+      if (target) focusItem(target);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      const target = [...items].reverse().find((candidate) => !candidate.disabled);
+      if (target) focusItem(target);
+    }
+  };
+  return (
+    <nav {...props} className={`wl-section-navigation ${className}`.trim()} aria-label={label}>
+      {items.map((item) => {
+        const active = item.id === activeId;
+        return (
+          <button
+            key={item.id}
+            type="button"
+            ref={(node) => { itemRefs.current[item.id] = node; }}
+            className={`wl-section-navigation__item ${active ? "wl-section-navigation__item--active" : ""}`.trim()}
+            aria-current={active ? "page" : undefined}
+            disabled={item.disabled}
+            onClick={() => onSelect(item)}
+            onKeyDown={(event) => handleKeyDown(event, item)}
+          >
+            <span className="wl-section-navigation__label">{item.label}</span>
+            {item.badge !== undefined && <span className="wl-section-navigation__badge" aria-label={`${item.badge} 项`}>{item.badge}</span>}
+          </button>
+        );
+      })}
+    </nav>
+  );
 }
 
 export interface BottomTabItem {

@@ -23,6 +23,7 @@
  *  4. 用户新增 / 系统自动生成员工时，由 personaOf() 依 preset_key 稳定分配，
  *     不会随机跳变；行业岗位名称由 Bundle 投影提供，不登记在基座词表。
  */
+import { clientChineseText } from "@workloom/ui";
 
 /** preset_key → 人名（只保留基座公共角色；其他员工按稳定哈希生成） */
 export const PERSONA_MAP: Record<string, string> = {
@@ -112,7 +113,8 @@ export function roleTitleOf(roleName: string | null | undefined, presetKey?: str
   const role = (roleName ?? "").trim();
   // 岗位名来自服务端或行业包，普通客户端只接受可读中文；英文键继续走
   // 稳定人名兜底，避免把实现字段直接当成岗位名释放。
-  if (/[\u3400-\u9fff]/.test(role) && !/[A-Za-z][A-Za-z0-9_]*_[A-Za-z0-9_]+/.test(role)) return role;
+  const safeRole = clientChineseText(role, "");
+  if (safeRole) return safeRole;
   if (presetKey) {
     const KEY_TITLE: Record<string, string> = {
       "company-ceo": "数字总经理",

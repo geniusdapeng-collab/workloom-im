@@ -97,11 +97,21 @@ export async function createApiKey(
 
 /** 校验 API 密钥（命中即更新 last_used_at；能力校验由调用方做） */
 export async function verifyApiKey(q: QueryFn, plain: string): Promise<ApiKeyIdentity | null> {
+  const keyHash = hashSecret(plain, "apikey");
+  // 轮换窗口到期即把旧密钥落成“已吊销”，既拒绝认证，也给管理页留下明确审计状态。
+  await q(
+    `UPDATE api_keys SET revoked_at=overlap_expires_at
+     WHERE key_hash=$1 AND revoked_at IS NULL
+       AND overlap_expires_at IS NOT NULL AND overlap_expires_at <= now()`,
+    [keyHash],
+  );
   const r = await q(
     `UPDATE api_keys SET last_used_at=now()
-     WHERE key_hash=$1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())
+     WHERE key_hash=$1 AND revoked_at IS NULL
+       AND (expires_at IS NULL OR expires_at > now())
+       AND (overlap_expires_at IS NULL OR overlap_expires_at > now())
      RETURNING id, workspace_id, capabilities, rate_limit`,
-    [hashSecret(plain, "apikey")],
+    [keyHash],
   );
   const row = r.rows[0];
   if (!row) return null;
@@ -112,8 +122,15 @@ export async function verifyApiKey(q: QueryFn, plain: string): Promise<ApiKeyIde
 }
 
 export async function listApiKeys(q: QueryFn, workspaceId: string) {
+  await q(
+    `UPDATE api_keys SET revoked_at=overlap_expires_at
+     WHERE workspace_id=$1 AND revoked_at IS NULL
+       AND overlap_expires_at IS NOT NULL AND overlap_expires_at <= now()`,
+    [workspaceId],
+  );
   const r = await q(
-    `SELECT id, name, key_prefix, capabilities, rate_limit, last_used_at, expires_at, revoked_at, created_at
+    `SELECT id, name, key_prefix, capabilities, rate_limit, last_used_at, expires_at, revoked_at, created_at,
+            rotation_of, replaced_by, overlap_expires_at
      FROM api_keys WHERE workspace_id=$1 ORDER BY created_at DESC`,
     [workspaceId],
   );
@@ -121,7 +138,76 @@ export async function listApiKeys(q: QueryFn, workspaceId: string) {
 }
 
 export async function revokeApiKey(q: QueryFn, workspaceId: string, keyId: string): Promise<void> {
-  await q(`UPDATE api_keys SET revoked_at=now() WHERE id=$1 AND workspace_id=$2`, [keyId, workspaceId]);
+  const result = await q(
+    `UPDATE api_keys SET revoked_at=COALESCE(revoked_at, now())
+     WHERE id=$1 AND workspace_id=$2 RETURNING id`,
+    [keyId, workspaceId],
+  );
+  if (!result.rows[0]) throw new Error("密钥不存在或不属于当前工作区");
+}
+
+/**
+ * 无中断轮换：一次 SQL 原子创建新密钥并为旧密钥开启短暂并存窗口。
+ * 新密钥继承原能力、限流和到期时间；明文仍只返回一次。
+ */
+export async function rotateApiKey(
+  deps: AccountsDeps,
+  input: { workspaceId: string; keyId: string; overlapMinutes?: number; createdBy: string },
+): Promise<{ keyId: string; plainKey: string; replacedKeyId: string; overlapExpiresAt: string }> {
+  const overlapMinutes = input.overlapMinutes ?? 60;
+  if (!Number.isInteger(overlapMinutes) || overlapMinutes < 5 || overlapMinutes > 1_440) {
+    throw new Error("双密钥并存时间须在 5 分钟至 24 小时之间");
+  }
+  const plain = `wlk_${randomToken(24)}`;
+  const newKeyId = newId("key");
+  const result = await deps.q(
+    `WITH source AS MATERIALIZED (
+       SELECT id, workspace_id, name, capabilities, rate_limit, expires_at
+       FROM api_keys
+       WHERE id=$1 AND workspace_id=$2 AND revoked_at IS NULL
+         AND replaced_by IS NULL
+         AND (expires_at IS NULL OR expires_at > now())
+         AND (overlap_expires_at IS NULL OR overlap_expires_at > now())
+       FOR UPDATE
+     ), created AS (
+       INSERT INTO api_keys
+         (id, workspace_id, name, key_hash, key_prefix, capabilities, rate_limit,
+          expires_at, created_by, rotation_of)
+       SELECT $3, workspace_id, name, $4, $5, capabilities, rate_limit,
+              expires_at, $6, id
+       FROM source
+       RETURNING id
+     ), linked AS (
+       UPDATE api_keys AS old_key
+       SET replaced_by=(SELECT id FROM created),
+           overlap_expires_at=now() + ($7::int || ' minutes')::interval
+       WHERE old_key.id=(SELECT id FROM source) AND EXISTS (SELECT 1 FROM created)
+       RETURNING old_key.id, old_key.overlap_expires_at
+     )
+     SELECT created.id AS new_key_id, linked.id AS old_key_id,
+            linked.overlap_expires_at
+     FROM created CROSS JOIN linked`,
+    [input.keyId, input.workspaceId, newKeyId, hashSecret(plain, "apikey"), plain.slice(0, 10), input.createdBy, overlapMinutes],
+  );
+  const row = result.rows[0];
+  if (!row) throw new Error("密钥不可轮换：它可能已失效、正在轮换，或不属于当前工作区");
+  return {
+    keyId: row.new_key_id as string,
+    plainKey: plain,
+    replacedKeyId: row.old_key_id as string,
+    overlapExpiresAt: new Date(row.overlap_expires_at as string).toISOString(),
+  };
+}
+
+/** 确认调用方已切换到新密钥后，可提前结束旧密钥并存窗口。 */
+export async function completeApiKeyRotation(q: QueryFn, workspaceId: string, keyId: string): Promise<void> {
+  const result = await q(
+    `UPDATE api_keys SET revoked_at=COALESCE(revoked_at, now()), overlap_expires_at=LEAST(overlap_expires_at, now())
+     WHERE id=$1 AND workspace_id=$2 AND replaced_by IS NOT NULL
+     RETURNING id`,
+    [keyId, workspaceId],
+  );
+  if (!result.rows[0]) throw new Error("没有可结束的密钥轮换窗口");
 }
 
 /* ================= 集团租户层级 ================= */

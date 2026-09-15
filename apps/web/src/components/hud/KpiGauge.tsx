@@ -35,7 +35,7 @@ export function KpiGauge({
       <div className="relative my-1 font-orb text-[22px] font-bold text-ink">{value}</div>
       {delta !== undefined && (
         <div className={`relative text-body font-bold ${delta >= 0 ? "text-go" : "text-alert"}`}>
-          {delta >= 0 ? "▲" : "▼"} {Math.abs(delta)}%
+          {delta >= 0 ? "上升" : "下降"} {Math.abs(delta)}%
         </div>
       )}
       <div className="relative mt-1 text-body text-ink3">

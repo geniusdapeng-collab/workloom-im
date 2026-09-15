@@ -4,9 +4,11 @@
  * 数据：trpc.service.eval.*（硬轨零 token；软题 L3 阅卷 P1 接入）
  */
 import { useCallback, useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router";
 import { ensureDemoLogin, trpc } from "../../lib/trpc";
-import { AsyncState, Button, Overlay } from "@workloom/ui";
+import { AsyncState, Button, Overlay, SectionNavigation, clientChineseText } from "@workloom/ui";
 import { operationFailure, toUiFailure } from "../../lib/ui-state";
+import { useNavigationAccess } from "../../shell/NavigationAccess";
 
 /* ---------------- 类型（与服务端对齐） ---------------- */
 interface DimScores { accuracy: number; recall: number; latency: number; satisfaction: number }
@@ -63,7 +65,7 @@ const SUBJECT_TEXT: Record<string, string> = {
 };
 
 function safeNarrative(value: string | null | undefined, fallback: string): string {
-  return value && /[\u3400-\u9fff]/.test(value) ? value : fallback;
+  return clientChineseText(value, fallback);
 }
 
 function finiteNumber(value: unknown): number | null {
@@ -77,14 +79,26 @@ function formatDateTime(value: string): string {
 }
 
 type Tab = "report" | "exams" | "questions" | "settings";
+const TAB_ITEMS: ReadonlyArray<{ id: Tab; label: string }> = [
+  { id: "report", label: "成绩单" },
+  { id: "exams", label: "考试记录" },
+  { id: "questions", label: "题库" },
+  { id: "settings", label: "设置" },
+];
+function tabFromSearch(search: string): Tab {
+  const value = new URLSearchParams(search).get("section");
+  return TAB_ITEMS.some((item) => item.id === value) ? value as Tab : "report";
+}
 
 export default function P24() {
-  const [tab, setTab] = useState<Tab>("report");
+  const { canAction } = useNavigationAccess();
+  const { search } = useLocation();
+  const navigate = useNavigate();
+  const [tab, setTab] = useState<Tab>(() => tabFromSearch(search));
   const [report, setReport] = useState<Report | null>(null);
   const [exams, setExams] = useState<ExamRow[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [settings, setSettings] = useState<EvalSettings | null>(null);
-  const [role, setRole] = useState("readonly");
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error" | "forbidden">("loading");
   const [hasSnapshot, setHasSnapshot] = useState(false);
   const [loadMessage, setLoadMessage] = useState("");
@@ -107,14 +121,12 @@ export default function P24() {
           settings: { query: () => Promise<{ settings: EvalSettings }> };
         };
       };
-      const [me, r, e, q, st] = await Promise.all([
-        trpc.members.me.query() as Promise<{ identity: { role: string } }>,
+      const [r, e, q, st] = await Promise.all([
         svc.eval.latestReport.query(),
         svc.eval.listExams.query(),
         svc.eval.listQuestions.query(),
         svc.eval.settings.query(),
       ]);
-      setRole(me.identity.role);
       setReport(r.report);
       setExams(e.exams);
       setQuestions(q.questions);
@@ -132,6 +144,14 @@ export default function P24() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { setTab(tabFromSearch(search)); }, [search]);
+
+  const selectTab = (next: Tab) => {
+    const params = new URLSearchParams(search);
+    params.set("section", next);
+    setTab(next);
+    navigate({ search: `?${params.toString()}` });
+  };
 
   const runExam = async () => {
     if (running) return;
@@ -175,7 +195,7 @@ export default function P24() {
 
   const score = report ? finiteNumber(report.total_score) : null;
   const vm = report ? VERDICT_META[report.verdict] : null;
-  const canRunExam = loadState === "ready" && role !== "readonly";
+  const canRunExam = loadState === "ready" && canAction("exam.run");
 
   if (!hasSnapshot) {
     return (
@@ -216,18 +236,14 @@ export default function P24() {
         </div>
       )}
 
-      {/* Tab 栏 */}
-      <div className="mb-4 flex flex-wrap gap-1 rounded-lg border border-line bg-card p-1 text-body">
-        {([["report", "成绩单"], ["exams", "考试记录"], ["questions", `题库 ${questions.length}`], ["settings", "设置"]] as Array<[Tab, string]>).map(([k, label]) => (
-          <button
-            key={k}
-            onClick={() => setTab(k)}
-            className={`rounded-md px-3 py-1.5 ${tab === k ? "bg-bg700 font-semibold text-ink" : "text-ink2 hover:text-ink"}`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <div className="wl-section-layout">
+        <SectionNavigation
+          label="考试院分区"
+          items={TAB_ITEMS.map((item) => item.id === "questions" ? { ...item, badge: questions.length } : item)}
+          activeId={tab}
+          onSelect={(item) => selectTab(item.id as Tab)}
+        />
+        <section className="min-w-0" aria-label={TAB_ITEMS.find((item) => item.id === tab)?.label}>
 
       {/* 成绩单 */}
       {tab === "report" && (
@@ -237,7 +253,7 @@ export default function P24() {
           ) : (
             <>
               {/* 总分卡 + 四维记分卡 */}
-              <div className="mb-4 grid grid-cols-[220px_1fr] gap-4">
+              <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-[220px_1fr]">
                 <div className="rounded-xl border border-line bg-card p-5 text-center">
                   <div className="text-[42px] font-bold leading-none" style={{ color: report.verdict === "pass" ? "var(--color-go)" : report.verdict === "warn" ? "var(--color-warn)" : "var(--color-alert)" }}>
                     {score}
@@ -254,7 +270,7 @@ export default function P24() {
                 </div>
                 <div className="rounded-xl border border-line bg-card p-5">
                   <div className="mb-3 text-body font-semibold">四维记分卡</div>
-                  <div className="grid grid-cols-2 gap-x-8 gap-y-3">
+                  <div className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
                     {DIM_META.map(({ key, label }) => {
                       const v = finiteNumber(report.dim_scores?.[key]);
                       const d = finiteNumber(report.delta?.perDim?.[key]);
@@ -307,7 +323,7 @@ export default function P24() {
 
       {/* 考试记录 */}
       {tab === "exams" && (
-        <div className="rounded-xl border border-line bg-card">
+        <div className="overflow-x-auto rounded-xl border border-line bg-card">
           {exams.length === 0 ? <Empty text="暂无考试记录" /> : (
             <table className="w-full text-body">
               <thead>
@@ -375,7 +391,7 @@ export default function P24() {
             <p className="mb-3 break-words text-body text-ink2">
               开启后：考试跌破上岗线或触碰红线时，自动拦截新技能启用 / 版本发布 / 影子转正 / 模拟转实盘。默认关闭（只提示不拦截），授权动作留痕上链。
             </p>
-            {role !== "readonly" && loadState === "ready" ? <button
+            {canRunExam ? <button
               onClick={() => setGateTarget(!settings.promotion_gate)}
               disabled={gateBusy}
               className={`rounded-lg px-4 py-2 text-body font-semibold ${settings.promotion_gate ? "bg-alert/15 text-alert" : "bg-go/15 text-go"}`}
@@ -385,6 +401,8 @@ export default function P24() {
           </div>
         </div>
       )}
+        </section>
+      </div>
       <Overlay
         open={confirmExam}
         title="确认立即开考"

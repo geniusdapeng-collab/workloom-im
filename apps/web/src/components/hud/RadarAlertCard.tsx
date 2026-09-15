@@ -5,6 +5,7 @@
  *      禁止消失导致布局跳动（§5.8）
  */
 import { EventIdChip } from "./EventIdChip";
+import { Icon } from "@workloom/ui";
 
 export type RadarSeverity = "p0" | "p1" | "p2" | "attention";
 
@@ -56,7 +57,7 @@ export function RadarAlertCard({
             onClick={onDispatch}
             className="cursor-pointer rounded-md gold-grad px-3 py-1 text-body font-black text-ongold shadow-[0_0_12px_rgba(255,160,60,.35)] disabled:cursor-wait disabled:opacity-50"
           >
-            {busy ? "正在派单…" : "派发处理任务 ▶"}
+            {busy ? "正在派单…" : <>派发处理任务 <Icon name="send" size={13} className="inline" /></>}
           </button>
         )}
       </div>
@@ -69,7 +70,7 @@ export function RadarAlertCard({
 export function RadarAllClear() {
   return (
     <div className="rounded-msg border border-go/25 bg-go/4 px-4 py-3.5 text-center">
-      <span className="text-body text-go">🛰 昨夜一切正常，雷达全域清净</span>
+      <span className="inline-flex items-center gap-1.5 text-body text-go"><Icon name="radar" size={15} />昨夜一切正常，雷达全域清净</span>
     </div>
   );
 }

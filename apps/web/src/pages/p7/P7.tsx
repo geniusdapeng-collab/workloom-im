@@ -18,7 +18,8 @@ import { ensureDemoLogin, trpc } from "../../lib/trpc";
 import { Bridge } from "../../shell/Bridge";
 import { BannerAlert, EmptyState, Skeleton } from "../../components/hud";
 import { MEMBER_ROLE_TEXT, actorText, dictText, shortId, versionText } from "../../lib/display";
-import { Button, Overlay, clientChineseText } from "@workloom/ui";
+import { Button, Icon, Overlay, clientChineseText, type IconName } from "@workloom/ui";
+import { useNavigationAccess } from "../../shell/NavigationAccess";
 
 interface SlotState { id: string; label: string; filled: boolean; failed: boolean; summary: string; go?: "p5" | "p8" }
 interface CheckItem { key: string; label: string; ok: boolean; detail: string; fix?: string; slot?: string }
@@ -35,14 +36,14 @@ interface BundleProfile {
 interface StatusResp { activeSlug: string; profiles: BundleProfile[]; selected: BundleProfile | null }
 interface MemberRow { id: string; memberNo: string; name: string; role: string }
 
-const SLOT_ICON: Record<string, string> = {
-  archive: "📁", enums: "🧭", tools: "🔧", fences: "🛡", presets: "👥", ui: "🎨",
+const SLOT_ICON: Record<string, IconName> = {
+  archive: "folder", enums: "configuration", tools: "customize", fences: "rules", presets: "team", ui: "palette",
 };
 
 export default function P7() {
+  const { canAction, subject } = useNavigationAccess();
   const nav = useNavigate();
   const [ready, setReady] = useState(false);
-  const [role, setRole] = useState("owner");
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [data, setData] = useState<StatusResp | null>(null);
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
@@ -59,15 +60,13 @@ export default function P7() {
     if (!silent) setReady(false);
     try {
       await ensureDemoLogin();
-      const [meR, mem, st] = await Promise.all([
-        trpc.members.me.query() as Promise<{ identity: { role: string; memberNo?: string } }>,
+      const [mem, st] = await Promise.all([
         trpc.members.list.query() as Promise<MemberRow[]>,
         trpc.bundles.status.query(slug ? { slug } : {}) as Promise<StatusResp>,
       ]);
-      setRole(meR.identity.role);
       setMembers(mem);
       setData(st);
-      if (meR.identity.memberNo) setDraft((d) => (d.ownerMemberNo ? d : { ...d, ownerMemberNo: meR.identity.memberNo! }));
+      if (subject?.memberNo) setDraft((d) => (d.ownerMemberNo ? d : { ...d, ownerMemberNo: subject.memberNo! }));
       if (!slug) setSelectedSlug(st.selected?.slug ?? st.activeSlug);
     } catch (e) {
       console.warn("装配信息加载失败", e);
@@ -75,11 +74,11 @@ export default function P7() {
     } finally {
       setReady(true);
     }
-  }, []);
+  }, [subject?.memberNo]);
 
   useEffect(() => { void load(); }, [load]);
 
-  const canManage = role === "owner" || role === "manager"; // E2.6：readonly 无「新建/激活」入口（隐藏非置灰）
+  const canManage = canAction("bundle.manage"); // 动作能力完全取自服务端权威授权
   const selected = data?.selected ?? null;
   const failedChecks = selected?.checks.filter((c) => !c.ok) ?? [];
   const isFail = failedChecks.length > 0; // p7_fail 状态变体
@@ -147,14 +146,14 @@ export default function P7() {
       left={
         <>
           <div className="mb-2 px-1 text-body tracking-[.2em] text-ink3">装配导航</div>
-          {[
-            ["#sec-profiles", "🛰 行业方案切换", `${data?.profiles.length ?? 0} 套注册`],
-            ["#sec-slots", "🧩 六装配槽", selected ? `${selected.filledCount}/6 已装配` : "—"],
-            ["#sec-check", "🚀 起飞前检查单", selected ? (selected.canActivate ? "五项全绿" : `${failedChecks.length} 项失败`) : "—"],
-            ["#sec-crew", "👥 数字员工班组", selected ? `${selected.agents.length} 个岗位` : "—"],
-          ].map(([href, label, meta]) => (
+          {([
+            { href: "#sec-profiles", icon: "radar", label: "行业方案切换", meta: `${data?.profiles.length ?? 0} 套注册` },
+            { href: "#sec-slots", icon: "puzzle", label: "六装配槽", meta: selected ? `${selected.filledCount}/6 已装配` : "—" },
+            { href: "#sec-check", icon: "rocket", label: "起飞前检查单", meta: selected ? (selected.canActivate ? "五项全绿" : `${failedChecks.length} 项失败`) : "—" },
+            { href: "#sec-crew", icon: "team", label: "数字员工班组", meta: selected ? `${selected.agents.length} 个岗位` : "—" },
+          ] as Array<{ href: string; icon: IconName; label: string; meta: string }>).map(({ href, icon, label, meta }) => (
             <a key={href} href={href} className="mb-1.5 block rounded-lg border border-line bg-card px-3 py-2.5 hover:border-gline">
-              <div className="text-body text-ink2">{label}</div>
+              <div className="flex items-center gap-1.5 text-body text-ink2"><Icon name={icon} size={14} />{label}</div>
               <div className="mt-0.5 text-body text-ink3">{meta}</div>
             </a>
           ))}
@@ -177,8 +176,8 @@ export default function P7() {
             <div className="mt-2.5 rounded-lg border border-line bg-card p-3 text-body text-ink3">
               <div className="mb-1 text-body font-bold text-ink2">最近校验</div>
               <span className="font-mono text-body">{new Date(selected.checkedAt).toLocaleTimeString("zh-CN")}</span>
-              <span className={selected.canActivate ? " text-go" : " text-alert"}>
-                {selected.canActivate ? " · 五项全绿 ✓" : ` · ${failedChecks.length} 项待修复 ✗`}
+              <span className={`inline-flex items-center gap-1 ${selected.canActivate ? " text-go" : " text-alert"}`}>
+                · {selected.canActivate ? <>五项全绿 <Icon name="check" size={13} /></> : <>{failedChecks.length} 项待修复 <Icon name="error" size={13} /></>}
               </span>
             </div>
           )}
@@ -196,12 +195,12 @@ export default function P7() {
         {!ready || !data ? (
           <Skeleton count={5} height={72} label="行业方案正在加载" /> /* 加载态 G10：槽位卡骨架屏 */
         ) : !selected ? (
-          <EmptyState icon="🛰" title="暂无行业方案" hint="当前还没有可用行业包，请创建第一套行业草稿。" />
+          <EmptyState icon={<Icon name="assembly" size={24} />} title="暂无行业方案" hint="当前还没有可用行业包，请创建第一套行业草稿。" />
         ) : (
           <>
             {/* infobar（原型口径）：当前 profile · 装配计数 · 底座零改动 */}
             <div className="mb-4 rounded-lg border border-line bg-card px-3.5 py-2.5 text-body text-ink2">
-              🚀 当前行业方案：<b className="text-holo">{clientChineseText(data.profiles.find((profile) => profile.slug === data.activeSlug)?.displayName, "名称待补充")}</b>
+              <Icon name="rocket" size={14} className="inline" /> 当前行业方案：<b className="text-holo">{clientChineseText(data.profiles.find((profile) => profile.slug === data.activeSlug)?.displayName, "名称待补充")}</b>
               {" "}· 装配 <b className="text-goldhi">{data.profiles.find((p) => p.slug === data.activeSlug)?.filledCount ?? 0}/6</b>
               {" "}· 基座代码无需修改
             </div>
@@ -232,7 +231,7 @@ export default function P7() {
                   onClick={() => setWizardOpen(true)}
                   className="cursor-pointer rounded-lg border border-dashed border-gline px-3 py-2 text-body text-goldhi hover:border-gold/60"
                 >
-                  ＋ 新建行业包<span className="ml-1 text-body text-ink3">五要素向导</span>
+                  <span className="inline-flex items-center gap-1"><Icon name="partner" size={15} aria-hidden="true" />新建行业包</span><span className="ml-1 text-body text-ink3">五要素向导</span>
                 </button>
               )}
             </div>
@@ -285,7 +284,7 @@ export default function P7() {
                       placeholder="首版草稿：五槽待填充" className="mt-1 w-full rounded-md border border-line bg-bg px-2.5 py-1.5 text-body text-ink outline-none focus:border-gline" />
                   </label>
                 </div>
-                {wizardErr && <div className="mt-2 rounded border border-alert/50 bg-alert/8 px-2 py-1 text-body text-alert">✗ {wizardErr}</div>}
+                {wizardErr && <div className="mt-2 flex items-start gap-1 rounded border border-alert/50 bg-alert/8 px-2 py-1 text-body text-alert"><Icon name="error" size={13} className="mt-0.5 shrink-0" />{wizardErr}</div>}
               </Overlay>
             )}
 
@@ -293,7 +292,7 @@ export default function P7() {
             {isFail && (
               <div className="mb-4">
                 <BannerAlert level="alert">
-                  🚫 <b>装配校验未通过，已拒绝激活</b>：
+                  <b>装配校验未通过，已拒绝激活</b>：
                   {failedChecks.map((c) => clientChineseText(c.label, "装配项")).join("、")} · 修复后请重新校验
                 </BannerAlert>
               </div>
@@ -315,9 +314,9 @@ export default function P7() {
                   <span className={`absolute right-2.5 top-2.5 rounded border px-1 py-px text-body ${
                     s.failed ? "border-alert/50 text-alert" : s.filled ? "border-go/50 text-go" : "border-line text-ink3"
                   }`}>
-                    {s.failed ? "✗ 校验失败" : s.filled ? "✓ 已装配" : "待填充"}
+                    {s.failed ? <><Icon name="error" size={12} className="inline" /> 校验失败</> : s.filled ? <><Icon name="check" size={12} className="inline" /> 已装配</> : "待填充"}
                   </span>
-                  <div className="mb-1.5 text-[22px]" aria-hidden>{SLOT_ICON[s.id] ?? "🧩"}</div>
+                  <Icon name={SLOT_ICON[s.id] ?? "puzzle"} size={22} className="mb-1.5" />
                   <h4 className="text-body font-bold text-ink2">{clientChineseText(s.label, "装配项")}</h4>
                   <p className={`mt-1 text-body leading-relaxed ${s.failed ? "text-alert" : "text-ink3"}`}>{clientChineseText(s.summary, s.filled ? "已完成装配" : "等待补充配置")}</p>
                   {s.go && <p className="mt-1 text-body text-holo">{s.go === "p5" ? "→ 前往规则与权限" : "→ 前往团队成员"}</p>}
@@ -334,7 +333,7 @@ export default function P7() {
                 </div>
                 <button type="button" disabled={busy} onClick={() => void recheck()}
                   className="cursor-pointer rounded-md border border-gline px-2.5 py-1 text-body text-goldhi hover:border-gold/60 disabled:opacity-40">
-                  ↻ 重跑校验
+                  <Icon name="reset" size={13} className="inline" /> 重跑校验
                 </button>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-5">
@@ -343,7 +342,7 @@ export default function P7() {
                     className={`rounded-xl border px-2 py-2.5 text-center text-body ${
                       c.ok ? "border-go/35 text-go" : "border-alert/60 bg-alert/8 text-alert"
                     }`}>
-                    <div className="text-[15px]">{c.ok ? "✓" : "✗"}</div>
+                    <Icon name={c.ok ? "check" : "error"} label={c.ok ? "校验通过" : "校验未通过"} size={15} className="mx-auto" />
                     {clientChineseText(c.label, "装配校验")}
                   </div>
                 ))}
@@ -351,7 +350,7 @@ export default function P7() {
               <div className="mt-2.5 space-y-1">
                 {selected.checks.map((c) => (
                   <div key={c.key} className="flex gap-2 text-body leading-relaxed">
-                    <span className={c.ok ? "text-go" : "text-alert"}>{c.ok ? "✓" : "✗"}</span>
+                    <Icon name={c.ok ? "check" : "error"} label={c.ok ? "校验通过" : "校验未通过"} size={13} className={c.ok ? "text-go" : "text-alert"} />
                     <span className="text-ink3">{clientChineseText(c.label, "装配校验")}：</span>
                     <span className={c.ok ? "text-ink2" : "text-alert"}>{clientChineseText(c.detail, c.ok ? "校验通过" : "校验未通过，请检查对应配置")}</span>
                   </div>
@@ -375,7 +374,7 @@ export default function P7() {
                 <div className="mt-3">
                   <button type="button" disabled={busy} onClick={() => void recheck()}
                     className="cursor-pointer rounded-md gold-grad px-4 py-2 text-body font-black text-ongold disabled:opacity-40">
-                    ↻ 修复并重跑校验
+                    <Icon name="reset" size={13} className="inline" /> 修复并重跑校验
                   </button>
                 </div>
               </div>
@@ -404,7 +403,7 @@ export default function P7() {
                         </div>
                         <div className="mt-0.5 text-body text-ink3">
                           {actorText(a.presetKey)} · {a.readonly ? "只读岗位无需写入围栏" : a.fenceBindings.length > 0 ? `已绑定 ${a.fenceBindings.length} 条围栏` : "未声明围栏"}
-                          {" "}{a.fenceOk ? <span className="text-go">✓</span> : <span className="text-alert">✗ 禁写</span>}
+                          {" "}{a.fenceOk ? <Icon name="check" size={13} className="inline text-go" /> : <span className="inline-flex items-center gap-1 text-alert"><Icon name="error" size={13} />禁写</span>}
                         </div>
                       </div>
                     </button>
@@ -425,7 +424,7 @@ export default function P7() {
                   onClick={() => void activate(selected.slug)}
                   title={selected.canActivate ? "" : "校验未全部通过，暂不能激活"}
                   className="cursor-pointer rounded-md gold-grad px-4 py-2 text-body font-black text-ongold disabled:cursor-not-allowed disabled:opacity-40">
-                  🚀 激活「{clientChineseText(selected.displayName, "所选行业方案")}」
+                  <Icon name="rocket" size={15} className="inline" /> 激活「{clientChineseText(selected.displayName, "所选行业方案")}」
                 </button>
               </div>
             )}

@@ -22,7 +22,8 @@ h3 { font-size: 0.96rem; margin: 0; }
 .mobile-header .wl-top-context-bar__description { margin-top: 2px; }
 .mobile-header .wl-top-context-bar__actions { inline-size: auto; }
 .page { display: grid; gap: 14px; padding: 18px 14px; }
-.page-heading { display: flex; gap: 10px; justify-content: space-between; align-items: flex-start; }
+.page-heading { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: flex-start; min-width: 0; }
+.page-heading > * { min-width: 0; max-width: 100%; }
 .page-heading p { margin: 5px 0 0; }
 .stack { display: grid; gap: 10px; }
 .row { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; min-width: 0; }
@@ -40,7 +41,8 @@ h3 { font-size: 0.96rem; margin: 0; }
 .chip { background: var(--wl-color-surface-muted); border: 1px solid var(--wl-color-border); border-radius: 999px; color: var(--wl-color-text); max-width: 100%; overflow-wrap: anywhere; padding: 7px 10px; }
 .drawer-group { margin-bottom: 16px; }
 .drawer-group > strong { color: var(--wl-color-text-muted); display: block; font-size: var(--wl-text-caption); letter-spacing: .1em; margin: 0 8px 6px; }
-.drawer-link { align-items: center; background: transparent; border: 0; border-radius: var(--wl-radius-sm); color: var(--wl-color-text); display: flex; gap: 10px; min-height: var(--wl-touch-target); padding: 9px; text-align: left; width: 100%; }
+.drawer-link { align-items: center; background: transparent; border: 0; border-radius: var(--wl-radius-sm); color: var(--wl-color-text); display: flex; flex-wrap: wrap; gap: 10px; min-height: var(--wl-touch-target); min-width: 0; padding: 9px; text-align: left; width: 100%; }
+.drawer-link > span { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .drawer-link[aria-current="page"] { background: var(--wl-color-surface-muted); color: var(--wl-color-action); }
 .status-strip { border: 1px solid var(--wl-color-border); border-radius: var(--wl-radius-md); color: var(--wl-color-text-muted); font-size: var(--wl-text-body); line-height: 1.5; padding: 10px 12px; }
 .status-strip.demo { border-color: var(--wl-color-warning); color: var(--wl-color-warning); }

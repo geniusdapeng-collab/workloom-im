@@ -4,7 +4,8 @@
 import { useEffect, useState } from "react";
 import { ensureDemoLogin, trpc } from "../../lib/trpc";
 import { capabilityText, dictText } from "../../lib/display";
-import { AsyncState, Button } from "@workloom/ui";
+import { AsyncState, Button, clientIdentifierText } from "@workloom/ui";
+import { useNavigationAccess } from "../../shell/NavigationAccess";
 
 interface Session { id: string; device_name: string; device_trusted: boolean; ip: string; ua: string; issued_at: string }
 interface LoginEvent { kind: string; workspace_id: string | null; ip: string; device: string; created_at: string }
@@ -16,6 +17,7 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 export default function P29() {
+  const { subject, scope, partnerCapabilities, grantIds, availableScopes, selectScope, status } = useNavigationAccess();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [events, setEvents] = useState<LoginEvent[]>([]);
   const [grants, setGrants] = useState<Grant[]>([]);
@@ -48,7 +50,51 @@ export default function P29() {
       setLoadState("error");
     }
   }
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    if (subject?.kind !== "partner") void load();
+  }, [subject?.kind]);
+
+  if (subject?.kind === "partner") {
+    return (
+      <div className="mx-auto max-w-3xl space-y-6 px-6 py-8">
+        <h1 className="text-xl font-bold">我的</h1>
+        <section className={card}>
+          <h2 className={h2}>伙伴身份</h2>
+          <p className="mt-2 text-sm text-neutral-200">{subject.name}</p>
+          <p className={dim}>当前授权工作区：{scope?.workspaceId ? clientIdentifierText(scope.workspaceId) : "待确认"}</p>
+          <p className={dim}>身份与范围均由服务端实时授权确认；令牌中的旧授权快照不会用于放行。</p>
+          {availableScopes.length > 1 && (
+            <div className="mt-4 space-y-2" aria-label="切换伙伴授权工作区">
+              <p className="text-body text-neutral-400">可切换的实时授权范围</p>
+              <div className="flex flex-wrap gap-2">
+                {availableScopes.map((option) => {
+                  const selected = option.tenantId === scope?.tenantId && option.workspaceId === scope.workspaceId;
+                  return (
+                    <Button
+                      key={`${option.tenantId}:${option.workspaceId}`}
+                      variant={selected ? "primary" : "quiet"}
+                      disabled={selected || status === "loading"}
+                      onClick={() => selectScope(option)}
+                    >
+                      {option.workspaceName || clientIdentifierText(option.workspaceId)}
+                      {option.tenantName ? ` · ${option.tenantName}` : ""}
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </section>
+        <section className={card}>
+          <h2 className={h2}>当前伙伴能力</h2>
+          {partnerCapabilities.length > 0
+            ? <div className="mt-3 flex flex-wrap gap-2">{partnerCapabilities.map((capability) => <span key={capability} className="rounded-full border border-neutral-700 px-2.5 py-1 text-body text-neutral-300">{capabilityText(capability)}</span>)}</div>
+            : <p className={dim}>当前没有有效业务能力，请联系授权方确认。</p>}
+          <p className={dim}>有效授权凭证 {grantIds.length} 份；到期或吊销后，入口会在下次权限确认时立即收起。</p>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 px-6 py-8">
@@ -90,11 +136,11 @@ export default function P29() {
       <section className={card}>
         <h2 className={h2}>安全设置</h2>
         <div className="mt-2 grid grid-cols-1 items-end gap-2 text-sm sm:grid-cols-[minmax(0,1fr)_auto]">
-          <label className="text-neutral-300">前台快切码（4–6 位数字，适合轮班共用电脑）
+          <label className="text-neutral-300">共享终端快切码（4–6 位数字，适合轮班共用设备）
           <input className="mt-1 w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-2 text-sm" value={pin}
             onChange={(e) => setPin(e.target.value)} placeholder="输入新的快切码" inputMode="numeric" maxLength={6} /></label>
           <Button variant="primary"
-            onClick={() => void svc().setQuickPin.mutate({ pin }).then(() => setMsg("快切码已更新")).catch((e) => { console.warn("更新快捷码失败", e); setMsg("更新失败，请检查输入后重试。"); })}>
+            onClick={() => void svc().setQuickPin.mutate({ pin }).then(() => setMsg("共享终端快切码已更新")).catch((e) => { console.warn("更新快捷码失败", e); setMsg("更新失败，请检查输入后重试。"); })}>
             设置
           </Button>
         </div>

@@ -9,14 +9,14 @@
  * 扩展纪律：基座只保留公共术语；行业岗位、动作与字段显示名必须通过
  * 当前已验签 Bundle 的 terminology 投影注入，禁止在客户端追加行业词表。
  */
-import { clientFieldLabel, clientStatusLabel, clientValueText } from "@workloom/ui";
+import { clientChineseText, clientFieldLabel, clientStatusLabel, clientValueText } from "@workloom/ui";
 
 let DISPLAY_TERMINOLOGY: Readonly<Record<string, string>> = {};
 
 /** 身份或工作区切换时由导航上下文原子替换，不能累加，以免跨租户串用术语。 */
 export function hydrateDisplayTerminology(terminology: Record<string, string>): void {
   DISPLAY_TERMINOLOGY = Object.freeze(Object.fromEntries(
-    Object.entries(terminology).filter(([, value]) => /[\u3400-\u9fff]/u.test(value)),
+    Object.entries(terminology).filter(([, value]) => clientChineseText(value, "") === value.trim()),
   ));
 }
 
@@ -75,6 +75,16 @@ export const APPROVAL_STATUS_TEXT: Record<string, string> = {
   edited: "已改派",
   escalated: "已升级",
 };
+
+export const APPROVAL_GESTURE_TEXT: Readonly<Record<string, string>> = {
+  approve: "已批准",
+  edit: "已修改后批准",
+  reject: "已驳回",
+};
+
+export function approvalGestureText(value: string | null | undefined): string {
+  return value ? (APPROVAL_GESTURE_TEXT[value] ?? "审批已处理") : "审批已处理";
+}
 
 // —— 对话意图 ——
 export const INTENT_TEXT: Record<string, string> = {
@@ -262,7 +272,8 @@ export function actionText(action: string): string {
 export function dictText(dict: Record<string, string>, value: string | null | undefined): string {
   if (!value) return "—";
   if (dict[value]) return dict[value]!;
-  if (/[^\u0000-\u007f]/.test(value) || /^(MEM|E|T|VID|R|G)-/.test(value)) return value;
+  if (/[^\u0000-\u007f]/.test(value)) return clientChineseText(value, "待确认");
+  if (/^(MEM|E|T|VID|R|G)-/.test(value)) return "待确认";
   return clientStatusLabel(value) === value ? "待确认" : clientStatusLabel(value);
 }
 
@@ -278,7 +289,7 @@ export function versionText(value: string | null | undefined): string {
   if (!value) return "版本待确认";
   const match = value.match(/(?:^|[\/_-])v?(\d+(?:\.\d+)*)$/i) ?? value.match(/^v?(\d+(?:\.\d+)*)$/i);
   if (match?.[1]) return `第 ${match[1]} 版`;
-  return /[^\u0000-\u007f]/.test(value) ? value : "版本已记录";
+  return clientChineseText(value, "版本已记录");
 }
 
 /** 定时表达式 → 中文读法；未知表达式不向普通客户端泄露底层语法。 */
@@ -331,19 +342,19 @@ export const ACTOR_TEXT: Record<string, string> = {
 };
 
 /**
- * 行动者人性化：先查表；未收录的 xxx-agent 去后缀查词根；MEM-/E-/T- 等编号原样；
- * 其余下划线/连字符串转空格分词（永不裸奔原始 ID）
+ * 行动者人性化：先查表；未收录的 xxx-agent 去后缀查词根；
+ * 其余标识仅在通过中文边界后展示（永不裸奔原始 ID）。
  */
 export function actorText(id: string): string {
   if (!id) return "—";
   const hit = projectedText(`actor.${id}`) ?? ACTOR_TEXT[id];
   if (hit) return hit;
-  if (/^(MEM|E|T|VID|R|G)-/.test(id)) return id; // 编号类保留
+  if (/^(MEM|E|T|VID|R|G)-/.test(id)) return "系统成员";
   if (id.endsWith("-agent")) {
     const root = id.slice(0, -6);
     return projectedText(`actor.${root}`) ?? ACTOR_TEXT[root] ?? "数字员工";
   }
-  return /[^\u0000-\u007f]/.test(id) ? id : "系统成员";
+  return clientChineseText(id, "系统成员");
 }
 
 /** 夜班/运营高频动作码补录（F-CN1） */

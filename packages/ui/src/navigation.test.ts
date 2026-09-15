@@ -3,10 +3,14 @@ import { composeNavigation, isNavigationActive, navigationEntriesFromBundle } fr
 
 describe("共享导航契约", () => {
   it("按客户端与权限过滤，并保持固定分组顺序", () => {
-    const entries = composeNavigation({ client: "b-mobile", permissions: new Set(["approvals.read"]) });
+    const entries = composeNavigation({ client: "b-mobile", permissions: new Set(["today.read", "approvals.read"]) });
     expect(entries.some((entry) => entry.capabilityId === "workloom.approvals")).toBe(true);
     expect(entries.some((entry) => entry.capabilityId === "workloom.models")).toBe(false);
     expect(entries[0]?.group).toBe("today");
+  });
+
+  it("空授权不会因已登录而获得任何基座入口", () => {
+    expect(composeNavigation({ client: "b-pc", permissions: new Set() })).toEqual([]);
   });
 
   it("旧路由仍能正确高亮语义入口", () => {
@@ -62,5 +66,9 @@ describe("共享导航契约", () => {
       capabilityId: "hotel.orders", route: "/orders", title: "订单", group: "operations",
       icon: "hotel-logo", clients: ["pc"], permissions: [],
     }])).toThrow(/图标/);
+    expect(() => navigationEntriesFromBundle("hotel", [{
+      capabilityId: "hotel.orders", route: "/orders", title: "订单 orderStatus", group: "operations",
+      icon: "home", clients: ["pc"], permissions: [],
+    }])).toThrow(/中文名称/);
   });
 });

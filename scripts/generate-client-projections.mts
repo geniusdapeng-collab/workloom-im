@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseBundleManifest } from "../packages/industry-contract/src/index.ts";
 import { validateLightBrandTheme } from "../packages/ui/src/color-contrast.ts";
@@ -56,9 +56,12 @@ const projection = {
   },
 };
 const output = `${JSON.stringify(projection, null, 2)}\n`;
-const target = join(root, product.clients.cMobile.entry, "public/service-front.config.json");
+// 行业内容只能写入 client-foundation 明确放行的扩展目录；根配置是受管加载壳，
+// 由基座稳定标签统一升级，任何行业包都不得覆盖它。
+const target = join(root, product.clients.cMobile.entry, "public/industry/service-front.config.json");
 
 if (write) {
+  mkdirSync(join(root, product.clients.cMobile.entry, "public/industry"), { recursive: true });
   writeFileSync(target, output);
   console.log(`✅ 已由 ${product.defaultBundle} 行业包生成 C端投影：${target}`);
 } else {

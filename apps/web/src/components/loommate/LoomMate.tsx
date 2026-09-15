@@ -11,7 +11,8 @@ import { VoiceEngine } from "../../voice/VoiceEngine";
 import { MateLive2D, type MateMood, type MateGesture } from "./MateLive2D";
 import { useAskRailPadding, useSideNavWidth } from "../../lib/useAskRail";
 import { canonicalNavigationPath } from "../../shell/NavMenu";
-import { clientValueText } from "@workloom/ui";
+import { Icon, clientChineseText, clientValueText, useManagedSurface } from "@workloom/ui";
+import { inboxSpeechText } from "./speechText";
 
 /* ---------------- 类型 ---------------- */
 interface Settings {
@@ -98,6 +99,7 @@ export function LoomMate() {
   const [busy, setBusy] = useState(false);
   const [memory, setMemory] = useState<Record<string, MemRow[]> | null>(null);
   const seenIds = useRef<Set<string>>(new Set());
+  const sizeToggleRef = useRef<HTMLButtonElement | null>(null);
   const size = settings?.widget_size ?? "large";
 
   /* —— 浮层交互（拖拽移动 / 迷你球 / 隐藏把手；本机偏好存 localStorage，2026-09 浮层 UX 专项） —— */
@@ -183,7 +185,7 @@ export function LoomMate() {
       for (const it of fresh.filter((x) => x.level === "red" || x.level === "high").slice(0, 2)) {
         VoiceEngine.speak({
           role: "loommate", persona: personaName,
-          text: `${it.title}。${it.body}`.slice(0, 120),
+          text: inboxSpeechText(it.title, it.body).slice(0, 120),
           priority: it.level === "red" ? "fuse" : "ambient",
           voiceOverride: VOICE_MAP[s.settings.voice_key] ?? VOICE_MAP.sweet,
         });
@@ -267,6 +269,36 @@ export function LoomMate() {
     setSettings((s) => s ? { ...s, widget_size: next } : s);
     await svc().secretary.saveSettings.mutate({ widget_size: next }).catch(() => undefined);
   };
+  const mateSurface = useManagedSurface<HTMLDivElement>({
+    open: size === "fullscreen" || (!hidden && open !== "none"),
+    kind: "assistant-companion",
+    onDismiss: () => {
+      if (size === "fullscreen") void toggleSize();
+      else setOpen("none");
+    },
+    modal: size === "fullscreen",
+    focusOnOpen: size === "fullscreen",
+    restoreFocusOnClose: size === "fullscreen",
+    returnFocusRef: sizeToggleRef,
+  });
+
+  const moveByKeyboard = (event: React.KeyboardEvent<HTMLElement>) => {
+    const movement: Partial<Record<"ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight", [number, number]>> = {
+      ArrowUp: [0, -1],
+      ArrowDown: [0, 1],
+      ArrowLeft: [-1, 0],
+      ArrowRight: [1, 0],
+    };
+    const direction = movement[event.key as keyof typeof movement];
+    if (!direction) return false;
+    event.preventDefault();
+    const distance = event.shiftKey ? 48 : 16;
+    const base = pos ?? defaultPos();
+    const next = clampPos(base.x + direction[0] * distance, base.y + direction[1] * distance);
+    setPos(next);
+    persistLocal("loommate.pos", JSON.stringify(next));
+    return true;
+  };
 
   const send = async (text: string) => {
     if (!text.trim() || busy) return;
@@ -275,10 +307,11 @@ export function LoomMate() {
     setInput("");
     try {
       const r = await svc().secretary.chat.mutate({ text });
-      setChat((c) => [...c, { from: "mate", text: r.reply }]);
+      const reply = clientChineseText(r.reply, "小织暂时没能整理出可展示的答复，请稍后再试。");
+      setChat((c) => [...c, { from: "mate", text: reply }]);
       if (settings?.voice_on) {
         VoiceEngine.speak({
-          role: "loommate", persona: personaName, text: r.reply.slice(0, 150),
+          role: "loommate", persona: personaName, text: reply.slice(0, 150),
           priority: "ambient", voiceOverride: VOICE_MAP[settings.voice_key] ?? VOICE_MAP.sweet,
         });
       }
@@ -307,15 +340,13 @@ export function LoomMate() {
   // —— 全屏屏保模式：她守着整个场，有事直接喊你 ——
   if (size === "fullscreen") {
     return (
-      <div className="fixed inset-0 flex flex-col items-center justify-center bg-bg950/98"
+      <div {...mateSurface} className="fixed inset-0 flex flex-col items-center justify-center bg-bg950/98"
         style={{ zIndex: "var(--wl-z-assistant)" }}
-        role="dialog" aria-modal="true" aria-label="小织屏保"
-        onKeyDown={(e) => { if (e.key === "Escape") void toggleSize(); }} tabIndex={0}
-        ref={(el) => el?.focus()}>
+        role="dialog" aria-modal="true" aria-label="小织屏保">
         {/* 环境微光背景 */}
         <div className="pointer-events-none absolute inset-0 opacity-30"
           style={{ background: "radial-gradient(ellipse at 50% 62%, rgba(232,160,191,.25), transparent 60%)" }} />
-        <button onClick={() => void toggleSize()}
+        <button ref={sizeToggleRef} onClick={() => void toggleSize()}
           className="absolute right-5 top-5 rounded-full border border-line bg-bg900/80 px-3 py-1.5 text-body text-ink2 hover:text-ink">
           退出屏保（Esc）
         </button>
@@ -334,7 +365,7 @@ export function LoomMate() {
         {/* 红色/高级别事件：屏保中央强提醒 */}
         {items.filter((it) => it.level === "red" || it.level === "high").slice(0, 1).map((it) => (
           <div key={it.id} className={`mt-5 w-[min(28rem,calc(100vw-2rem))] max-w-full rounded-2xl border p-4 shadow-2xl ${LEVEL_STYLE[it.level]}`}>
-            <div className="text-[14px] font-semibold text-ink"><span aria-hidden>{it.level === "red" ? "🚨 " : "🔔 "}</span>{clientValueText(it.title)}</div>
+            <div className="flex items-center gap-1.5 text-[14px] font-semibold text-ink"><Icon name={it.level === "red" ? "warning" : "notice"} label={it.level === "red" ? "紧急提醒" : "重要提醒"} size={15} />{clientValueText(it.title)}</div>
             <div className="mt-1 text-body leading-relaxed text-ink2">{clientValueText(it.body)}</div>
             <div className="wl-action-row mt-2.5 flex flex-wrap gap-2">
               <button onClick={() => void act(it)}
@@ -392,12 +423,12 @@ export function LoomMate() {
     : { position: "fixed", right: railW + 16, bottom: 16, zIndex: "var(--wl-z-assistant)" };
 
   return (
-    <div className={`flex flex-col gap-2 ${docked === "left" ? "items-start" : "items-end"}`} style={{ fontFamily: "inherit", ...rootStyle }}>
+    <div {...mateSurface} className={`flex flex-col gap-2 ${docked === "left" ? "items-start" : "items-end"}`} style={{ fontFamily: "inherit", ...rootStyle }}>
       {/* 气泡提醒（最多叠 3 条） */}
       {open === "none" && items.slice(0, 3).map((it) => (
         <div key={it.id} className={`w-[min(19rem,calc(100vw-2rem))] max-w-full rounded-2xl border p-3 shadow-xl backdrop-blur ${LEVEL_STYLE[it.level]}`}>
           <div className="flex items-start justify-between gap-2">
-            <div className="text-body font-semibold text-ink"><span aria-hidden>{it.level === "red" ? "🚨 " : ""}</span>{clientValueText(it.title)}</div>
+            <div className="flex items-center gap-1.5 text-body font-semibold text-ink">{it.level === "red" && <Icon name="warning" size={14} />}{clientValueText(it.title)}</div>
             <button onClick={() => void later(it)} className="shrink-0 text-body text-ink3 hover:text-ink">稍后</button>
           </div>
           <div className="mt-1 text-body leading-relaxed text-ink2">{clientValueText(it.body)}</div>
@@ -438,8 +469,11 @@ export function LoomMate() {
       <div className="flex flex-col items-center">
         <div
           role="button" tabIndex={0}
+          aria-label={`${personaName}助手；回车打开对话，方向键移动，按住 Shift 可加速移动`}
+          aria-keyshortcuts="Enter Space ArrowUp ArrowDown ArrowLeft ArrowRight"
           onPointerDown={onDragStart} onPointerMove={onDragMove} onPointerUp={onDragEnd}
           onKeyDown={(e) => {
+            if (moveByKeyboard(e)) return;
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
               void openPanel("chat");
@@ -461,7 +495,7 @@ export function LoomMate() {
             <span className="rounded-full bg-bg900/90 px-2.5 py-0.5 text-body text-ink shadow">
             {personaName}
           </span>
-          <button onClick={() => void toggleSize()} title="切换大小"
+          <button ref={sizeToggleRef} onClick={() => void toggleSize()} title="切换大小"
             className="rounded-full border border-line bg-bg900/90 px-1.5 py-0.5 text-body text-ink2 opacity-70 shadow hover:text-ink hover:opacity-100">
             {MODE_LABEL[size] ?? "变大"}
           </button>
@@ -503,7 +537,7 @@ function MatePanel({ open, setOpen, openPanel, chat, busy, input, setInput, send
                 </button>
               ))}
             </div>
-            <button onClick={() => setOpen("none")} className="text-ink3 hover:text-ink" aria-label="关闭小织助手面板">✕</button>
+            <button onClick={() => setOpen("none")} className="text-ink3 hover:text-ink" aria-label="关闭小织助手面板" title="关闭小织助手面板"><Icon name="close" size={16} /></button>
           </div>
           {open === "chat" && (
             <>

@@ -5,7 +5,14 @@
  * H5：置信度归一化三档边界（≥0.72 直答 / 0.5–0.72 附提示 / <0.5 拒答）。
  */
 import { describe, expect, it } from "vitest";
-import { classify, tierOfScore, ticketKindOf, CONFIDENCE_HIGH, CONFIDENCE_MEDIUM } from "./dialog.js";
+import {
+  classify,
+  tierOfScore,
+  ticketKindOf,
+  sharesDistinctiveEvidence,
+  CONFIDENCE_HIGH,
+  CONFIDENCE_MEDIUM,
+} from "./dialog.js";
 import { hotelBizAdapter } from "../industry/hotel/service-front-adapter.js";
 
 describe("classify 意图规则（M8 与 base 同表）", () => {
@@ -59,5 +66,18 @@ describe("tierOfScore 置信度三档（H5，归一化 0..1）", () => {
   it("越界输入归一化", () => {
     expect(tierOfScore(1.2)).toBe("high");
     expect(tierOfScore(-0.3)).toBe("low");
+  });
+});
+
+describe("知识块合并词义由活动 Bundle 注入", () => {
+  const first = { heading: "订单", content: "第一段" };
+  const second = { heading: "订单", content: "第二段" };
+
+  it("基座默认不把业务词擅自降为弱词", () => {
+    expect(sharesDistinctiveEvidence(first, second)).toBe(true);
+  });
+
+  it("显式词表可阻止仅共享弱词的知识块合并", () => {
+    expect(sharesDistinctiveEvidence(first, second, { weakTokens: ["订单"] })).toBe(false);
   });
 });

@@ -21,6 +21,8 @@ export interface AccountsDeps {
   now?: () => number;
 }
 
+export type VerificationPurpose = "login" | "activate" | "invite" | "danger-confirm" | `danger-confirm:${string}`;
+
 const CODE_TTL_MS = 5 * 60_000;
 const CODE_DAILY_LIMIT = 5;
 const CODE_MAX_ATTEMPTS = 5;
@@ -33,7 +35,7 @@ const now = (d: AccountsDeps) => (d.now ? d.now() : Date.now());
 
 export async function requestCode(
   deps: AccountsDeps,
-  input: { channel: "phone" | "email"; target: string; purpose: "login" | "activate" | "invite" | "danger-confirm"; ip?: string },
+  input: { channel: "phone" | "email"; target: string; purpose: VerificationPurpose; ip?: string },
 ): Promise<{ sent: boolean; devCode?: string }> {
   const { q, sms } = deps;
   if (input.channel !== "phone") {
@@ -431,7 +433,7 @@ export async function updateMemberRole(
   );
 }
 
-/** 设置/修改前台快切 PIN（本人操作） */
+/** 设置/修改共享终端快切 PIN（本人操作） */
 export async function setQuickPin(deps: AccountsDeps, input: { memberId: string; pin: string }): Promise<void> {
   if (!/^\d{4,6}$/.test(input.pin)) throw new Error("PIN 须为 4-6 位数字");
   await deps.q(`UPDATE members SET quick_pin_hash=$2 WHERE id=$1`, [input.memberId, hashPassword(input.pin)]);

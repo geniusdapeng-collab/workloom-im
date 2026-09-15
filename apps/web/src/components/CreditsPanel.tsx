@@ -6,6 +6,8 @@
  */
 import { useEffect, useState } from "react";
 import { trpc } from "../lib/trpc";
+import { operationFailure } from "../lib/ui-state";
+import { Icon, clientChineseText } from "@workloom/ui";
 
 interface LedgerView {
   pools: Array<{ name: "gift" | "pack" | "principal"; amount: number; expiresAt: string | null }>;
@@ -31,7 +33,13 @@ export function CreditsPanel() {
       trpc.credits.balance.query() as Promise<LedgerView>,
       trpc.credits.packs.query() as Promise<{ packs: Pack[] }>,
     ]);
-    setView(b);
+    setView({
+      ...b,
+      recent: b.recent.map((row) => ({
+        ...row,
+        detail: clientChineseText(row.detail, "积分变动已记录"),
+      })),
+    });
     setPacks(p.packs);
   };
   useEffect(() => { void refresh().catch(() => undefined); }, []);
@@ -44,7 +52,7 @@ export function CreditsPanel() {
       setMsg(`已入账 ${r.amount.toLocaleString()} 积分（加油包池，6 个月有效）`);
       await refresh();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : String(e));
+      setMsg(operationFailure(e, "购买积分"));
     } finally {
       setBuying(null);
     }
@@ -104,7 +112,7 @@ export function CreditsPanel() {
           <div className="max-h-40 space-y-1 overflow-y-auto">
             {view.recent.map((r, i) => (
               <div key={i} className="flex justify-between text-body text-ink3">
-                <span>{r.action === "grant" ? "🎁" : "🛒"} {r.detail}</span>
+                <span className="flex min-w-0 items-center gap-1.5"><Icon name={r.action === "grant" ? "gift" : "cart"} label={r.action === "grant" ? "赠送" : "购买"} size={14} /> {clientChineseText(r.detail, "积分变动已记录")}</span>
                 <span className="text-emerald-300/90">+{r.amount.toLocaleString()}</span>
               </div>
             ))}

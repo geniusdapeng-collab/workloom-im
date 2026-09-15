@@ -12,12 +12,14 @@ import pg from "pg";
 import YAML from "yaml";
 import {
   appendEventIdempotent,
+  gatewayAppendOnClient,
   reconcileEventStorageSequenceForSeed,
 } from "@workloom/base/workdata";
 import {
   bundleEvalQuestionId,
   loadVerifiedBundleManifest,
   loadVerifiedBundleEvalQuestions,
+  loadVerifiedBundleWorkforcePresets,
 } from "@workloom/base/bundles";
 
 import { fileURLToPath } from "node:url";
@@ -33,20 +35,9 @@ const WS_ID = "ws-aipm-demo";
 const WS_SLUG = "ai-pm-demo";
 const WS_NAME = "织元产品部（AI 产品经理示例团队）";
 
-interface Preset {
-  preset_key: string; name: string; version: string; kind: string;
-  description: string; readonly: boolean; night_shift: boolean; high_risk: boolean;
-  fence_bindings: string[]; skills: string[];
-  tools: Array<{ name: string; access: string; desc: string }>;
-  prompt: Record<string, unknown>;
-}
 interface FenceRule { rule_id: string; name: string; level: string; match: Record<string, unknown>; when?: Record<string, unknown>; note?: string }
 interface SkillDoc { name: string; description: string; body: string; fenceBindings: string[] }
 
-function loadPresets(): Preset[] {
-  return BUNDLE_MANIFEST.workloom.provides.presets
-    .map((assetPath) => YAML.parse(readFileSync(join(BUNDLE_DIR, assetPath), "utf-8")) as Preset);
-}
 function loadFences(): FenceRule[] {
   return BUNDLE_MANIFEST.workloom.provides.fences.flatMap((assetPath) => {
     const doc = YAML.parse(readFileSync(join(BUNDLE_DIR, assetPath), "utf-8")) as { fences?: FenceRule[]; rules?: FenceRule[] };
@@ -77,7 +68,7 @@ const MEMBERS = [
 async function main(): Promise<void> {
   // 清单、摘要/签名与题集 Schema 必须在建立数据库连接前全部通过。
   const evalPack = loadVerifiedBundleEvalQuestions("ai-pm", join(REPO_ROOT, "bundles"));
-  const presets = loadPresets();
+  const presets = loadVerifiedBundleWorkforcePresets("ai-pm", join(REPO_ROOT, "bundles"));
   const fences = loadFences();
   const skillsDocs = loadSkills();
   console.log(`✓ ai-pm Bundle 资产：${presets.length} preset / ${fences.length} 围栏 / ${skillsDocs.length} 技能`);
@@ -114,10 +105,77 @@ async function main(): Promise<void> {
        ON CONFLICT (id) DO NOTHING`,
       [`agt-${p.preset_key}`, WS_ID, p.preset_key, p.name, p.version, p.kind, p.readonly,
        JSON.stringify(p.fence_bindings), JSON.stringify(p.skills),
-       JSON.stringify({ description: p.description, night_shift: p.night_shift, high_risk: p.high_risk, tools: p.tools, prompt: p.prompt })],
+       JSON.stringify({
+         description: p.description,
+         night_shift: p.night_shift,
+         high_risk: p.high_risk,
+         coverage: p.coverage,
+         tools: p.tools,
+         prompt: p.prompt,
+       })],
     );
   }
   console.log(`✓ Agent 实例 ×${presets.length}（产品总监领队的 AI 产品研发团队）`);
+
+  // 示例团队也必须具备可运行的「档案 + 阶段 + 目标」三要素，不能出现首页看似
+  // 就绪、首个任务却因缺档案被拒绝的断点。档案内容来自 ai-pm Bundle 种子，
+  // 并明确标记为模拟数据；宪章仅为 shadow，允许演示推理与简报留痕但不执行
+  // 真实外部动作。若用户已通过向导建立档案，重跑种子绝不覆盖其真实配置。
+  const profileSeed = loadSeed<{ archive: Record<string, unknown>; forbidden: string[] }>("profile.json");
+  await q(
+    `INSERT INTO profiles (workspace_id, tenant_id, industry, archive, forbidden, pii_vault)
+     VALUES ($1,$2,'ai-pm',$3,$4,NULL)
+     ON CONFLICT (workspace_id) DO NOTHING`,
+    [WS_ID, TENANT_ID, JSON.stringify(profileSeed.archive), JSON.stringify(profileSeed.forbidden)],
+  );
+
+  // Bundle 专属存量迁移：仅处理本 Bundle 自带、仍明确标记为 simulated 的示例档案。
+  // 真实用户档案继续由发布门禁拦截并要求所属行业包显式迁移；基座不会猜测其行业字段。
+  const nextAutonomy = (profileSeed.archive.charter as { autonomy: unknown }).autonomy;
+  await owner.query("BEGIN");
+  try {
+    await owner.query("SELECT set_config('app.tenant_id', $1, true)", [TENANT_ID]);
+    await owner.query("SELECT set_config('app.workspace_id', $1, true)", [WS_ID]);
+    const migrated = await owner.query(
+      `UPDATE profiles p
+          SET archive = jsonb_set(p.archive, '{charter,autonomy}', $3::jsonb, true),
+              updated_at = now()
+         FROM workspaces w
+        WHERE p.workspace_id=$1 AND p.tenant_id=$2
+          AND w.id=p.workspace_id AND w.tenant_id=p.tenant_id
+          AND w.bundle_id='ai-pm' AND w.is_example=true
+          AND p.industry='ai-pm' AND p.archive->>'dataMode'='simulated'
+          AND NOT (
+            (p.archive #> '{charter,autonomy}') ? 'ranges'
+            AND (p.archive #> '{charter,autonomy}') ? 'caps'
+          )
+        RETURNING p.workspace_id`,
+      [WS_ID, TENANT_ID, JSON.stringify(nextAutonomy)],
+    );
+    if ((migrated.rowCount ?? 0) > 0) {
+      await gatewayAppendOnClient(owner as unknown as pg.PoolClient, {
+        tenantId: TENANT_ID,
+        workspaceId: WS_ID,
+        actor: { id: "system", type: "system" },
+      }, {
+        who: { type: "system", id: "system", version: "ai-pm-bundle/v3" },
+        context: { tenant_id: TENANT_ID, workspace_id: WS_ID, time: new Date().toISOString(), channel: "inapp" },
+        object: { type: "bundle_migration", id: "ai-pm-charter-autonomy-v1" },
+        decision: {
+          action: "bundle.profile.migrate",
+          after: { bundle: "ai-pm", contract: "autonomy-ranges-caps/v1" },
+          basis: ["AI 产品经理示例 Bundle 的旧自治字段已迁移为通用 ranges/caps 契约"],
+        },
+        rule_impact: [],
+      });
+      console.log("✓ AI 产品经理示例档案迁移：旧自治字段 → ranges/caps（事件账本已留痕）");
+    }
+    await owner.query("COMMIT");
+  } catch (error) {
+    await owner.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  }
+  console.log("✓ 示例团队档案（模拟数据；影子模式不执行真实外部动作）");
 
   for (const r of fences) {
     await q(

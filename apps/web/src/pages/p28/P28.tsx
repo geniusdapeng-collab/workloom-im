@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { ensureDemoLogin, trpc } from "../../lib/trpc";
 import { MEMBER_ROLE_TEXT, dictText } from "../../lib/display";
-import { AsyncState, clientValueText } from "@workloom/ui";
+import { AsyncState, Icon, clientValueText } from "@workloom/ui";
 
 interface Group {
   workspaceId: string; slug: string; workspaceName: string; tenantName: string;
@@ -64,7 +64,7 @@ export default function P28() {
                   {g.pendingApprovals} 待审批
                 </span>
               ) : (
-                <span className="text-body text-emerald-500">无待办 ✓</span>
+                <span className="inline-flex items-center gap-1 text-body text-emerald-500">无待办 <Icon name="check" size={14} /></span>
               )}
             </div>
           </button>

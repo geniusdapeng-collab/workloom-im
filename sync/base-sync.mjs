@@ -279,6 +279,27 @@ function validateScope(scope, baseDir) {
       throw new Error(`registry capability ${capability.package} 必须通过 stable-registry-upgrade-pr 分发`);
     }
   }
+  const foundation = scope.clientFoundationCapability;
+  if (foundation) {
+    if (foundation.distribution !== "stable-tag-upgrade-pr") {
+      throw new Error("三端客户端基座必须通过 stable-tag-upgrade-pr 分发");
+    }
+    if (foundation.conflictPolicy !== "previous-source-sha256-fail-close") {
+      throw new Error("三端客户端基座必须采用旧基座 SHA-256 冲突关闭策略");
+    }
+    const foundationInstaller = assertSafeRelative(foundation.installer, "client foundation installer");
+    assertNoSymlinkPath(baseDir, join(baseDir, foundationInstaller), "client foundation installer", { allowMissing: false });
+    for (const clientRoot of ["apps/web", "apps/webb", "apps/webc"]) {
+      const probe = `${clientRoot}/__workloom_foundation_probe__`;
+      const excluded = (scope.exclude ?? []).some((pattern) => globToRegExp(pattern).test(probe));
+      if (!excluded) throw new Error(`三端受管根必须排除普通 base-sync，防止双通道覆盖：${clientRoot}`);
+    }
+    for (const pattern of foundation.industryExtensionPaths ?? []) {
+      if (typeof pattern !== "string" || !pattern.startsWith("apps/") || pattern.includes("..")) {
+        throw new Error(`非法三端行业扩展路径：${pattern}`);
+      }
+    }
+  }
   const protectedFiles = scope.protectedChildAssets?.files ?? [];
   for (const path of protectedFiles) {
     const safePath = assertSafeRelative(path, "protected child asset");

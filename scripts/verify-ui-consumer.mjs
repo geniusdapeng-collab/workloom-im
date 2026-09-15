@@ -3,6 +3,9 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+const BUTTON_COMPONENTS = Object.freeze(["Button", "IconButton"]);
+const FORM_CONTROL_COMPONENTS = Object.freeze(["Input", "Select", "Textarea", "Checkbox", "Switch"]);
+
 const CLIENT_CONTRACTS = Object.freeze([
   {
     packagePath: "apps/web/package.json",
@@ -13,7 +16,8 @@ const CLIENT_CONTRACTS = Object.freeze([
       ["SideNavigation"],
       ["TopContextBar"],
       ["Overlay", "Drawer", "Sheet", "ConfirmDialog"],
-      ["Button", "IconButton", "Input", "Select", "Textarea", "Checkbox", "Switch"],
+      BUTTON_COMPONENTS,
+      FORM_CONTROL_COMPONENTS,
     ],
   },
   {
@@ -26,7 +30,8 @@ const CLIENT_CONTRACTS = Object.freeze([
       ["BottomTabs"],
       ["TopContextBar"],
       ["Overlay", "Drawer", "Sheet", "ConfirmDialog"],
-      ["Button", "IconButton", "Input", "Select", "Textarea", "Checkbox", "Switch"],
+      BUTTON_COMPONENTS,
+      FORM_CONTROL_COMPONENTS,
     ],
   },
   {
@@ -39,7 +44,8 @@ const CLIENT_CONTRACTS = Object.freeze([
       ["BottomTabs"],
       ["TopContextBar"],
       ["Overlay", "Drawer", "Sheet", "ConfirmDialog"],
-      ["Button", "IconButton", "Input", "Select", "Textarea", "Checkbox", "Switch"],
+      BUTTON_COMPONENTS,
+      FORM_CONTROL_COMPONENTS,
     ],
   },
 ]);
@@ -92,6 +98,8 @@ function isRendered(source, alias) {
 }
 
 function contractLabel(group) {
+  if (group === BUTTON_COMPONENTS) return `共享操作按钮（${group.join("、")} 至少一种）`;
+  if (group === FORM_CONTROL_COMPONENTS) return `共享表单控件（${group.join("、")} 至少一种）`;
   return group.length === 1 ? group[0] : `以下任一组件：${group.join("、")}`;
 }
 

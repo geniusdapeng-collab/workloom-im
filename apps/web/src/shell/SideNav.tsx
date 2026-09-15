@@ -5,10 +5,12 @@ import {
   NAVIGATION_GROUP_LABELS,
   SideNavigation as SharedSideNavigation,
   isNavigationActive,
+  useManagedSurface,
+  clientChineseText,
   type NavigationEntry,
   type TextScale,
 } from "@workloom/ui";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { sharedLayoutPixels } from "../lib/useAskRail";
 import { useNavigationAccess } from "./NavigationAccess";
@@ -75,8 +77,18 @@ export function SideNav({ entries: providedEntries }: { entries?: readonly Navig
   const [query, setQuery] = useState("");
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [recentIds, setRecentIds] = useState<string[]>([]);
+  const mobileTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const mobileSearchRef = useRef<HTMLInputElement | null>(null);
   const favoriteStorageKey = `${FAVORITES_KEY}:${identityKey}`;
   const recentStorageKey = `${RECENT_KEY}:${identityKey}`;
+  const mobileSurface = useManagedSurface<HTMLDivElement>({
+    open: mobile && mobileOpen,
+    kind: "navigation-drawer",
+    onDismiss: () => setMobileOpen(false),
+    modal: true,
+    initialFocusRef: mobileSearchRef,
+    returnFocusRef: mobileTriggerRef,
+  });
 
   const updateMode = (next: NavMode) => {
     setMode(next);
@@ -219,6 +231,7 @@ export function SideNav({ entries: providedEntries }: { entries?: readonly Navig
 
   const renderShortcut = (entry: NavigationEntry) => {
     const active = isNavigationActive(entry, pathname);
+    const title = clientChineseText(entry.title, "未命名页面");
     return (
       <button
         key={entry.capabilityId}
@@ -228,7 +241,7 @@ export function SideNav({ entries: providedEntries }: { entries?: readonly Navig
         className={`flex min-h-9 min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left text-body ${active ? "bg-card font-semibold text-gold" : "text-ink2 hover:bg-card/60 hover:text-ink"}`}
       >
         <Icon name={entry.icon} size={15} className="shrink-0" />
-        <span className="min-w-0 break-words">{entry.title}</span>
+        <span className="min-w-0 break-words">{title}</span>
       </button>
     );
   };
@@ -236,6 +249,7 @@ export function SideNav({ entries: providedEntries }: { entries?: readonly Navig
   if ((mobile && !mobileOpen) || (!mobile && mode === "hidden")) {
     return (
       <button
+        ref={mobile ? mobileTriggerRef : undefined}
         type="button"
         onClick={() => mobile ? setMobileOpen(true) : updateMode("expanded")}
         className="fixed left-0 top-1/2 flex -translate-y-1/2 items-center gap-1 rounded-r-xl border border-l-0 border-gline bg-bg900/95 px-2 py-3 text-body font-semibold text-gold shadow-xl backdrop-blur-md"
@@ -256,8 +270,7 @@ export function SideNav({ entries: providedEntries }: { entries?: readonly Navig
       onNavigate={openEntry}
       collapsed={collapsed}
       onCollapsedChange={mobile ? undefined : (next) => updateMode(next ? "collapsed" : "expanded")}
-      className={`${mobile ? "fixed inset-y-0 left-0 h-dvh shadow-2xl" : "sticky top-0 h-screen shrink-0"} bg-bg950/97 backdrop-blur-md`}
-      style={mobile ? { zIndex: "var(--wl-z-drawer)" } : undefined}
+      className={`${mobile ? "relative h-dvh shadow-2xl" : "sticky top-0 h-screen shrink-0"} bg-bg950/97 backdrop-blur-md`}
       header={(
         <div className="flex min-w-0 items-center gap-2.5">
           <span className="inline-block h-4 w-4 shrink-0 rotate-45 rounded gold-grad shadow-[0_0_14px_rgba(255,160,60,.6)]" />
@@ -266,7 +279,7 @@ export function SideNav({ entries: providedEntries }: { entries?: readonly Navig
             <div className="break-words text-body text-ink3">企业数字员工即时协作</div>
           </div>
           {mobile && (
-            <button type="button" onClick={() => setMobileOpen(false)} className="min-h-9 min-w-9 rounded p-1 text-ink2 hover:bg-card" aria-label="关闭主导航">
+            <button type="button" onClick={() => setMobileOpen(false)} className="min-h-9 min-w-9 rounded p-1 text-ink2 hover:bg-card" aria-label="关闭主导航" title="关闭主导航">
               <Icon name="close" size={16} />
             </button>
           )}
@@ -278,6 +291,7 @@ export function SideNav({ entries: providedEntries }: { entries?: readonly Navig
             <span className="sr-only">搜索主导航</span>
             <Icon name="search" size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink3" />
             <input
+              ref={mobile ? mobileSearchRef : undefined}
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -302,12 +316,13 @@ export function SideNav({ entries: providedEntries }: { entries?: readonly Navig
       )}
       renderItemAction={(entry) => {
         const favorite = favoriteIds.includes(entry.capabilityId);
+        const title = clientChineseText(entry.title, "未命名页面");
         return (
           <button
             type="button"
             onClick={() => toggleFavorite(entry)}
             className={`flex min-h-9 min-w-9 items-center justify-center rounded-md ${favorite ? "text-gold" : "text-ink3 hover:text-gold"}`}
-            aria-label={favorite ? `取消收藏${entry.title}` : `收藏${entry.title}`}
+            aria-label={favorite ? `取消收藏${title}` : `收藏${title}`}
             aria-pressed={favorite}
             title={favorite ? "取消收藏" : "收藏"}
           >
@@ -335,8 +350,19 @@ export function SideNav({ entries: providedEntries }: { entries?: readonly Navig
 
   return (
     <>
-      {mobile && <button type="button" aria-label="关闭主导航" className="fixed inset-0 cursor-default bg-black/55" style={{ zIndex: "calc(var(--wl-z-drawer) - 1)" }} onClick={() => setMobileOpen(false)} />}
-      {nav}
+      {mobile ? (
+        <div
+          {...mobileSurface}
+          role="dialog"
+          aria-modal="true"
+          aria-label="主导航"
+          className="fixed inset-0"
+          style={{ zIndex: "var(--wl-z-drawer)" }}
+        >
+          <button type="button" tabIndex={-1} aria-label="关闭主导航" className="absolute inset-0 cursor-default bg-black/55" onClick={() => setMobileOpen(false)} />
+          <div className="relative h-full w-fit max-w-full">{nav}</div>
+        </div>
+      ) : nav}
       <LayoutControls
         open={layoutOpen}
         onClose={() => setLayoutOpen(false)}

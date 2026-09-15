@@ -1,3 +1,5 @@
+import { clientChineseText } from "./language";
+
 export type WorkLoomClient = "b-pc" | "b-mobile" | "c-mobile";
 export type NavigationGroup = "today" | "collaboration" | "operations" | "trust" | "automation" | "organization" | "mine";
 
@@ -7,7 +9,12 @@ export type IconName =
   | "team" | "workspace" | "inbox" | "account" | "partner" | "more"
   | "executive" | "customize" | "configuration" | "assembly" | "agents" | "developer"
   | "menu" | "close" | "reset" | "search" | "notice" | "chevron"
-  | "chat" | "ticket" | "star" | "history";
+  | "chat" | "ticket" | "star" | "history"
+  | "warning" | "check" | "error" | "edit" | "lock" | "pin"
+  | "book" | "phone" | "play" | "copy" | "like" | "dislike"
+  | "gift" | "cart" | "radar" | "send" | "package" | "experiment"
+  | "lightning" | "medal" | "rocket" | "puzzle" | "folder" | "palette"
+  | "celebrate" | "question" | "brake" | "circle" | "document";
 
 export interface NavigationEntry {
   capabilityId: string;
@@ -17,7 +24,7 @@ export interface NavigationEntry {
   group: NavigationGroup;
   icon: IconName;
   clients: readonly WorkLoomClient[];
-  /** 服务端返回的权限标识；不存在时对已登录 B 用户可见。 */
+  /** 服务端返回的权限标识；产品路由必须显式声明，禁止“已登录即 broad-read”。 */
   permission?: string;
   /** 行业包可声明多个权限，必须全部由服务端授予；permission 保留给旧基座条目。 */
   permissions?: readonly string[];
@@ -41,11 +48,11 @@ export const NAVIGATION_GROUP_ORDER: readonly NavigationGroup[] = [
 
 /** 基座页面导航唯一注册表。行业页面通过 bundle 条目合并，不能修改这里的基础语义。 */
 export const BASE_NAVIGATION: readonly NavigationEntry[] = [
-  { capabilityId: "workloom.today", route: "/", legacyRoutes: ["/p0"], title: "经营首页", group: "today", icon: "home", clients: ["b-pc", "b-mobile"], source: "base", order: 10 },
-  { capabilityId: "workloom.inbox", route: "/inbox", legacyRoutes: ["/p28"], title: "统一待办", group: "today", icon: "inbox", clients: ["b-pc", "b-mobile"], source: "base", order: 20 },
-  { capabilityId: "workloom.tasks", route: "/tasks", legacyRoutes: ["/p1", "/p2"], title: "任务中心", group: "collaboration", icon: "tasks", clients: ["b-pc", "b-mobile"], source: "base", order: 10 },
+  { capabilityId: "workloom.today", route: "/", legacyRoutes: ["/p0"], title: "经营首页", group: "today", icon: "home", clients: ["b-pc", "b-mobile"], permission: "today.read", source: "base", order: 10 },
+  { capabilityId: "workloom.inbox", route: "/inbox", legacyRoutes: ["/p28"], title: "统一待办", group: "today", icon: "inbox", clients: ["b-pc", "b-mobile"], permission: "inbox.read", source: "base", order: 20 },
+  { capabilityId: "workloom.tasks", route: "/tasks", legacyRoutes: ["/p1", "/p2"], title: "任务中心", group: "collaboration", icon: "tasks", clients: ["b-pc", "b-mobile"], permission: "tasks.read", source: "base", order: 10 },
   { capabilityId: "workloom.approvals", route: "/approvals", legacyRoutes: ["/p4"], title: "审批中心", group: "collaboration", icon: "approval", clients: ["b-pc", "b-mobile"], permission: "approvals.read", source: "base", order: 20 },
-  { capabilityId: "workloom.reports", route: "/reports", legacyRoutes: ["/p3"], title: "经营报告", group: "operations", icon: "report", clients: ["b-pc", "b-mobile"], source: "base", order: 10 },
+  { capabilityId: "workloom.reports", route: "/reports", legacyRoutes: ["/p3"], title: "经营报告", group: "operations", icon: "report", clients: ["b-pc", "b-mobile"], permission: "reports.read", source: "base", order: 10 },
   { capabilityId: "workloom.service-front", route: "/service", legacyRoutes: ["/p22"], title: "服务前台", group: "operations", icon: "service", clients: ["b-pc"], permission: "service.read", source: "base", order: 20 },
   { capabilityId: "workloom.executive", route: "/executive", legacyRoutes: ["/p21"], title: "经营驾驶舱", group: "operations", icon: "executive", clients: ["b-pc", "b-mobile"], permission: "executive.read", source: "base", order: 30 },
   { capabilityId: "workloom.guardrails", route: "/guardrails", legacyRoutes: ["/p5"], title: "围栏规则", group: "trust", icon: "rules", clients: ["b-pc", "b-mobile"], permission: "guardrails.read", source: "base", order: 10 },
@@ -62,7 +69,7 @@ export const BASE_NAVIGATION: readonly NavigationEntry[] = [
   { capabilityId: "workloom.agents", route: "/agents", legacyRoutes: ["/p8"], title: "数字员工", group: "organization", icon: "agents", clients: ["b-pc", "b-mobile"], permission: "agents.read", source: "base", order: 50 },
   { capabilityId: "workloom.members", route: "/members", legacyRoutes: ["/p30"], title: "成员管理", group: "organization", icon: "team", clients: ["b-pc", "b-mobile"], permission: "members.read", source: "base", order: 60 },
   { capabilityId: "workloom.partners", route: "/partners", legacyRoutes: ["/p31"], title: "伙伴授权", group: "organization", icon: "partner", clients: ["b-pc"], permission: "partners.read", source: "base", order: 70 },
-  { capabilityId: "workloom.account", route: "/account", legacyRoutes: ["/p29"], title: "个人与偏好", group: "mine", icon: "account", clients: ["b-pc", "b-mobile"], source: "base", order: 10 },
+  { capabilityId: "workloom.account", route: "/account", legacyRoutes: ["/p29"], title: "个人与偏好", group: "mine", icon: "account", clients: ["b-pc", "b-mobile"], permission: "account.read", source: "base", order: 10 },
 ];
 
 export interface ComposeNavigationOptions {
@@ -85,7 +92,9 @@ const ICON_NAMES = new Set<IconName>([
   "home", "tasks", "report", "service", "approval", "ledger", "rules", "exam", "memory", "night",
   "model", "skills", "team", "workspace", "inbox", "account", "partner", "more", "executive", "customize",
   "configuration", "assembly", "agents", "developer", "menu", "close", "reset", "search", "notice", "chevron",
-  "chat", "ticket", "star", "history",
+  "chat", "ticket", "star", "history", "warning", "check", "error", "edit", "lock", "pin", "book", "phone",
+  "play", "copy", "like", "dislike", "gift", "cart", "radar", "send", "package", "experiment", "lightning",
+  "medal", "rocket", "puzzle", "folder", "palette", "celebrate", "question", "brake", "circle", "document",
 ]);
 
 /** 把已由服务端验证的 Bundle UI 槽位转换为三端共享导航；未知分组、图标或命名空间一律拒绝。 */
@@ -95,10 +104,12 @@ export function navigationEntriesFromBundle(bundleId: string, slots: readonly Bu
     if (!slot.capabilityId.startsWith(`${bundleId}.`)) throw new Error(`行业导航能力必须使用 ${bundleId}. 命名空间`);
     if (!NAVIGATION_GROUP_ORDER.includes(slot.group as NavigationGroup)) throw new Error(`行业导航分组不受支持：${slot.group}`);
     if (!ICON_NAMES.has(slot.icon as IconName)) throw new Error(`行业导航图标不受支持：${slot.icon}`);
+    const title = clientChineseText(slot.title, "");
+    if (!title) throw new Error("行业导航标题必须是通过客户端安全边界的中文名称");
     return {
       capabilityId: slot.capabilityId,
       route: slot.route,
-      title: slot.title,
+      title,
       group: slot.group as NavigationGroup,
       icon: slot.icon as IconName,
       clients: slot.clients.map((client) => client === "pc" ? "b-pc" : client) as WorkLoomClient[],
@@ -120,6 +131,10 @@ export function composeNavigation({ client, permissions, bundleEntries = [] }: C
     if (seen.has(entry.capabilityId)) throw new Error(`导航能力标识重复：${entry.capabilityId}`);
     seen.add(entry.capabilityId);
     if (entry.source.startsWith("bundle:") && !entry.capabilityId.includes(".")) throw new Error(`行业导航缺少命名空间：${entry.capabilityId}`);
+    // 基座入口必须逐项授权；行业入口 permissions=[] 是已验 Bundle 对全体本工作区成员的显式声明。
+    if (entry.source === "base" && requiredNavigationPermissions(entry).length === 0) {
+      throw new Error(`基座导航入口缺少服务端权限标识：${entry.capabilityId}`);
+    }
   }
   return all
     .filter((entry) => entry.clients.includes(client))

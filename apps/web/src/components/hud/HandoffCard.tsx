@@ -6,6 +6,7 @@
  * 铁律：三计数与 P3 逐条强一致（F4.4）；未启用夜班时整卡转空态，禁止显 0（§5.3）
  */
 import { versionText } from "../../lib/display";
+import { Icon } from "@workloom/ui";
 
 export interface HandoffData {
   deliveredAt: string; // HH:MM
@@ -33,7 +34,7 @@ export function HandoffCard({
           className="pointer-events-none absolute inset-0 rounded-msg opacity-40"
           style={{ background: "radial-gradient(50% 60% at 50% 0%, rgb(36 27 77 / .5), transparent 70%)" }}
         />
-        <div className="relative mb-1.5 text-2xl" aria-hidden="true">🌙</div>
+        <Icon name="night" size={28} className="relative mx-auto mb-1.5" />
         <div className="relative text-body text-ink2">夜班中心尚未出征</div>
         <div className="relative mt-0.5 text-body text-ink3">开启夜班后，明早 08:30 日报送达</div>
       </div>
@@ -43,7 +44,7 @@ export function HandoffCard({
     <div className="relative overflow-hidden rounded-msg border border-line bg-card p-4">
       {/* 卡头 */}
       <div className="mb-3 flex min-w-0 flex-wrap items-center gap-2">
-        <span className="text-h2 font-black tracking-wide text-goldhi">✦ 昨夜日报 · 夜班中心</span>
+        <span className="inline-flex items-center gap-1.5 text-h2 font-black tracking-wide text-goldhi"><Icon name="night" size={17} />昨夜日报 · 夜班中心</span>
         <span className="text-body text-ink3">{data.deliveredAt} 送达</span>
         <span className="hidden flex-1 sm:inline" />
         <span className="max-w-full break-words text-body text-holo">围栏快照 {versionText(data.fenceSnapshot)}</span>
@@ -51,9 +52,9 @@ export function HandoffCard({
       {/* 三栏大数字（Orbitron 发光；战果✓绿 / 待审批◆琥珀 / 求援▲红——固定语义 §6） */}
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
         {[
-          { n: data.done, label: "战果 ✓", cls: "text-go", glow: "0_0_18px_rgba(34,200,138,.45)" },
-          { n: data.pending, label: "待审批 ◆", cls: "text-warn", glow: "0_0_18px_rgba(255,170,51,.45)" },
-          { n: data.needHuman, label: "求援 ▲", cls: "text-alert", glow: "0_0_18px_rgba(255,77,109,.45)" },
+          { n: data.done, label: "战果", cls: "text-go", glow: "0_0_18px_rgba(34,200,138,.45)" },
+          { n: data.pending, label: "待审批", cls: "text-warn", glow: "0_0_18px_rgba(255,170,51,.45)" },
+          { n: data.needHuman, label: "求援", cls: "text-alert", glow: "0_0_18px_rgba(255,77,109,.45)" },
         ].map((c) => (
           <div key={c.label} className="rounded-lg border border-line bg-bg800/60 px-3 py-2.5 text-center">
             <div

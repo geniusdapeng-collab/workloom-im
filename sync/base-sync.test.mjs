@@ -272,9 +272,9 @@ test("缺少 B 端移动客户端时只报告第一阶段迁移，绝不伪装�
   }
 });
 
-test("v4 scope 明确保护桌面产品身份，不整文件同步 electron-builder.yml", () => {
+test("v5 scope 明确保护产品身份，并将三端应用壳交给稳定标签指纹分发", () => {
   const scope = JSON.parse(readFileSync(join(REAL_BASE, "sync/base-scope.json"), "utf8"));
-  assert.equal(scope.version, 4);
+  assert.equal(scope.version, 5);
   assert.ok(scope.protectedChildAssets.files.includes("electron-builder.yml"));
   assert.ok(scope.protectedChildAssets.files.includes("product.manifest.json"));
   assert.ok(scope.exclude.includes("electron-builder.yml"));
@@ -283,6 +283,12 @@ test("v4 scope 明确保护桌面产品身份，不整文件同步 electron-buil
   assert.ok(scope.exclude.includes("apps/server/src/industry/**"));
   assert.ok(scope.exclude.includes("apps/server/src/service/adapters/**"));
   assert.equal(scope.registryCapabilities[0].distribution, "stable-registry-upgrade-pr");
+  assert.equal(scope.clientFoundationCapability.distribution, "stable-tag-upgrade-pr");
+  assert.equal(scope.clientFoundationCapability.conflictPolicy, "previous-source-sha256-fail-close");
+  assert.ok(scope.exclude.includes("apps/web/**"));
+  assert.ok(scope.exclude.includes("apps/webb/**"));
+  assert.ok(scope.exclude.includes("apps/webc/**"));
+  assert.ok(!scope.include.includes("apps/web/src/lib/**"));
 });
 
 test("相同 base SHA 仍逐项验真；Tiger required assets 写根目录且 state 同提交迁移", () => {

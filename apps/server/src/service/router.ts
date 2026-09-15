@@ -9,7 +9,7 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { protectedProcedure, router, scopeOf, writeProcedure } from "../trpc/context.js";
+import { actionProcedure, protectedProcedure, router, scopeOf, writeProcedure } from "../trpc/context.js";
 import {
   createCollectionOn, listCollections, listDocuments, setDocumentStatusOn, upsertDocumentOn,
   registerSiteSourceOn, crawlAndStructure, diffScan, searchKB,
@@ -32,7 +32,7 @@ import {
   listAnswers as evalListAnswers, listExams as evalListExams,
   listCandidateResults as evalListCandidateResults,
   listQuestions as evalListQuestions, runExam as evalRunExam,
-  seedQuestionsIfEmpty as evalSeedQuestions, setPromotionGate as evalSetPromotionGate,
+  seedQuestionsIfEmpty as evalSeedQuestions, setPromotionGateOn as evalSetPromotionGateOn,
 } from "./eval.js";
 import {
   listTools as devListTools, refreshTools as devRefreshTools,
@@ -377,7 +377,7 @@ const evalRouter = router({
     return { questions: await evalListQuestions(ws) };
   }),
   /** 开考（手动/变更触发；P0 同步执行） */
-  runExam: writeProcedure
+  runExam: actionProcedure("exam.run")
     .input(z.object({
       examType: z.enum(["on-change", "weekly", "onboarding"]).default("weekly"),
       subjectScope: z.array(z.string()).optional(),
@@ -388,7 +388,7 @@ const evalRouter = router({
       return { exam: r.exam, wrongCount: r.answers.filter((a) => !a.passed).length };
     }),
   /** 播种示例题库（空库时） */
-  seedQuestions: writeProcedure.mutation(async ({ ctx }) => {
+  seedQuestions: actionProcedure("exam.run").mutation(async ({ ctx }) => {
     const ws = scopeOf(ctx.identity).workspaceId;
     return { seeded: await evalSeedQuestions(ws) };
   }),
@@ -398,12 +398,12 @@ const evalRouter = router({
     return { settings: await evalGetSettings(ws) };
   }),
   /** 卡晋升授权开关（默认关；开启即留痕——授权动作写事件库） */
-  setPromotionGate: writeProcedure
+  setPromotionGate: actionProcedure("exam.run")
     .input(z.object({ enabled: z.boolean() }))
     .mutation(async ({ ctx, input }) => {
       const scope = scopeOf(ctx.identity);
       const settings = await serviceTx(scope.workspaceId, async (client, sc) => {
-        const s = await evalSetPromotionGate(scope.workspaceId, input.enabled);
+        const s = await evalSetPromotionGateOn(client, scope.workspaceId, input.enabled);
         await appendEventOn(client, sc, { id: ctx.identity.memberNo, type: "human" }, {
           objectType: "eval_settings", objectId: scope.workspaceId,
           action: input.enabled ? "eval.promotion_gate.enable" : "eval.promotion_gate.disable",

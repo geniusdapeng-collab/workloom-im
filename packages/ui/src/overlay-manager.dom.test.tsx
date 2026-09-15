@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { act, useRef, useState } from "react";
+import { act, type RefObject, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Dialog, OverlayManager } from "./overlays";
 import { acquireModalDocumentState } from "./modal-document-state";
+import { useManagedSurface } from "./managed-surface";
 
 function NestedDialogHarness() {
   const [outerOpen, setOuterOpen] = useState(false);
@@ -18,6 +19,65 @@ function NestedDialogHarness() {
         <Dialog open={innerOpen} title="内层确认" onClose={() => setInnerOpen(false)} initialFocusRef={innerActionRef}>
           <button id="inner-action" ref={innerActionRef} type="button">确认当前事项</button>
         </Dialog>
+      </Dialog>
+    </OverlayManager>
+  );
+}
+
+function InlineModalSurface({ open, onClose, returnFocusRef }: { open: boolean; onClose: () => void; returnFocusRef: RefObject<HTMLElement | null> }) {
+  const actionRef = useRef<HTMLButtonElement>(null);
+  const surface = useManagedSurface<HTMLDivElement>({
+    open,
+    kind: "navigation-drawer",
+    onDismiss: onClose,
+    modal: true,
+    initialFocusRef: actionRef,
+    returnFocusRef,
+  });
+  if (!open) return null;
+  return (
+    <div {...surface} id="inline-surface" role="dialog" aria-modal="true" aria-label="移动主导航">
+      <button id="inline-first" ref={actionRef} type="button">第一个操作</button>
+      <button id="inline-last" type="button" onClick={onClose}>关闭导航</button>
+    </div>
+  );
+}
+
+function InlineModalHarness() {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  return (
+    <OverlayManager>
+      <main id="inline-background">工作区内容</main>
+      {!open && <button id="open-inline" ref={triggerRef} type="button" onClick={() => setOpen(true)}>打开移动主导航</button>}
+      <InlineModalSurface open={open} onClose={() => setOpen(false)} returnFocusRef={triggerRef} />
+    </OverlayManager>
+  );
+}
+
+function AssistantSurface({ open, onClose, onOpenDialog }: { open: boolean; onClose: () => void; onOpenDialog: () => void }) {
+  const surface = useManagedSurface<HTMLDivElement>({
+    open,
+    kind: "assistant-companion",
+    onDismiss: onClose,
+  });
+  if (!open) return null;
+  return (
+    <aside {...surface} id="assistant-surface" aria-label="随身助手">
+      <button id="open-assistant-dialog" type="button" onClick={onOpenDialog}>打开确认</button>
+    </aside>
+  );
+}
+
+function MixedSurfaceHarness() {
+  const [assistantOpen, setAssistantOpen] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  return (
+    <OverlayManager>
+      <button id="page-action" type="button">页面操作</button>
+      <AssistantSurface open={assistantOpen} onClose={() => setAssistantOpen(false)} onOpenDialog={() => setDialogOpen(true)} />
+      <Dialog open={dialogOpen} title="高风险确认" onClose={() => setDialogOpen(false)}>
+        <button id="dialog-action" type="button">确认执行</button>
       </Dialog>
     </OverlayManager>
   );
@@ -100,5 +160,46 @@ describe("统一浮层宿主的真实嵌套行为", () => {
     expect(target.hasAttribute("inert")).toBe(false);
     expect(document.body.style.overflow).toBe("auto");
     target.remove();
+  });
+
+  it("应用背景内的自制阻断表面只锁定外部分支，并圈定焦点后恢复触发点", async () => {
+    await act(async () => root.render(<InlineModalHarness />));
+    const trigger = document.querySelector<HTMLButtonElement>("#open-inline")!;
+    trigger.focus();
+    await click("#open-inline");
+
+    const surface = document.querySelector<HTMLElement>("#inline-surface")!;
+    const background = document.querySelector<HTMLElement>("#inline-background")!;
+    expect(surface.dataset.wlManagedSurface).toBe("navigation-drawer");
+    expect(surface.hasAttribute("inert")).toBe(false);
+    expect(background.hasAttribute("inert")).toBe(true);
+    expect(document.activeElement?.id).toBe("inline-first");
+    expect(document.body.style.overflow).toBe("hidden");
+
+    document.querySelector<HTMLButtonElement>("#inline-last")!.focus();
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(document.activeElement?.id).toBe("inline-first");
+
+    await escape();
+    expect(document.querySelector("#inline-surface")).toBeNull();
+    expect(background.hasAttribute("inert")).toBe(false);
+    expect(document.activeElement?.id).toBe("open-inline");
+  });
+
+  it("常驻助手与确认框共用 LIFO 栈，Esc 每次只关闭最上层", async () => {
+    await act(async () => root.render(<MixedSurfaceHarness />));
+    await click("#open-assistant-dialog");
+    expect(document.querySelector("#assistant-surface")).not.toBeNull();
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+
+    await escape();
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(0);
+    expect(document.querySelector("#assistant-surface")).not.toBeNull();
+
+    await escape();
+    expect(document.querySelector("#assistant-surface")).toBeNull();
   });
 });

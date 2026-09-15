@@ -1,4 +1,4 @@
-import { composeNavigation, type BottomTabItem } from "@workloom/ui";
+import { composeNavigation, isNavigationActive, type BottomTabItem, type NavigationEntry } from "@workloom/ui";
 
 /** 移动端一级入口使用共享 BottomTabs 契约；id 即现有语义路由，不引入第二套路由状态。 */
 export const B_MOBILE_PRIMARY_TABS = [
@@ -32,6 +32,18 @@ export const B_MOBILE_SUPPORTED_ROUTES = new Set([
 
 export function isBMobileRoute(pathname: string): boolean {
   return B_MOBILE_SUPPORTED_ROUTES.has(pathname);
+}
+
+/** 同一服务端授权结果约束抽屉、底栏和手输/外部打开的直达地址。 */
+export function isBMobileRoutePermitted(pathname: string, entries: readonly NavigationEntry[]): boolean {
+  // “经营”是移动聚合页，沿用经营报告授权，不另造客户端权限。
+  const canonical = pathname === "/operations" ? "/reports" : pathname;
+  return entries.some((entry) => isNavigationActive(entry, canonical));
+}
+
+/** 页内链接与壳导航复用同一判定，避免先展示无权入口、点击后再撞拦截页。 */
+export function permittedBMobileRoutes(paths: readonly string[], entries: readonly NavigationEntry[]): string[] {
+  return paths.filter((path) => isBMobileRoutePermitted(path, entries));
 }
 
 export function unsupportedBaseBMobileRoutes(): string[] {

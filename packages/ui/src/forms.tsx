@@ -22,6 +22,7 @@ export interface FieldPresentationProps {
   error?: ReactNode;
   hideLabel?: boolean;
   optionalLabel?: string;
+  requiredLabel?: string;
   wrapperClassName?: string;
 }
 
@@ -39,6 +40,7 @@ function FieldFrame({
   error,
   hideLabel = false,
   optionalLabel = "选填",
+  requiredLabel = "必填",
   wrapperClassName = "",
   controlId,
   descriptionId,
@@ -47,10 +49,16 @@ function FieldFrame({
   children,
 }: FieldFrameProps) {
   return (
-    <div className={`wl-field ${error ? "wl-field--error" : ""} ${wrapperClassName}`.trim()}>
+    <div
+      className={`wl-field ${error ? "wl-field--error" : ""} ${wrapperClassName}`.trim()}
+      data-invalid={error ? "true" : undefined}
+      data-required={required ? "true" : undefined}
+    >
       <label className={hideLabel ? "wl-visually-hidden" : "wl-field__label"} htmlFor={controlId}>
         <span>{label}</span>
-        {!required && optionalLabel && <span className="wl-field__optional">（{optionalLabel}）</span>}
+        {required
+          ? requiredLabel && <span className="wl-field__required">（{requiredLabel}）</span>
+          : optionalLabel && <span className="wl-field__optional">（{optionalLabel}）</span>}
       </label>
       {children}
       {description && <div className="wl-field__description" id={descriptionId}>{description}</div>}
@@ -76,6 +84,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input({
   error,
   hideLabel,
   optionalLabel,
+  requiredLabel,
   wrapperClassName,
   id,
   className = "",
@@ -87,13 +96,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input({
   const generatedId = useId();
   const ids = fieldIds(id, generatedId);
   return (
-    <FieldFrame {...ids} label={label} description={description} error={error} hideLabel={hideLabel} optionalLabel={optionalLabel} wrapperClassName={wrapperClassName} required={required}>
+    <FieldFrame {...ids} label={label} description={description} error={error} hideLabel={hideLabel} optionalLabel={optionalLabel} requiredLabel={requiredLabel} wrapperClassName={wrapperClassName} required={required}>
       <input
         {...props}
         ref={ref}
         id={ids.controlId}
         required={required}
         aria-invalid={ariaInvalid ?? Boolean(error)}
+        aria-errormessage={error ? ids.errorId : undefined}
         aria-describedby={joinIds(ariaDescribedBy, description ? ids.descriptionId : undefined, error ? ids.errorId : undefined)}
         className={`wl-input ${className}`.trim()}
       />
@@ -109,6 +119,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
   error,
   hideLabel,
   optionalLabel,
+  requiredLabel,
   wrapperClassName,
   id,
   className = "",
@@ -121,13 +132,14 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
   const generatedId = useId();
   const ids = fieldIds(id, generatedId);
   return (
-    <FieldFrame {...ids} label={label} description={description} error={error} hideLabel={hideLabel} optionalLabel={optionalLabel} wrapperClassName={wrapperClassName} required={required}>
+    <FieldFrame {...ids} label={label} description={description} error={error} hideLabel={hideLabel} optionalLabel={optionalLabel} requiredLabel={requiredLabel} wrapperClassName={wrapperClassName} required={required}>
       <select
         {...props}
         ref={ref}
         id={ids.controlId}
         required={required}
         aria-invalid={ariaInvalid ?? Boolean(error)}
+        aria-errormessage={error ? ids.errorId : undefined}
         aria-describedby={joinIds(ariaDescribedBy, description ? ids.descriptionId : undefined, error ? ids.errorId : undefined)}
         className={`wl-select ${className}`.trim()}
       >
@@ -160,6 +172,7 @@ export const Combobox = forwardRef<HTMLInputElement, ComboboxProps>(function Com
   error,
   hideLabel,
   optionalLabel,
+  requiredLabel,
   wrapperClassName,
   id,
   className = "",
@@ -172,7 +185,7 @@ export const Combobox = forwardRef<HTMLInputElement, ComboboxProps>(function Com
   const ids = fieldIds(id, generatedId);
   const listId = `${ids.controlId}-options`;
   return (
-    <FieldFrame {...ids} label={label} description={description} error={error} hideLabel={hideLabel} optionalLabel={optionalLabel} wrapperClassName={wrapperClassName} required={required}>
+    <FieldFrame {...ids} label={label} description={description} error={error} hideLabel={hideLabel} optionalLabel={optionalLabel} requiredLabel={requiredLabel} wrapperClassName={wrapperClassName} required={required}>
       <input
         {...props}
         ref={ref}
@@ -183,6 +196,7 @@ export const Combobox = forwardRef<HTMLInputElement, ComboboxProps>(function Com
         aria-autocomplete="list"
         aria-controls={listId}
         aria-invalid={ariaInvalid ?? Boolean(error)}
+        aria-errormessage={error ? ids.errorId : undefined}
         aria-describedby={joinIds(ariaDescribedBy, description ? ids.descriptionId : undefined, error ? ids.errorId : undefined)}
         className={`wl-input wl-combobox ${className}`.trim()}
       />
@@ -201,6 +215,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
   error,
   hideLabel,
   optionalLabel,
+  requiredLabel,
   wrapperClassName,
   id,
   className = "",
@@ -212,13 +227,14 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
   const generatedId = useId();
   const ids = fieldIds(id, generatedId);
   return (
-    <FieldFrame {...ids} label={label} description={description} error={error} hideLabel={hideLabel} optionalLabel={optionalLabel} wrapperClassName={wrapperClassName} required={required}>
+    <FieldFrame {...ids} label={label} description={description} error={error} hideLabel={hideLabel} optionalLabel={optionalLabel} requiredLabel={requiredLabel} wrapperClassName={wrapperClassName} required={required}>
       <textarea
         {...props}
         ref={ref}
         id={ids.controlId}
         required={required}
         aria-invalid={ariaInvalid ?? Boolean(error)}
+        aria-errormessage={error ? ids.errorId : undefined}
         aria-describedby={joinIds(ariaDescribedBy, description ? ids.descriptionId : undefined, error ? ids.errorId : undefined)}
         className={`wl-textarea ${className}`.trim()}
       />
@@ -255,6 +271,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Che
           type="checkbox"
           id={ids.controlId}
           aria-invalid={ariaInvalid ?? Boolean(error)}
+          aria-errormessage={error ? ids.errorId : undefined}
           aria-describedby={joinIds(ariaDescribedBy, description ? ids.descriptionId : undefined, error ? ids.errorId : undefined)}
           className={`wl-checkbox__input ${className}`.trim()}
         />
@@ -296,6 +313,7 @@ export const Radio = forwardRef<HTMLInputElement, RadioProps>(function Radio({
           type="radio"
           id={ids.controlId}
           aria-invalid={ariaInvalid ?? Boolean(error)}
+          aria-errormessage={error ? ids.errorId : undefined}
           aria-describedby={joinIds(ariaDescribedBy, description ? ids.descriptionId : undefined, error ? ids.errorId : undefined)}
           className={`wl-radio__input ${className}`.trim()}
         />
@@ -337,6 +355,7 @@ export const Switch = forwardRef<HTMLInputElement, SwitchProps>(function Switch(
           role="switch"
           id={ids.controlId}
           aria-invalid={ariaInvalid ?? Boolean(error)}
+          aria-errormessage={error ? ids.errorId : undefined}
           aria-describedby={joinIds(ariaDescribedBy, description ? ids.descriptionId : undefined, error ? ids.errorId : undefined)}
           className={`wl-switch__input ${className}`.trim()}
         />

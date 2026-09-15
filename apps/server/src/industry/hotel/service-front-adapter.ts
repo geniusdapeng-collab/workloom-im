@@ -66,6 +66,17 @@ const HOTEL_DEPARTMENTS: Record<string, string> = {
 export const hotelBizAdapter: ServiceFrontBusinessAdapter = {
   id: "hotel.service-front-v1",
 
+  // 业务同义词与弱词归行业适配器所有；只有已验证活动 Bundle 选中本适配器后才生效。
+  kbLexicon: {
+    synonyms: [
+      ["会员", "会员卡"], ["优惠", "折扣"], ["配送", "送货"], ["开票", "发票"], ["退换", "售后"],
+    ],
+    weakTokens: [
+      "时间", "免费", "收费", "可以", "服务", "商品", "店铺", "半天", "一份", "一瓶", "东西", "地方",
+      "怎么", "如何", "一下", "价格", "多少钱", "订单", "买家", "顾客", "客服", "工作", "两张", "一张", "几位", "一些",
+    ],
+  },
+
   classify(text) {
     if (RE_ROOM_RATE.test(text)) {
       return { tool: "query_catalog", answer: "为您查询到以下房型价格：" };

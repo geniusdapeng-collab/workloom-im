@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { StatusChip, clientChineseText, clientValueText } from "@workloom/ui";
+import { Icon, StatusChip, clientChineseText, clientValueText } from "@workloom/ui";
 import { getConfig } from "../lib/config";
 import type { CatalogInfo, Citation, MemberInfo, BusinessRecord } from "../lib/types";
 import { formatTime } from "./common";
@@ -16,22 +16,19 @@ export function CitationCard({ citations }: { citations: Citation[] }) {
         className="pressable flex min-w-0 w-full items-center justify-between gap-2 px-3 py-2 text-left"
       >
         <span className="flex min-w-0 items-center gap-1.5 break-words text-body text-holo">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-          </svg>
+          <Icon name="book" size={12} />
           引用来源 · {citations.length} 条
         </span>
-        <span className={`text-holo transition-transform duration-200 ${open ? "rotate-180" : ""}`}>▾</span>
+        <Icon name="chevron" size={14} className={`text-holo transition-transform duration-200 ${open ? "-rotate-90" : "rotate-90"}`} />
       </button>
       {open && (
         <div className="animate-fadein space-y-2 border-t border-holo/20 px-3 py-2">
           {citations.map((c, i) => (
             <div key={i} className="min-w-0 rounded-lg bg-bg900/60 p-2">
               <p className="break-words text-body font-medium text-holo">
-                《{c.documentTitle}》 · {c.heading}
+                《{clientChineseText(c.documentTitle, "参考资料")}》 · {clientChineseText(c.heading, "相关章节")}
               </p>
-              <p className="mt-1 break-words text-body leading-relaxed text-ink2">{c.content}</p>
+              <p className="mt-1 break-words text-body leading-relaxed text-ink2">{clientChineseText(c.content, "引用内容暂无法安全展示")}</p>
             </div>
           ))}
         </div>
@@ -88,13 +85,11 @@ export function MemberCard({ member }: { member: MemberInfo }) {
     <div className="mt-2 animate-fadein overflow-hidden rounded-xl border border-gline bg-gradient-to-br from-bg700 to-bg800">
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 pt-3">
         <span className="flex min-w-0 items-center gap-1.5 break-words text-body font-semibold text-gold">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2l2.4 4.8 5.3.8-3.8 3.7.9 5.3L12 14.1 7.2 16.6l.9-5.3L4.3 7.6l5.3-.8L12 2z" />
-          </svg>
+          <Icon name="star" size={14} fill="currentColor" stroke="none" />
           {clientChineseText(member.title, "用户权益")}
         </span>
         {member.metric && (
-          <span className="min-w-0 break-words text-right font-orb text-[15px] text-goldhi">
+          <span className="min-w-0 break-words text-right font-orb text-[0.9375rem] text-goldhi">
             {clientChineseText(member.metric.label, "权益值")} {clientValueText(member.metric.value)}
           </span>
         )}
@@ -149,10 +144,7 @@ export function TicketNoticeCard({ title, state }: { title: string; state: "draf
   return (
     <div className="mt-2 flex animate-fadein items-start gap-2.5 rounded-xl border border-warn/40 bg-warn/10 p-3">
       <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-warn/20 text-warn">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-          <path d="M13.7 21a2 2 0 0 1-3.4 0" />
-        </svg>
+        <Icon name="notice" size={14} />
       </span>
       <div className="min-w-0">
         <p className="text-body font-medium text-warn">{state === "accepted" ? "工单已受理" : "尚未提交"}</p>
@@ -206,8 +198,8 @@ export function ServiceNoticeCard({
         </span>
       </div>
       <div className="px-3 py-2.5">
-        <p className="break-words text-body font-medium text-ink">{title}</p>
-        {detail && <p className="mt-1 break-words text-body leading-relaxed text-ink2">{detail}</p>}
+        <p className="break-words text-body font-medium text-ink">{clientChineseText(title, "服务通知")}</p>
+        {detail && <p className="mt-1 break-words text-body leading-relaxed text-ink2">{clientChineseText(detail, "服务进度已更新")}</p>}
         {deliveryLabel && (
           <p className={`mt-2 text-body ${deliveryState === "failed" ? "text-alert" : deliveryState === "sent" ? "text-go" : "text-warn"}`}>
             通知状态：{deliveryLabel}

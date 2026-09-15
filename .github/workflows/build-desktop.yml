@@ -66,6 +66,7 @@ jobs:
           pnpm product:verify
           pnpm bundle:governance
           pnpm projections:check
+          node --test apps/desktop/electron/bootstrap.test.cjs
           pnpm exec vitest run apps/web/src/voice/VoiceEngine.test.ts
           pnpm -C apps/web build
 
@@ -197,6 +198,7 @@ jobs:
           pnpm product:verify
           pnpm bundle:governance
           pnpm projections:check
+          node --test apps/desktop/electron/bootstrap.test.cjs
           pnpm exec vitest run apps/web/src/voice/VoiceEngine.test.ts
           pnpm -C apps/web build
 

@@ -15,18 +15,26 @@ function parseArgs(argv) {
     prefix: value("--path-prefix")?.replace(/^\/+|\/+$/g, "") ?? "",
     version: value("--version"),
     allowCandidate: argv.includes("--allow-candidate"),
-    requireAll: argv.includes("--require-all"),
+    // 新行业接入默认必须一次具备三端。存量仓的分步迁移由发布前迁移流程负责，
+    // 不能通过普通接入命令把缺端状态标记为已完成。
+    requireAll: true,
   };
 }
 
 export function resolveUiVersion(manifest, explicitVersion, allowCandidate = false) {
-  if (explicitVersion) return explicitVersion;
-  if (manifest.ui.latestStableVersion) return manifest.ui.latestStableVersion;
-  if (allowCandidate && manifest.ui.candidateVersion) return manifest.ui.candidateVersion;
+  const stable = manifest.ui.latestStableVersion;
+  if (stable) {
+    if (!explicitVersion || explicitVersion === stable) return stable;
+    if (allowCandidate && explicitVersion === manifest.ui.candidateVersion) return explicitVersion;
+    throw new Error(`新行业默认只能接入 latestStableVersion=${stable}；目标 ${explicitVersion} 不是当前稳定版`);
+  }
+  if (allowCandidate && (!explicitVersion || explicitVersion === manifest.ui.candidateVersion) && manifest.ui.candidateVersion) {
+    return manifest.ui.candidateVersion;
+  }
   throw new Error("基座尚未发布稳定 UI 版本；新行业接入已被阻断。请先完成 WorkLoom IM 基座门禁并发布 ui-v* 稳定版本。");
 }
 
-export function setUiVersion({ repo, prefix = "", version, manifest, requireAll = false }) {
+export function setUiVersion({ repo, prefix = "", version, manifest, requireAll = true }) {
   const workdir = prefix ? join(repo, prefix) : repo;
   const existing = manifest.ui.requiredClientPackages.filter((relativePath) => existsSync(join(workdir, relativePath)));
   if (existing.length === 0) {
@@ -51,6 +59,7 @@ export function setUiVersion({ repo, prefix = "", version, manifest, requireAll 
     contractVersion: manifest.ui.contractVersion,
     source: manifest.baseRepository,
     updatePolicy: "upgrade-pr-only",
+    releaseChannel: "stable",
     allowedIndustryOverrides: manifest.ui.allowedIndustryOverrides,
     requiredClientPackages: manifest.ui.requiredClientPackages,
     connectedClientPackages: touched,

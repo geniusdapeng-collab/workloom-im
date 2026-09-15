@@ -11,8 +11,9 @@ import { ensureDemoLogin, trpc } from "../../lib/trpc";
 import { COMMON_STATUS_TEXT, FENCE_LEVEL_TEXT, actionText, dictText, shortId, versionText } from "../../lib/display";
 import { Bridge } from "../../shell/Bridge";
 import { BannerAlert, EmptyState, FenceLight, type FenceLevel4 } from "../../components/hud";
-import { AsyncState } from "@workloom/ui";
+import { AsyncState, Icon, clientChineseText, clientIdentifierText, clientValueText } from "@workloom/ui";
 import { operationFailure, toUiFailure } from "../../lib/ui-state";
+import { useNavigationAccess } from "../../shell/NavigationAccess";
 
 interface RuleRow {
   id: string; rule_id: string; version: string; workspace_id: string; name: string;
@@ -31,10 +32,10 @@ function levelOf(r: RuleRow): FenceLevel4 {
 }
 
 export default function P5() {
+  const { canAction } = useNavigationAccess();
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error" | "forbidden">("loading");
   const [hasSnapshot, setHasSnapshot] = useState(false);
   const [loadMessage, setLoadMessage] = useState("");
-  const [role, setRole] = useState("readonly");
   const [rules, setRules] = useState<RuleRow[]>([]);
   const [versions, setVersions] = useState<VersionRow[]>([]);
   const [banner, setBanner] = useState<{ level: "alert" | "warn" | "info"; text: string } | null>(null);
@@ -49,12 +50,10 @@ export default function P5() {
     setLoadState("loading");
     try {
       await ensureDemoLogin();
-      const [meR, ru, ve] = await Promise.all([
-        trpc.members.me.query() as Promise<{ identity: { role: string } }>,
+      const [ru, ve] = await Promise.all([
         trpc.fence.rules.query() as Promise<RuleRow[]>,
         trpc.fence.versions.query() as Promise<VersionRow[]>,
       ]);
-      setRole(meR.identity.role);
       setRules(ru);
       setVersions(ve);
       setHasSnapshot(true);
@@ -70,7 +69,7 @@ export default function P5() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const readonly = loadState !== "ready" || role === "readonly";
+  const readonly = loadState !== "ready" || !canAction("guardrail.manage");
   const activeRules = rules.filter((r) => r.status === "active");
   const baselineCount = activeRules.filter((r) => r.is_baseline).length;
   const localCount = activeRules.filter((r) => !r.is_baseline && r.workspace_id !== "*").length;
@@ -79,7 +78,7 @@ export default function P5() {
   const scopeOptions = useMemo(() => activeRules.flatMap((rule, ruleIndex) => {
     const objectTypes = rule.match_spec.object_types ?? [];
     const actions = rule.match_spec.actions ?? [];
-    const ruleName = /[\u3400-\u9fff]/.test(rule.name) ? rule.name : `行业规则 ${ruleIndex + 1}`;
+    const ruleName = clientChineseText(rule.name, `行业规则 ${ruleIndex + 1}`);
     return objectTypes.flatMap((objectType) => actions.map((action) => ({
       key: `${rule.id}:${objectType}:${action}`,
       objectType,
@@ -160,12 +159,12 @@ export default function P5() {
               {dictText(COMMON_STATUS_TEXT, v.status)}
             </span>
           </div>
-          <div className="mt-0.5 text-body text-ink3">{v.rules} 条规则</div>
+          <div className="mt-0.5 text-body text-ink3">{clientValueText(v.rules)} 条规则</div>
         </div>
       ))}
       <div className="rounded-lg border border-line bg-card p-3">
         <div className="text-body font-bold text-holo">生效范围</div>
-        <div className="mt-1 text-body text-ink2">本店规则 {localCount} 条 + 基线 {baselineCount} 条 🔒 集团强制</div>
+        <div className="mt-1 flex items-center gap-1 text-body text-ink2">本店规则 {localCount} 条 + 基线 {baselineCount} 条 <Icon name="lock" size={13} />集团强制</div>
         <div className="mt-0.5 text-body text-ink3">安全基线只可加严，不可被工作区规则放宽。</div>
       </div>
     </>
@@ -235,7 +234,7 @@ export default function P5() {
                 aria-busy={busy === "dry-run" || undefined}
                 className="mt-2 w-full cursor-pointer rounded-lg gold-grad px-3 py-1.5 text-body font-black text-ongold disabled:cursor-wait disabled:opacity-50"
               >
-                {busy === "dry-run" ? "正在模拟回放…" : "▶ 模拟回放最近 10 条事件"}
+                {busy === "dry-run" ? "正在模拟回放…" : <><Icon name="play" size={14} className="inline" /> 模拟回放最近 10 条事件</>}
               </button>
             </div>
           )}
@@ -243,15 +242,15 @@ export default function P5() {
           {report && (
             <div className={`rounded-lg border p-3 ${report.report.wouldBlock.length > 3 ? "border-alert/50 bg-alert/6" : "border-holo/35 bg-holo/5"}`}>
               <div className="mb-1.5 text-body font-bold text-holo">模拟回放报告</div>
-              <div className="text-body text-ink2">{report.report.impact}</div>
+              <div className="text-body text-ink2">{clientChineseText(report.report.impact, "本次变更影响已完成模拟，请核对下方结果。")}</div>
               {report.report.wouldBlock.length > 0 && (
                 <div className="mt-1 text-body text-alert">
-                  将拦截：{report.report.wouldBlock.map((e) => `#${e}`).join("、")}
+                  将拦截：{report.report.wouldBlock.map((e) => clientIdentifierText(e)).join("、")}
                 </div>
               )}
               {report.report.wouldReview.length > 0 && (
                 <div className="mt-0.5 text-body text-warn">
-                  将挂起：{report.report.wouldReview.map((e) => `#${e}`).join("、")}
+                  将挂起：{report.report.wouldReview.map((e) => clientIdentifierText(e)).join("、")}
                 </div>
               )}
               <button
@@ -261,7 +260,7 @@ export default function P5() {
                 aria-busy={busy === "confirm" || undefined}
                 className="mt-2 w-full cursor-pointer rounded-lg border border-go/50 bg-go/10 px-3 py-1.5 text-body font-bold text-go disabled:cursor-wait disabled:opacity-50"
               >
-                {busy === "confirm" ? "正在提交…" : "✓ 确认并提交变更审批（审批前不生效）"}
+                {busy === "confirm" ? "正在提交…" : <><Icon name="check" size={14} className="inline" /> 确认并提交变更审批（审批前不生效）</>}
               </button>
             </div>
           )}
@@ -296,7 +295,7 @@ export default function P5() {
             onRetry={loadState === "error" ? () => void load() : undefined}
           />
         ) : activeRules.length === 0 ? (
-          <EmptyState icon="🛡" title="当前工作区暂无自定义规则" hint="系统安全基线仍在生效，且不能被工作区规则放宽。" />
+          <EmptyState icon={<Icon name="rules" size={24} />} title="当前工作区暂无自定义规则" hint="系统安全基线仍在生效，且不能被工作区规则放宽。" />
         ) : (
           <div className="space-y-2">
             {activeRules.map((r) => (
@@ -304,13 +303,13 @@ export default function P5() {
                 <div className="flex-1">
                   <FenceLight
                     level={levelOf(r)}
-                    name={`${shortId(r.rule_id)} ${r.name}`}
+                    name={`${shortId(r.rule_id)} ${clientChineseText(r.name, "未命名规则")}`}
                     desc={`${r.workspace_id === "*" ? "系统基线" : "当前工作区"} · ${versionText(r.version)} · ${(r.match_spec.actions ?? []).map(actionText).join("、") || "适用动作待说明"}`}
                     baseline={r.is_baseline}
                   />
                 </div>
                 <div className="w-24 text-right">
-                  <div className="font-orb text-body font-bold text-holo">{r.hits30}</div>
+                  <div className="font-orb text-body font-bold text-holo">{clientValueText(r.hits30)}</div>
                   <div className="text-body text-ink3">30 天触发</div>
                 </div>
               </div>

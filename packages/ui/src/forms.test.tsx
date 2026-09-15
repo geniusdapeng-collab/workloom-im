@@ -17,6 +17,8 @@ describe("三端共享表单原语", () => {
     expect(html).toContain('for="company-name"');
     expect(html).toContain('aria-describedby="company-name-description company-name-error"');
     expect(html).toContain('aria-invalid="true"');
+    expect(html).toContain('aria-errormessage="company-name-error"');
+    expect(html).toContain('data-invalid="true"');
     expect(html).toContain('role="alert"');
     expect(html).toContain("企业名称不能为空");
   });
@@ -33,6 +35,8 @@ describe("三端共享表单原语", () => {
     );
     expect(selectHtml).toContain("请选择需要由数字员工持续经营的业务范围");
     expect(selectHtml).not.toContain("（选填）");
+    expect(selectHtml).toContain("（必填）");
+    expect(selectHtml).toContain('data-required="true"');
     expect(textareaHtml).toContain("（选填）");
     expect(textareaHtml).toContain("wl-textarea");
   });

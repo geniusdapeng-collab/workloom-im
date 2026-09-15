@@ -18,6 +18,7 @@ describe("服务前台行业适配器契约", () => {
       installId: "bi-hotel",
       adapter: { id: "hotel.service-front-v1" },
     });
+    expect(result.adapter?.kbLexicon?.synonyms).toContainEqual(["会员", "会员卡"]);
   });
 
   it("AI 产品经理默认包未声明行业适配器，绝不回退酒店", () => {

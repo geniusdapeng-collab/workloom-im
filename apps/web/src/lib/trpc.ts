@@ -8,19 +8,31 @@ import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import type { AppRouter } from "@workloom/server/router";
 
 const TOKEN_KEY = "workloom.demo.token";
+// 身份切换代次：显式登录开始后，较早发出的游客请求不得再覆盖正式令牌。
+let identityRevision = 0;
+let formalLoginEpoch = 0;
+let formalLoginsInFlight = 0;
+
+function announceIdentityChange(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("workloom:identity-changed"));
+}
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
 export function setToken(token: string): void {
+  identityRevision += 1;
   localStorage.setItem(TOKEN_KEY, token);
-  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("workloom:identity-changed"));
+  // setToken 只用于正式身份；游客令牌必须通过 setGuestToken 原子写入身份标记。
+  localStorage.removeItem(GUEST_KEY);
+  announceIdentityChange();
 }
 export function clearToken(): void {
+  identityRevision += 1;
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_KEY);
   localStorage.removeItem(GUEST_KEY);
-  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("workloom:identity-changed"));
+  announceIdentityChange();
 }
 
 const REFRESH_KEY = "workloom.accounts.refresh";
@@ -35,6 +47,13 @@ const GUEST_KEY = "workloom.guest";
 export function isGuest(): boolean { return localStorage.getItem(GUEST_KEY) === "1"; }
 export function clearGuestFlag(): void { localStorage.removeItem(GUEST_KEY); }
 
+function setGuestToken(token: string): void {
+  identityRevision += 1;
+  localStorage.setItem(TOKEN_KEY, token);
+  localStorage.setItem(GUEST_KEY, "1");
+  announceIdentityChange();
+}
+
 let validatedToken: string | null = null;
 let guestSessionPromise: Promise<void> | null = null;
 
@@ -43,28 +62,40 @@ async function validateStoredSession(): Promise<boolean> {
   const token = getToken();
   if (!token) return false;
   if (validatedToken === token) return true;
+  const requestRevision = identityRevision;
   try {
-    await trpc.onboarding.status.query();
+    await trpc.access.me.query();
+    // 校验返回期间身份已变化时，结果只属于旧令牌；保留新身份并阻止游客降级。
+    if (identityRevision !== requestRevision || getToken() !== token) return getToken() !== null;
     validatedToken = token;
     return true;
   } catch {
-    clearToken();
-    validatedToken = null;
+    // 旧令牌的迟到失败不能清掉并发登录刚写入的新令牌。
+    if (identityRevision === requestRevision && getToken() === token) {
+      clearToken();
+      if (validatedToken === token) validatedToken = null;
+    }
     return false;
   }
 }
 
 /** 无令牌时静默进场游客会话（幂等；正式登录后不再触发） */
 export async function ensureGuestSession(): Promise<void> {
+  // 登录页正在换取正式身份时不再签发临时身份，避免页面短暂降级为游客。
+  if (formalLoginsInFlight > 0) return;
   if (guestSessionPromise) return guestSessionPromise;
   guestSessionPromise = (async () => {
+    if (formalLoginsInFlight > 0) return;
     if (await validateStoredSession()) return;
+    if (formalLoginsInFlight > 0 || getToken()) return;
+    const requestRevision = identityRevision;
     const r = await (trpc.accounts.auth as unknown as {
       guestEnter: { mutate: (i: Record<string, never>) => Promise<{ token: string }> };
     }).guestEnter.mutate({});
-    setToken(r.token);
+    // 登录页可能在游客请求尚未返回时完成正式登录。旧响应只能作废，不能降级身份。
+    if (formalLoginsInFlight > 0 || identityRevision !== requestRevision || getToken()) return;
+    setGuestToken(r.token);
     validatedToken = r.token;
-    localStorage.setItem(GUEST_KEY, "1");
   })();
   try { await guestSessionPromise; } finally { guestSessionPromise = null; }
 }
@@ -94,12 +125,21 @@ const DEMO_MEMBER = (import.meta.env.VITE_DEMO_MEMBER as string | undefined) ?? 
 export const DEV_DEMO_MEMBER = DEMO_MEMBER;
 export async function ensureDemoLogin(memberNo?: string): Promise<void> {
   if (memberNo) {
-    if (!isGuest() && await validateStoredSession()) return;
-    if (isGuest()) clearToken();
-    const r = await trpc.auth.loginAs.mutate({ workspaceSlug: DEMO_WORKSPACE, memberNo });
-    setToken(r.token);
-    validatedToken = r.token;
-    return;
+    // 先使并发中的游客请求失效；只允许最后一次显式登录写入正式身份。
+    const loginEpoch = ++formalLoginEpoch;
+    formalLoginsInFlight += 1;
+    identityRevision += 1;
+    try {
+      if (!isGuest() && await validateStoredSession()) return;
+      if (isGuest()) clearToken();
+      const r = await trpc.auth.loginAs.mutate({ workspaceSlug: DEMO_WORKSPACE, memberNo });
+      if (loginEpoch !== formalLoginEpoch) return;
+      setToken(r.token);
+      validatedToken = r.token;
+      return;
+    } finally {
+      formalLoginsInFlight = Math.max(0, formalLoginsInFlight - 1);
+    }
   }
   return ensureGuestSession();
 }

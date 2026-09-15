@@ -29,6 +29,7 @@ CSS 必须按上述顺序引入。组件不依赖 `react-router`；导航、路�
 | 导航与框架 | `TopContextBar`、`SideNav`（`SideNavigation` 兼容名）、`BottomTabs`、`AppShell`、`Grid`、`ResizablePanel`、`SplitView`、`WorkspaceSwitcher` | PC 使用左侧导航，移动端使用底部导航；不得再叠加第二套顶部主导航 |
 | 协作与数据 | `Confidence`、`Delta`、`Table`、`FilterBar`、`Timeline`、`Chart`、`ExportDialog` 及既有治理模式 | 颜色不得成为唯一状态编码；图表必须带读屏数据表；导出继续受账号权限约束 |
 | 导航数据 | `BASE_NAVIGATION`、`composeNavigation`、`navigationEntriesFromBundle` | 行业页面只能通过已验证的行业包导航槽加入，组件不读取行业硬编码 |
+| 实体外观 | `avatarModelOf`、`avatarPresentationOf`、`skillIconOf` | 只接受 Bundle/受控分发的显式 presentation 元数据；缺省按稳定标识确定性分配，禁止从岗位名、技能名或行业关键词猜测外观 |
 
 ## 表单示例
 
@@ -48,7 +49,9 @@ import { Input, Select, Switch } from "@workloom/ui";
 <Switch label="启用夜班运行" checked={nightShift} onChange={(event) => setNightShift(event.currentTarget.checked)} />
 ```
 
-标签、说明、错误与控件会自动建立 ARIA 关联。长中文允许自然换行，正文和交互文字使用共享 `--wl-text-body`，触控环境的操作目标不小于 `--wl-touch-target`。
+标签、说明、错误与控件会自动建立 ARIA 关联，必填项显示“必填”，校验失败同时提供 `aria-invalid` 与 `aria-errormessage`。长中文允许自然换行，表单盒模型不会撑破父容器，正文和交互文字使用共享 `--wl-text-body`，触控环境的操作目标不小于 `--wl-touch-target`。
+
+三端消费门禁分别核验“共享操作按钮”和“共享表单控件”。渲染 `Button` 不能替代 `Input`、`Select`、`Textarea`、`Checkbox` 或 `Switch` 的真实消费；每个生产客户端至少要在一个真实主流程中使用共享表单控件。
 
 ## 三端应用壳示例
 
@@ -120,8 +123,9 @@ createRoot(rootElement).render(
 ## 可访问性与内容安全
 
 - 所有动态容器均允许收缩，标题、正文、按钮和导航标签可换行，不依赖固定画布。
-- 纯图标操作必须使用 `IconButton`，装饰图标由共享 `Icon` 自动对辅助技术隐藏。
+- 功能图标必须来自共享 `Icon` 注册表，客户端不得复制 SVG/path，也不得用表情或字体符号承担状态语义；机器二维码、数字员工形象、动态角色和全息人物等业务绘图必须逐项登记例外。
+- 纯图标操作优先使用 `IconButton`，并同时提供中文 `aria-label` 与 `title`；装饰图标由共享 `Icon` 自动对辅助技术隐藏。
 - 200% 缩放进入响应式布局；移动触控目标至少 44px，可调面板手柄扩大到 20px。
 - 动效遵循 `prefers-reduced-motion`；未知底层字段继续由中文显示边界拦截，不得把原始键名作为兜底。
 
-发布由 WorkLoom IM 的 `ui-v*` 稳定标签触发。现有行业仓通过机器人升级 PR 消费，新行业脚手架读取 `sync/base-capabilities.json` 的稳定版本。
+发布由 WorkLoom IM 的 `ui-v*` 稳定标签触发。该标签同时封存 `@workloom/ui` 和 PC/B移动/C移动的应用壳、导航、布局、状态与 API 接线；两者必须同版。现有行业仓通过机器人升级 PR 消费，新行业用 `sync/adopt.sh --new-industry` 默认接入 `sync/base-capabilities.json` 登记的最新版稳定基座。

@@ -30,8 +30,9 @@ import {
 } from "../../lib/display";
 import { Bridge } from "../../shell/Bridge";
 import { BannerAlert, EmptyState, Skeleton } from "../../components/hud";
-import { Overlay } from "@workloom/ui";
+import { ConfirmDialog, Icon, Overlay, clientChineseText } from "@workloom/ui";
 import { UrlQrCode } from "../../components/UrlQrCode";
+import { publicationSystemText } from "../onboarding/systemText";
 
 /* ---------- 数据契约（与 apps/server/src/service 对齐） ---------- */
 interface KbCollection { id: string; name: string; description: string; createdAt: string }
@@ -60,6 +61,11 @@ interface ServiceFrontPublication {
 }
 
 type Tab = "kb" | "tickets" | "stats";
+
+function tabFromSearch(search: string): Tab {
+  const value = new URLSearchParams(search).get("tab");
+  return value === "tickets" || value === "stats" ? value : "kb";
+}
 
 const TICKET_STATUS: Array<{ key: string; label: string }> = [
   { key: "", label: "全部" },
@@ -92,8 +98,16 @@ function pct(x: number | null): string { return x === null ? "—" : `${Math.rou
 export default function P22() {
   const nav = useNavigate();
   const location = useLocation();
-  const initialTab = (new URLSearchParams(location.search).get("tab") ?? "kb") as Tab;
-  const [tab, setTab] = useState<Tab>(initialTab);
+  const [tab, setTab] = useState<Tab>(() => tabFromSearch(location.search));
+
+  useEffect(() => setTab(tabFromSearch(location.search)), [location.search]);
+  const selectTab = useCallback((next: Tab) => {
+    const search = new URLSearchParams(location.search);
+    if (next === "kb") search.delete("tab");
+    else search.set("tab", next);
+    setTab(next);
+    void nav({ pathname: location.pathname, search: search.toString() }, { replace: false });
+  }, [location.pathname, location.search, nav]);
 
   const [ready, setReady] = useState(false);
   const [banner, setBanner] = useState<{ level: "alert" | "warn" | "info"; text: string } | null>(null);
@@ -109,6 +123,7 @@ export default function P22() {
   const [newColDesc, setNewColDesc] = useState("");
   const [docDrawer, setDocDrawer] = useState<KbDocument | null>(null);
   const [docPreview, setDocPreview] = useState<KbHit[] | null>(null);
+  const [docStatusConfirm, setDocStatusConfirm] = useState<{ document: KbDocument; status: "active" | "disabled" } | null>(null);
   /* 官网源 */
   const [siteUrl, setSiteUrl] = useState("");
   const [siteId, setSiteId] = useState("");
@@ -162,7 +177,7 @@ export default function P22() {
       setCollections(cols.collections);
       setPending(pend.documents);
       setOverview(ov);
-      setPublication(front);
+      setPublication(front ? publicationSystemText(front) : null);
     } catch (e) {
       if (!silent) fail(e);
     } finally {
@@ -262,6 +277,7 @@ export default function P22() {
       await trpc.service.kb.setStatus.mutate({ documentId: d.id, status });
       setBanner({ level: status === "active" ? "info" : "warn", text: `「${d.title}」已置为${dictText(DOC_STATUS_TEXT, status)}${status === "disabled" ? "（即时退出检索索引）" : "（重新进入检索索引）"}` });
       setDocDrawer(null);
+      setDocStatusConfirm(null);
       await loadDocs(activeCol);
       await load(true);
     } catch (e) { fail(e); } finally { setBusy(null); }
@@ -394,7 +410,7 @@ export default function P22() {
         <button
           key={key}
           type="button"
-          onClick={() => setTab(key)}
+          onClick={() => selectTab(key)}
           className={`mb-1.5 block w-full cursor-pointer rounded-lg border px-3 py-2.5 text-left ${
             tab === key ? "border-gline bg-gold/6" : "border-line bg-card hover:border-gline"
           }`}
@@ -479,7 +495,7 @@ export default function P22() {
           onClick={() => void doCreateCol()}
           className="cursor-pointer rounded-md gold-grad px-3.5 py-1.5 text-body font-bold text-ongold disabled:opacity-40"
         >
-          ＋ 新建集合
+          <span className="inline-flex items-center gap-1"><Icon name="partner" size={15} aria-hidden="true" />新建集合</span>
         </button>
       </div>
 
@@ -488,7 +504,7 @@ export default function P22() {
         文档{activeCol ? ` · ${collections.find((c) => c.id === activeCol)?.name ?? ""}` : "（全部集合）"}（{documents.length}）
       </div>
       {documents.length === 0 ? (
-        <div className="mb-5"><EmptyState icon="📄" title="该集合暂无文档" hint="用「官网源」抓取或落地向导录入；文档切块后进入检索索引" /></div>
+        <div className="mb-5"><EmptyState icon={<Icon name="document" size={24} />} title="该集合暂无文档" hint="用「官网源」抓取或落地向导录入；文档切块后进入检索索引" /></div>
       ) : (
         <div className="mb-5 overflow-hidden rounded-lg border border-line">
           <table className="w-full text-body">
@@ -508,7 +524,7 @@ export default function P22() {
                   <td className="px-3 py-2 text-ink2">{d.title}</td>
                   <td className="px-3 py-2 text-ink3">
                     {dictText(SOURCE_KIND_TEXT, d.sourceKind)}
-                    {d.sourceUrl && <span className="ml-1 font-mono text-body text-holo" title={d.sourceUrl}>↗</span>}
+                    {d.sourceUrl && <span className="ml-1 inline-flex text-holo" title={d.sourceUrl}><Icon name="chevron" size={13} aria-hidden="true" /></span>}
                   </td>
                   <td className="px-3 py-2 text-ink3">{versionText(String(d.version))}</td>
                   <td className="px-3 py-2">{docStatusChip(d.status)}</td>
@@ -539,7 +555,7 @@ export default function P22() {
         <div className="mb-5 space-y-2">
           {pending.map((d) => (
             <div key={d.id} className="flex items-center gap-3 rounded-lg border border-warn/35 bg-card px-3.5 py-2.5">
-              <span className="text-[16px]">📝</span>
+              <Icon name="edit" size={16} />
               <div className="flex-1">
                 <div className="text-body text-ink">{d.title} <span className="text-body text-ink3">{versionText(String(d.version))}</span></div>
                 <div className="text-body text-ink3">
@@ -553,7 +569,7 @@ export default function P22() {
                 title="批准后发布文档，并同步审批中心与事件账本"
                 className="cursor-pointer rounded-md border border-go/50 px-3 py-1 text-body font-bold text-go hover:bg-go/10 disabled:opacity-40"
               >
-                ✓ 批准生效
+                <Icon name="check" size={14} className="inline" /> 批准生效
               </button>
             </div>
           ))}
@@ -589,7 +605,7 @@ export default function P22() {
               title={siteId ? "" : "先登记抓取源"}
               className="cursor-pointer rounded border border-holo/40 px-2.5 py-1 text-body text-holo hover:bg-holo/10 disabled:opacity-40"
             >
-              ⚡ 立即抓取
+              <Icon name="lightning" size={14} className="inline" /> 立即抓取
             </button>
             <button
               type="button"
@@ -598,7 +614,7 @@ export default function P22() {
               title={siteId ? "" : "先登记抓取源"}
               className="cursor-pointer rounded border border-line px-2.5 py-1 text-body text-ink2 hover:border-holo/40 disabled:opacity-40"
             >
-              <span aria-hidden="true">🔍</span> 检查更新
+              <Icon name="search" size={14} className="inline" /> 检查更新
             </button>
           </div>
           {siteId && <div className="mt-1.5 font-mono text-body text-ink3">抓取源编号 {shortId(siteId)}</div>}
@@ -606,7 +622,7 @@ export default function P22() {
         </div>
 
         <div className="rounded-lg border border-line bg-card p-3.5">
-          <div className="mb-1.5 text-body font-bold text-holo"><span aria-hidden="true">🔎</span> 试检索（混合检索）</div>
+          <div className="mb-1.5 flex items-center gap-1 text-body font-bold text-holo"><Icon name="search" size={14} />试检索（混合检索）</div>
           <div className="flex gap-2">
             <input
               value={query}
@@ -674,7 +690,7 @@ export default function P22() {
       </div>
 
       {tickets.length === 0 ? (
-        <EmptyState icon="🎫" title="当前过滤下暂无工单" hint="C 端低置信/投诉类会话会自动转工单；调整状态或部门过滤试试" />
+        <EmptyState icon={<Icon name="ticket" size={24} />} title="当前过滤下暂无工单" hint="C 端低置信/投诉类会话会自动转工单；调整状态或部门过滤试试" />
       ) : (
         <div className="space-y-2">
           {tickets.map((t) => (
@@ -709,7 +725,7 @@ export default function P22() {
                     onClick={() => void doAdvance(t)}
                     className="cursor-pointer rounded border border-holo/40 px-2 py-0.5 text-body font-bold text-holo hover:bg-holo/10 disabled:opacity-40"
                   >
-                    ▶ 开始处理
+                    <Icon name="play" size={13} className="inline" /> 开始处理
                   </button>
                 )}
                 {(t.status === "processing" || t.status === "assigned") && (
@@ -718,7 +734,7 @@ export default function P22() {
                     onClick={() => { setCompleteFor(t.id); setAssignFor(null); }}
                     className="cursor-pointer rounded border border-go/50 px-2 py-0.5 text-body font-bold text-go hover:bg-go/10"
                   >
-                    ✓ 办结
+                    <Icon name="check" size={13} className="inline" /> 办结
                   </button>
                 )}
               </div>
@@ -803,10 +819,10 @@ export default function P22() {
     </div>
   );
   const statsSection = overview === null ? (
-    <EmptyState icon="📊" title="暂无运营数据" hint="C 端产生会话/工单后，这里聚合今日运营投影" />
+    <EmptyState icon={<Icon name="report" size={24} />} title="暂无运营数据" hint="C 端产生会话/工单后，这里聚合今日运营投影" />
   ) : (
     <>
-      <div className="mb-2 text-body font-bold tracking-wider text-ink2">今日运营总览（{overview.date} · c_messages/c_tickets 聚合投影）</div>
+      <div className="mb-2 text-body font-bold tracking-wider text-ink2">今日运营总览（{overview.date} · 会话与工单聚合）</div>
       <div className="mb-4 grid grid-cols-3 gap-3">
         {metric("今日会话", String(overview.sessions), { tone: "holo" })}
         {metric("问答量", String(overview.qaCount), { tone: "holo" })}
@@ -857,44 +873,32 @@ export default function P22() {
             </div>
           )}
           <div className="min-w-0 flex-1">
-            <div className="text-body font-bold text-ink">🛎 C 端服务前台入口</div>
+            <div className="flex items-center gap-1.5 text-body font-bold text-ink"><Icon name="service" size={15} />C 端服务前台入口</div>
             <div className="mt-0.5 break-words text-body leading-relaxed text-ink2">
               {publication?.overall === "published" ? "已正式发布" : publication?.overall === "preview" ? "当前仅可预览，尚未正式发布" : "尚未满足发布条件"}
               ——知识问答、业务查询、工单流转与结果通知。
             </div>
             {publication?.url && <div className="mt-1 break-all text-body text-holo">{publication.url}</div>}
             <div className="mt-2 grid min-w-0 grid-cols-1 gap-1.5 sm:grid-cols-3">
-              {(publication?.channels ?? []).map((channel) => (
-                <div key={channel.key} className={`min-w-0 rounded border px-2 py-1 text-body ${PUBLICATION_TONE[channel.status]}`} title={channel.detail}>
-                  <div className="break-words font-semibold">{channel.label} · {PUBLICATION_STATUS[channel.status]}</div>
-                  <div className="mt-0.5 break-words leading-relaxed opacity-80">{channel.detail}</div>
-                </div>
-              ))}
+              {(publication?.channels ?? []).map((channel) => {
+                const label = clientChineseText(channel.label, "服务渠道");
+                const detail = clientChineseText(channel.detail, "渠道状态说明待确认");
+                return (
+                  <div key={channel.key} className={`min-w-0 rounded border px-2 py-1 text-body ${PUBLICATION_TONE[channel.status]}`} title={detail}>
+                    <div className="break-words font-semibold">{label} · {PUBLICATION_STATUS[channel.status]}</div>
+                    <div className="mt-0.5 break-words leading-relaxed opacity-80">{detail}</div>
+                  </div>
+                );
+              })}
               {!publication && <span className="text-body text-warn">发布状态暂时无法读取，不会显示为已发布。</span>}
             </div>
           </div>
           {publication?.url && (
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => void copyPublicationUrl()} className="cursor-pointer rounded-md border border-line px-3.5 py-2 text-body text-ink2">复制链接</button>
-              <a href={publication.url} target="_blank" rel="noreferrer" className="cursor-pointer max-w-full whitespace-normal break-words rounded-md gold-grad px-3.5 py-2 text-body font-bold text-ongold no-underline">打开地址检查 ↗</a>
+              <a href={publication.url} target="_blank" rel="noreferrer" className="inline-flex cursor-pointer max-w-full items-center gap-1 whitespace-normal break-words rounded-md gold-grad px-3.5 py-2 text-body font-bold text-ongold no-underline">打开地址检查 <Icon name="chevron" size={13} aria-hidden="true" /></a>
             </div>
           )}
-        </div>
-
-        {/* 区块 Tab */}
-        <div className="mb-3 flex gap-2 border-b border-line pb-2">
-          {([["kb", "📚 知识库"], ["tickets", "🎫 工单台"], ["stats", "📊 服务报表"]] as Array<[Tab, string]>).map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setTab(key)}
-              className={`cursor-pointer rounded-md px-3 py-1.5 text-body font-bold ${
-                tab === key ? "gold-grad text-ongold" : "border border-line text-ink3 hover:border-gline hover:text-ink2"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
         </div>
 
         {!ready ? (
@@ -947,21 +951,21 @@ export default function P22() {
                 <button
                   type="button"
                   disabled={busy === `doc-${docDrawer.id}`}
-                  onClick={() => void doSetDocStatus(docDrawer, "active")}
+                  onClick={() => setDocStatusConfirm({ document: docDrawer, status: "active" })}
                   title={docDrawer.status === "pending_review" ? "待审文档建议走待审区批准（联动审批台）" : ""}
                   className="cursor-pointer rounded-md border border-go/50 px-3 py-1.5 text-body font-bold text-go hover:bg-go/10 disabled:opacity-40"
                 >
-                  ▶ 置为{DOC_STATUS_TEXT.active}
+                  <Icon name="play" size={13} className="inline" /> 置为{DOC_STATUS_TEXT.active}
                 </button>
               )}
               {docDrawer.status !== "disabled" && (
                 <button
                   type="button"
                   disabled={busy === `doc-${docDrawer.id}`}
-                  onClick={() => void doSetDocStatus(docDrawer, "disabled")}
+                  onClick={() => setDocStatusConfirm({ document: docDrawer, status: "disabled" })}
                   className="cursor-pointer rounded-md border border-line px-3 py-1.5 text-body text-ink3 hover:border-alert/40 hover:text-alert disabled:opacity-40"
                 >
-                  ■ 停用
+                  <Icon name="brake" size={13} className="inline" /> 停用
                 </button>
               )}
             </div>
@@ -970,6 +974,26 @@ export default function P22() {
             )}
         </Overlay>
       )}
+
+      {/* 文档状态会改变客户问答的检索范围；确认层叠在详情抽屉之上，Esc 只关闭最上层。 */}
+      <ConfirmDialog
+        open={docStatusConfirm !== null}
+        title={docStatusConfirm?.status === "disabled" ? "确认停用知识文档" : "确认启用知识文档"}
+        description={docStatusConfirm?.document.title}
+        confirmLabel={docStatusConfirm?.status === "disabled" ? "确认停用" : "确认启用"}
+        confirmVariant={docStatusConfirm?.status === "disabled" ? "danger" : "primary"}
+        confirming={docStatusConfirm !== null && busy === `doc-${docStatusConfirm.document.id}`}
+        onClose={() => setDocStatusConfirm(null)}
+        onConfirm={() => {
+          if (docStatusConfirm) void doSetDocStatus(docStatusConfirm.document, docStatusConfirm.status);
+        }}
+      >
+        <p className="m-0 text-body leading-relaxed text-ink2">
+          {docStatusConfirm?.status === "disabled"
+            ? "停用后该文档会立即退出客户问答的检索范围；历史事件仍可在事件账本中追溯。"
+            : "启用后该文档会重新进入客户问答的检索范围，操作会写入事件账本。"}
+        </p>
+      </ConfirmDialog>
 
       {/* 工单时间线抽屉 */}
       {timelineFor && (

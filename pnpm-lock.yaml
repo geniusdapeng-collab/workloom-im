@@ -115,6 +115,9 @@ importers:
       '@workloom/server':
         specifier: workspace:*
         version: link:../server
+      '@workloom/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@workloom/ui':
         specifier: workspace:*
         version: link:../../packages/ui

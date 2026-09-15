@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { assertBundleCompatibility, parseBundleManifest, satisfiesCompatibility } from "./index.js";
+import {
+  assertBundleCompatibility,
+  parseBundleManifest,
+  parseWorkforcePreset,
+  parseWorkforcePresets,
+  satisfiesCompatibility,
+} from "./index.js";
 
 const manifest = {
   schemaVersion: "workloom.bundle/v1",
@@ -58,6 +64,25 @@ describe("行业包契约", () => {
     expect(() => parseBundleManifest(invalid)).toThrow(/能力标识格式不正确/);
   });
 
+  it("巡检无基座默认；启用时必须显式声明受约束适配器标识", () => {
+    expect(parseBundleManifest(manifest).workloom.ui.inspection).toBeUndefined();
+
+    const enabled = structuredClone(manifest) as Record<string, any>;
+    enabled.workloom.ui.inspection = { enabled: true, adapterId: "example.inspection-v1" };
+    expect(parseBundleManifest(enabled).workloom.ui.inspection).toEqual({
+      enabled: true,
+      adapterId: "example.inspection-v1",
+    });
+
+    const missingAdapter = structuredClone(manifest) as Record<string, any>;
+    missingAdapter.workloom.ui.inspection = { enabled: true };
+    expect(() => parseBundleManifest(missingAdapter)).toThrow();
+
+    const disabledWithAdapter = structuredClone(manifest) as Record<string, any>;
+    disabledWithAdapter.workloom.ui.inspection = { enabled: false, adapterId: "example.inspection-v1" };
+    expect(() => parseBundleManifest(disabledWithAdapter)).toThrow();
+  });
+
   it("用户可见名称不能直接释放英文代码字段", () => {
     const invalid = structuredClone(manifest) as Record<string, any>;
     invalid.workloom.ui.navigation.slots = [{
@@ -65,5 +90,60 @@ describe("行业包契约", () => {
       group: "operations", icon: "report", clients: ["pc"], permissions: [],
     }];
     expect(() => parseBundleManifest(invalid)).toThrow(/必须包含中文/);
+  });
+});
+
+const workforcePreset = {
+  preset_key: "operations-coordinator",
+  name: "经营协调官",
+  version: "v1.0",
+  kind: "coordinator",
+  description: "协调任务、证据与人工裁决。",
+  readonly: false,
+  night_shift: true,
+  high_risk: false,
+  fence_bindings: ["R1"],
+  coverage: [{ eventPrefix: "operations.", label: "经营协调" }],
+  skills: ["task-orchestration"],
+  tools: [{ name: "operations.task.write", access: "write", desc: "写入受控任务" }],
+  prompt: { role: "你是经营协调官。" },
+};
+
+describe("数字员工岗位契约", () => {
+  it("解析完整岗位，并把历史 event_prefix 规范为统一字段", () => {
+    const legacy = structuredClone(workforcePreset) as Record<string, any>;
+    legacy.coverage = [{ event_prefix: "operations.", label: "经营协调" }];
+    expect(parseWorkforcePreset(legacy).coverage).toEqual([
+      { eventPrefix: "operations.", label: "经营协调" },
+    ]);
+  });
+
+  it("缺少 coverage 时失败关闭", () => {
+    const invalid = structuredClone(workforcePreset) as Record<string, any>;
+    delete invalid.coverage;
+    expect(() => parseWorkforcePreset(invalid)).toThrow(/coverage/);
+  });
+
+  it("缺少 night_shift 时失败关闭，不允许运行时猜默认值", () => {
+    const invalid = structuredClone(workforcePreset) as Record<string, any>;
+    delete invalid.night_shift;
+    expect(() => parseWorkforcePreset(invalid)).toThrow(/night_shift/);
+  });
+
+  it("同一 Bundle 重复认领事件前缀时失败关闭", () => {
+    const duplicate = structuredClone(workforcePreset) as Record<string, any>;
+    duplicate.preset_key = "delivery-coordinator";
+    expect(() => parseWorkforcePresets([workforcePreset, duplicate]))
+      .toThrow(/事件前缀 operations\. 已由岗位 operations-coordinator 认领/);
+  });
+
+  it("写岗位必须同时具备围栏、覆盖与写工具，只读岗位不得带写工具", () => {
+    const missingFence = structuredClone(workforcePreset) as Record<string, any>;
+    missingFence.fence_bindings = [];
+    expect(() => parseWorkforcePreset(missingFence)).toThrow(/必须绑定围栏/);
+
+    const readOnly = structuredClone(workforcePreset) as Record<string, any>;
+    readOnly.readonly = true;
+    expect(() => parseWorkforcePreset(readOnly)).toThrow(/只读岗位不得声明写工具/);
   });
 });

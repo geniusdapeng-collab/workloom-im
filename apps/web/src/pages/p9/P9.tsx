@@ -28,8 +28,9 @@ import {
   type NightPillState,
   type ReceiptState,
 } from "../../components/hud";
-import { AsyncState, Button, Overlay, clientChineseText } from "@workloom/ui";
+import { AsyncState, Button, Icon, Overlay, clientChineseText } from "@workloom/ui";
 import { operationFailure, toUiFailure } from "../../lib/ui-state";
+import { useNavigationAccess } from "../../shell/NavigationAccess";
 
 interface Ev {
   event_id: string;
@@ -54,11 +55,11 @@ function receiptOf(ev: Ev): ReceiptState {
 }
 
 export default function P9() {
+  const { canAction } = useNavigationAccess();
   const navigate = useNavigate();
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error" | "forbidden">("loading");
   const [hasSnapshot, setHasSnapshot] = useState(false);
   const [loadMessage, setLoadMessage] = useState("");
-  const [role, setRole] = useState("readonly");
   const [run, setRun] = useState<NightRun | null>(null);
   const [configured, setConfigured] = useState(false);
   const [events, setEvents] = useState<Ev[]>([]);
@@ -77,14 +78,12 @@ export default function P9() {
     if (!background) setLoadState("loading");
     try {
       await ensureDemoLogin();
-      const [meR, cur, ev, ag] = await Promise.all([
-        trpc.members.me.query() as Promise<{ identity: { role: string } }>,
+      const [cur, ev, ag] = await Promise.all([
         trpc.nightShift.current.query() as Promise<{ configured: boolean; run?: NightRun }>,
         trpc.nightShift.events.query() as Promise<Ev[]>,
         trpc.workspace.agents.query() as Promise<typeof agents>,
       ]);
       if (requestId !== loadSequence.current) return;
-      setRole(meR.identity.role);
       setConfigured(cur.configured);
       setRun(cur.run ?? null);
       setEvents(ev);
@@ -110,7 +109,8 @@ export default function P9() {
   const pillState: NightPillState = !configured
     ? "unconfigured"
     : run?.status === "running" ? "cruising" : run?.status === "paused" ? "paused" : run?.status === "package_generated" ? "completed" : "ready";
-  const readonly = loadState !== "ready" || role === "readonly";
+  const readonly = loadState !== "ready" || !canAction("night.manage");
+  const canDispatch = loadState === "ready" && canAction("task.dispatch");
 
   const meter = useMemo(() => {
     const credits = events.reduce((s, e) => s + (e.model_trace?.credits ?? 0), 0);
@@ -173,7 +173,7 @@ export default function P9() {
   }, [note, busy, load]);
 
   const dispatchAlert = useCallback(async (eventId: string, presetKey: string) => {
-    if (busy || !presetKey) return;
+    if (busy || !presetKey || !canDispatch) return;
     setBusy(`dispatch-${eventId}`);
     setActionError("");
     try {
@@ -187,14 +187,14 @@ export default function P9() {
     } finally {
       setBusy(null);
     }
-  }, [busy, load]);
+  }, [busy, canDispatch, load]);
 
   /* ---------- 左栏：班组导航 ---------- */
   const left = (
     <>
       <div className="mb-2 px-1 text-body tracking-[.2em] text-ink3">夜班中心 · 班组频道</div>
       <div className="mb-1.5 rounded-lg border border-gline bg-gold/6 px-3 py-2.5">
-        <div className="text-body text-gold">📌 班组群（本页）</div>
+        <div className="inline-flex items-center gap-1 text-body text-gold"><Icon name="pin" size={13} />班组群（本页）</div>
         <div className="mt-0.5 text-body text-ink2">{run ? `班次 ${shortId(run.id)}` : "—"}</div>
       </div>
       <a href="/" className="mb-1.5 block rounded-lg border border-line bg-card px-3 py-2.5 text-body text-ink2 no-underline hover:border-gline">
@@ -273,7 +273,7 @@ export default function P9() {
               onClick={() => void doResume()}
               className="cursor-pointer rounded-lg border border-go/50 bg-go/10 px-3.5 py-1.5 text-body font-extrabold text-go disabled:cursor-wait disabled:opacity-50"
             >
-              {busy === "resume" ? "正在恢复…" : "▶ 恢复夜班（从断点续跑）"}
+              {busy === "resume" ? "正在恢复…" : <><Icon name="play" size={14} className="inline" /> 恢复夜班（从断点续跑）</>}
             </button>
           )}
         </div>
@@ -297,7 +297,7 @@ export default function P9() {
               onRetry={loadState === "error" ? () => void load() : undefined}
             />
           ) : !configured ? (
-            <EmptyState icon="🌙" title="夜班未配置" hint="请前往规则与权限页面完成夜班配置。" actionLabel="去配置 →" onAction={() => navigate("/guardrails")} />
+            <EmptyState icon={<Icon name="night" size={24} />} title="夜班未配置" hint="请前往规则与权限页面完成夜班配置。" actionLabel="去配置 →" onAction={() => navigate("/guardrails")} />
           ) : (
             <>
               <SystemDivider time="22:00" summary={`夜班开始 · 当班围栏${versionText(run?.fenceSnapshot)} · 候选清单 ${run?.candidateCount ?? 0} 项已确认`} />
@@ -319,7 +319,7 @@ export default function P9() {
                       title={`需介入：${actorText(ev.who.id)} · ${actionText(ev.decision.action)}${ev.object.id ? `（${shortId(ev.object.id)}）` : ""}`}
                       source={dictText(OBJECT_TYPE_TEXT, ev.object.type)}
                       busy={Boolean(busy)}
-                      onDispatch={readonly ? undefined : () => {
+                      onDispatch={readonly || !canDispatch ? undefined : () => {
                         if (busy) return;
                         setDispatchTarget(ev);
                         setDispatchAgentKey(agents[0]?.preset_key ?? "");
@@ -343,7 +343,7 @@ export default function P9() {
                 );
               })}
               {events.length === 0 && (
-                <EmptyState icon="🌌" title="班组尚未运行" hint="夜班开始后，这里会持续显示各数字员工的行动消息。" />
+                <EmptyState icon={<Icon name="night" size={24} />} title="班组尚未运行" hint="夜班开始后，这里会持续显示各数字员工的行动消息。" />
               )}
             </>
           )}
@@ -367,7 +367,7 @@ export default function P9() {
               aria-busy={busy === "note" || undefined}
               className="cursor-pointer rounded-lg gold-grad px-4 py-2 text-body font-black text-ongold disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {busy === "note" ? "正在提交…" : "留言 ▶"}
+              {busy === "note" ? "正在提交…" : <>留言 <Icon name="send" size={14} className="inline" /></>}
             </button>
           </div>
         )}

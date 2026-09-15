@@ -15,7 +15,6 @@ import { dirname, join } from "node:path";
 import { createHash } from "node:crypto";
 import { getAppPool, getGatewayPool, getOwnerPool } from "@workloom/db";
 import {
-  getCapabilities,
   getMember,
   listMembers,
   signDemoToken,
@@ -23,7 +22,18 @@ import {
 } from "@workloom/base/tenancy";
 import { gatewayAppend, gatewayAppendOnClient, MockEmbedder, upsertMemoryInTx } from "@workloom/base/workdata";
 import { makeReadableId } from "@workloom/shared";
-import { capabilityWriteProcedure, protectedProcedure, publicProcedure, router, scopeOf, writeProcedure } from "./context.js";
+import {
+  actionProcedure,
+  capabilityActionProcedure,
+  capabilityProcedure,
+  capabilityWriteProcedure,
+  protectedProcedure,
+  publicProcedure,
+  router,
+  scopeOf,
+  sessionProcedure,
+  writeProcedure,
+} from "./context.js";
 import {
   ApprovalError,
   batchApprove,
@@ -151,13 +161,21 @@ import {
   resolveServiceFrontPublication,
 } from "../service/service-front-publication.js";
 import { resolveWorkspaceActiveBundle } from "../service/active-bundle.js";
+import { resolveWorkspaceInspectionAdapter } from "../service/inspection-adapter.js";
+import {
+  AccessAuthorityError,
+  resolveAuthoritativeClientAccess,
+} from "../service/access-authority.js";
 import {
   buildEvolutionScorecard,
   decayMemories,
   disableMemory,
   editMemoryContent,
   getFeedbackEnums,
+  previewMemoryImpact,
+  reactivateMemory,
   recallMemoriesByMember,
+  restoreMemories,
   runMemoryMinerBeat,
 } from "@workloom/base/evolve";
 import { getMemorySources, searchMemories } from "@workloom/base/workdata";
@@ -221,7 +239,6 @@ function persistLlmEnv(cfg: { provider: string; baseUrl: string; apiKey: string;
   writeFileSync(file, lines.filter((l, i) => l !== "" || i < lines.length - 1).join("\n"));
   cachedLlmCall = undefined; // 复位装配缓存（见 llmCall()/intentClassifier()）
   cachedClassifier = undefined;
-  cachedIndustry = undefined;
   resetLlmAssembly(); // v3.0：模型池与行业策略缓存同步复位（写盘即全链生效免重启）
 }
 
@@ -585,7 +602,7 @@ const onboardingRouter = router({
   }),
 
   /** 第①步：真实大模型「测试连接」（真实 round-trip；不落盘、不留痕 key） */
-  testLlm: writeProcedure
+  testLlm: actionProcedure("workspace.configure")
     .input(z.object({
       baseUrl: z.string().url().min(1),
       apiKey: z.string().max(200).default(""),
@@ -601,7 +618,7 @@ const onboardingRouter = router({
     }),
 
   /** 第①步保存：真实试调通过 → 写 .env 四变量 + 即时生效 + 事件留痕（key 只记掩码；provider=mock 为还原操作，免实测） */
-  saveLlmConfig: writeProcedure
+  saveLlmConfig: actionProcedure("workspace.configure")
     .input(z.object({
       provider: z.string().min(1).max(40),
       baseUrl: z.string().max(200).default(""),
@@ -670,7 +687,7 @@ const onboardingRouter = router({
     }),
 
   /** 第②步：经营主体信息（工作区名 + 行业 + 简介 → 档案；事件留痕） */
-  setupWorkspace: writeProcedure
+  setupWorkspace: actionProcedure("workspace.configure")
     .input(z.object({
       displayName: z.string().min(1).max(60),
       industry: z.string().min(1).max(40),
@@ -727,7 +744,7 @@ const onboardingRouter = router({
     }),
 
   /** 第③步：服务端全量门禁通过后才启用真实模式；不能把 mock/示例/缺资产状态改名为 real。 */
-  activateRealMode: writeProcedure.mutation(async ({ ctx }) => {
+  activateRealMode: actionProcedure("workspace.configure").mutation(async ({ ctx }) => {
     if (ctx.identity.role !== "owner") {
       throw new TRPCError({ code: "FORBIDDEN", message: "只有工作区所有者可以启用正式经营模式" });
     }
@@ -816,7 +833,7 @@ const authRouter = router({
     }),
   /** 版本切换演示（F12 权限态：社区版/Pro/Teams/VPC 实切，F7.2 能力矩阵即时生效）
    *  owner 专属；写 tenants.plan（登录引导例外点同口径走 owner 池）+ 留痕 plan.switch（G8）+ 重签 JWT */
-  setPlan: protectedProcedure
+  setPlan: actionProcedure("tenant.plan.manage")
     .input(z.object({ plan: z.enum(PLAN_TIERS) }))
     .mutation(async ({ ctx, input }) => {
       if (ctx.identity.role !== "owner") {
@@ -858,19 +875,50 @@ const authRouter = router({
     }),
 });
 
-/** members router：me（角色+版本能力下发，F5.6 三端一致的数据源）/ list */
+function accessRethrow(error: unknown): never {
+  if (error instanceof AccessAuthorityError) {
+    throw new TRPCError({
+      code: error.code === "SESSION_INVALID" ? "UNAUTHORIZED"
+        : error.code === "TARGET_REQUIRED" ? "BAD_REQUEST"
+          : "FORBIDDEN",
+      message: error.message,
+    });
+  }
+  throw error;
+}
+
+/**
+ * 三端访问权威接口：成员与伙伴都从服务端实时事实解析；伙伴未选区时由服务端
+ * 从实时有效授权中选择默认范围，绝不信任 JWT 授权快照或客户端缓存。
+ * 导航、深链与动作只能消费这一份 payload，不能在客户端按“已登录”补权限。
+ */
+const accessRouter = router({
+  me: sessionProcedure
+    .input(z.object({ tenantId: z.string().min(1), workspaceId: z.string().min(1) }).optional())
+    .query(async ({ ctx, input }) => {
+      try {
+        return await resolveAuthoritativeClientAccess(ctx.session, input);
+      } catch (error) {
+        accessRethrow(error);
+      }
+    }),
+});
+
+/** members router：me 保留兼容字段，并附同一份服务端权威访问载荷。 */
 const membersRouter = router({
-  me: protectedProcedure.query(({ ctx }) => {
-    return {
-      identity: ctx.identity,
-      capabilities: getCapabilities(ctx.identity.plan),
-    };
+  me: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      const access = await resolveAuthoritativeClientAccess(ctx.identity);
+      return { identity: ctx.identity, capabilities: access.capabilities, access };
+    } catch (error) {
+      accessRethrow(error);
+    }
   }),
   list: protectedProcedure.query(async ({ ctx }) => {
     return listMembers(getAppPool(), scopeOf(ctx.identity));
   }),
   /** F-NAME2：数字员工别名设置（显示层第三层；留痕上链，改别名零数据迁移） */
-  updateAlias: writeProcedure
+  updateAlias: actionProcedure("agent.manage")
     .input(z.object({
       memberNo: z.string().min(1),
       alias: z.string().max(12).nullable(),          // null/空 = 清除别名回岗位名
@@ -920,6 +968,61 @@ const membersRouter = router({
     }),
 });
 
+interface RunnableAgent {
+  id: string;
+  presetKey: string;
+}
+
+/**
+ * 运行员工只能从当前工作区已装配且 ready 的班组中解析。调用方可传稳定 preset_key
+ * 或已落在线程上的 agent id；缺省优先 Bundle 声明的 coordinator，再按稳定顺序选择。
+ * 基座不内置任何行业员工名。
+ */
+async function runnableAgentOn(
+  client: pg.PoolClient,
+  workspaceId: string,
+  requested?: string | null,
+): Promise<RunnableAgent> {
+  const result = await client.query<{ id: string; preset_key: string }>(
+    `SELECT id, preset_key FROM agents
+     WHERE workspace_id=$1 AND status='ready'
+       AND ($2::text IS NULL OR preset_key=$2 OR id=$2)
+     ORDER BY CASE WHEN kind='coordinator' THEN 0 ELSE 1 END,
+              CASE WHEN readonly=false THEN 0 ELSE 1 END,
+              preset_key
+     LIMIT 1`,
+    [workspaceId, requested ?? null],
+  );
+  const row = result.rows[0];
+  if (!row) {
+    throw new TRPCError({
+      code: requested ? "BAD_REQUEST" : "PRECONDITION_FAILED",
+      message: requested ? "所选数字员工当前不可运行，请重新选择" : "当前行业包没有可运行的数字员工，请先完成装配检查",
+    });
+  }
+  return { id: row.id, presetKey: row.preset_key };
+}
+
+async function resolveRunnableAgent(
+  scope: { tenantId: string; workspaceId: string },
+  requested?: string | null,
+): Promise<RunnableAgent> {
+  const client = await getAppPool().connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+    const agent = await runnableAgentOn(client, scope.workspaceId, requested);
+    await client.query("COMMIT");
+    return agent;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 /** threads router：list（L7.1 越权返回空）/ dispatch（Quest 接口；H-10 越版 403+留痕） */
 const threadsRouter = router({
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -947,11 +1050,11 @@ const threadsRouter = router({
   }),
 
   /** Quest 派遣入口（B8：意图路由→含糊反问/建档；L3.1 并发上限；G8 留痕） */
-  dispatch: capabilityWriteProcedure("quest")
+  dispatch: capabilityActionProcedure("quest", "task.dispatch")
     .input(
       z.object({
         title: z.string().min(1).max(500), // F3.1：≤500 字
-        presetKey: z.string().default("pricing-agent"),
+        presetKey: z.string().min(1).optional(),
         runImmediately: z.boolean().default(false),
       }),
     )
@@ -966,11 +1069,13 @@ const threadsRouter = router({
       const app = getAppPool();
       const client = await app.connect();
       let threadId: string;
+      let selectedAgent: RunnableAgent;
       try {
         // 事务级 RLS 上下文必须在显式事务内设置：autocommit 下 set_config(...,true) 语句结束即失效
         await client.query("BEGIN");
         await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
         await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+        selectedAgent = await runnableAgentOn(client, scope.workspaceId, input.presetKey);
         // L3.1：单工作区并发 ≤10，超出排队且可见（须在 RLS 上下文内统计，否则恒 0 行 fail-open）
         const conc = await client.query<{ c: string }>(
           `SELECT count(*) AS c FROM threads WHERE workspace_id=$1 AND status IN ('queued','running')`,
@@ -989,9 +1094,9 @@ const threadsRouter = router({
         );
         threadId = makeReadableId("T", Number(max.rows[0]?.n ?? 100) + 1); // bigint 驱动返回 string，必须 Number() 防拼接（D29 教训）
         await client.query(
-          `INSERT INTO threads (id, tenant_id, workspace_id, title, mode, status, created_by)
-           VALUES ($1,$2,$3,$4,$5,'queued',$6)`,
-          [threadId, scope.tenantId, scope.workspaceId, input.title, intent.mode, ctx.identity.memberNo],
+          `INSERT INTO threads (id, tenant_id, workspace_id, title, mode, status, created_by, agent_id)
+           VALUES ($1,$2,$3,$4,$5,'queued',$6,$7)`,
+          [threadId, scope.tenantId, scope.workspaceId, input.title, intent.mode, ctx.identity.memberNo, selectedAgent.id],
         );
         // D16（#1/A）：建线程与派遣事件同一事务（G8 留痕不再独立于状态）
         await gatewayAppendOnClient(client, {
@@ -1017,13 +1122,13 @@ const threadsRouter = router({
       // ask 问询：即时应答（B8——取数为真、模型可插拔；不依赖 runImmediately 按钮）
       if (intent.mode === "ask") {
         const ra = await runAsk(getAppPool(), getGatewayPool(), scope, {
-          threadId, goal: input.title, presetKey: "morning-briefing", llmCall: llmCall("ask-synthesize", scope),
+          threadId, goal: input.title, presetKey: selectedAgent!.presetKey, llmCall: llmCall("ask-synthesize", scope),
         });
         return { kind: "routed" as const, mode: intent.mode, via: intent.via, threadId, status: ra.status, answer: ra.answer };
       }
       if (input.runImmediately && intent.mode === "quest") {
         const r = await runQuest(app, getGatewayPool(), scope, {
-          threadId, goal: input.title, presetKey: input.presetKey, llmCall: llmCall("quest-plan", scope),
+          threadId, goal: input.title, presetKey: selectedAgent!.presetKey, llmCall: llmCall("quest-plan", scope),
         });
         return { kind: "routed" as const, mode: intent.mode, via: intent.via, threadId, status: r.status, stepsDone: r.stepsDone, stepsTotal: r.stepsTotal };
       }
@@ -1084,17 +1189,20 @@ const threadsRouter = router({
     }),
 
   /** 运行/续跑线程（replay 断点续跑幂等，E3.3/H-5；按线程模式分流：ask 应答 / agent 逐步确认 / quest 自主执行） */
-  run: capabilityWriteProcedure("quest")
-    .input(z.object({ threadId: z.string(), goal: z.string(), presetKey: z.string().default("pricing-agent") }))
+  run: capabilityActionProcedure("quest", "task.dispatch")
+    .input(z.object({ threadId: z.string(), goal: z.string(), presetKey: z.string().min(1).optional() }))
     .mutation(async ({ ctx, input }) => {
       const scope = scopeOf(ctx.identity);
       const app = getAppPool();
       const client = await app.connect();
       let mode: "ask" | "agent" | "quest" = "quest";
+      let selectedAgent: RunnableAgent;
       try {
         await client.query("BEGIN");
         await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-        const t = await client.query<{ mode: string }>(`SELECT mode FROM threads WHERE id=$1 AND workspace_id=$2`, [input.threadId, scope.workspaceId]);
+        const t = await client.query<{ mode: string; agent_id: string | null }>(`SELECT mode, agent_id FROM threads WHERE id=$1 AND workspace_id=$2`, [input.threadId, scope.workspaceId]);
+        if (!t.rows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "任务不存在或无权访问" });
+        selectedAgent = await runnableAgentOn(client, scope.workspaceId, input.presetKey ?? t.rows[0].agent_id);
         await client.query("COMMIT");
         if (t.rows[0]?.mode === "ask" || t.rows[0]?.mode === "agent") mode = t.rows[0].mode;
       } catch (err) {
@@ -1104,10 +1212,10 @@ const threadsRouter = router({
         client.release();
       }
       if (mode === "ask") {
-        return runAsk(app, getGatewayPool(), scope, { threadId: input.threadId, goal: input.goal, presetKey: input.presetKey, llmCall: llmCall("ask-synthesize", scope) });
+        return runAsk(app, getGatewayPool(), scope, { threadId: input.threadId, goal: input.goal, presetKey: selectedAgent!.presetKey, llmCall: llmCall("ask-synthesize", scope) });
       }
       return runQuest(app, getGatewayPool(), scope, {
-        threadId: input.threadId, goal: input.goal, presetKey: input.presetKey, mode, llmCall: llmCall("quest-plan", scope),
+        threadId: input.threadId, goal: input.goal, presetKey: selectedAgent!.presetKey, mode, llmCall: llmCall("quest-plan", scope),
       });
     }),
 });
@@ -1171,7 +1279,7 @@ const approvalsRouter = router({
       return listQueue(getAppPool(), scopeOf(ctx.identity), { status: input?.status });
     }),
 
-  decide: protectedProcedure
+  decide: actionProcedure("approval.decide")
     .input(
       z.object({
         approvalId: z.string(),
@@ -1230,7 +1338,7 @@ const approvalsRouter = router({
       }
     }),
 
-  batchApprove: protectedProcedure
+  batchApprove: actionProcedure("approval.decide")
     .input(z.object({ approvalIds: z.array(z.string()).min(1).max(50) }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -1255,7 +1363,7 @@ const approvalsRouter = router({
     }),
 
   /** 超时升级扫描（F5.7；高危项不自动放行 L5.4）——由触发器/巡检调度调用 */
-  sweep: writeProcedure.mutation(async ({ ctx }) => {
+  sweep: actionProcedure("approval.decide").mutation(async ({ ctx }) => {
     return expireSweep(getAppPool(), getGatewayPool(), scopeOf(ctx.identity));
   }),
 });
@@ -1268,15 +1376,19 @@ const inspectionRouter = router({
   }),
   /** 手动跑一轮巡检（生产由触发器引擎 cron 07:00 唤起，F9.1；演示手动触发） */
   run: writeProcedure.mutation(async ({ ctx }) => {
-    return runInspectionScan(getAppPool(), getGatewayPool(), scopeOf(ctx.identity));
+    const scope = scopeOf(ctx.identity);
+    const binding = await resolveWorkspaceInspectionAdapter(scope.workspaceId);
+    return runInspectionScan(getAppPool(), getGatewayPool(), scope, { adapter: binding.adapter });
   }),
   /** 一键派单（F9.3：以异常事件为输入唤起业务 Agent；幂等 L9.3） */
-  dispatch: writeProcedure
-    .input(z.object({ anomalyEventId: z.string(), presetKey: z.string().default("review-agent") }))
+  dispatch: actionProcedure("task.dispatch")
+    .input(z.object({ anomalyEventId: z.string(), presetKey: z.string().min(1).optional() }))
     .mutation(async ({ ctx, input }) => {
       try {
+        const scope = scopeOf(ctx.identity);
+        const selectedAgent = await resolveRunnableAgent(scope, input.presetKey);
         return await dispatchFromAnomaly(getAppPool(), getGatewayPool(), scopeOf(ctx.identity), {
-          anomalyEventId: input.anomalyEventId, presetKey: input.presetKey, by: ctx.identity.memberNo,
+          anomalyEventId: input.anomalyEventId, presetKey: selectedAgent.presetKey, by: ctx.identity.memberNo,
         });
       } catch (err) {
         if (err instanceof DispatchError) {
@@ -1305,8 +1417,8 @@ const inspectionRouter = router({
 /** skills router（B10/M8：技能广场 / 安装绑定 / 零代码锻造 / 意识系统） */
 /** 技能管理写操作角色守卫（E2.6/L5.1 同口径：readonly 服务端 403，前端隐藏非置灰） */
 function assertSkillManage(role: string): void {
-  if (role === "readonly") {
-    throw new TRPCError({ code: "FORBIDDEN", message: "readonly 角色无技能管理权限（E2.6，服务端 403）" });
+  if (role !== "owner" && role !== "manager") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "当前角色无技能管理权限（E2.6，服务端 403）" });
   }
 }
 
@@ -1388,7 +1500,7 @@ const skillsRouter = router({
     }
   }),
   /** 安装（F8.2 安装即绑定；L8.1 脱敏闸 / L8.2 白名单 / E8.1 冲突进审批 / F8.3 dry-run 前置） */
-  install: protectedProcedure
+  install: actionProcedure("skill.manage")
     .input(z.object({ skillId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       assertSkillManage(ctx.identity.role);
@@ -1404,7 +1516,7 @@ const skillsRouter = router({
       }
     }),
   /** 卸载（L8.3 卸载即撤销围栏绑定） */
-  uninstall: protectedProcedure
+  uninstall: actionProcedure("skill.manage")
     .input(z.object({ skillId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       assertSkillManage(ctx.identity.role);
@@ -1420,7 +1532,7 @@ const skillsRouter = router({
       }
     }),
   /** 零代码自定义技能草稿（F8.3 三要素；生成物进版本管理） */
-  forge: protectedProcedure
+  forge: actionProcedure("skill.manage")
     .input(z.object({
       name: z.string().min(1).max(100),
       description: z.string().max(500).default(""),
@@ -1432,7 +1544,7 @@ const skillsRouter = router({
       return createSkillDraft(getAppPool(), getGatewayPool(), scopeOf(ctx.identity), { ...input, by: ctx.identity.memberNo });
     }),
   /** 生效前 dry-run 预览（F8.3/F2.5：回放最近 10 条） */
-  dryRun: protectedProcedure
+  dryRun: actionProcedure("skill.manage")
     .input(z.object({ skillId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -1452,7 +1564,7 @@ const skillsRouter = router({
       return detectSuggestions(getAppPool(), scopeOf(ctx.identity));
     }),
     /** 一键确认 → 生成触发器或新技能（F8.4） */
-    confirm: protectedProcedure
+    confirm: actionProcedure("skill.manage")
       .input(z.object({
         suggestion: z.object({
           key: z.string(), objectType: z.string(), actionCategory: z.string(),
@@ -1468,7 +1580,7 @@ const skillsRouter = router({
         });
       }),
     /** 驳回建议（E8.3 校准闭环：该类阈值 ×2） */
-    reject: protectedProcedure
+    reject: actionProcedure("skill.manage")
       .input(z.object({ key: z.string(), reason: z.string().max(200).optional() }))
       .mutation(async ({ ctx, input }) => {
         assertSkillManage(ctx.identity.role);
@@ -1484,7 +1596,7 @@ const skillsRouter = router({
       return distStatus(getAppPool(), scopeOf(ctx.identity));
     }),
     /** 立即同步（手动触发=拉取通道同路径；夜班窗口自动同步复用本函数） */
-    syncNow: protectedProcedure
+    syncNow: actionProcedure("skill.manage")
       .input(z.object({ registryUrl: z.string().url().optional() }).optional())
       .mutation(async ({ ctx, input }) => {
         assertSkillManage(ctx.identity.role);
@@ -1502,7 +1614,7 @@ const skillsRouter = router({
         }
       }),
     /** 分发策略（silent=L0/L1 默认静默 / prompt=提示后升级；autoSync=夜班自动同步总开关；L2 不可配置永远审批） */
-    setPolicy: protectedProcedure
+    setPolicy: actionProcedure("skill.manage")
       .input(z.object({ mode: z.enum(["silent", "prompt"]).optional(), autoSync: z.boolean().optional() }))
       .mutation(async ({ ctx, input }) => {
         assertSkillManage(ctx.identity.role);
@@ -1515,7 +1627,7 @@ const skillsRouter = router({
         }
       }),
     /** 人工装载 staging 项（prompt 策略项 / L2 审批通过项——审批未过服务端拒绝） */
-    loadStaging: protectedProcedure
+    loadStaging: actionProcedure("skill.manage")
       .input(z.object({ stagingId: z.string() }))
       .mutation(async ({ ctx, input }) => {
         assertSkillManage(ctx.identity.role);
@@ -1528,7 +1640,7 @@ const skillsRouter = router({
         }
       }),
     /** 一键回滚（恢复装载前快照：skills 行 + install 快照同事务恢复） */
-    rollback: protectedProcedure
+    rollback: actionProcedure("skill.manage")
       .input(z.object({ skillId: z.string() }))
       .mutation(async ({ ctx, input }) => {
         assertSkillManage(ctx.identity.role);
@@ -1547,7 +1659,7 @@ const skillsRouter = router({
         return { optIn: await getRefluxOptIn(getAppPool(), scopeOf(ctx.identity)) };
       }),
       /** opt-in 开关（客户治理主权，变更留痕） */
-      setOptIn: protectedProcedure
+      setOptIn: actionProcedure("skill.manage")
         .input(z.object({ optIn: z.boolean() }))
         .mutation(async ({ ctx, input }) => {
           assertSkillManage(ctx.identity.role);
@@ -1570,7 +1682,7 @@ const skillsRouter = router({
           }
         }),
       /** 发送（opt-in 未开启拒发；未配端点留 outbox；发送行为留痕） */
-      send: protectedProcedure
+      send: actionProcedure("skill.manage")
         .input(z.object({ skillId: z.string() }))
         .mutation(async ({ ctx, input }) => {
           assertSkillManage(ctx.identity.role);
@@ -1593,7 +1705,7 @@ const skillsRouter = router({
         assertOfficialMode(ctx.identity.role);
         return listInbox(getAppPool());
       }),
-      review: protectedProcedure
+      review: actionProcedure("skill.manage")
         .input(z.object({ draftId: z.string(), gesture: z.enum(["approve", "reject"]), reason: z.string().max(200).optional() }))
         .mutation(async ({ ctx, input }) => {
           assertOfficialMode(ctx.identity.role);
@@ -1606,7 +1718,7 @@ const skillsRouter = router({
           }
         }),
       /** 官方化（须双人复核通过且执行人为复核成员之一；可附抽象完善终稿） */
-      officialize: protectedProcedure
+      officialize: actionProcedure("skill.manage")
         .input(z.object({
           draftId: z.string(),
           final: z.object({ name: z.string().optional(), description: z.string().optional(), body: z.string().optional() }).optional(),
@@ -1622,7 +1734,7 @@ const skillsRouter = router({
           }
         }),
       /** 构建签名 manifest（官方技能库 → 分发包；GET /skill-dist/manifest.json 同逻辑对外服务） */
-      buildManifest: protectedProcedure.mutation(async ({ ctx }) => {
+      buildManifest: actionProcedure("skill.manage").mutation(async ({ ctx }) => {
         assertOfficialMode(ctx.identity.role);
         const key = process.env.SKILL_DIST_SIGNING_KEY ?? "";
         if (!key) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "未配置 SKILL_DIST_SIGNING_KEY" });
@@ -1740,20 +1852,17 @@ const workspaceRouter = router({
 /** nightShift router（F3 起 P1 数据源：夜班状态胶囊 + 昨夜战报卡投影） */
 const nightShiftRouter = router({
   /** 18:00 候选清单（F4.1：夜班 preset 覆盖过滤 + 谷时价 + 围栏摘要；E1 联调挂端点） */
-  candidates: protectedProcedure.query(async ({ ctx }) => {
+  candidates: capabilityProcedure("nightShift").query(async ({ ctx }) => {
     return buildCandidateList(getAppPool(), scopeOf(ctx.identity));
   }),
 
   /** 开启夜班（F4.1 人类命令·不经模型轮次；ensureReady→confirmNight：围栏快照 F2.6 + 状态机 F4.8） */
-  start: protectedProcedure
+  start: capabilityActionProcedure("nightShift", "night.manage")
     .input(z.object({
       runDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       candidateIds: z.array(z.string()).default([]),
     }))
     .mutation(async ({ ctx, input }) => {
-      if (ctx.identity.role === "readonly") {
-        throw new TRPCError({ code: "FORBIDDEN", message: "readonly 角色无权开启夜班（E2.6/L3.4，服务端 403）" });
-      }
       const scope = scopeOf(ctx.identity);
       const runId = await ensureReady(getAppPool(), getGatewayPool(), scope, input.runDate);
       try {
@@ -1768,7 +1877,7 @@ const nightShiftRouter = router({
     }),
 
   /** 08:30 决策包投递（F4.4 三段投影；状态机 → package_generated，统计回写 night_runs.stats） */
-  deliver: writeProcedure
+  deliver: capabilityActionProcedure("nightShift", "night.manage")
     .input(z.object({
       runId: z.string(),
       window: z.object({ from: z.string(), to: z.string() }),
@@ -1778,7 +1887,7 @@ const nightShiftRouter = router({
     }),
 
   /** 最近班次 + 状态机投影（F4.8）+ 决策包统计（F4.4，deliverPackage 回写的 stats） */
-  current: protectedProcedure.query(async ({ ctx }) => {
+  current: capabilityProcedure("nightShift").query(async ({ ctx }) => {
     const scope = scopeOf(ctx.identity);
     const app = getAppPool();
     const client = await app.connect();
@@ -1815,7 +1924,7 @@ const nightShiftRouter = router({
   }),
 
   /** 班组消息流（P9E1：夜班频道事件流投影，ts 升序；夜班动作 100% 过围栏 L4.1） */
-  events: protectedProcedure
+  events: capabilityProcedure("nightShift")
     .input(z.object({ limit: z.number().min(1).max(200).default(80) }).optional())
     .query(async ({ ctx, input }) => {
       const scope = scopeOf(ctx.identity);
@@ -1843,7 +1952,7 @@ const nightShiftRouter = router({
     }),
 
   /** 一键暂停（P9E2：二次确认在组件层；G5 端到端计时留痕；超时 P0 升级 E4.1） */
-  pause: writeProcedure
+  pause: capabilityActionProcedure("nightShift", "night.manage")
     .input(z.object({ runId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -1859,7 +1968,7 @@ const nightShiftRouter = router({
     }),
 
   /** 恢复（E4.2：断点续跑由 runtime replay 保证） */
-  resume: writeProcedure
+  resume: capabilityActionProcedure("nightShift", "night.manage")
     .input(z.object({ runId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await resumeNight(getAppPool(), getGatewayPool(), scopeOf(ctx.identity), input.runId, ctx.identity.memberNo);
@@ -1867,7 +1976,7 @@ const nightShiftRouter = router({
     }),
 
   /** 班组留言（P9E6：人给班组留言=五元事件留痕；触发的动作照常过围栏 L4.1/L4.4） */
-  note: writeProcedure
+  note: capabilityActionProcedure("nightShift", "night.manage")
     .input(z.object({ text: z.string().min(1).max(500) }))
     .mutation(async ({ ctx, input }) => {
       const scope = scopeOf(ctx.identity);
@@ -1944,7 +2053,7 @@ const fenceRouter = router({
   }),
 
   /** NL 新增群规 dry-run（P5E3/P5E4：候选规则回放最近 10 条 F2.5；未确认不生效 L2.4） */
-  dryRun: writeProcedure
+  dryRun: actionProcedure("guardrail.manage")
     .input(z.object({
       ruleId: z.string().regex(/^R\d+$/),
       name: z.string().min(1).max(100),
@@ -1968,7 +2077,7 @@ const fenceRouter = router({
     }),
 
   /** 确认 dry-run（人看过报告才激活 L2.4）→ 规则进 pending_approval + 变更审批（F2.4，走 P4 决断流） */
-  confirmDryRun: writeProcedure
+  confirmDryRun: actionProcedure("guardrail.manage")
     .input(z.object({
       dryRunId: z.string(),
       rule: z.object({
@@ -2484,8 +2593,8 @@ const imRouter = router({
 /** bundles router（F11：P7 舰船换装坞——行业装配台 §2.2/§2.3；校验 F2.10/L1.6；权限 E2.6）
  *  数据来源（P7-⑤）：槽位=bundle 注册表实物投影（磁盘扫描）；校验=活算+留痕（biz_events bundle.*） */
 function assertBundleManage(role: string): void {
-  if (role === "readonly") {
-    throw new TRPCError({ code: "FORBIDDEN", message: "readonly 角色无装配管理权限（E2.6，服务端 403）" });
+  if (role !== "owner" && role !== "manager") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "当前角色无装配管理权限（E2.6，服务端 403）" });
   }
 }
 function bundleRethrow(err: unknown): never {
@@ -2507,29 +2616,18 @@ const bundlesRouter = router({
    * 契约、兼容性和完整性校验的配置。无有效 Bundle 时明确返回未配置，不做酒店兜底。
    */
   currentUi: protectedProcedure.query(async ({ ctx }) => {
-    const scope = scopeOf(ctx.identity);
-    const active = await resolveWorkspaceActiveBundle(scope.workspaceId);
-    if (active.state !== "ready" || !active.projection) {
-      return {
-        configured: false as const,
-        reason: active.state === "bundle-mismatch"
-          ? "当前工作区装配状态不一致，请由管理员重新确认生效版本"
-          : active.state === "projection-invalid"
-            ? "当前行业界面未通过安全校验，请由管理员重新发布"
-            : "当前工作区尚未装配可用行业界面",
-      };
-    }
-
     try {
-      const projection = active.projection;
-      const canUseRestrictedSlots = ctx.identity.role === "owner" || ctx.identity.role === "manager";
+      const access = await resolveAuthoritativeClientAccess(ctx.identity);
+      if (!access.bundle.configured) return access.bundle;
       return {
-        configured: true as const,
-        ...projection,
-        grantedPermissions: canUseRestrictedSlots ? projection.ui.permissions : [],
+        ...access.bundle,
+        grantedPermissions: access.navigationPermissions.filter((permission) => access.bundle.configured
+          && access.bundle.ui.permissions.includes(permission)),
+        actionPermissions: access.actionPermissions,
       };
     } catch (error) {
-      console.error("当前工作区行业界面投影校验失败", { workspaceId: scope.workspaceId, bundleId: active.bundleId, error });
+      if (error instanceof AccessAuthorityError) accessRethrow(error);
+      console.error("当前工作区行业界面投影校验失败", { workspaceId: ctx.identity.workspaceId, error });
       throw new TRPCError({
         code: "PRECONDITION_FAILED",
         message: "当前行业界面未通过安全校验，已停止加载。请联系管理员重新发布行业包。",
@@ -2578,7 +2676,7 @@ const bundlesRouter = router({
       return { activeSlug, profiles, selected };
     }),
   /** 重跑校验并留痕（P7E3：修复后重跑；记录可查） */
-  recheck: protectedProcedure
+  recheck: actionProcedure("bundle.manage")
     .input(z.object({ slug: z.string() }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -2588,7 +2686,7 @@ const bundlesRouter = router({
       }
     }),
   /** 激活/切换 profile（F2.10：任一校验失败拒绝激活，PRECONDITION_FAILED 带检查单） */
-  activate: protectedProcedure
+  activate: actionProcedure("bundle.manage")
     .input(z.object({ slug: z.string() }))
     .mutation(async ({ ctx, input }) => {
       assertBundleManage(ctx.identity.role);
@@ -2599,7 +2697,7 @@ const bundlesRouter = router({
       }
     }),
   /** 新建行业 Bundle 五要素向导（P7E5/§2.3：草稿不进分发） */
-  createDraft: protectedProcedure
+  createDraft: actionProcedure("bundle.manage")
     .input(z.object({
       slug: z.string(),
       displayName: z.string().min(1),
@@ -2656,18 +2754,10 @@ function llmCall(scene = "generic", scope?: { tenantId: string; workspaceId: str
   }
 }
 
-/** 工作区行业（bundle 第⑦槽 model-policy.yml 按行业加载；进程级缓存） */
-let cachedIndustry: string | null | undefined;
+/** 模型策略只认经过完整性校验的活动 Bundle，不读取可漂移的行业字段。 */
 async function workspaceIndustry(scope: { workspaceId: string }): Promise<string | null> {
-  if (cachedIndustry !== undefined) return cachedIndustry;
-  try {
-    const r = await getAppPool().query<{ industry: string | null }>(
-      `SELECT industry FROM workspaces WHERE id=$1`, [scope.workspaceId]);
-    cachedIndustry = r.rows[0]?.industry ?? null;
-  } catch {
-    cachedIndustry = null;
-  }
-  return cachedIndustry;
+  const active = await resolveWorkspaceActiveBundle(scope.workspaceId);
+  return active.state === "ready" ? active.bundleId : null;
 }
 
 let cachedClassifier: IntentClassifier | null | undefined;
@@ -2689,7 +2779,7 @@ function intentClassifier(scope?: { tenantId: string; workspaceId: string }): In
 /** 风险揭示书版本（§12.2 第①步；文本见 docs/CEO-RISK-DISCLOSURE.md） */
 const RISK_DISCLOSURE_VERSION = "risk-v1";
 /** 深度授权必确认条款（§12.2 第②步，逐条勾选缺一不可） */
-const REQUIRED_CLAUSES = ["自主调价", "自主采购", "自主对外回复", "试用降档规则", "AI 非法律责任主体·授权人承担经营决策责任"];
+const REQUIRED_CLAUSES = ["自主执行授权", "资金动作授权", "对外承诺授权", "试用降档规则", "AI 非法律责任主体·授权人承担经营决策责任"];
 
 /** 宪章读写串行锁（D26 审计#6：grant/transit 为 load→transition→save 读改写，并发互踩会留下 from/to 失真的留痕） */
 let charterLock: Promise<unknown> = Promise.resolve();
@@ -2730,9 +2820,16 @@ const captainRouter = router({
     .input(z.object({
       clauses: z.array(z.string()),
       autonomy: z.object({
-        price_band: z.tuple([z.number(), z.number()]),
-        procurement_cap: z.number(),
-        campaign_cap: z.number(),
+        ranges: z.record(z.string().min(1), z.object({
+          label: z.string().min(1).max(80),
+          lower: z.number(),
+          upper: z.number(),
+          anchor: z.number(),
+        })),
+        caps: z.record(z.string().min(1), z.object({
+          label: z.string().min(1).max(80),
+          limit: z.number().nonnegative(),
+        })),
       }),
       shadowDays: z.number().int().min(1).max(14).default(3),
       trialDays: z.number().int().min(3).max(30).default(7),
@@ -3137,7 +3234,7 @@ const memoryRouter = router({
     }),
 
   /** 人类编辑内容（M2.1 可读可改；写 memory.calibrate 事件留痕） */
-  update: writeProcedure
+  update: actionProcedure("memory.manage")
     .input(z.object({ memoryId: z.string(), content: z.string().min(1).max(2000) }))
     .mutation(async ({ ctx, input }) => {
       return editMemoryContent(
@@ -3147,7 +3244,7 @@ const memoryRouter = router({
     }),
 
   /** 人类禁用（回收区口径 F1.11；防记忆污染越用越偏） */
-  disable: writeProcedure
+  disable: actionProcedure("memory.manage")
     .input(z.object({ memoryId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       return disableMemory(
@@ -3156,10 +3253,46 @@ const memoryRouter = router({
       );
     }),
 
+  /** 停用/来源清算前读取真实影响关系；无引用时返回空数组而非推测。 */
+  impact: protectedProcedure
+    .input(z.object({
+      memoryId: z.string().optional(),
+      memberId: z.string().optional(),
+    }).refine((input) => Boolean(input.memoryId) !== Boolean(input.memberId), "必须且只能指定一条记忆或一名来源成员"))
+    .query(async ({ ctx, input }) => {
+      return previewMemoryImpact(getAppPool(), scopeOf(ctx.identity), {
+        memoryIds: input.memoryId ? [input.memoryId] : undefined,
+        sourceMemberId: input.memberId,
+      });
+    }),
+
+  /** 回收区单条重新启用，恢复本身写独立校准事件。 */
+  reactivate: actionProcedure("memory.manage")
+    .input(z.object({ memoryId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      return reactivateMemory(
+        getAppPool(), getGatewayPool(), scopeOf(ctx.identity),
+        { memberNo: ctx.identity.memberNo }, input.memoryId,
+      );
+    }),
+
+  /** 撤销最近一批来源清算；只恢复请求中仍处于回收区的本工作区记忆。 */
+  restore: actionProcedure("memory.manage")
+    .input(z.object({ memoryIds: z.array(z.string()).min(1).max(50) }))
+    .mutation(async ({ ctx, input }) => {
+      return restoreMemories(
+        getAppPool(), getGatewayPool(), scopeOf(ctx.identity),
+        { memberNo: ctx.identity.memberNo }, input.memoryIds,
+      );
+    }),
+
   /** 来源人一键清算（D24 修订 2：成员离任/换岗，作废其手势沉淀的偏好记忆） */
-  recallBySource: writeProcedure
+  recallBySource: actionProcedure("memory.recall")
     .input(z.object({ memberId: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      if (ctx.identity.role !== "owner" && ctx.identity.role !== "manager") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "当前角色无权清算其他成员来源的组织记忆" });
+      }
       return recallMemoriesByMember(
         getAppPool(), getGatewayPool(), scopeOf(ctx.identity),
         { memberNo: ctx.identity.memberNo }, input.memberId,
@@ -3167,12 +3300,12 @@ const memoryRouter = router({
     }),
 
   /** 手动触发提炼节拍（演示/联调用；生产由夜班调度触发） */
-  mineNow: writeProcedure.mutation(async ({ ctx }) => {
+  mineNow: actionProcedure("memory.manage").mutation(async ({ ctx }) => {
     return runMemoryMinerBeat(getAppPool(), getGatewayPool(), scopeOf(ctx.identity));
   }),
 
   /** 手动触发衰减扫描（同上） */
-  decayNow: writeProcedure.mutation(async ({ ctx }) => {
+  decayNow: actionProcedure("memory.manage").mutation(async ({ ctx }) => {
     return decayMemories(getAppPool(), getGatewayPool(), scopeOf(ctx.identity));
   }),
 
@@ -3191,6 +3324,7 @@ const evolutionRouter = router({
 
 export const appRouter = router({
   system: systemRouter,
+  access: accessRouter,
   onboarding: onboardingRouter,
   auth: authRouter,
   members: membersRouter,

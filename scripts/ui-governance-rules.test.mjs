@@ -6,6 +6,7 @@ import {
   findDiagnosticIsolationRisks,
   findEntryStyleRisks,
   findIconAccessibilityRisks,
+  findSharedIconRisks,
   findStylesheetLayoutRisks,
   findTypographyRisks,
   findViewportRisks,
@@ -49,6 +50,18 @@ test("AST 仅拦截真正输出的原始动态字段，不误伤条件、键值�
   assert.equal(risks.length, 2);
   assert.equal(risks.some((item) => item.text === "ticket.id"), true);
   assert.equal(risks.some((item) => item.text === "ticket.status"), true);
+});
+
+test("动态值门禁拦截 JSX 文本与可见属性中的裸底层字段", () => {
+  const source = `
+    export function Identity({ workspaceId, eventId }) {
+      return <><span>{workspaceId}</span><button title={eventId}>查看</button></>;
+    }
+  `;
+  const risks = findRawDynamicValueRisks(source);
+  assert.equal(risks.length, 2);
+  assert.equal(risks.some((item) => item.text === "workspaceId"), true);
+  assert.equal(risks.some((item) => item.text === "eventId"), true);
 });
 
 test("开发诊断页面必须具备权限、显式开发开关、醒目标识和审计说明", () => {
@@ -120,6 +133,11 @@ test("字号门禁拦截任意小字号与小号交互，仅允许显式标记�
   assert.equal(findTypographyRisks('<button data-wl-meta className="text-caption">继续</button>').length, 1);
   assert.deepEqual(findTypographyRisks('<button className="text-body">继续</button>'), []);
   assert.deepEqual(findTypographyRisks('<span data-wl-meta title="完整标题" className="truncate text-caption">短标题</span>'), []);
+  assert.deepEqual(findTypographyRisks(`<span
+    data-wl-meta
+    className="truncate text-caption"
+    title={fullTitle}
+  >短标题</span>`), []);
 });
 
 test("客户端样式门禁拒绝小字号、固定根宽度与强制单行", () => {
@@ -137,6 +155,32 @@ test("客户端样式门禁拒绝小字号、固定根宽度与强制单行", ()
 test("纯图标与纯表情按钮必须有可访问名称", () => {
   assert.equal(findIconAccessibilityRisks("<button>✕</button>").length, 1);
   assert.equal(findIconAccessibilityRisks("<button><Icon name=\"close\" /></button>").length, 1);
-  assert.deepEqual(findIconAccessibilityRisks('<button aria-label="关闭"><Icon name="close" /></button>'), []);
+  assert.equal(findIconAccessibilityRisks('<button aria-label="关闭"><Icon name="close" /></button>').length, 1);
+  assert.equal(findIconAccessibilityRisks('<button aria-label="Close" title="Close"><Icon name="close" /></button>').length, 1);
+  assert.deepEqual(findIconAccessibilityRisks('<button aria-label="关闭" title="关闭"><Icon name="close" /></button>'), []);
+  assert.equal(findIconAccessibilityRisks('<IconButton icon="close" label="Close" />').length, 1);
+  assert.deepEqual(findIconAccessibilityRisks('<IconButton icon="close" label="关闭详情" />'), []);
   assert.deepEqual(findIconAccessibilityRisks("<button>✕ 驳回</button>"), []);
+});
+
+test("三端功能图标必须来自共享注册表，特殊图形逐项登记并声明辅助技术语义", () => {
+  assert.equal(findSharedIconRisks('<svg><path d="M0 0" /></svg>', "apps/webc/src/Card.tsx").length, 2);
+  assert.equal(findSharedIconRisks('<p>⚠ 失败</p>', "apps/web/src/Page.tsx").length, 1);
+  assert.deepEqual(findSharedIconRisks('<Icon name="warning" /><span>失败</span>', "apps/web/src/Page.tsx"), []);
+  assert.deepEqual(findSharedIconRisks(
+    '<svg data-wl-custom-graphic="generated-qr-code" role="img" aria-label="服务二维码"><path d="M0 0" /></svg>',
+    "apps/web/src/components/UrlQrCode.tsx",
+  ), []);
+  assert.equal(findSharedIconRisks(
+    '<svg data-wl-custom-graphic="generated-qr-code"><path d="M0 0" /></svg>',
+    "apps/web/src/components/UrlQrCode.tsx",
+  ).length, 1);
+  assert.equal(findSharedIconRisks(
+    '<svg data-wl-custom-graphic="generated-qr-code" role="img" aria-label="服务二维码"><path d="M0 0" /></svg>',
+    "apps/webc/src/components/UrlQrCode.tsx",
+  ).length, 2);
+  const avatar = '<g data-wl-custom-graphic-part="agent-avatar"><path d="M0 0" /></g><path d="M1 1" /><svg data-wl-custom-graphic="agent-avatar" role="img" aria-label="数字员工"></svg>';
+  const avatarRisks = findSharedIconRisks(avatar, "apps/web/src/components/AgentAvatar.tsx");
+  assert.equal(avatarRisks.length, 1);
+  assert.equal(avatarRisks[0]?.text, "path");
 });

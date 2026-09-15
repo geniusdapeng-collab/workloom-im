@@ -4,15 +4,12 @@ import {
   type HTMLAttributes,
   type ReactNode,
   type RefObject,
-  useEffect,
   useId,
-  useRef,
 } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
-import { acquireModalDocumentState, restoreOverlayFocus } from "./modal-document-state";
+import { useManagedSurface } from "./managed-surface";
 import { useOverlayEnvironment } from "./overlay-manager";
-import { activateOverlayLayer, isTopOverlayLayer } from "./overlay-stack";
 
 export type ButtonVariant = "primary" | "secondary" | "danger" | "quiet";
 
@@ -81,12 +78,6 @@ export function AsyncState({ status, children, title, description, visual, onRet
   );
 }
 
-function focusableElements(container: HTMLElement): HTMLElement[] {
-  return Array.from(container.querySelectorAll<HTMLElement>(
-    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-  )).filter((element) => !element.hasAttribute("hidden") && element.getAttribute("aria-hidden") !== "true");
-}
-
 export interface OverlayProps {
   open: boolean;
   title: string;
@@ -120,86 +111,37 @@ export function Overlay({
   dismissOnBackdrop = true,
   dismissOnEscape = true,
 }: OverlayProps) {
-  const panelRef = useRef<HTMLDivElement>(null);
   const overlayEnvironment = useOverlayEnvironment();
   const titleId = useId();
   const descriptionId = useId();
-  const stackId = useId();
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
-
-  useEffect(() => {
-    if (!open) return;
-    if (overlayEnvironment && (!overlayEnvironment.backgroundElement || !overlayEnvironment.portalElement)) return;
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const panel = panelRef.current;
-    const deactivateLayer = activateOverlayLayer(stackId);
-    const inerted = overlayEnvironment?.backgroundElement && overlayEnvironment.portalElement
-      ? [
-        overlayEnvironment.backgroundElement,
-        ...Array.from(overlayEnvironment.portalElement.children).filter((element) => !element.contains(panel)),
-      ]
-      : Array.from(document.body.children).filter((element) => !element.contains(panel));
-    const releaseDocumentState = acquireModalDocumentState(document, inerted);
-    queueMicrotask(() => {
-      if (!panel) return;
-      const preferred = initialFocusRef?.current;
-      (preferred && panel.contains(preferred) ? preferred : (focusableElements(panel)[0] ?? panel)).focus();
-    });
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!isTopOverlayLayer(stackId)) return;
-      if (event.key === "Escape" && dismissOnEscape) {
-        event.preventDefault();
-        closeRef.current();
-        return;
-      }
-      if (event.key !== "Tab" || !panel) return;
-      const items = focusableElements(panel);
-      if (items.length === 0) {
-        event.preventDefault();
-        panel.focus();
-        return;
-      }
-      const first = items[0];
-      const last = items[items.length - 1];
-      const active = document.activeElement;
-      if (event.shiftKey && (active === first || active === panel || !panel.contains(active))) {
-        event.preventDefault();
-        last?.focus();
-      } else if (!event.shiftKey && (active === last || !panel.contains(active))) {
-        event.preventDefault();
-        first?.focus();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      deactivateLayer();
-      releaseDocumentState();
-      restoreOverlayFocus(previous);
-    };
-  }, [dismissOnEscape, initialFocusRef, open, overlayEnvironment, stackId]);
+  const surface = useManagedSurface<HTMLDivElement>({
+    open,
+    kind,
+    onDismiss: onClose,
+    modal: true,
+    dismissOnEscape,
+    initialFocusRef,
+  });
 
   if (!open) return null;
   if (typeof document === "undefined") return null;
   if (overlayEnvironment && !overlayEnvironment.portalElement) return null;
   return createPortal(
-    <div className={`wl-overlay wl-overlay--${kind} wl-overlay--${side}`} onPointerDown={(event) => event.target === event.currentTarget && dismissOnBackdrop && closeRef.current()}>
+    <div className={`wl-overlay wl-overlay--${kind} wl-overlay--${side}`} onPointerDown={(event) => event.target === event.currentTarget && dismissOnBackdrop && onClose()}>
       <div
-        ref={panelRef}
+        {...surface}
         className="wl-overlay__panel"
         role={role}
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
-        tabIndex={-1}
       >
         <header className="wl-overlay__header">
           <div>
             <h2 id={titleId}>{title}</h2>
             {description && <p id={descriptionId}>{description}</p>}
           </div>
-          <Button variant="quiet" onClick={onClose} disabled={closeDisabled} aria-label={closeLabel}><Icon name="close" /></Button>
+          <Button variant="quiet" onClick={onClose} disabled={closeDisabled} aria-label={closeLabel} title={closeLabel}><Icon name="close" /></Button>
         </header>
         <div className="wl-overlay__body">{children}</div>
         {footer && <footer className="wl-overlay__footer">{footer}</footer>}

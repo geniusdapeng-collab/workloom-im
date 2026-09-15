@@ -9,9 +9,11 @@ import { createHash, generateKeyPairSync, sign as signValue } from "node:crypto"
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import YAML from "yaml";
 import {
   BundleError, REGISTERED_PAGES, computeAssembly, listProfileSlugs, scaffoldDraft, removeDraft,
-  listSelfServiceBundles, loadBundleUiProjection, loadVerifiedBundleManifest, verifyBundleManifestDocument,
+  listSelfServiceBundles, loadBundleUiProjection, loadVerifiedBundleManifest,
+  loadVerifiedBundleWorkforcePresets, verifyBundleManifestDocument,
 } from "./assembly.js";
 import { canonicalBundleArtifactPayload, parseBundleManifest } from "@workloom/industry-contract";
 
@@ -143,6 +145,51 @@ describe("草稿骨架与校验（P7E5/§2.3，文件级）", () => {
     expect(projection.ui.home.widgets[0]?.component).toBe("QuickTaskList");
     expect(projection.ui.terminology["actor.requirement-analyst"]).toBe("需求分析官");
     expect(() => loadBundleUiProjection("missing-industry")).toThrow(/不存在或不可读取/);
+  });
+
+  it.each([
+    {
+      label: "缺少 coverage",
+      mutate: (root: string) => {
+        const path = join(root, "hotel/presets/pricing-agent.yml");
+        const preset = YAML.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+        delete preset.coverage;
+        writeFileSync(path, YAML.stringify(preset));
+      },
+      expected: /pricing-agent\.yml.*coverage/s,
+    },
+    {
+      label: "缺少 night_shift",
+      mutate: (root: string) => {
+        const path = join(root, "hotel/presets/pricing-agent.yml");
+        const preset = YAML.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+        delete preset.night_shift;
+        writeFileSync(path, YAML.stringify(preset));
+      },
+      expected: /pricing-agent\.yml.*night_shift/s,
+    },
+    {
+      label: "重复事件前缀",
+      mutate: (root: string) => {
+        const path = join(root, "hotel/presets/review-agent.yml");
+        const preset = YAML.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+        preset.coverage = [{ eventPrefix: "price.", label: "重复覆盖" }];
+        writeFileSync(path, YAML.stringify(preset));
+      },
+      expected: /事件前缀 price\. 已由岗位 pricing-agent 认领/,
+    },
+  ])("运行时装配在 $label 时失败关闭", ({ mutate, expected }) => {
+    const root = mkdtempSync(join(tmpdir(), "wl-workforce-contract-"));
+    const source = new URL("../../../bundles/hotel", import.meta.url).pathname;
+    cpSync(source, join(root, "hotel"), { recursive: true });
+    const manifestPath = join(root, "hotel/bundle.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    manifest.workloom.status = "draft";
+    delete manifest.integrity;
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    mutate(root);
+
+    expect(() => loadVerifiedBundleWorkforcePresets("hotel", root)).toThrow(expected);
   });
 
   it("开发通道公开通过校验且明确开放的候选包，生产通道只公开稳定包", () => {

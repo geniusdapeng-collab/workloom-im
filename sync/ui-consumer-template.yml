@@ -24,6 +24,8 @@ jobs:
       - run: pnpm -C "$WORKLOOM_DIR" install --frozen-lockfile
       - name: 禁止 UI 分叉并校验三端版本
         run: node "$WORKLOOM_DIR/scripts/verify-ui-consumer.mjs" --repo "$WORKLOOM_DIR"
+      - name: 校验三端应用壳指纹与行业扩展边界
+        run: node "$WORKLOOM_DIR/scripts/verify-client-foundation-consumer.mjs" --repo "$WORKLOOM_DIR"
       - name: 三端类型与生产构建
         run: |
           pnpm -C "$WORKLOOM_DIR" -r --if-present typecheck

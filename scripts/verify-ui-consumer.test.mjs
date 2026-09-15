@@ -6,9 +6,9 @@ import { describe, it } from "node:test";
 import { verifyUiConsumerRepo } from "./verify-ui-consumer.mjs";
 
 const CLIENTS = [
-  { root: "apps/web", marker: "b-pc", shells: "OverlayManager, SideNavigation, TopContextBar, Overlay, Button", body: "<OverlayManager><SideNavigation /><TopContextBar /><Overlay /><Button /></OverlayManager>" },
-  { root: "apps/webb", marker: "b-mobile", shells: "OverlayManager, AppShell, BottomTabs, TopContextBar, Drawer, Button", body: "<OverlayManager><AppShell><BottomTabs /><TopContextBar /><Drawer /><Button /></AppShell></OverlayManager>" },
-  { root: "apps/webc", marker: "c-mobile", shells: "OverlayManager, AppShell, BottomTabs, TopContextBar, Sheet, Button", body: "<OverlayManager><AppShell><BottomTabs /><TopContextBar /><Sheet /><Button /></AppShell></OverlayManager>" },
+  { root: "apps/web", marker: "b-pc", shells: "OverlayManager, SideNavigation, TopContextBar, Overlay, Button, Textarea", body: "<OverlayManager><SideNavigation /><TopContextBar /><Overlay /><Button /><Textarea label=\"任务目标\" /></OverlayManager>" },
+  { root: "apps/webb", marker: "b-mobile", shells: "OverlayManager, AppShell, BottomTabs, TopContextBar, Drawer, Button, Select", body: "<OverlayManager><AppShell><BottomTabs /><TopContextBar /><Drawer /><Button /><Select label=\"驳回原因\" /></AppShell></OverlayManager>" },
+  { root: "apps/webc", marker: "c-mobile", shells: "OverlayManager, AppShell, BottomTabs, TopContextBar, Sheet, Button, Input", body: "<OverlayManager><AppShell><BottomTabs /><TopContextBar /><Sheet /><Button /><Input label=\"咨询内容\" /></AppShell></OverlayManager>" },
 ];
 
 function fixture() {
@@ -43,6 +43,28 @@ describe("行业仓共享界面消费门禁", () => {
     const path = join(repo, "apps/webc/src/App.tsx");
     writeFileSync(path, readFileSync(path, "utf8").replace("<AppShell>", "<main>").replace("</AppShell>", "</main>"));
     assert.ok(verifyUiConsumerRepo(repo).some((error) => error.includes("apps/webc 未实际渲染共享基座组件 AppShell")));
+  });
+
+  it("操作按钮不能代替共享表单控件的真实消费", () => {
+    const repo = fixture();
+    const path = join(repo, "apps/webc/src/App.tsx");
+    writeFileSync(path, readFileSync(path, "utf8")
+      .replace(", Input", "")
+      .replace('<Input label="咨询内容" />', ""));
+    const errors = verifyUiConsumerRepo(repo);
+    assert.ok(errors.some((error) => error.includes("apps/webc 未实际渲染共享基座组件 共享表单控件")));
+    assert.equal(errors.some((error) => error.includes("apps/webc 未实际渲染共享基座组件 共享操作按钮")), false);
+  });
+
+  it("共享表单控件也不能代替操作按钮的真实消费", () => {
+    const repo = fixture();
+    const path = join(repo, "apps/web/src/App.tsx");
+    writeFileSync(path, readFileSync(path, "utf8")
+      .replace(", Button", "")
+      .replace("<Button />", ""));
+    const errors = verifyUiConsumerRepo(repo);
+    assert.ok(errors.some((error) => error.includes("apps/web 未实际渲染共享基座组件 共享操作按钮")));
+    assert.equal(errors.some((error) => error.includes("apps/web 未实际渲染共享基座组件 共享表单控件")), false);
   });
 
   it("拒绝重定义共享令牌和同名公共组件", () => {

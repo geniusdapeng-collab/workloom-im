@@ -48,10 +48,15 @@ function lineNumberAt(text, index) {
 function isSafePlaceholder(raw) {
   const value = raw.trim();
   const lower = value.toLowerCase();
+  const bareIdentifier = value.replace(/[)\]};,:]+$/g, "");
   if (!value) return true;
   if (value.startsWith("$") || value.startsWith("<") || value.startsWith("{{")) return true;
   if (/^(?:\*+|x+|none|null|false|true)$/i.test(value)) return true;
   if (/^(?:process\.)?env[.[_]/i.test(value)) return true;
+  // TypeScript 形参类型和显式环境常量不是字面凭据；provider token、JWT、URL
+  // 等高置信模式仍由 RULES 独立拦截，不受此占位判断影响。
+  if (/^(?:string|number|boolean|unknown|object|never)$/i.test(bareIdentifier)) return true;
+  if (/^[A-Z][A-Z0-9_]*$/.test(bareIdentifier)) return true;
   return [
     "example", "sample", "placeholder", "replace-me", "replace_me", "changeme",
     "redacted", "dummy", "fake", "mock", "test-only", "not-a-token",
@@ -103,13 +108,38 @@ function readStagedFiles(cwd = process.cwd()) {
   const names = execFileSync(
     "git",
     ["diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"],
-    { cwd, encoding: "utf8" },
+    { cwd, encoding: "utf8", maxBuffer: 100 * 1024 * 1024 },
   ).split("\u0000").filter(Boolean);
 
   return names.flatMap((file) => {
-    const body = execFileSync("git", ["show", `:${file}`], { cwd });
+    // 视觉基线、字体等受版本控制的二进制文件常超过 Node 默认的 1 MiB
+    // 子进程缓冲区。先允许读取完整 blob，再按 NUL 字节跳过二进制内容；
+    // 不能因为提交较大就让发布门禁以 ENOBUFS 失效。
+    const body = execFileSync("git", ["show", `:${file}`], {
+      cwd,
+      maxBuffer: 100 * 1024 * 1024,
+    });
     if (body.includes(0)) return [];
-    return [{ file, text: body.toString("utf8") }];
+    // 只审查本次新增的行。扫描整个已修改文件会把仓库历史中的演示连接串或
+    // 测试占位符误算为本次泄漏，最终诱导发布者绕过门禁。空白占位保留原始
+    // 行号，因此 finding 仍可直接定位到暂存区文件。
+    const patch = execFileSync(
+      "git",
+      ["diff", "--cached", "--no-ext-diff", "--no-color", "--unified=0", "--", file],
+      { cwd, encoding: "utf8", maxBuffer: 100 * 1024 * 1024 },
+    );
+    const ranges = [...patch.matchAll(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gm)]
+      .map((match) => ({ start: Number(match[1]), count: match[2] === undefined ? 1 : Number(match[2]) }))
+      .filter(({ count }) => count > 0);
+    if (ranges.length === 0) return [];
+    const lines = body.toString("utf8").split("\n");
+    const additions = new Array(lines.length).fill("");
+    for (const { start, count } of ranges) {
+      for (let index = start - 1; index < Math.min(start - 1 + count, lines.length); index += 1) {
+        additions[index] = lines[index];
+      }
+    }
+    return [{ file, text: additions.join("\n") }];
   });
 }
 
@@ -178,7 +208,10 @@ function runSelfTest() {
   try {
     execFileSync("git", ["init", "--quiet"], { cwd: repo });
     writeFileSync(join(repo, "context.md"), "token=" + "ghp_" + "C".repeat(36) + "\n", { mode: 0o600 });
-    execFileSync("git", ["add", "--", "context.md"], { cwd: repo });
+    // 覆盖大于 execFileSync 默认缓冲区的已暂存二进制；扫描器应安全跳过，
+    // 同时仍能报告同批次文本中的秘密。
+    writeFileSync(join(repo, "large.bin"), Buffer.alloc(2 * 1024 * 1024 + 1));
+    execFileSync("git", ["add", "--", "context.md", "large.bin"], { cwd: repo });
     const staged = readStagedFiles(repo);
     const stagedFindings = staged.flatMap(({ file, text }) => scanText(file, text));
     if (staged.length !== 1 || stagedFindings.length === 0) {

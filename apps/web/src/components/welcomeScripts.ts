@@ -8,6 +8,7 @@
  *          在 Bundle 中补充自己的行业话术：
  *          必须基于该项目真实资产（README/配置/代码）撰写，名词数字逐条可溯源。
  */
+import { clientChineseText } from "@workloom/ui";
 
 export interface MateScript {
   /** S1 简短自我介绍（通用） */
@@ -47,20 +48,28 @@ const SYSTEM_DEFAULT: string[] = [
   "小事按规则自动完成；关键决策会带着依据请您拍板。",
   "这里不是演示视频，派活、审批和数据都会真实流转。",
 ];
+const KEYWORDS_DEFAULT = ["全天候在岗", "规则内自动办", "大事您拍板", "过程可追溯"];
 
 export interface BundleWelcomeProjection {
   system: string[];
   keywords: string[];
 }
 
+function projectedChineseLines(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((line) => clientChineseText(line, ""))
+    .filter((line) => line.length > 0);
+}
+
 /** 合并通用仪式文案与 Bundle 行业投影；基座不识别任何具体行业标识。 */
 export function mateScriptOf(projection?: BundleWelcomeProjection | null): MateScript {
+  const projectedSystem = projectedChineseLines(projection?.system);
+  const projectedKeywords = projectedChineseLines(projection?.keywords);
   return {
     intro: INTRO,
-    system: projection?.system?.length ? projection.system : SYSTEM_DEFAULT,
-    keywords: projection?.keywords?.length
-      ? projection.keywords
-      : ["全天候在岗", "规则内自动办", "大事您拍板", "过程可追溯"],
+    system: projectedSystem.length ? projectedSystem : SYSTEM_DEFAULT,
+    keywords: projectedKeywords.length ? projectedKeywords : KEYWORDS_DEFAULT,
     detail: DETAIL,
     bridge: BRIDGE,
   };

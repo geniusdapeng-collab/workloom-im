@@ -134,10 +134,13 @@ function publicStartupError(error) {
   return "启动未完成。系统已停止本次启动流程，没有把未就绪状态显示为可用。";
 }
 
-const SPLASH_HTML = ({ message, error = "", reference = "", startedAt = Date.now() }) => {
+const SPLASH_HTML = ({ message, error = "", reference = "", startedAt = Date.now(), progress = {} }) => {
   const failed = Boolean(error);
   const safeMessage = escapeHtml(message);
   const safeError = escapeHtml(error);
+  const percent = Math.max(0, Math.min(100, Number.isFinite(Number(progress.percent)) ? Math.round(Number(progress.percent)) : 0));
+  const etaSeconds = Math.max(0, Number.isFinite(Number(progress.etaSeconds)) ? Math.round(Number(progress.etaSeconds)) : 0);
+  const progressText = etaSeconds > 0 ? `已完成 ${percent}% · 预计还需约 ${etaSeconds} 秒` : `已完成 ${percent}%`;
   const actions = failed ? `<div class="actions">
     <a class="primary" href="workloom-action://retry">重试启动</a>
     <a href="workloom-action://logs">打开日志目录</a>
@@ -148,20 +151,20 @@ const SPLASH_HTML = ({ message, error = "", reference = "", startedAt = Date.now
   <main aria-live="polite">
     <div class="brand">WorkLoom <span>织元</span></div>
     <div class="subtitle">企业数字员工 IM · ${failed ? "启动需要处理" : "正在准备工作区"}</div>
-    ${failed ? `<div class="failure" role="alert"><strong>本次启动未完成</strong><p>${safeError}</p>${reference ? `<p>支持参考：${escapeHtml(reference)}</p>` : ""}</div>` : `<div role="progressbar" aria-label="正在初始化" aria-valuetext="${safeMessage}" class="progress"><i></i></div>`}
+    ${failed ? `<div class="failure" role="alert"><strong>本次启动未完成</strong><p>${safeError}</p>${reference ? `<p>支持参考：${escapeHtml(reference)}</p>` : ""}</div>` : `<div role="progressbar" aria-label="正在初始化" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}" aria-valuetext="${escapeHtml(`${progressText}，${message}`)}" class="progress"><i style="width:${percent}%"></i></div>`}
     <p class="stage">${safeMessage}</p>
-    ${failed ? "" : `<p class="elapsed">已用时 <strong id="elapsed">0 秒</strong> · 按实际启动阶段更新，不估算虚假百分比</p>`}
+    ${failed ? "" : `<p class="elapsed"><strong>${progressText}</strong><br>已用时 <span id="elapsed">0 秒</span> · 进度按已完成的启动检查点更新</p>`}
     ${failed ? actions : `<div class="actions"><a href="workloom-action://logs">查看启动日志</a><a href="workloom-action://export">导出诊断</a><a href="workloom-action://exit">安全退出</a></div>`}
     <p class="hint">${failed ? "重试前可先导出诊断；所有动作都不会清除业务数据。" : "请勿重复启动多个实例；若失败，页面会保留原因、重试和诊断入口。"}</p>
   </main>
   <style>
-    *{box-sizing:border-box}body{margin:0;background:#0B1220;color:#E2E8F0;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;min-height:100vh;display:grid;place-items:center;padding:28px}main{width:min(100%,390px);text-align:center}.brand{font-size:28px;font-weight:700;letter-spacing:2px}.brand span{color:#C9A227}.subtitle{margin-top:10px;font-size:14px;color:#94A3B8}.progress{margin:28px auto 0;width:min(100%,280px);height:4px;background:#1E293B;border-radius:2px;overflow:hidden}.progress i{display:block;width:100%;height:100%;background:linear-gradient(90deg,transparent,#C9A227,transparent);animation:slide 1.2s ease-in-out infinite}.stage,.failure p{overflow-wrap:anywhere;word-break:break-word}.stage{margin:18px auto 0;font-size:14px;line-height:1.6;color:#CBD5E1;max-width:360px}.elapsed,.hint{margin:10px auto 0;font-size:14px;line-height:1.6;color:#94A3B8}.failure{margin-top:24px;padding:14px;border:1px solid #7F1D1D;border-radius:10px;background:#2B1018;text-align:left}.failure strong{color:#FCA5A5}.failure p{margin:8px 0 0;color:#FECACA;font-size:14px;line-height:1.55;max-height:112px;overflow:auto}.actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:18px}.actions a{align-items:center;display:flex;justify-content:center;min-height:44px;min-width:0;padding:9px 10px;border:1px solid #475569;border-radius:8px;color:#E2E8F0;text-decoration:none;font-size:14px;overflow-wrap:anywhere}.actions a:focus-visible{outline:3px solid #FACC15;outline-offset:2px}.actions .primary{background:#C9A227;border-color:#C9A227;color:#111827;font-weight:700}@keyframes slide{from{transform:translateX(-100%)}to{transform:translateX(100%)}}@media(prefers-reduced-motion:reduce){.progress i{animation:none;background:#C9A227}}
+    *{box-sizing:border-box}body{margin:0;background:#0B1220;color:#E2E8F0;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;min-height:100vh;display:grid;place-items:center;padding:28px}main{width:min(100%,390px);text-align:center}.brand{font-size:28px;font-weight:700;letter-spacing:2px}.brand span{color:#C9A227}.subtitle{margin-top:10px;font-size:14px;color:#94A3B8}.progress{margin:28px auto 0;width:min(100%,280px);height:6px;background:#1E293B;border-radius:999px;overflow:hidden}.progress i{display:block;height:100%;min-width:2px;background:#C9A227;border-radius:inherit;transition:width .25s ease}.stage,.failure p{overflow-wrap:anywhere;word-break:break-word}.stage{margin:18px auto 0;font-size:14px;line-height:1.6;color:#CBD5E1;max-width:360px}.elapsed,.hint{margin:10px auto 0;font-size:14px;line-height:1.6;color:#94A3B8}.elapsed strong{color:#E2E8F0}.failure{margin-top:24px;padding:14px;border:1px solid #7F1D1D;border-radius:10px;background:#2B1018;text-align:left}.failure strong{color:#FCA5A5}.failure p{margin:8px 0 0;color:#FECACA;font-size:14px;line-height:1.55;max-height:112px;overflow:auto}.actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:18px}.actions a{align-items:center;display:flex;justify-content:center;min-height:44px;min-width:0;padding:9px 10px;border:1px solid #475569;border-radius:8px;color:#E2E8F0;text-decoration:none;font-size:14px;overflow-wrap:anywhere}.actions a:focus-visible{outline:3px solid #FACC15;outline-offset:2px}.actions .primary{background:#C9A227;border-color:#C9A227;color:#111827;font-weight:700}@media(prefers-reduced-motion:reduce){.progress i{transition:none}}
   </style>
   ${failed ? "" : `<script>const startedAt=${Number(startedAt)};const tick=()=>{const el=document.getElementById('elapsed');if(el)el.textContent=Math.max(0,Math.floor((Date.now()-startedAt)/1000))+' 秒'};tick();setInterval(tick,1000)</script>`}
 </body></html>`)}`;
 };
 
-function showSplash(message, error = "", reference = lastBootstrapReference ?? "") {
+function showSplash(message, error = "", reference = lastBootstrapReference ?? "", progress = {}) {
   if (!splash) {
     splash = new BrowserWindow({
       width: 520, height: 420, minWidth: 440, minHeight: 340, resizable: Boolean(error), frame: false,
@@ -177,7 +180,7 @@ function showSplash(message, error = "", reference = lastBootstrapReference ?? "
     });
   }
   splash.setResizable(Boolean(error));
-  void splash.loadURL(SPLASH_HTML({ message, error, reference, startedAt: bootstrapStartedAt || Date.now() }));
+  void splash.loadURL(SPLASH_HTML({ message, error, reference, startedAt: bootstrapStartedAt || Date.now(), progress }));
 }
 
 function diagnosticText() {
@@ -547,7 +550,7 @@ app.whenReady().then(async () => {
     bootstrapStartedAt = Date.now();
     lastBootstrapError = null;
     lastBootstrapReference = null;
-    if (!APP_SMOKE) showSplash("正在准备运行环境…");
+    if (!APP_SMOKE) showSplash("正在准备运行环境…", "", "", { phase: "starting", percent: 1, etaSeconds: 150 });
     try {
       if (handle) {
         await handle.stop();
@@ -557,7 +560,7 @@ app.whenReady().then(async () => {
         resourcesDir,
         supportDir,
         smoke: APP_SMOKE,
-        onStatus: (msg) => { if (splash) showSplash(msg); },
+        onStatus: (msg, progress) => { if (splash) showSplash(msg, "", "", progress); },
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

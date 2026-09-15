@@ -205,9 +205,9 @@ export function NamePlate({
         transform: spotlight ? "scale(1.18)" : "scale(1)", transition: "transform .25s",
         filter: spotlight ? `drop-shadow(0 0 10px ${color})` : "none",
       }}>
-        <div style={{
-          maxWidth: "min(220px, 42vw)", overflow: "hidden", textOverflow: "ellipsis",
-          whiteSpace: "nowrap", textAlign: "center", fontSize: spotlight ? 13 : 11,
+        <div data-wl-meta className={spotlight ? "truncate text-body" : "truncate text-caption"} style={{
+          maxWidth: "min(220px, 42vw)",
+          textAlign: "center",
           fontWeight: 700, letterSpacing: .7,
           color: spotlight ? "#fff8e8" : "#eef4ff",
           textShadow: "0 1px 3px rgba(0,0,0,.9)",
@@ -217,9 +217,9 @@ export function NamePlate({
         }} title={persona}>
           {persona}{spotlight && spotText ? ` · ${spotText}` : ""}
         </div>
-        {(role || sub) && <div style={{
-          maxWidth: "min(220px, 42vw)", overflow: "hidden", textOverflow: "ellipsis",
-          whiteSpace: "nowrap", textAlign: "center", fontSize: 9, fontWeight: 500, letterSpacing: 2.5,
+        {(role || sub) && <div data-wl-meta className="truncate text-caption" style={{
+          maxWidth: "min(220px, 42vw)",
+          textAlign: "center", fontWeight: 500, letterSpacing: 2.5,
           color, textShadow: "0 1px 2px rgba(0,0,0,.8)", opacity: 0.95,
         }} title={[role, sub].filter(Boolean).join(" · ")}>
           {role}{sub ? ` · ${sub}` : ""}

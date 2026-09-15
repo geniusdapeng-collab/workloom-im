@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { MEMBER_ROLE_TEXT, dictText } from "../../lib/display";
 import { ensureDemoLogin, trpc } from "../../lib/trpc";
+import { workspaceIndustryText } from "./systemText";
 
 interface WorkspaceMembership {
   workspaceId: string;
@@ -26,7 +27,10 @@ export default function Workspaces() {
         unified: { query: () => Promise<{ groups: WorkspaceMembership[] }> };
       };
       const result = await service.unified.query();
-      setRows(result.groups);
+      setRows(result.groups.map((row) => ({
+        ...row,
+        industry: workspaceIndustryText(row.industry),
+      })));
       setStatus(result.groups.length > 0 ? "ready" : "empty");
     } catch (cause) {
       console.warn("读取工作区失败", cause);

@@ -12,7 +12,12 @@
  */
 import { createHash } from "node:crypto";
 import type pg from "pg";
-import { guardedFetchText, scoreChunkFallback, tokenizeQuery } from "@workloom/base/service-kb";
+import {
+  guardedFetchText,
+  scoreChunkFallback,
+  tokenizeQuery,
+  type KbSearchLexicon,
+} from "@workloom/base/service-kb";
 import { ensureServiceSchema, indexChunks } from "./store.js";
 import { serviceTx, svcQuery } from "./events.js";
 import type { LlmCall } from "./llm.js";
@@ -303,9 +308,15 @@ export async function diffScan(input: { workspaceId: string; sourceId: string })
  * 检索（H4 修复全表扫描）：SQL 侧候选召回（content/heading ILIKE ANY 关键词数组，LIMIT 100），
  * JS 侧与 base 一致的 2-gram 切词（tokenizeQuery）+ scoreChunkFallback 精排（score 归一化 0..1）。
  */
-export async function searchKB(input: { workspaceId: string; query: string; limit?: number }): Promise<KbHit[]> {
+export async function searchKB(input: {
+  workspaceId: string;
+  query: string;
+  limit?: number;
+  /** 由已验证活动 Bundle 选择的适配器注入；省略时基座不理解行业词义。 */
+  lexicon?: KbSearchLexicon;
+}): Promise<KbHit[]> {
   await ensureServiceSchema();
-  const terms = tokenizeQuery(input.query);
+  const terms = tokenizeQuery(input.query, input.lexicon);
   if (terms.length === 0) return [];
   const patterns = terms.map((t) => `%${t}%`);
   const rows = await svcQuery<{ document_id: string; heading: string; content: string; title: string }>(
@@ -320,7 +331,7 @@ export async function searchKB(input: { workspaceId: string; query: string; limi
   return rows
     .map((x) => ({
       content: x.content, heading: x.heading, documentTitle: x.title, documentId: x.document_id,
-      score: scoreChunkFallback(input.query, { heading: x.heading, content: x.content }),
+      score: scoreChunkFallback(input.query, { heading: x.heading, content: x.content }, input.lexicon),
     }))
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score)

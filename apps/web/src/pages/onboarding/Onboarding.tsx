@@ -14,6 +14,8 @@ import CustomizeWizard from "./CustomizeWizard";
 import { ensureDemoLogin, trpc } from "../../lib/trpc";
 import type { OnboardingStatus } from "../../components/SimBanner";
 import { UrlQrCode } from "../../components/UrlQrCode";
+import { Icon, clientChineseText } from "@workloom/ui";
+import { modelTestReplyText, onboardingStatusSystemText, publicationSystemText } from "./systemText";
 
 const PROVIDERS: Array<{ key: string; label: string; baseUrl: string; model: string }> = [
   { key: "deepseek", label: "DeepSeek（深度求索）", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat" },
@@ -122,7 +124,7 @@ export default function Onboarding() {
 
   const reload = async () => {
     await ensureDemoLogin();
-    const s = (await trpc.onboarding.status.query()) as OnboardingStatus;
+    const s = onboardingStatusSystemText((await trpc.onboarding.status.query()) as OnboardingStatus);
     setSt(s);
     return s;
   };
@@ -143,7 +145,7 @@ export default function Onboarding() {
       setSiteUrl(payload.siteUrl ?? "");
       setDocTitle(payload.documentTitle ?? "");
       setTestQ(payload.testQuestion ?? "");
-      setPublication(front);
+      setPublication(publicationSystemText(front));
       setDraftVersion(draft?.version ?? 0);
       setDraftResponsible(draft?.responsible ?? null);
       if (s.llm.real) setLlmDone(true);
@@ -211,7 +213,9 @@ export default function Onboarding() {
   };
 
   const refreshPublication = async () => {
-    const result = await trpc.onboarding.serviceFrontPublication.query() as ServiceFrontPublication;
+    const result = publicationSystemText(
+      await trpc.onboarding.serviceFrontPublication.query() as ServiceFrontPublication,
+    );
     setPublication(result);
     return result;
   };
@@ -250,7 +254,7 @@ export default function Onboarding() {
     try {
       const r = (await trpc.onboarding.testLlm.mutate({ baseUrl, apiKey, model })) as typeof testResult;
       setTestResult(r?.ok
-        ? r
+        ? { ...r, reply: modelTestReplyText(r.reply) }
         : { ok: false, error: "模型没有返回可验证的连接结果，请检查配置后重试。" });
     } catch (e) { setTestResult({ ok: false, error: safeOnboardingError(e, "模型连接测试失败，请稍后重试。") }); }
     finally { setTesting(false); }
@@ -384,8 +388,8 @@ export default function Onboarding() {
         {/* 步骤条 */}
         <div className="mb-6 grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-5">
           {STEPS.map((s, i) => (
-            <div key={s} className={`min-w-0 break-words rounded-lg border px-2 py-2 text-center text-body ${i === step ? "border-gline bg-gold/10 text-gold" : i < step || (i === 1 && llmDone) || (i === 2 && bizDone) ? "border-go/40 text-go" : "border-line text-ink3"}`}>
-              {i < step || (i === 1 && llmDone) || (i === 2 && bizDone) ? "✓ " : `${i + 1}. `}{s}
+            <div key={s} className={`flex min-w-0 items-center justify-center gap-1 break-words rounded-lg border px-2 py-2 text-center text-body ${i === step ? "border-gline bg-gold/10 text-gold" : i < step || (i === 1 && llmDone) || (i === 2 && bizDone) ? "border-go/40 text-go" : "border-line text-ink3"}`}>
+              {i < step || (i === 1 && llmDone) || (i === 2 && bizDone) ? <Icon name="check" size={14} /> : <span>{i + 1}.</span>}{s}
             </div>
           ))}
         </div>
@@ -399,7 +403,7 @@ export default function Onboarding() {
             {!st && <div className="text-body text-ink3">自检中……</div>}
             {checks.map((c) => (
               <div key={c.label} className="flex items-center gap-3 rounded-lg border border-line bg-card px-3 py-2.5">
-                <span className={c.ok ? "text-go" : "text-amber-300"}>{c.ok ? "✓" : "○"}</span>
+                <Icon name={c.ok ? "check" : "circle"} label={c.ok ? "已通过" : "待完成"} size={15} className={c.ok ? "text-go" : "text-amber-300"} />
                 <span className="w-24 text-sm">{c.label}</span>
                 <span className="min-w-0 flex-1 break-words text-body text-ink3">{c.detail}</span>
               </div>
@@ -438,8 +442,8 @@ export default function Onboarding() {
             {testResult && (
               <div className={`break-words rounded-lg border px-3 py-2 text-body ${testResult.ok ? "border-go/50 bg-go/10 text-go" : "border-warn/50 bg-warn/10 text-warn"}`}>
                 {testResult.ok
-                  ? <>✓ 真实试调通过（{testResult.latencyMs} 毫秒）——模型回复：「{testResult.reply}」</>
-                  : <>✕ 试调失败：{testResult.error}</>}
+                  ? <><Icon name="check" size={15} className="inline" /> 真实试调通过（{testResult.latencyMs} 毫秒）——模型回复：「{clientChineseText(testResult.reply, "模型已返回可验证结果。")}」</>
+                  : <><Icon name="error" size={15} className="inline" /> 试调失败：{testResult.error}</>}
               </div>
             )}
             <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
@@ -486,10 +490,10 @@ export default function Onboarding() {
             <div className="space-y-2">
               {(st?.activationGate?.checks ?? []).map((check) => (
                 <div key={check.key} className="flex min-w-0 items-start gap-2 rounded-lg border border-line bg-card px-3 py-2 text-body">
-                  <span className={check.ok ? "shrink-0 text-go" : "shrink-0 text-amber-300"}>{check.ok ? "✓" : "○"}</span>
+                  <Icon name={check.ok ? "check" : "circle"} label={check.ok ? "已通过" : "待完成"} size={15} className={check.ok ? "shrink-0 text-go" : "shrink-0 text-amber-300"} />
                   <div className="min-w-0 flex-1">
-                    <div className="font-semibold text-ink">{check.label}</div>
-                    <div className="break-words leading-relaxed text-ink3">{check.detail}</div>
+                    <div className="font-semibold text-ink">{clientChineseText(check.label, "运行条件")}</div>
+                    <div className="break-words leading-relaxed text-ink3">{clientChineseText(check.detail, "运行条件信息待确认")}</div>
                   </div>
                 </div>
               ))}
@@ -533,7 +537,7 @@ export default function Onboarding() {
                     {publication.url && <div className="mt-1 break-all text-body text-holo">{publication.url}</div>}
                     <div className="mt-2 flex flex-wrap gap-2">
                       {publication.url && <button className={btnCls} onClick={() => void copyServiceLink()}>复制链接</button>}
-                      {publication.url && <a className={`${btnCls} no-underline`} href={publication.url} target="_blank" rel="noreferrer">打开地址检查 ↗</a>}
+                      {publication.url && <a className={`${btnCls} no-underline`} href={publication.url} target="_blank" rel="noreferrer">打开地址检查 <Icon name="chevron" size={13} aria-hidden="true" /></a>}
                       <button className={btnCls} onClick={() => void refreshPublication().catch((error) => setErr(safeOnboardingError(error, "发布状态暂时无法刷新。")))}>刷新状态</button>
                     </div>
                   </div>
@@ -541,8 +545,8 @@ export default function Onboarding() {
                 <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3">
                   {publication.channels.map((channel) => (
                     <div key={channel.key} className={`min-w-0 rounded border px-2 py-1.5 text-body ${CHANNEL_TONE[channel.status]}`}>
-                      <div className="break-words font-semibold">{channel.label} · {CHANNEL_STATUS[channel.status]}</div>
-                      <div className="mt-0.5 break-words leading-relaxed opacity-80">{channel.detail}</div>
+                      <div className="break-words font-semibold">{clientChineseText(channel.label, "服务渠道")} · {CHANNEL_STATUS[channel.status]}</div>
+                      <div className="mt-0.5 break-words leading-relaxed opacity-80">{clientChineseText(channel.detail, "渠道状态说明待确认")}</div>
                     </div>
                   ))}
                 </div>
@@ -557,7 +561,7 @@ export default function Onboarding() {
                 <button className={`${btnCls} shrink-0`} disabled={siteBusy || !siteUrl.trim()} onClick={() => void crawlSite()}>{siteBusy ? "抓取中……" : "抓取建库"}</button>
               </div>
               {siteResult && (
-                <div className="break-words text-body text-go">✓ 已结构化抽取 {siteResult.entryCount} 条知识入库{siteResult.degraded ? "（未配置真实模型凭据，已降级直存）" : ""}，已进入待审列表。</div>
+                <div className="break-words text-body text-go"><Icon name="check" size={14} className="inline" /> 已结构化抽取 {siteResult.entryCount} 条知识入库{siteResult.degraded ? "（未配置真实模型凭据，已降级直存）" : ""}，已进入待审列表。</div>
               )}
             </div>
 
@@ -571,7 +575,7 @@ export default function Onboarding() {
               <div className="text-right">
                 <button className={btnCls} disabled={docBusy || !docTitle.trim() || !docMd.trim()} onClick={() => void addDoc()}>{docBusy ? "入库中……" : "解析入库"}</button>
               </div>
-              {docResult && <div className="break-words text-body text-go">✓ 已入库第 {docResult.version} 版，自动切分 {docResult.chunks} 个知识块。</div>}
+              {docResult && <div className="break-words text-body text-go"><Icon name="check" size={14} className="inline" /> 已入库第 {docResult.version} 版，自动切分 {docResult.chunks} 个知识块。</div>}
             </div>
 
             {/* 试营业测试问 */}
@@ -600,14 +604,14 @@ export default function Onboarding() {
         {/* 完成 */}
         {done && (
           <div className="space-y-4 rounded-xl border border-go/50 bg-go/5 p-6 text-center">
-            <div className="text-2xl">🎉</div>
+            <Icon name="celebrate" size={28} className="mx-auto text-go" />
             <div className="text-sm font-bold text-go">{st?.dataMode === "real" ? "真实经营模式已启用" : "向导进度已保存"}</div>
             <div className="text-body leading-relaxed text-ink3">
               {st?.dataMode === "real" ? "服务端正式模式激活事件已留痕，数字团队将按正式配置继续工作。" : "正式运行门禁尚未全绿，系统仍保持模拟状态；您可以稍后继续补齐。"}
             </div>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <a href="/" className="inline-block rounded-lg border border-gline bg-gold/10 px-5 py-2 text-sm text-gold no-underline hover:bg-gold/20">回到经营主页 →</a>
-              {publication?.url && <a href={publication.url} target="_blank" rel="noreferrer" className="inline-block max-w-full whitespace-normal break-words rounded-lg border border-holo/40 bg-holo/10 px-5 py-2 text-sm text-holo no-underline hover:bg-holo/20">打开客户服务地址检查 ↗</a>}
+              {publication?.url && <a href={publication.url} target="_blank" rel="noreferrer" className="inline-flex max-w-full items-center gap-1 whitespace-normal break-words rounded-lg border border-holo/40 bg-holo/10 px-5 py-2 text-sm text-holo no-underline hover:bg-holo/20">打开客户服务地址检查 <Icon name="chevron" size={13} aria-hidden="true" /></a>}
             </div>
           </div>
         )}

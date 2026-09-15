@@ -12,8 +12,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { ensureDemoLogin, trpc } from "../../lib/trpc";
-import { COMMON_STATUS_TEXT, MODEL_TIER_TEXT, MODEL_WINDOW_TEXT, RULE_RESULT_TEXT, THREAD_MODE_TEXT, actionText, actorText, dictText, payloadText, shortId } from "../../lib/display";
+import { COMMON_STATUS_TEXT, MODEL_TIER_TEXT, MODEL_WINDOW_TEXT, RULE_RESULT_TEXT, THREAD_MODE_TEXT, actionText, actorText, approvalGestureText, dictText, payloadText, shortId } from "../../lib/display";
 import { Bridge } from "../../shell/Bridge";
+import { useNavigationAccess } from "../../shell/NavigationAccess";
 import { RejectDialog } from "../../components/RejectDialog";
 import {
   AgentActionMessage,
@@ -28,6 +29,7 @@ import {
   XpBar,
   type ReceiptState,
 } from "../../components/hud";
+import { Icon, clientChineseText } from "@workloom/ui";
 
 interface ThreadRow {
   id: string; title: string; mode: string; status: string;
@@ -39,7 +41,7 @@ interface Ev {
   who: { type: "human" | "agent" | "system"; id: string; version?: string };
   context: { time: string };
   object: { type: string; id?: string };
-  decision: { action: string; before?: unknown; after?: unknown; basis?: string[] };
+  decision: { action: string; effect?: "read" | "write"; before?: unknown; after?: unknown; basis?: string[] };
   rule_impact: Array<{ rule_id: string; version: string; result: string }>;
   receipt?: { synced?: boolean; snapshot_uri?: string };
   model_trace?: { model_id: string; tier?: string; window?: string; credits?: number };
@@ -57,17 +59,14 @@ function receiptOf(ev: Ev): ReceiptState {
   return "unverified";
 }
 
-/** 写类动作前缀（完成后态「仅只读分析」判定；与网关同源口径） */
-const WRITE_PREFIX = ["price.adjust", "order.refund", "review.reply", "content.draft", "content.publish", "refund.apply", "trigger."];
-
 export default function P2() {
+  const { canAction } = useNavigationAccess();
   const { threadId = "" } = useParams();
   const [params] = useSearchParams();
   const demo = params.get("demo");
 
   const [ready, setReady] = useState(false);
   const [offline, setOffline] = useState(false); // 断线重连中（F3.4 不伪造进度）
-  const [role, setRole] = useState<string>("owner");
   const [thread, setThread] = useState<ThreadRow | null>(null);
   const [threads, setThreads] = useState<ThreadRow[]>([]);
   const [events, setEvents] = useState<Ev[]>([]);
@@ -79,13 +78,11 @@ export default function P2() {
   const load = useCallback(async () => {
     try {
       await ensureDemoLogin();
-      const [meR, th, list, ap] = await Promise.all([
-        trpc.members.me.query() as Promise<{ identity: { role: string } }>,
+      const [th, list, ap] = await Promise.all([
         trpc.threads.get.query({ threadId }) as Promise<ThreadRow | null>,
         trpc.threads.list.query() as Promise<ThreadRow[]>,
         trpc.approvals.list.query() as Promise<ApprovalRow[]>,
       ]);
-      setRole(meR.identity.role);
       setThread(th);
       setThreads(list);
       if (th) {
@@ -124,10 +121,11 @@ export default function P2() {
     };
   }, [events]);
 
-  const hasWrite = events.some((e) => WRITE_PREFIX.some((p) => e.decision.action.startsWith(p)));
+  const hasWrite = events.some((e) => e.decision.effect === "write" && e.receipt?.synced === true);
   const isDone = thread?.status === "completed";
   const isFailed = demo === "p2_error" || thread?.status === "failed";
-  const readonly = role === "readonly";
+  const canApprove = canAction("approval.decide");
+  const canDispatch = canAction("task.dispatch");
 
   /* ---------- 手势写回（approvals.decide；驳回原因弹窗在 P4 落地完整枚举，此处驳回走默认原因） ---------- */
   const gesture = useCallback(async (approvalId: string, g: "approve" | "edit" | "reject") => {
@@ -161,7 +159,7 @@ export default function P2() {
     setBanner({ level: "info", text: "追问已沿用当前任务上下文并进入队列，正在执行…" });
     setComposer("");
     try {
-      await trpc.threads.run.mutate({ threadId: thread.id, goal: composer, presetKey: thread.agent_id ?? "pricing-agent" });
+      await trpc.threads.run.mutate({ threadId: thread.id, goal: composer, ...(thread.agent_id ? { presetKey: thread.agent_id } : {}) });
     } finally {
       await load();
     }
@@ -250,13 +248,13 @@ export default function P2() {
               <span className="font-mono text-body text-ink3">{shortId(thread.id)}</span>
               <span className="text-body text-ink2">{thread.title}</span>
               <span className="flex-1" />
-              {thread.status !== "completed" && thread.status !== "failed" && (
+              {canDispatch && thread.status !== "completed" && thread.status !== "failed" && (
                 <button
                   type="button"
-                  onClick={() => void trpc.threads.run.mutate({ threadId: thread.id, goal: thread.title, presetKey: thread.agent_id ?? "pricing-agent" }).then(load)}
+                  onClick={() => void trpc.threads.run.mutate({ threadId: thread.id, goal: thread.title, ...(thread.agent_id ? { presetKey: thread.agent_id } : {}) }).then(load)}
                   className="cursor-pointer rounded-md border border-gline bg-gold/8 px-3 py-1 text-body font-bold text-gold hover:bg-gold/15"
                 >
-                  ▶ 执行或从中断处继续
+                  <Icon name="play" size={14} className="inline" /> 执行或从中断处继续
                 </button>
               )}
             </>
@@ -273,15 +271,15 @@ export default function P2() {
         {/* p2_error：探针失效停止一切点击 + 三入口（E3.1/L3.3） */}
         {isFailed && (
           <div className="mb-3 rounded-lg border border-alert/55 bg-alert/8 p-3.5">
-            <div className="mb-2 text-body font-bold text-alert">⛔ 渠道连接检查失败 · 已暂停所有外部操作</div>
-            <div className="wl-action-row flex flex-wrap gap-2">
+            <div className="mb-2 flex items-center gap-1.5 text-body font-bold text-alert"><Icon name="brake" size={15} />渠道连接检查失败 · 已暂停所有外部操作</div>
+            {canDispatch && <div className="wl-action-row flex flex-wrap gap-2">
               <button type="button" onClick={() => setBanner({ level: "info", text: "已标记为需要人工介入，并开启人工接管通道。" })}
                 className="cursor-pointer rounded-md border border-alert/60 bg-alert/10 px-3 py-1.5 text-body font-bold text-alert">转人工</button>
-              <button type="button" onClick={() => thread && void trpc.threads.run.mutate({ threadId: thread.id, goal: thread.title, presetKey: thread.agent_id ?? "pricing-agent" }).then(load)}
+              <button type="button" onClick={() => thread && void trpc.threads.run.mutate({ threadId: thread.id, goal: thread.title, ...(thread.agent_id ? { presetKey: thread.agent_id } : {}) }).then(load)}
                 className="cursor-pointer rounded-md border border-warn/50 bg-warn/10 px-3 py-1.5 text-body font-bold text-warn">降级重试</button>
               <button type="button" onClick={() => setBanner({ level: "info", text: "回滚会生成一组反向补偿事件，原始账本记录不会被覆盖。" })}
                 className="cursor-pointer rounded-md border border-holo/40 bg-holo/8 px-3 py-1.5 text-body font-bold text-holo">回滚</button>
-            </div>
+            </div>}
           </div>
         )}
 
@@ -289,9 +287,9 @@ export default function P2() {
           {!ready ? (
             <><Skeleton count={2} height={44} label="会话摘要正在加载" /><Skeleton count={4} label="会话内容正在加载" /></>
           ) : !thread ? (
-            <EmptyState icon="🧭" title="线程不存在或已越权清空" hint="从左侧会话列表选择一条任务线程" />
+            <EmptyState icon={<Icon name="tasks" size={24} />} title="线程不存在或已越权清空" hint="从左侧会话列表选择一条任务线程" />
           ) : events.length === 0 ? (
-            <EmptyState icon="🌌" title="还没有会话内容" hint="选择一位数字员工或说出第一句话" />
+            <EmptyState icon={<Icon name="chat" size={24} />} title="还没有会话内容" hint="选择一位数字员工或说出第一句话" />
           ) : (
             <>
               <SystemDivider time={new Date(thread.created_at).toTimeString().slice(0, 5)} summary={`任务会话 ${shortId(thread.id)} 已建立，派遣事件已写入账本`} />
@@ -302,7 +300,7 @@ export default function P2() {
                   const text = ev.decision.action === "thread.dispatch"
                     ? (after?.title ?? thread.title)
                     : ev.decision.action === "approval.gesture"
-                      ? `待我审批：${after?.gesture ?? "已处理"}`
+                      ? `待我审批：${approvalGestureText(after?.gesture)}`
                       : actionText(ev.decision.action);
                   return <HumanBubble key={ev.event_id} time={new Date(ev.context.time).toTimeString().slice(0, 5)}>{text}</HumanBubble>;
                 }
@@ -315,7 +313,10 @@ export default function P2() {
                 }
                 if (ev.decision.action === "ask.answer") {
                   // ask 问询应答（B8）：正文上屏（§9.1 动作码不直接上屏同口径）
-                  const ans = (ev.decision.after as { text?: string } | undefined)?.text ?? "";
+                  const ans = clientChineseText(
+                    (ev.decision.after as { text?: string } | undefined)?.text,
+                    "应答内容暂时无法显示，请稍后再试。",
+                  );
                   return (
                     <AgentActionMessage
                       key={ev.event_id}
@@ -350,8 +351,8 @@ export default function P2() {
               {approvals.map((a) => (
                 <div key={a.approval_id} className={`rounded-msg border p-4 ${a.status === "pending" ? "border-warn/40 bg-warn/4" : "border-line bg-card"}`}>
                   <div className="mb-2 flex items-center gap-2">
-                    <span className={`text-h2 font-bold ${a.status === "pending" ? "text-warn" : "text-ink2"}`}>
-                      ◆ 待我审批 · {a.status === "pending" ? "待审查" : a.status === "approved" ? "已采纳" : a.status === "edited" ? "编辑后采纳" : a.status === "rejected" ? "已驳回" : "已过期"}
+                    <span className={`inline-flex items-center gap-1 text-h2 font-bold ${a.status === "pending" ? "text-warn" : "text-ink2"}`}>
+                      <Icon name="approval" size={15} />待我审批 · {a.status === "pending" ? "待审查" : a.status === "approved" ? "已采纳" : a.status === "edited" ? "编辑后采纳" : a.status === "rejected" ? "已驳回" : "已过期"}
                     </span>
                     <span className="font-mono text-body text-ink3">{shortId(a.approval_id)}</span>
                     {a.snapshot.rule_version && <span className="text-body text-holo">命中关联围栏</span>}
@@ -363,7 +364,7 @@ export default function P2() {
                     </div>
                   )}
                   {a.status === "pending" ? (
-                    <TriGestureBar canApprove={!readonly} onGesture={(g) => void gesture(a.approval_id, g)} />
+                    <TriGestureBar canApprove={canApprove} onGesture={(g) => void gesture(a.approval_id, g)} />
                   ) : (
                     <div className="text-body text-ink3">审批动作已写入事件账本，并用于校准协作偏好；重复提交不会重复生效。</div>
                   )}
@@ -373,8 +374,8 @@ export default function P2() {
               {/* 完成后态 p2_done：交付卡 + 决策链路时间轴；无对外变更明示「仅只读分析」（E3.7） */}
               {isDone && (
                 <div className="rounded-msg border border-go/40 bg-go/5 p-4">
-                  <div className="mb-1.5 text-h2 font-black text-go">✓ 交付完成 · 变更报告</div>
-                  {!hasWrite && <div className="mb-1.5 text-body text-warn">⚠ 本任务没有产生对外变更，仅完成了只读分析。</div>}
+                  <div className="mb-1.5 flex items-center gap-1.5 text-h2 font-black text-go"><Icon name="check" size={17} />交付完成 · 变更报告</div>
+                  {!hasWrite && <div className="mb-1.5 flex items-center gap-1.5 text-body text-warn"><Icon name="warning" size={14} />本任务没有产生对外变更，仅完成了只读分析。</div>}
                   <div className="text-body text-ink2">决策链路时间轴（共 {events.length} 条账本事件）：</div>
                   <div className="mt-1.5 space-y-1">
                     {events.map((ev) => (
@@ -382,7 +383,11 @@ export default function P2() {
                         <span className="text-holo">账本凭证 {shortId(ev.event_id)}</span>
                         <span>{actorText(ev.who.id)} · {actionText(ev.decision.action)}</span>
                         <span className={receiptOf(ev) === "synced" ? "text-go" : receiptOf(ev) === "failed" ? "text-alert" : "text-warn"}>
-                          {receiptOf(ev) === "synced" ? "✓" : receiptOf(ev) === "failed" ? "✗" : "⚠"}
+                          <Icon
+                            name={receiptOf(ev) === "synced" ? "check" : receiptOf(ev) === "failed" ? "error" : "warning"}
+                            label={receiptOf(ev) === "synced" ? "已生效" : receiptOf(ev) === "failed" ? "失败" : "未核实"}
+                            size={13}
+                          />
                         </span>
                       </div>
                     ))}
@@ -394,7 +399,7 @@ export default function P2() {
         </div>
 
         {/* P2E6 线程内追问（只读成员不显示输入栏 E2.6；沿用线程上下文 F3.6） */}
-        {!readonly && thread && (
+        {canDispatch && thread && (
           <div className="mt-4">
             <DispatchBar
               state={composer ? "typing" : "empty"}

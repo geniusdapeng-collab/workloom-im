@@ -4,6 +4,7 @@
  */
 
 import { versionText } from "../../lib/display";
+import { Icon } from "@workloom/ui";
 
 /** LevelBadge 等级徽章：等级数字 + 段位小字（全息青）
  *  主理人=圆形头像金描边；船员=方形头像+版本角标。段位阶梯：青铜→白银→黄金→铂金→星钻 */
@@ -54,7 +55,7 @@ export function AchievementBadge({ name, achievedAt }: { name: string; achievedA
         className="flex h-11 w-11 items-center justify-center border-2 border-gold/70 bg-gold/8 text-lg"
         style={{ clipPath: "polygon(50% 0, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%)" }}
       >
-        🏅
+        <Icon name="medal" size={24} />
       </div>
       <div>
         <div className="text-body font-bold text-goldhi">{name}</div>
@@ -126,7 +127,7 @@ export function EquipSlot({
       }`}
       style={{ clipPath: "polygon(50% 0, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%)" }}
     >
-      <span>{failed ? "✗" : filled ? "◆" : "◇"}</span>
+      <Icon name={failed ? "error" : filled ? "check" : "circle"} label={failed ? "校验失败" : filled ? "已装配" : "待装配"} size={15} />
       <span className="mt-0.5 px-1 text-center leading-tight">{label}</span>
     </div>
   );

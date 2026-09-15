@@ -134,6 +134,10 @@
           "查询工单"
         ]
       },
+      "inspection": {
+        "enabled": true,
+        "adapterId": "hotel.inspection-v1"
+      },
       "theme": {
         "brand": {}
       },
@@ -143,7 +147,7 @@
   },
   "integrity": {
     "algorithm": "sha256",
-    "digest": "12e281a5fb4fd5606ba0243c2e1fc7d90f542b31a97ecbbe463000cd99d23bb2",
+    "digest": "400aa0b8497bca2251517fcd2124a4f41072e4b66d8d062720300ceb6de6ce82",
     "assets": {
       "eval/questions.json": "23044b47e17985da056220cef131e27b6262dab53b036e3750c166d6d337a842",
       "feedback-enums.yml": "0b64759da7c6a529084b6f56fa4bbeb1527c03f665f3e1d460e0d06045d5b263",

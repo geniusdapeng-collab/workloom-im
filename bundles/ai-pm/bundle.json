@@ -70,6 +70,7 @@
       ],
       "evalQuestions": "eval/questions.json",
       "seeds": [
+        "seeds/profile.json",
         "seeds/requirements.json",
         "seeds/competitors.json",
         "seeds/metrics.json",
@@ -182,7 +183,7 @@
   },
   "integrity": {
     "algorithm": "sha256",
-    "digest": "da745876b9f66878563832fb92f78d0c24bf367a327d46734259169f7d44348a",
+    "digest": "a672cf5b3a41f9dd98881e0b8e50e3a224e705b4a7c0da4d79c55e03f6c110fd",
     "assets": {
       "eval/questions.json": "a204675c579639a33cece2b0a4a5ffa9e94686abcef26c86c1abe7d6c0bd08fb",
       "feedback-enums.yml": "fbba50157cda065db504eb48fbc95a2db8a7fdfb9719f910b82dd7945b5fe4f4",
@@ -215,6 +216,7 @@
       "seeds/kb.json": "2f0e788cfe2738a5478544d0eccf500fa56255e3513c37490b6fb2c722b5259f",
       "seeds/metrics.json": "70948478764dfb1e70ae7ffb81ee6f711d402310b59a030c644e0b7caa14ff85",
       "seeds/night-jobs.json": "ea48c6bde60efb89aa3eeaa168b8cc10529b1069f174c1e0a4139c7994662f55",
+      "seeds/profile.json": "6d5e0e546d84732ee057f5857cf56e2983efcf46b9affe69e87a2b4895844f7a",
       "seeds/prompts.json": "9798bdd5dfdf8164307ef78197cf8b3434c886d4a9af0defd2bbb620ebcaf093",
       "seeds/requirements.json": "7b3d38df4877a9c58af1b72d1073711c313281d22d0166a9ef25a8414f62528c",
       "service-front/client.json": "48ec6d249b12f02623caefed317b90e690968e4cb6f7c4cff696dd5818fa74e3",
