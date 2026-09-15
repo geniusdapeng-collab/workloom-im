@@ -7,7 +7,16 @@ import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { extractManagedSection, gitAuthEnv, mergeManagedSection, redact, repoUrl } from "./base-sync.mjs";
+import {
+  anchorNeedsSync,
+  extractManagedSection,
+  gitAuthEnv,
+  mergeKeepChildExtra,
+  mergeManagedSection,
+  redact,
+  registryCapabilityReadiness,
+  repoUrl,
+} from "./base-sync.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ENGINE = join(HERE, "base-sync.mjs");
@@ -215,6 +224,71 @@ test("认证不进入 URL，错误输出会脱敏", () => {
   assert.ok(!redact(`failed ${credentialSample} ${unsafeUrl}`, credentialSample).includes(credentialSample));
   const embeddedCredential = ["https://user:", "plain-secret", "@github.com"].join("");
   assert.throws(() => repoUrl(embeddedCredential, "owner/repo"), /\[REDACTED\]@github\.com/);
+});
+
+test("@workloom/ui 由稳定制品升级维护，锚点合并保留子仓精确版本", () => {
+  const basePackage = {
+    dependencies: { "@workloom/ui": "workspace:*", react: "19.2.0" },
+  };
+  const childPackage = {
+    dependencies: { "@workloom/ui": "1.2.3", react: "19.2.0", "industry-only": "1.0.0" },
+  };
+  const merged = mergeKeepChildExtra(basePackage, childPackage, ["dependencies"], ["@workloom/ui"]);
+  assert.equal(merged.dependencies["@workloom/ui"], "1.2.3");
+  assert.equal(merged.dependencies["industry-only"], "1.0.0");
+  assert.equal(anchorNeedsSync(basePackage, childPackage, ["dependencies"], ["@workloom/ui"]), false);
+  assert.equal(anchorNeedsSync(
+    basePackage,
+    { dependencies: { ...childPackage.dependencies, react: "18.0.0" } },
+    ["dependencies"],
+    ["@workloom/ui"],
+  ), true);
+});
+
+test("缺少 B 端移动客户端时只报告第一阶段迁移，绝不伪装三端合规", () => {
+  const root = mkdtempSync(join(tmpdir(), "workloom-registry-readiness-"));
+  try {
+    const capability = {
+      package: "@workloom/ui",
+      distribution: "stable-registry-upgrade-pr",
+      consumerGate: "scripts/verify-ui-consumer.mjs",
+      consumers: ["apps/web", "apps/webb", "apps/webc"],
+    };
+    for (const client of ["apps/web", "apps/webc"]) {
+      write(join(root, client, "package.json"), JSON.stringify({ dependencies: { "@workloom/ui": "1.2.3" } }));
+    }
+    const [missing] = registryCapabilityReadiness(root, { registryCapabilities: [capability] });
+    assert.deepEqual(missing.missingConsumers, ["apps/webb"]);
+    assert.equal(missing.phase, "phase-1-client-structure-required");
+    assert.equal(missing.compliance, "unverified");
+
+    write(join(root, "apps/webb/package.json"), JSON.stringify({ dependencies: { "@workloom/ui": "1.2.3" } }));
+    const [complete] = registryCapabilityReadiness(root, { registryCapabilities: [capability] });
+    assert.deepEqual(complete.missingConsumers, []);
+    assert.equal(complete.phase, "consumer-gate-required");
+    assert.equal(complete.compliance, "unverified");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("v5 scope 明确保护产品身份，并将三端应用壳交给稳定标签指纹分发", () => {
+  const scope = JSON.parse(readFileSync(join(REAL_BASE, "sync/base-scope.json"), "utf8"));
+  assert.equal(scope.version, 5);
+  assert.ok(scope.protectedChildAssets.files.includes("electron-builder.yml"));
+  assert.ok(scope.protectedChildAssets.files.includes("product.manifest.json"));
+  assert.ok(scope.exclude.includes("electron-builder.yml"));
+  assert.ok(!scope.include.includes("electron-builder.yml"));
+  assert.ok(scope.include.includes("packages/industry-contract/**"));
+  assert.ok(scope.exclude.includes("apps/server/src/industry/**"));
+  assert.ok(scope.exclude.includes("apps/server/src/service/adapters/**"));
+  assert.equal(scope.registryCapabilities[0].distribution, "stable-registry-upgrade-pr");
+  assert.equal(scope.clientFoundationCapability.distribution, "stable-tag-upgrade-pr");
+  assert.equal(scope.clientFoundationCapability.conflictPolicy, "previous-source-sha256-fail-close");
+  assert.ok(scope.exclude.includes("apps/web/**"));
+  assert.ok(scope.exclude.includes("apps/webb/**"));
+  assert.ok(scope.exclude.includes("apps/webc/**"));
+  assert.ok(!scope.include.includes("apps/web/src/lib/**"));
 });
 
 test("相同 base SHA 仍逐项验真；Tiger required assets 写根目录且 state 同提交迁移", () => {

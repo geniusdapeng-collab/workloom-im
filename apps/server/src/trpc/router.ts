@@ -9,11 +9,12 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
+import type pg from "pg";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { createHash } from "node:crypto";
 import { getAppPool, getGatewayPool, getOwnerPool } from "@workloom/db";
 import {
-  getCapabilities,
   getMember,
   listMembers,
   signDemoToken,
@@ -21,7 +22,18 @@ import {
 } from "@workloom/base/tenancy";
 import { gatewayAppend, gatewayAppendOnClient, MockEmbedder, upsertMemoryInTx } from "@workloom/base/workdata";
 import { makeReadableId } from "@workloom/shared";
-import { capabilityWriteProcedure, protectedProcedure, publicProcedure, router, scopeOf, writeProcedure } from "./context.js";
+import {
+  actionProcedure,
+  capabilityActionProcedure,
+  capabilityProcedure,
+  capabilityWriteProcedure,
+  protectedProcedure,
+  publicProcedure,
+  router,
+  scopeOf,
+  sessionProcedure,
+  writeProcedure,
+} from "./context.js";
 import {
   ApprovalError,
   batchApprove,
@@ -33,6 +45,11 @@ import { routeIntent, runAsk, runQuest } from "@workloom/runtime";
 import { LlmIntentClassifier, type IntentClassifier } from "@workloom/runtime";
 import { providerFromEnv, OpenAiCompatibleProvider } from "@workloom/base/model-router";
 import { routedLlmCall, resetLlmAssembly } from "../service/llm.js";
+import {
+  evaluateRealModeReadiness,
+  type ActivationGateResult,
+  type ExamBinding,
+} from "../service/onboarding-truth.js";
 import { creditsRouter, modelFeedbackRouter } from "./credits-router.js";
 import { overlayRouter } from "./overlay-router.js";
 import { accountsRouter } from "./accounts-router.js";
@@ -129,12 +146,36 @@ import {
 import { serviceRouter } from "../service/router.js";
 import { appendEventOn } from "../service/events.js";
 import {
+  advanceWizardDraftOn,
+  assignWizardDraft,
+  completeWizardDraft,
+  getWizardDraft,
+  replayWelcome,
+  saveWelcomeProgress,
+  saveWizardDraft,
+  welcomeProgress,
+  WELCOME_STEPS,
+} from "../service/onboarding-continuity.js";
+import {
+  bundledServiceFrontAvailable,
+  resolveServiceFrontPublication,
+} from "../service/service-front-publication.js";
+import { resolveWorkspaceActiveBundle } from "../service/active-bundle.js";
+import { resolveWorkspaceInspectionAdapter } from "../service/inspection-adapter.js";
+import {
+  AccessAuthorityError,
+  resolveAuthoritativeClientAccess,
+} from "../service/access-authority.js";
+import {
   buildEvolutionScorecard,
   decayMemories,
   disableMemory,
   editMemoryContent,
   getFeedbackEnums,
+  previewMemoryImpact,
+  reactivateMemory,
   recallMemoriesByMember,
+  restoreMemories,
   runMemoryMinerBeat,
 } from "@workloom/base/evolve";
 import { getMemorySources, searchMemories } from "@workloom/base/workdata";
@@ -163,7 +204,7 @@ const systemRouter = router({
  * 契约：首次安装开箱即为「全模拟运行态」（种子数据 + mock 模型），P0/工作台横幅常显提示；
  * 向导四步（自检 → 真实大模型 → 经营主体 → 启用真实模式）尽量自动化：
  *  - saveLlmConfig 真实试调通过才落盘（.env 四变量 + process.env + 清缓存，全链即时真实化）
- *  - activateRealMode 翻转 profiles.archive.dataMode（simulated→real），横幅熄灭
+ *  - activateRealMode 在服务端重新核验模型、主体、装配资产与考试绑定，通过才写入正式激活凭据
  * 全程五元事件留痕；API Key 只记掩码后 4 位（L6.2 同纪律）。
  */
 
@@ -198,7 +239,6 @@ function persistLlmEnv(cfg: { provider: string; baseUrl: string; apiKey: string;
   writeFileSync(file, lines.filter((l, i) => l !== "" || i < lines.length - 1).join("\n"));
   cachedLlmCall = undefined; // 复位装配缓存（见 llmCall()/intentClassifier()）
   cachedClassifier = undefined;
-  cachedIndustry = undefined;
   resetLlmAssembly(); // v3.0：模型池与行业策略缓存同步复位（写盘即全链生效免重启）
 }
 
@@ -214,6 +254,11 @@ function llmAssembly(): { provider: string; model: string; baseUrl: string; real
   };
 }
 
+/** 仅用于判断当前凭据是否仍是已实测版本；不回传、不进事件明文。 */
+function llmCredentialFingerprint(apiKey: string): string {
+  return createHash("sha256").update(`workloom-llm-credential/v1:${apiKey}`, "utf8").digest("hex");
+}
+
 /** 真实试调探针（落地向导「测试连接」：真实 round-trip 通过才允许保存） */
 async function probeLlm(cfg: { baseUrl: string; apiKey?: string; model: string }): Promise<{ reply: string; latencyMs: number }> {
   const provider = new OpenAiCompatibleProvider(cfg.model, { baseUrl: cfg.baseUrl, apiKey: cfg.apiKey || undefined });
@@ -226,7 +271,295 @@ async function probeLlm(cfg: { baseUrl: string; apiKey?: string; model: string }
   return { reply: res.text.trim().slice(0, 200), latencyMs: Date.now() - t0 };
 }
 
+interface OnboardingGateSnapshot {
+  persistedDataMode: "simulated" | "real";
+  llmVerified: boolean;
+  formalActivationRecorded: boolean;
+  business: { name: string; industry: string; note: string; configuredAt: string; source: string } | null;
+  workspace: { name: string; bundleId: string | null; isExample: boolean };
+  runtimeGate: ActivationGateResult;
+  gate: ActivationGateResult;
+}
+
+/**
+ * 在调用方事务内加载正式运行门禁事实。装配资产按台账 ID 精确核验，
+ * 不能用工作区里任意 ready 员工/active 围栏凑数。
+ */
+async function loadOnboardingGate(
+  client: pg.PoolClient,
+  workspaceId: string,
+  activationOwner: boolean,
+): Promise<OnboardingGateSnapshot> {
+  const profileRows = await client.query<{ archive: Record<string, unknown> }>(
+    `SELECT archive FROM profiles WHERE workspace_id=$1`, [workspaceId],
+  );
+  const workspaceRows = await client.query<{ name: string; bundle_id: string | null; is_example: boolean }>(
+    `SELECT name, bundle_id, is_example FROM workspaces WHERE id=$1`, [workspaceId],
+  );
+  const profile = profileRows.rows[0];
+  const workspace = workspaceRows.rows[0];
+  const archive = profile?.archive ?? {};
+  const rawBusiness = archive.business;
+  const business = rawBusiness && typeof rawBusiness === "object"
+    ? rawBusiness as { name?: string; industry?: string; note?: string; configured_at?: string; source?: string }
+    : null;
+  const currentLlm = llmAssembly();
+  const rawLlmVerification = archive.llmVerification;
+  const llmVerification = rawLlmVerification && typeof rawLlmVerification === "object"
+    ? rawLlmVerification as { provider?: string; baseUrl?: string; model?: string; credentialFingerprint?: string; verified?: boolean }
+    : null;
+  const llmVerified = Boolean(
+    currentLlm.real
+    && llmVerification?.verified
+    && llmVerification.provider === currentLlm.provider
+    && llmVerification.baseUrl === currentLlm.baseUrl
+    && llmVerification.model === currentLlm.model
+    && llmVerification.credentialFingerprint === llmCredentialFingerprint(process.env.LLM_API_KEY ?? ""),
+  );
+  const rawFormalActivation = archive.realModeActivation;
+  const formalActivationRecorded = Boolean(
+    rawFormalActivation
+    && typeof rawFormalActivation === "object"
+    && (rawFormalActivation as { gateVersion?: number }).gateVersion === 1,
+  );
+
+  const installRows = await client.query<{
+    id: string; bundle_id: string; assets: {
+      preset_ids?: string[];
+      fence_rule_ids?: string[];
+      skill_ids?: string[];
+      candidate?: { agents?: Array<{ id: string; skills?: string[]; meta?: Record<string, unknown> }> };
+    };
+    status: string; draft_id: string | null; assembly_version: number | null;
+    assembly_hash: string | null; qualified_exam_id: string | null;
+  }>(
+    `SELECT id, bundle_id, assets, status, draft_id, assembly_version, assembly_hash, qualified_exam_id
+     FROM bundle_installs WHERE workspace_id=$1 AND status='active'
+     ORDER BY COALESCE(activated_at, installed_at) DESC`,
+    [workspaceId],
+  );
+  const install = installRows.rows[0];
+  const exactlyOneActiveInstall = installRows.rows.length === 1;
+  const presetIds = [...new Set(install?.assets?.preset_ids ?? [])];
+  const fenceIds = [...new Set(install?.assets?.fence_rule_ids ?? [])];
+  const skillIds = [...new Set(install?.assets?.skill_ids ?? [])];
+  const readyAgentRows = presetIds.length === 0 ? [] : (await client.query<{
+    id: string; skills: string[]; meta: Record<string, unknown>;
+  }>(
+    `SELECT id, skills, meta FROM agents
+     WHERE workspace_id=$1 AND id=ANY($2::text[]) AND status='ready'`,
+    [workspaceId, presetIds],
+  )).rows;
+  const readyAgents = readyAgentRows.length;
+  const activeFenceRows = fenceIds.length === 0 ? [] : (await client.query<{ id: string; created_by: string }>(
+    `SELECT id, created_by FROM fence_rules
+     WHERE workspace_id=$1 AND id=ANY($2::text[]) AND status='active'`,
+    [workspaceId, fenceIds],
+  )).rows;
+  const activeFences = activeFenceRows.length;
+  let fenceResponsibilityReady = activeFenceRows.length === fenceIds.length
+    && activeFenceRows.every((fence) => Boolean(fence.created_by?.trim()));
+  const installedSkills = skillIds.length === 0 ? 0 : Number((await client.query<{ n: string }>(
+    `SELECT count(*)::text AS n FROM skill_installs
+     WHERE workspace_id=$1 AND skill_id=ANY($2::text[])`,
+    [workspaceId, skillIds],
+  )).rows[0]?.n ?? 0);
+  const candidateAgents = install?.assets?.candidate?.agents ?? [];
+  const actualAgentById = new Map(readyAgentRows.map((agent) => [agent.id, agent]));
+  let pendingCapabilities = 0;
+  const capabilityClaimsSafe = install?.bundle_id !== "custom" || (
+    candidateAgents.length === presetIds.length
+    && candidateAgents.every((expected) => {
+      const actual = actualAgentById.get(expected.id);
+      const actualSkills = Array.isArray(actual?.skills) ? actual.skills : [];
+      const actualTools = Array.isArray(actual?.meta?.tools) ? actual.meta.tools : [];
+      const declarations = Array.isArray(expected.meta?.capability_declarations)
+        ? expected.meta.capability_declarations as Array<{ status?: unknown }>
+        : [];
+      pendingCapabilities += declarations.filter((item) => item?.status === "pending_approval").length;
+      return Boolean(actual)
+        && JSON.stringify(actualSkills) === JSON.stringify(expected.skills ?? [])
+        && JSON.stringify(actualTools) === JSON.stringify(Array.isArray(expected.meta?.tools) ? expected.meta.tools : [])
+        && declarations.every((item) => item?.status === "pending_approval");
+    })
+  );
+
+  let customAssembly: Parameters<typeof evaluateRealModeReadiness>[0]["customAssembly"] = {
+    required: install?.bundle_id === "custom",
+  };
+  if (install?.bundle_id === "custom") {
+    const draftRows = install.draft_id ? await client.query<{ status: string; confirmed_by: string | null }>(
+      `SELECT status, confirmed_by FROM wizard_staffing_drafts WHERE workspace_id=$1 AND id=$2`,
+      [workspaceId, install.draft_id],
+    ) : null;
+    const examRows = install.qualified_exam_id ? await client.query<{
+      id: string; status: string; verdict: string | null; assessment_kind: string;
+      target_install_id: string | null; target_draft_id: string | null;
+      target_version: number | null; target_hash: string | null;
+    }>(
+      `SELECT id, status, verdict, assessment_kind,
+              target_install_id, target_draft_id, target_version, target_hash
+       FROM eval_exams WHERE workspace_id=$1 AND id=$2`,
+      [workspaceId, install.qualified_exam_id],
+    ) : null;
+    const exam = examRows?.rows[0];
+    const candidateEvidence = exam ? await client.query<{ agent_id: string; passed: boolean; red_line_hit: boolean }>(
+      `SELECT agent_id, passed, red_line_hit FROM eval_candidate_results
+       WHERE workspace_id=$1 AND exam_id=$2 AND install_id=$3 AND draft_id=$4
+         AND assembly_version=$5 AND assembly_hash=$6
+       ORDER BY agent_id`,
+      [workspaceId, exam.id, install.id, install.draft_id, install.assembly_version, install.assembly_hash],
+    ) : null;
+    const candidateRows = candidateEvidence?.rows ?? [];
+    const candidateIdsMatch = JSON.stringify(candidateRows.map((row) => row.agent_id))
+      === JSON.stringify([...presetIds].sort());
+    const installBinding: ExamBinding | null = install.draft_id && install.assembly_version !== null && install.assembly_hash
+      ? { installId: install.id, draftId: install.draft_id, version: install.assembly_version, hash: install.assembly_hash }
+      : null;
+    const examBinding: ExamBinding | null = exam?.target_install_id && exam.target_draft_id
+      && exam.target_version !== null && exam.target_hash
+      ? { installId: exam.target_install_id, draftId: exam.target_draft_id, version: exam.target_version, hash: exam.target_hash }
+      : null;
+    const confirmedBy = draftRows?.rows[0]?.confirmed_by?.trim() ?? "";
+    fenceResponsibilityReady = fenceResponsibilityReady
+      && Boolean(confirmedBy)
+      && activeFenceRows.every((fence) => fence.created_by === confirmedBy);
+    customAssembly = {
+      required: true,
+      installStatus: install.status,
+      draftStatus: draftRows?.rows[0]?.status ?? null,
+      examStatus: exam?.status ?? null,
+      examVerdict: exam?.verdict ?? null,
+      examAssessmentKind: exam?.assessment_kind ?? null,
+      candidateExpected: presetIds.length,
+      candidateTotal: candidateRows.length,
+      candidatePassed: candidateIdsMatch
+        ? candidateRows.filter((row) => row.passed && !row.red_line_hit).length
+        : -1,
+      installBinding,
+      examBinding,
+    };
+  }
+
+  const readinessFacts = {
+    llmReal: llmVerified,
+    workspaceIsExample: Boolean(workspace?.is_example),
+    business: business ? {
+      name: business.name,
+      industry: business.industry,
+      configuredAt: business.configured_at,
+      source: business.source,
+    } : null,
+    activeInstall: exactlyOneActiveInstall,
+    expectedAgents: presetIds.length,
+    readyInstalledAgents: readyAgents,
+    expectedFences: fenceIds.length,
+    activeInstalledFences: activeFences,
+    fenceResponsibilityReady,
+    expectedSkills: skillIds.length,
+    installedSkills,
+    capabilityClaimsSafe,
+    pendingCapabilities,
+    customAssembly,
+  };
+  return {
+    persistedDataMode: archive.dataMode === "real" ? "real" : "simulated",
+    llmVerified,
+    formalActivationRecorded,
+    business: business ? {
+      name: business.name ?? "",
+      industry: business.industry ?? "",
+      note: business.note ?? "",
+      configuredAt: business.configured_at ?? "",
+      source: business.source ?? "",
+    } : null,
+    workspace: {
+      name: workspace?.name ?? "",
+      bundleId: workspace?.bundle_id ?? null,
+      isExample: Boolean(workspace?.is_example),
+    },
+    // runtimeGate 判定工作区是否仍可被称为“正式”；不因只读/经理查看而降级。
+    runtimeGate: evaluateRealModeReadiness({ ...readinessFacts, activationOwner: true }),
+    // gate 是当前操作者的激活资格，非 owner 会看到明确阻断项。
+    gate: evaluateRealModeReadiness({ ...readinessFacts, activationOwner }),
+  };
+}
+
 const onboardingRouter = router({
+  /** 首次欢迎按账号/角色/工作区持久化；只读成员也只能写自己的欢迎进度。 */
+  welcomeStatus: protectedProcedure.query(async ({ ctx }) => ({
+    ...(await welcomeProgress(ctx.identity.workspaceId, {
+      memberId: ctx.identity.memberId,
+      memberNo: ctx.identity.memberNo,
+      role: ctx.identity.role,
+    })),
+    role: ctx.identity.role,
+  })),
+
+  saveWelcomeProgress: protectedProcedure
+    .input(z.object({
+      status: z.enum(["in_progress", "paused", "completed"]),
+      currentStep: z.enum(WELCOME_STEPS),
+    }))
+    .mutation(async ({ ctx, input }) => saveWelcomeProgress(ctx.identity.workspaceId, {
+      memberId: ctx.identity.memberId,
+      memberNo: ctx.identity.memberNo,
+      role: ctx.identity.role,
+    }, input)),
+
+  replayWelcome: protectedProcedure.mutation(async ({ ctx }) => replayWelcome(ctx.identity.workspaceId, {
+    memberId: ctx.identity.memberId,
+    memberNo: ctx.identity.memberNo,
+    role: ctx.identity.role,
+  })),
+
+  /** 标准落地向导草稿：显式版本号防多人覆盖，payload 白名单不接收密钥和文档正文。 */
+  wizardDraft: protectedProcedure.query(({ ctx }) => getWizardDraft(ctx.identity.workspaceId)),
+
+  saveWizardDraft: writeProcedure
+    .input(z.object({
+      expectedVersion: z.number().int().min(0),
+      currentStep: z.number().int().min(0).max(4),
+      payload: z.object({
+        provider: z.string().max(40).optional(),
+        baseUrl: z.string().max(200).optional(),
+        model: z.string().max(80).optional(),
+        businessName: z.string().max(60).optional(),
+        industry: z.string().max(40).optional(),
+        note: z.string().max(300).optional(),
+        siteUrl: z.string().max(500).optional(),
+        documentTitle: z.string().max(120).optional(),
+        testQuestion: z.string().max(500).optional(),
+      }).strict(),
+    }))
+    .mutation(({ ctx, input }) => saveWizardDraft(ctx.identity.workspaceId, {
+      memberId: ctx.identity.memberId,
+      memberNo: ctx.identity.memberNo,
+      role: ctx.identity.role,
+    }, input)),
+
+  assignWizardDraft: writeProcedure
+    .input(z.object({ memberId: z.string().min(1), expectedVersion: z.number().int().min(1) }))
+    .mutation(({ ctx, input }) => assignWizardDraft(ctx.identity.workspaceId, {
+      memberId: ctx.identity.memberId,
+      memberNo: ctx.identity.memberNo,
+      role: ctx.identity.role,
+    }, input)),
+
+  completeWizardDraft: writeProcedure
+    .input(z.object({ expectedVersion: z.number().int().min(1) }))
+    .mutation(({ ctx, input }) => completeWizardDraft(ctx.identity.workspaceId, {
+      memberId: ctx.identity.memberId,
+      memberNo: ctx.identity.memberNo,
+      role: ctx.identity.role,
+    }, input.expectedVersion)),
+
+  /** C 端发布结果必须来自部署环境、工作区路由和渠道接入事实。 */
+  serviceFrontPublication: protectedProcedure.query(({ ctx }) => resolveServiceFrontPublication({
+    workspaceId: ctx.identity.workspaceId,
+    bundledClientAvailable: bundledServiceFrontAvailable(),
+  })),
+
   /** 运行态总览（P0 横幅/落地向导同一事实源）：数据模式 + LLM 装配 + 工作区规模 */
   status: protectedProcedure.query(async ({ ctx }) => {
     const scope = scopeOf(ctx.identity);
@@ -236,12 +569,7 @@ const onboardingRouter = router({
       await client.query("BEGIN");
       await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
       await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
-      const prof = await client.query<{ data_mode: string | null }>(
-        `SELECT archive->>'dataMode' AS data_mode FROM profiles WHERE workspace_id=$1`,
-        [scope.workspaceId],
-      );
-      const ws = await client.query<{ name: string; bundle_id: string | null; is_example: boolean }>(
-        `SELECT name, bundle_id, is_example FROM workspaces WHERE id=$1`, [scope.workspaceId]);
+      const gateSnapshot = await loadOnboardingGate(client, scope.workspaceId, ctx.identity.role === "owner");
       const n = async (sql: string) => Number((await client.query<{ n: string }>(sql, [scope.workspaceId])).rows[0]?.n ?? 0);
       const [events, members, agents, memories] = await Promise.all([
         n(`SELECT count(*)::text AS n FROM biz_events WHERE workspace_id=$1`),
@@ -251,13 +579,19 @@ const onboardingRouter = router({
       ]);
       await client.query("COMMIT");
       return {
-        // 缺省按模拟态处理（种子库/历史库均无标记时横幅常显，宁可多提示不可漏提示）
-        dataMode: (prof.rows[0]?.data_mode ?? "simulated") as "simulated" | "real",
-        llm: llmAssembly(),
-        workspace: { name: ws.rows[0]?.name ?? "", events, members, agents, memories },
+        // 旧库即使曾被直接写成 real，只要当前事实未过门禁，客户端仍按 simulated 展示。
+        dataMode: (gateSnapshot.persistedDataMode === "real"
+          && gateSnapshot.formalActivationRecorded
+          && gateSnapshot.runtimeGate.canActivate ? "real" : "simulated") as "simulated" | "real",
+        persistedDataMode: gateSnapshot.persistedDataMode,
+        formalActivationRecorded: gateSnapshot.formalActivationRecorded,
+        activationGate: gateSnapshot.gate,
+        business: gateSnapshot.business,
+        llm: { ...llmAssembly(), real: gateSnapshot.llmVerified },
+        workspace: { name: gateSnapshot.workspace.name, events, members, agents, memories },
         workspaceId: scope.workspaceId,
         // V4 §2 示例明示：示例包装配标记（SimBanner 银带语义事实源）
-        bundle: { id: ws.rows[0]?.bundle_id ?? null, isExample: !!ws.rows[0]?.is_example },
+        bundle: { id: gateSnapshot.workspace.bundleId, isExample: gateSnapshot.workspace.isExample },
       };
     } catch (err) {
       await client.query("ROLLBACK").catch(() => undefined);
@@ -268,7 +602,7 @@ const onboardingRouter = router({
   }),
 
   /** 第①步：真实大模型「测试连接」（真实 round-trip；不落盘、不留痕 key） */
-  testLlm: writeProcedure
+  testLlm: actionProcedure("workspace.configure")
     .input(z.object({
       baseUrl: z.string().url().min(1),
       apiKey: z.string().max(200).default(""),
@@ -284,7 +618,7 @@ const onboardingRouter = router({
     }),
 
   /** 第①步保存：真实试调通过 → 写 .env 四变量 + 即时生效 + 事件留痕（key 只记掩码；provider=mock 为还原操作，免实测） */
-  saveLlmConfig: writeProcedure
+  saveLlmConfig: actionProcedure("workspace.configure")
     .input(z.object({
       provider: z.string().min(1).max(40),
       baseUrl: z.string().max(200).default(""),
@@ -310,6 +644,20 @@ const onboardingRouter = router({
         await llmClient.query("BEGIN");
         await llmClient.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
         await llmClient.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+        await llmClient.query(
+          `UPDATE profiles
+           SET archive=jsonb_set(archive, '{llmVerification}', $2::jsonb, true), updated_at=now()
+           WHERE workspace_id=$1`,
+          [scope.workspaceId, JSON.stringify({
+            provider: input.provider,
+            baseUrl: input.baseUrl,
+            model: input.model,
+            credentialFingerprint: llmCredentialFingerprint(input.apiKey),
+            verified: input.provider !== "mock",
+            verifiedAt: input.provider !== "mock" ? new Date().toISOString() : null,
+            verifiedBy: input.provider !== "mock" ? ctx.identity.memberNo : null,
+          })],
+        );
         await gatewayAppendOnClient(llmClient, {
           ...scope, actor: { id: ctx.identity.memberNo, type: "human" }, sessionId: `onboarding-${scope.workspaceId}`,
         }, {
@@ -339,7 +687,7 @@ const onboardingRouter = router({
     }),
 
   /** 第②步：经营主体信息（工作区名 + 行业 + 简介 → 档案；事件留痕） */
-  setupWorkspace: writeProcedure
+  setupWorkspace: actionProcedure("workspace.configure")
     .input(z.object({
       displayName: z.string().min(1).max(60),
       industry: z.string().min(1).max(40),
@@ -353,10 +701,21 @@ const onboardingRouter = router({
         await client.query("BEGIN");
         await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
         await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
-        await client.query(`UPDATE workspaces SET name=$2, industry=$3 WHERE id=$1`, [scope.workspaceId, input.displayName, input.industry]);
+        // 用户显式保存真实经营主体后退出“行业示例版”身份；在正式门禁通过前仍保持 simulated 数据模式。
+        await client.query(
+          `UPDATE workspaces SET name=$2, industry=$3, is_example=false WHERE id=$1`,
+          [scope.workspaceId, input.displayName, input.industry],
+        );
         await client.query(
           `UPDATE profiles SET archive = jsonb_set(archive, '{business}', $2::jsonb), industry=$3, updated_at=now() WHERE workspace_id=$1`,
-          [scope.workspaceId, JSON.stringify({ name: input.displayName, note: input.note, onboarded_at: new Date().toISOString() }), input.industry],
+          [scope.workspaceId, JSON.stringify({
+            name: input.displayName,
+            industry: input.industry,
+            note: input.note,
+            configured_at: new Date().toISOString(),
+            configured_by: ctx.identity.memberNo,
+            source: "user",
+          }), input.industry],
         );
         // D16（#1/A）：档案写与事件留痕同一事务同一 COMMIT
         await gatewayAppendOnClient(client, {
@@ -368,7 +727,7 @@ const onboardingRouter = router({
           decision: {
             action: "onboarding.workspace_profile",
             params: { name: input.displayName, industry: input.industry, note: input.note },
-            after: {},
+            after: { name: input.displayName, industry: input.industry, is_example: false },
             basis: ["落地向导：经营主体信息写入一店一档（archive.business）"],
           },
           rule_impact: [],
@@ -384,8 +743,11 @@ const onboardingRouter = router({
       return { ok: true };
     }),
 
-  /** 第③步：启用真实模式（dataMode simulated→real；横幅熄灭；事件留痕。模拟期事件保留为「演示期」历史，可经 reset.sh 整库重建清空） */
-  activateRealMode: writeProcedure.mutation(async ({ ctx }) => {
+  /** 第③步：服务端全量门禁通过后才启用真实模式；不能把 mock/示例/缺资产状态改名为 real。 */
+  activateRealMode: actionProcedure("workspace.configure").mutation(async ({ ctx }) => {
+    if (ctx.identity.role !== "owner") {
+      throw new TRPCError({ code: "FORBIDDEN", message: "只有工作区所有者可以启用正式经营模式" });
+    }
     const scope = scopeOf(ctx.identity);
     const app = getAppPool();
     const client = await app.connect();
@@ -393,10 +755,26 @@ const onboardingRouter = router({
       await client.query("BEGIN");
       await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
       await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+      await client.query(`SELECT id FROM workspaces WHERE id=$1 FOR UPDATE`, [scope.workspaceId]);
+      await client.query(`SELECT workspace_id FROM profiles WHERE workspace_id=$1 FOR UPDATE`, [scope.workspaceId]);
+      const gateSnapshot = await loadOnboardingGate(client, scope.workspaceId, true);
+      if (!gateSnapshot.gate.canActivate) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: `尚不能启用真实经营模式：${gateSnapshot.gate.blockers.join("；")}`,
+        });
+      }
       await client.query(
-        `UPDATE profiles SET archive = jsonb_set(archive, '{dataMode}', '"real"'::jsonb), updated_at=now() WHERE workspace_id=$1`,
-        [scope.workspaceId],
+        `UPDATE profiles
+         SET archive=jsonb_set(
+               jsonb_set(archive, '{dataMode}', '"real"'::jsonb),
+               '{realModeActivation}', $2::jsonb, true
+             ),
+             updated_at=now()
+         WHERE workspace_id=$1`,
+        [scope.workspaceId, JSON.stringify({ gateVersion: 1, activatedAt: new Date().toISOString(), activatedBy: ctx.identity.memberNo })],
       );
+      await advanceWizardDraftOn(client, scope.workspaceId, ctx.identity.memberId);
       // D16（#1/A）：dataMode 翻转与事件留痕同一事务同一 COMMIT
       await gatewayAppendOnClient(client, {
         ...scope, actor: { id: ctx.identity.memberNo, type: "human" }, sessionId: `onboarding-${scope.workspaceId}`,
@@ -404,12 +782,12 @@ const onboardingRouter = router({
         who: { type: "human", id: ctx.identity.memberNo },
         context: { tenant_id: scope.tenantId, workspace_id: scope.workspaceId, time: new Date().toISOString() },
         object: { type: "workspace", id: scope.workspaceId },
-        decision: {
-          action: "onboarding.real_mode_activated",
-          params: { from: "simulated", to: "real" },
-          after: { dataMode: "real" },
-          basis: ["落地向导收官：切换真实经营模式，模拟数据横幅熄灭；此后经营动作即真实数据"],
-        },
+          decision: {
+            action: "onboarding.real_mode_activated",
+            params: { from: "simulated", to: "real" },
+            after: { dataMode: "real" },
+            basis: ["落地向导服务端门禁全绿：真实模型、用户经营主体、非示例装配、装配内员工与围栏均已核验；定制装配另须同版本同哈希考试通过"],
+          },
         rule_impact: [],
         model_trace: { model_id: "human-operator", tier: "standard" },
       });
@@ -455,7 +833,7 @@ const authRouter = router({
     }),
   /** 版本切换演示（F12 权限态：社区版/Pro/Teams/VPC 实切，F7.2 能力矩阵即时生效）
    *  owner 专属；写 tenants.plan（登录引导例外点同口径走 owner 池）+ 留痕 plan.switch（G8）+ 重签 JWT */
-  setPlan: protectedProcedure
+  setPlan: actionProcedure("tenant.plan.manage")
     .input(z.object({ plan: z.enum(PLAN_TIERS) }))
     .mutation(async ({ ctx, input }) => {
       if (ctx.identity.role !== "owner") {
@@ -497,19 +875,50 @@ const authRouter = router({
     }),
 });
 
-/** members router：me（角色+版本能力下发，F5.6 三端一致的数据源）/ list */
+function accessRethrow(error: unknown): never {
+  if (error instanceof AccessAuthorityError) {
+    throw new TRPCError({
+      code: error.code === "SESSION_INVALID" ? "UNAUTHORIZED"
+        : error.code === "TARGET_REQUIRED" ? "BAD_REQUEST"
+          : "FORBIDDEN",
+      message: error.message,
+    });
+  }
+  throw error;
+}
+
+/**
+ * 三端访问权威接口：成员与伙伴都从服务端实时事实解析；伙伴未选区时由服务端
+ * 从实时有效授权中选择默认范围，绝不信任 JWT 授权快照或客户端缓存。
+ * 导航、深链与动作只能消费这一份 payload，不能在客户端按“已登录”补权限。
+ */
+const accessRouter = router({
+  me: sessionProcedure
+    .input(z.object({ tenantId: z.string().min(1), workspaceId: z.string().min(1) }).optional())
+    .query(async ({ ctx, input }) => {
+      try {
+        return await resolveAuthoritativeClientAccess(ctx.session, input);
+      } catch (error) {
+        accessRethrow(error);
+      }
+    }),
+});
+
+/** members router：me 保留兼容字段，并附同一份服务端权威访问载荷。 */
 const membersRouter = router({
-  me: protectedProcedure.query(({ ctx }) => {
-    return {
-      identity: ctx.identity,
-      capabilities: getCapabilities(ctx.identity.plan),
-    };
+  me: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      const access = await resolveAuthoritativeClientAccess(ctx.identity);
+      return { identity: ctx.identity, capabilities: access.capabilities, access };
+    } catch (error) {
+      accessRethrow(error);
+    }
   }),
   list: protectedProcedure.query(async ({ ctx }) => {
     return listMembers(getAppPool(), scopeOf(ctx.identity));
   }),
   /** F-NAME2：数字员工别名设置（显示层第三层；留痕上链，改别名零数据迁移） */
-  updateAlias: writeProcedure
+  updateAlias: actionProcedure("agent.manage")
     .input(z.object({
       memberNo: z.string().min(1),
       alias: z.string().max(12).nullable(),          // null/空 = 清除别名回岗位名
@@ -559,6 +968,61 @@ const membersRouter = router({
     }),
 });
 
+interface RunnableAgent {
+  id: string;
+  presetKey: string;
+}
+
+/**
+ * 运行员工只能从当前工作区已装配且 ready 的班组中解析。调用方可传稳定 preset_key
+ * 或已落在线程上的 agent id；缺省优先 Bundle 声明的 coordinator，再按稳定顺序选择。
+ * 基座不内置任何行业员工名。
+ */
+async function runnableAgentOn(
+  client: pg.PoolClient,
+  workspaceId: string,
+  requested?: string | null,
+): Promise<RunnableAgent> {
+  const result = await client.query<{ id: string; preset_key: string }>(
+    `SELECT id, preset_key FROM agents
+     WHERE workspace_id=$1 AND status='ready'
+       AND ($2::text IS NULL OR preset_key=$2 OR id=$2)
+     ORDER BY CASE WHEN kind='coordinator' THEN 0 ELSE 1 END,
+              CASE WHEN readonly=false THEN 0 ELSE 1 END,
+              preset_key
+     LIMIT 1`,
+    [workspaceId, requested ?? null],
+  );
+  const row = result.rows[0];
+  if (!row) {
+    throw new TRPCError({
+      code: requested ? "BAD_REQUEST" : "PRECONDITION_FAILED",
+      message: requested ? "所选数字员工当前不可运行，请重新选择" : "当前行业包没有可运行的数字员工，请先完成装配检查",
+    });
+  }
+  return { id: row.id, presetKey: row.preset_key };
+}
+
+async function resolveRunnableAgent(
+  scope: { tenantId: string; workspaceId: string },
+  requested?: string | null,
+): Promise<RunnableAgent> {
+  const client = await getAppPool().connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+    const agent = await runnableAgentOn(client, scope.workspaceId, requested);
+    await client.query("COMMIT");
+    return agent;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 /** threads router：list（L7.1 越权返回空）/ dispatch（Quest 接口；H-10 越版 403+留痕） */
 const threadsRouter = router({
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -586,11 +1050,11 @@ const threadsRouter = router({
   }),
 
   /** Quest 派遣入口（B8：意图路由→含糊反问/建档；L3.1 并发上限；G8 留痕） */
-  dispatch: capabilityWriteProcedure("quest")
+  dispatch: capabilityActionProcedure("quest", "task.dispatch")
     .input(
       z.object({
         title: z.string().min(1).max(500), // F3.1：≤500 字
-        presetKey: z.string().default("pricing-agent"),
+        presetKey: z.string().min(1).optional(),
         runImmediately: z.boolean().default(false),
       }),
     )
@@ -605,11 +1069,13 @@ const threadsRouter = router({
       const app = getAppPool();
       const client = await app.connect();
       let threadId: string;
+      let selectedAgent: RunnableAgent;
       try {
         // 事务级 RLS 上下文必须在显式事务内设置：autocommit 下 set_config(...,true) 语句结束即失效
         await client.query("BEGIN");
         await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
         await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+        selectedAgent = await runnableAgentOn(client, scope.workspaceId, input.presetKey);
         // L3.1：单工作区并发 ≤10，超出排队且可见（须在 RLS 上下文内统计，否则恒 0 行 fail-open）
         const conc = await client.query<{ c: string }>(
           `SELECT count(*) AS c FROM threads WHERE workspace_id=$1 AND status IN ('queued','running')`,
@@ -628,9 +1094,9 @@ const threadsRouter = router({
         );
         threadId = makeReadableId("T", Number(max.rows[0]?.n ?? 100) + 1); // bigint 驱动返回 string，必须 Number() 防拼接（D29 教训）
         await client.query(
-          `INSERT INTO threads (id, tenant_id, workspace_id, title, mode, status, created_by)
-           VALUES ($1,$2,$3,$4,$5,'queued',$6)`,
-          [threadId, scope.tenantId, scope.workspaceId, input.title, intent.mode, ctx.identity.memberNo],
+          `INSERT INTO threads (id, tenant_id, workspace_id, title, mode, status, created_by, agent_id)
+           VALUES ($1,$2,$3,$4,$5,'queued',$6,$7)`,
+          [threadId, scope.tenantId, scope.workspaceId, input.title, intent.mode, ctx.identity.memberNo, selectedAgent.id],
         );
         // D16（#1/A）：建线程与派遣事件同一事务（G8 留痕不再独立于状态）
         await gatewayAppendOnClient(client, {
@@ -656,13 +1122,13 @@ const threadsRouter = router({
       // ask 问询：即时应答（B8——取数为真、模型可插拔；不依赖 runImmediately 按钮）
       if (intent.mode === "ask") {
         const ra = await runAsk(getAppPool(), getGatewayPool(), scope, {
-          threadId, goal: input.title, presetKey: "morning-briefing", llmCall: llmCall("ask-synthesize", scope),
+          threadId, goal: input.title, presetKey: selectedAgent!.presetKey, llmCall: llmCall("ask-synthesize", scope),
         });
         return { kind: "routed" as const, mode: intent.mode, via: intent.via, threadId, status: ra.status, answer: ra.answer };
       }
       if (input.runImmediately && intent.mode === "quest") {
         const r = await runQuest(app, getGatewayPool(), scope, {
-          threadId, goal: input.title, presetKey: input.presetKey, llmCall: llmCall("quest-plan", scope),
+          threadId, goal: input.title, presetKey: selectedAgent!.presetKey, llmCall: llmCall("quest-plan", scope),
         });
         return { kind: "routed" as const, mode: intent.mode, via: intent.via, threadId, status: r.status, stepsDone: r.stepsDone, stepsTotal: r.stepsTotal };
       }
@@ -723,17 +1189,20 @@ const threadsRouter = router({
     }),
 
   /** 运行/续跑线程（replay 断点续跑幂等，E3.3/H-5；按线程模式分流：ask 应答 / agent 逐步确认 / quest 自主执行） */
-  run: capabilityWriteProcedure("quest")
-    .input(z.object({ threadId: z.string(), goal: z.string(), presetKey: z.string().default("pricing-agent") }))
+  run: capabilityActionProcedure("quest", "task.dispatch")
+    .input(z.object({ threadId: z.string(), goal: z.string(), presetKey: z.string().min(1).optional() }))
     .mutation(async ({ ctx, input }) => {
       const scope = scopeOf(ctx.identity);
       const app = getAppPool();
       const client = await app.connect();
       let mode: "ask" | "agent" | "quest" = "quest";
+      let selectedAgent: RunnableAgent;
       try {
         await client.query("BEGIN");
         await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-        const t = await client.query<{ mode: string }>(`SELECT mode FROM threads WHERE id=$1 AND workspace_id=$2`, [input.threadId, scope.workspaceId]);
+        const t = await client.query<{ mode: string; agent_id: string | null }>(`SELECT mode, agent_id FROM threads WHERE id=$1 AND workspace_id=$2`, [input.threadId, scope.workspaceId]);
+        if (!t.rows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "任务不存在或无权访问" });
+        selectedAgent = await runnableAgentOn(client, scope.workspaceId, input.presetKey ?? t.rows[0].agent_id);
         await client.query("COMMIT");
         if (t.rows[0]?.mode === "ask" || t.rows[0]?.mode === "agent") mode = t.rows[0].mode;
       } catch (err) {
@@ -743,10 +1212,10 @@ const threadsRouter = router({
         client.release();
       }
       if (mode === "ask") {
-        return runAsk(app, getGatewayPool(), scope, { threadId: input.threadId, goal: input.goal, presetKey: input.presetKey, llmCall: llmCall("ask-synthesize", scope) });
+        return runAsk(app, getGatewayPool(), scope, { threadId: input.threadId, goal: input.goal, presetKey: selectedAgent!.presetKey, llmCall: llmCall("ask-synthesize", scope) });
       }
       return runQuest(app, getGatewayPool(), scope, {
-        threadId: input.threadId, goal: input.goal, presetKey: input.presetKey, mode, llmCall: llmCall("quest-plan", scope),
+        threadId: input.threadId, goal: input.goal, presetKey: selectedAgent!.presetKey, mode, llmCall: llmCall("quest-plan", scope),
       });
     }),
 });
@@ -810,7 +1279,7 @@ const approvalsRouter = router({
       return listQueue(getAppPool(), scopeOf(ctx.identity), { status: input?.status });
     }),
 
-  decide: protectedProcedure
+  decide: actionProcedure("approval.decide")
     .input(
       z.object({
         approvalId: z.string(),
@@ -869,7 +1338,7 @@ const approvalsRouter = router({
       }
     }),
 
-  batchApprove: protectedProcedure
+  batchApprove: actionProcedure("approval.decide")
     .input(z.object({ approvalIds: z.array(z.string()).min(1).max(50) }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -894,7 +1363,7 @@ const approvalsRouter = router({
     }),
 
   /** 超时升级扫描（F5.7；高危项不自动放行 L5.4）——由触发器/巡检调度调用 */
-  sweep: writeProcedure.mutation(async ({ ctx }) => {
+  sweep: actionProcedure("approval.decide").mutation(async ({ ctx }) => {
     return expireSweep(getAppPool(), getGatewayPool(), scopeOf(ctx.identity));
   }),
 });
@@ -907,15 +1376,19 @@ const inspectionRouter = router({
   }),
   /** 手动跑一轮巡检（生产由触发器引擎 cron 07:00 唤起，F9.1；演示手动触发） */
   run: writeProcedure.mutation(async ({ ctx }) => {
-    return runInspectionScan(getAppPool(), getGatewayPool(), scopeOf(ctx.identity));
+    const scope = scopeOf(ctx.identity);
+    const binding = await resolveWorkspaceInspectionAdapter(scope.workspaceId);
+    return runInspectionScan(getAppPool(), getGatewayPool(), scope, { adapter: binding.adapter });
   }),
   /** 一键派单（F9.3：以异常事件为输入唤起业务 Agent；幂等 L9.3） */
-  dispatch: writeProcedure
-    .input(z.object({ anomalyEventId: z.string(), presetKey: z.string().default("review-agent") }))
+  dispatch: actionProcedure("task.dispatch")
+    .input(z.object({ anomalyEventId: z.string(), presetKey: z.string().min(1).optional() }))
     .mutation(async ({ ctx, input }) => {
       try {
+        const scope = scopeOf(ctx.identity);
+        const selectedAgent = await resolveRunnableAgent(scope, input.presetKey);
         return await dispatchFromAnomaly(getAppPool(), getGatewayPool(), scopeOf(ctx.identity), {
-          anomalyEventId: input.anomalyEventId, presetKey: input.presetKey, by: ctx.identity.memberNo,
+          anomalyEventId: input.anomalyEventId, presetKey: selectedAgent.presetKey, by: ctx.identity.memberNo,
         });
       } catch (err) {
         if (err instanceof DispatchError) {
@@ -944,8 +1417,8 @@ const inspectionRouter = router({
 /** skills router（B10/M8：技能广场 / 安装绑定 / 零代码锻造 / 意识系统） */
 /** 技能管理写操作角色守卫（E2.6/L5.1 同口径：readonly 服务端 403，前端隐藏非置灰） */
 function assertSkillManage(role: string): void {
-  if (role === "readonly") {
-    throw new TRPCError({ code: "FORBIDDEN", message: "readonly 角色无技能管理权限（E2.6，服务端 403）" });
+  if (role !== "owner" && role !== "manager") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "当前角色无技能管理权限（E2.6，服务端 403）" });
   }
 }
 
@@ -1027,7 +1500,7 @@ const skillsRouter = router({
     }
   }),
   /** 安装（F8.2 安装即绑定；L8.1 脱敏闸 / L8.2 白名单 / E8.1 冲突进审批 / F8.3 dry-run 前置） */
-  install: protectedProcedure
+  install: actionProcedure("skill.manage")
     .input(z.object({ skillId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       assertSkillManage(ctx.identity.role);
@@ -1043,7 +1516,7 @@ const skillsRouter = router({
       }
     }),
   /** 卸载（L8.3 卸载即撤销围栏绑定） */
-  uninstall: protectedProcedure
+  uninstall: actionProcedure("skill.manage")
     .input(z.object({ skillId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       assertSkillManage(ctx.identity.role);
@@ -1059,7 +1532,7 @@ const skillsRouter = router({
       }
     }),
   /** 零代码自定义技能草稿（F8.3 三要素；生成物进版本管理） */
-  forge: protectedProcedure
+  forge: actionProcedure("skill.manage")
     .input(z.object({
       name: z.string().min(1).max(100),
       description: z.string().max(500).default(""),
@@ -1071,7 +1544,7 @@ const skillsRouter = router({
       return createSkillDraft(getAppPool(), getGatewayPool(), scopeOf(ctx.identity), { ...input, by: ctx.identity.memberNo });
     }),
   /** 生效前 dry-run 预览（F8.3/F2.5：回放最近 10 条） */
-  dryRun: protectedProcedure
+  dryRun: actionProcedure("skill.manage")
     .input(z.object({ skillId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -1091,7 +1564,7 @@ const skillsRouter = router({
       return detectSuggestions(getAppPool(), scopeOf(ctx.identity));
     }),
     /** 一键确认 → 生成触发器或新技能（F8.4） */
-    confirm: protectedProcedure
+    confirm: actionProcedure("skill.manage")
       .input(z.object({
         suggestion: z.object({
           key: z.string(), objectType: z.string(), actionCategory: z.string(),
@@ -1107,7 +1580,7 @@ const skillsRouter = router({
         });
       }),
     /** 驳回建议（E8.3 校准闭环：该类阈值 ×2） */
-    reject: protectedProcedure
+    reject: actionProcedure("skill.manage")
       .input(z.object({ key: z.string(), reason: z.string().max(200).optional() }))
       .mutation(async ({ ctx, input }) => {
         assertSkillManage(ctx.identity.role);
@@ -1123,7 +1596,7 @@ const skillsRouter = router({
       return distStatus(getAppPool(), scopeOf(ctx.identity));
     }),
     /** 立即同步（手动触发=拉取通道同路径；夜班窗口自动同步复用本函数） */
-    syncNow: protectedProcedure
+    syncNow: actionProcedure("skill.manage")
       .input(z.object({ registryUrl: z.string().url().optional() }).optional())
       .mutation(async ({ ctx, input }) => {
         assertSkillManage(ctx.identity.role);
@@ -1141,7 +1614,7 @@ const skillsRouter = router({
         }
       }),
     /** 分发策略（silent=L0/L1 默认静默 / prompt=提示后升级；autoSync=夜班自动同步总开关；L2 不可配置永远审批） */
-    setPolicy: protectedProcedure
+    setPolicy: actionProcedure("skill.manage")
       .input(z.object({ mode: z.enum(["silent", "prompt"]).optional(), autoSync: z.boolean().optional() }))
       .mutation(async ({ ctx, input }) => {
         assertSkillManage(ctx.identity.role);
@@ -1154,7 +1627,7 @@ const skillsRouter = router({
         }
       }),
     /** 人工装载 staging 项（prompt 策略项 / L2 审批通过项——审批未过服务端拒绝） */
-    loadStaging: protectedProcedure
+    loadStaging: actionProcedure("skill.manage")
       .input(z.object({ stagingId: z.string() }))
       .mutation(async ({ ctx, input }) => {
         assertSkillManage(ctx.identity.role);
@@ -1167,7 +1640,7 @@ const skillsRouter = router({
         }
       }),
     /** 一键回滚（恢复装载前快照：skills 行 + install 快照同事务恢复） */
-    rollback: protectedProcedure
+    rollback: actionProcedure("skill.manage")
       .input(z.object({ skillId: z.string() }))
       .mutation(async ({ ctx, input }) => {
         assertSkillManage(ctx.identity.role);
@@ -1186,7 +1659,7 @@ const skillsRouter = router({
         return { optIn: await getRefluxOptIn(getAppPool(), scopeOf(ctx.identity)) };
       }),
       /** opt-in 开关（客户治理主权，变更留痕） */
-      setOptIn: protectedProcedure
+      setOptIn: actionProcedure("skill.manage")
         .input(z.object({ optIn: z.boolean() }))
         .mutation(async ({ ctx, input }) => {
           assertSkillManage(ctx.identity.role);
@@ -1209,7 +1682,7 @@ const skillsRouter = router({
           }
         }),
       /** 发送（opt-in 未开启拒发；未配端点留 outbox；发送行为留痕） */
-      send: protectedProcedure
+      send: actionProcedure("skill.manage")
         .input(z.object({ skillId: z.string() }))
         .mutation(async ({ ctx, input }) => {
           assertSkillManage(ctx.identity.role);
@@ -1232,7 +1705,7 @@ const skillsRouter = router({
         assertOfficialMode(ctx.identity.role);
         return listInbox(getAppPool());
       }),
-      review: protectedProcedure
+      review: actionProcedure("skill.manage")
         .input(z.object({ draftId: z.string(), gesture: z.enum(["approve", "reject"]), reason: z.string().max(200).optional() }))
         .mutation(async ({ ctx, input }) => {
           assertOfficialMode(ctx.identity.role);
@@ -1245,7 +1718,7 @@ const skillsRouter = router({
           }
         }),
       /** 官方化（须双人复核通过且执行人为复核成员之一；可附抽象完善终稿） */
-      officialize: protectedProcedure
+      officialize: actionProcedure("skill.manage")
         .input(z.object({
           draftId: z.string(),
           final: z.object({ name: z.string().optional(), description: z.string().optional(), body: z.string().optional() }).optional(),
@@ -1261,7 +1734,7 @@ const skillsRouter = router({
           }
         }),
       /** 构建签名 manifest（官方技能库 → 分发包；GET /skill-dist/manifest.json 同逻辑对外服务） */
-      buildManifest: protectedProcedure.mutation(async ({ ctx }) => {
+      buildManifest: actionProcedure("skill.manage").mutation(async ({ ctx }) => {
         assertOfficialMode(ctx.identity.role);
         const key = process.env.SKILL_DIST_SIGNING_KEY ?? "";
         if (!key) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "未配置 SKILL_DIST_SIGNING_KEY" });
@@ -1379,20 +1852,17 @@ const workspaceRouter = router({
 /** nightShift router（F3 起 P1 数据源：夜班状态胶囊 + 昨夜战报卡投影） */
 const nightShiftRouter = router({
   /** 18:00 候选清单（F4.1：夜班 preset 覆盖过滤 + 谷时价 + 围栏摘要；E1 联调挂端点） */
-  candidates: protectedProcedure.query(async ({ ctx }) => {
+  candidates: capabilityProcedure("nightShift").query(async ({ ctx }) => {
     return buildCandidateList(getAppPool(), scopeOf(ctx.identity));
   }),
 
   /** 开启夜班（F4.1 人类命令·不经模型轮次；ensureReady→confirmNight：围栏快照 F2.6 + 状态机 F4.8） */
-  start: protectedProcedure
+  start: capabilityActionProcedure("nightShift", "night.manage")
     .input(z.object({
       runDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       candidateIds: z.array(z.string()).default([]),
     }))
     .mutation(async ({ ctx, input }) => {
-      if (ctx.identity.role === "readonly") {
-        throw new TRPCError({ code: "FORBIDDEN", message: "readonly 角色无权开启夜班（E2.6/L3.4，服务端 403）" });
-      }
       const scope = scopeOf(ctx.identity);
       const runId = await ensureReady(getAppPool(), getGatewayPool(), scope, input.runDate);
       try {
@@ -1407,7 +1877,7 @@ const nightShiftRouter = router({
     }),
 
   /** 08:30 决策包投递（F4.4 三段投影；状态机 → package_generated，统计回写 night_runs.stats） */
-  deliver: writeProcedure
+  deliver: capabilityActionProcedure("nightShift", "night.manage")
     .input(z.object({
       runId: z.string(),
       window: z.object({ from: z.string(), to: z.string() }),
@@ -1417,7 +1887,7 @@ const nightShiftRouter = router({
     }),
 
   /** 最近班次 + 状态机投影（F4.8）+ 决策包统计（F4.4，deliverPackage 回写的 stats） */
-  current: protectedProcedure.query(async ({ ctx }) => {
+  current: capabilityProcedure("nightShift").query(async ({ ctx }) => {
     const scope = scopeOf(ctx.identity);
     const app = getAppPool();
     const client = await app.connect();
@@ -1454,7 +1924,7 @@ const nightShiftRouter = router({
   }),
 
   /** 班组消息流（P9E1：夜班频道事件流投影，ts 升序；夜班动作 100% 过围栏 L4.1） */
-  events: protectedProcedure
+  events: capabilityProcedure("nightShift")
     .input(z.object({ limit: z.number().min(1).max(200).default(80) }).optional())
     .query(async ({ ctx, input }) => {
       const scope = scopeOf(ctx.identity);
@@ -1482,7 +1952,7 @@ const nightShiftRouter = router({
     }),
 
   /** 一键暂停（P9E2：二次确认在组件层；G5 端到端计时留痕；超时 P0 升级 E4.1） */
-  pause: writeProcedure
+  pause: capabilityActionProcedure("nightShift", "night.manage")
     .input(z.object({ runId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -1498,7 +1968,7 @@ const nightShiftRouter = router({
     }),
 
   /** 恢复（E4.2：断点续跑由 runtime replay 保证） */
-  resume: writeProcedure
+  resume: capabilityActionProcedure("nightShift", "night.manage")
     .input(z.object({ runId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await resumeNight(getAppPool(), getGatewayPool(), scopeOf(ctx.identity), input.runId, ctx.identity.memberNo);
@@ -1506,7 +1976,7 @@ const nightShiftRouter = router({
     }),
 
   /** 班组留言（P9E6：人给班组留言=五元事件留痕；触发的动作照常过围栏 L4.1/L4.4） */
-  note: writeProcedure
+  note: capabilityActionProcedure("nightShift", "night.manage")
     .input(z.object({ text: z.string().min(1).max(500) }))
     .mutation(async ({ ctx, input }) => {
       const scope = scopeOf(ctx.identity);
@@ -1583,7 +2053,7 @@ const fenceRouter = router({
   }),
 
   /** NL 新增群规 dry-run（P5E3/P5E4：候选规则回放最近 10 条 F2.5；未确认不生效 L2.4） */
-  dryRun: writeProcedure
+  dryRun: actionProcedure("guardrail.manage")
     .input(z.object({
       ruleId: z.string().regex(/^R\d+$/),
       name: z.string().min(1).max(100),
@@ -1607,7 +2077,7 @@ const fenceRouter = router({
     }),
 
   /** 确认 dry-run（人看过报告才激活 L2.4）→ 规则进 pending_approval + 变更审批（F2.4，走 P4 决断流） */
-  confirmDryRun: writeProcedure
+  confirmDryRun: actionProcedure("guardrail.manage")
     .input(z.object({
       dryRunId: z.string(),
       rule: z.object({
@@ -1913,7 +2383,7 @@ const rosterRouter = router({
             constraints: agent.meta?.prompt?.constraints ?? [],
           },
           workspaceName: ws.rows[0]?.name ?? "",
-          bundle: "workloom-hotel", // 首版唯一行业 Bundle（D2）
+          bundle: ws.rows[0]?.bundle_id ?? "",
           nightWindow: { open: inNightWindow(), range: "22:00–08:00" },
           fences: agent.fence_bindings.map((ruleId) => {
             const hit = fences.find((f) => f.rule_id === ruleId);
@@ -2123,8 +2593,8 @@ const imRouter = router({
 /** bundles router（F11：P7 舰船换装坞——行业装配台 §2.2/§2.3；校验 F2.10/L1.6；权限 E2.6）
  *  数据来源（P7-⑤）：槽位=bundle 注册表实物投影（磁盘扫描）；校验=活算+留痕（biz_events bundle.*） */
 function assertBundleManage(role: string): void {
-  if (role === "readonly") {
-    throw new TRPCError({ code: "FORBIDDEN", message: "readonly 角色无装配管理权限（E2.6，服务端 403）" });
+  if (role !== "owner" && role !== "manager") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "当前角色无装配管理权限（E2.6，服务端 403）" });
   }
 }
 function bundleRethrow(err: unknown): never {
@@ -2141,6 +2611,29 @@ function bundleRethrow(err: unknown): never {
 }
 
 const bundlesRouter = router({
+  /**
+   * 当前工作区三端 UI 投影。客户端不得猜行业或读取磁盘清单；这里只返回已通过
+   * 契约、兼容性和完整性校验的配置。无有效 Bundle 时明确返回未配置，不做酒店兜底。
+   */
+  currentUi: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      const access = await resolveAuthoritativeClientAccess(ctx.identity);
+      if (!access.bundle.configured) return access.bundle;
+      return {
+        ...access.bundle,
+        grantedPermissions: access.navigationPermissions.filter((permission) => access.bundle.configured
+          && access.bundle.ui.permissions.includes(permission)),
+        actionPermissions: access.actionPermissions,
+      };
+    } catch (error) {
+      if (error instanceof AccessAuthorityError) accessRethrow(error);
+      console.error("当前工作区行业界面投影校验失败", { workspaceId: ctx.identity.workspaceId, error });
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: "当前行业界面未通过安全校验，已停止加载。请联系管理员重新发布行业包。",
+      });
+    }
+  }),
   /** 装配状态投影：全部 profile（注册表扫描）+ 选中 profile 六槽/检查单/班组（默认当前激活） */
   status: protectedProcedure
     .input(z.object({ slug: z.string().optional() }).optional())
@@ -2154,7 +2647,10 @@ const bundlesRouter = router({
           await c.query("BEGIN");
           await c.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
           await c.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
-          const r = await c.query<{ industry: string }>(`SELECT industry FROM workspaces WHERE id=$1`, [scope.workspaceId]);
+          const r = await c.query<{ bundle_id: string | null; industry: string | null }>(
+            `SELECT bundle_id, industry FROM workspaces WHERE id=$1`,
+            [scope.workspaceId],
+          );
           await c.query("COMMIT");
           return r;
         } catch (err) {
@@ -2164,8 +2660,9 @@ const bundlesRouter = router({
           c.release();
         }
       })();
-      const activeSlug = ws.rows[0]?.industry ?? "hotel";
       const slugs = listProfileSlugs();
+      const activeSlug = [ws.rows[0]?.bundle_id, ws.rows[0]?.industry]
+        .find((candidate): candidate is string => Boolean(candidate && candidate !== "custom" && slugs.includes(candidate))) ?? null;
       const profiles = [] as Awaited<ReturnType<typeof computeAssembly>>[];
       for (const s of slugs) {
         try {
@@ -2174,11 +2671,12 @@ const bundlesRouter = router({
           /* 注册表坏档不拖垮整页（L9.2：跳过并缺席，由校验页显式呈现缺失） */
         }
       }
-      const selected = profiles.find((p) => p.slug === (input?.slug ?? activeSlug)) ?? profiles[0] ?? null;
+      const selectedSlug = input?.slug ?? activeSlug;
+      const selected = selectedSlug ? profiles.find((p) => p.slug === selectedSlug) ?? null : null;
       return { activeSlug, profiles, selected };
     }),
   /** 重跑校验并留痕（P7E3：修复后重跑；记录可查） */
-  recheck: protectedProcedure
+  recheck: actionProcedure("bundle.manage")
     .input(z.object({ slug: z.string() }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -2188,7 +2686,7 @@ const bundlesRouter = router({
       }
     }),
   /** 激活/切换 profile（F2.10：任一校验失败拒绝激活，PRECONDITION_FAILED 带检查单） */
-  activate: protectedProcedure
+  activate: actionProcedure("bundle.manage")
     .input(z.object({ slug: z.string() }))
     .mutation(async ({ ctx, input }) => {
       assertBundleManage(ctx.identity.role);
@@ -2199,7 +2697,7 @@ const bundlesRouter = router({
       }
     }),
   /** 新建行业 Bundle 五要素向导（P7E5/§2.3：草稿不进分发） */
-  createDraft: protectedProcedure
+  createDraft: actionProcedure("bundle.manage")
     .input(z.object({
       slug: z.string(),
       displayName: z.string().min(1),
@@ -2256,18 +2754,10 @@ function llmCall(scene = "generic", scope?: { tenantId: string; workspaceId: str
   }
 }
 
-/** 工作区行业（bundle 第⑦槽 model-policy.yml 按行业加载；进程级缓存） */
-let cachedIndustry: string | null | undefined;
+/** 模型策略只认经过完整性校验的活动 Bundle，不读取可漂移的行业字段。 */
 async function workspaceIndustry(scope: { workspaceId: string }): Promise<string | null> {
-  if (cachedIndustry !== undefined) return cachedIndustry;
-  try {
-    const r = await getAppPool().query<{ industry: string | null }>(
-      `SELECT industry FROM workspaces WHERE id=$1`, [scope.workspaceId]);
-    cachedIndustry = r.rows[0]?.industry ?? null;
-  } catch {
-    cachedIndustry = null;
-  }
-  return cachedIndustry;
+  const active = await resolveWorkspaceActiveBundle(scope.workspaceId);
+  return active.state === "ready" ? active.bundleId : null;
 }
 
 let cachedClassifier: IntentClassifier | null | undefined;
@@ -2289,7 +2779,7 @@ function intentClassifier(scope?: { tenantId: string; workspaceId: string }): In
 /** 风险揭示书版本（§12.2 第①步；文本见 docs/CEO-RISK-DISCLOSURE.md） */
 const RISK_DISCLOSURE_VERSION = "risk-v1";
 /** 深度授权必确认条款（§12.2 第②步，逐条勾选缺一不可） */
-const REQUIRED_CLAUSES = ["自主调价", "自主采购", "自主对外回复", "试用降档规则", "AI 非法律责任主体·授权人承担经营决策责任"];
+const REQUIRED_CLAUSES = ["自主执行授权", "资金动作授权", "对外承诺授权", "试用降档规则", "AI 非法律责任主体·授权人承担经营决策责任"];
 
 /** 宪章读写串行锁（D26 审计#6：grant/transit 为 load→transition→save 读改写，并发互踩会留下 from/to 失真的留痕） */
 let charterLock: Promise<unknown> = Promise.resolve();
@@ -2330,9 +2820,16 @@ const captainRouter = router({
     .input(z.object({
       clauses: z.array(z.string()),
       autonomy: z.object({
-        price_band: z.tuple([z.number(), z.number()]),
-        procurement_cap: z.number(),
-        campaign_cap: z.number(),
+        ranges: z.record(z.string().min(1), z.object({
+          label: z.string().min(1).max(80),
+          lower: z.number(),
+          upper: z.number(),
+          anchor: z.number(),
+        })),
+        caps: z.record(z.string().min(1), z.object({
+          label: z.string().min(1).max(80),
+          limit: z.number().nonnegative(),
+        })),
       }),
       shadowDays: z.number().int().min(1).max(14).default(3),
       trialDays: z.number().int().min(3).max(30).default(7),
@@ -2737,7 +3234,7 @@ const memoryRouter = router({
     }),
 
   /** 人类编辑内容（M2.1 可读可改；写 memory.calibrate 事件留痕） */
-  update: writeProcedure
+  update: actionProcedure("memory.manage")
     .input(z.object({ memoryId: z.string(), content: z.string().min(1).max(2000) }))
     .mutation(async ({ ctx, input }) => {
       return editMemoryContent(
@@ -2747,7 +3244,7 @@ const memoryRouter = router({
     }),
 
   /** 人类禁用（回收区口径 F1.11；防记忆污染越用越偏） */
-  disable: writeProcedure
+  disable: actionProcedure("memory.manage")
     .input(z.object({ memoryId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       return disableMemory(
@@ -2756,10 +3253,46 @@ const memoryRouter = router({
       );
     }),
 
+  /** 停用/来源清算前读取真实影响关系；无引用时返回空数组而非推测。 */
+  impact: protectedProcedure
+    .input(z.object({
+      memoryId: z.string().optional(),
+      memberId: z.string().optional(),
+    }).refine((input) => Boolean(input.memoryId) !== Boolean(input.memberId), "必须且只能指定一条记忆或一名来源成员"))
+    .query(async ({ ctx, input }) => {
+      return previewMemoryImpact(getAppPool(), scopeOf(ctx.identity), {
+        memoryIds: input.memoryId ? [input.memoryId] : undefined,
+        sourceMemberId: input.memberId,
+      });
+    }),
+
+  /** 回收区单条重新启用，恢复本身写独立校准事件。 */
+  reactivate: actionProcedure("memory.manage")
+    .input(z.object({ memoryId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      return reactivateMemory(
+        getAppPool(), getGatewayPool(), scopeOf(ctx.identity),
+        { memberNo: ctx.identity.memberNo }, input.memoryId,
+      );
+    }),
+
+  /** 撤销最近一批来源清算；只恢复请求中仍处于回收区的本工作区记忆。 */
+  restore: actionProcedure("memory.manage")
+    .input(z.object({ memoryIds: z.array(z.string()).min(1).max(50) }))
+    .mutation(async ({ ctx, input }) => {
+      return restoreMemories(
+        getAppPool(), getGatewayPool(), scopeOf(ctx.identity),
+        { memberNo: ctx.identity.memberNo }, input.memoryIds,
+      );
+    }),
+
   /** 来源人一键清算（D24 修订 2：成员离任/换岗，作废其手势沉淀的偏好记忆） */
-  recallBySource: writeProcedure
+  recallBySource: actionProcedure("memory.recall")
     .input(z.object({ memberId: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      if (ctx.identity.role !== "owner" && ctx.identity.role !== "manager") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "当前角色无权清算其他成员来源的组织记忆" });
+      }
       return recallMemoriesByMember(
         getAppPool(), getGatewayPool(), scopeOf(ctx.identity),
         { memberNo: ctx.identity.memberNo }, input.memberId,
@@ -2767,12 +3300,12 @@ const memoryRouter = router({
     }),
 
   /** 手动触发提炼节拍（演示/联调用；生产由夜班调度触发） */
-  mineNow: writeProcedure.mutation(async ({ ctx }) => {
+  mineNow: actionProcedure("memory.manage").mutation(async ({ ctx }) => {
     return runMemoryMinerBeat(getAppPool(), getGatewayPool(), scopeOf(ctx.identity));
   }),
 
   /** 手动触发衰减扫描（同上） */
-  decayNow: writeProcedure.mutation(async ({ ctx }) => {
+  decayNow: actionProcedure("memory.manage").mutation(async ({ ctx }) => {
     return decayMemories(getAppPool(), getGatewayPool(), scopeOf(ctx.identity));
   }),
 
@@ -2791,6 +3324,7 @@ const evolutionRouter = router({
 
 export const appRouter = router({
   system: systemRouter,
+  access: accessRouter,
   onboarding: onboardingRouter,
   auth: authRouter,
   members: membersRouter,

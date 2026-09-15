@@ -9,7 +9,7 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { protectedProcedure, router, scopeOf, writeProcedure } from "../trpc/context.js";
+import { actionProcedure, protectedProcedure, router, scopeOf, writeProcedure } from "../trpc/context.js";
 import {
   createCollectionOn, listCollections, listDocuments, setDocumentStatusOn, upsertDocumentOn,
   registerSiteSourceOn, crawlAndStructure, diffScan, searchKB,
@@ -20,7 +20,7 @@ import { appendEventOn, serviceTx, svcQuery } from "./events.js";
 import { llmCall } from "./llm.js";
 import { ensureServiceSchema } from "./store.js";
 import {
-  activeInstall, clearBundle, clearPreview, generateStaffing,
+  activeInstall, clearBundle, clearPreview, confirmAndAssembleStaffing, customizationStatus, generateStaffing,
   onboardingExam, rollbackSnapshot,
 } from "./bundle.js";
 import {
@@ -30,8 +30,9 @@ import {
 import {
   getSettings as evalGetSettings, latestReport as evalLatestReport,
   listAnswers as evalListAnswers, listExams as evalListExams,
+  listCandidateResults as evalListCandidateResults,
   listQuestions as evalListQuestions, runExam as evalRunExam,
-  seedQuestionsIfEmpty as evalSeedQuestions, setPromotionGate as evalSetPromotionGate,
+  seedQuestionsIfEmpty as evalSeedQuestions, setPromotionGateOn as evalSetPromotionGateOn,
 } from "./eval.js";
 import {
   listTools as devListTools, refreshTools as devRefreshTools,
@@ -363,13 +364,20 @@ const evalRouter = router({
       const ws = scopeOf(ctx.identity).workspaceId;
       return { answers: await evalListAnswers(ws, input.examId) };
     }),
+  /** 定制上岗考逐候选答卷（岗位、四维成绩、技能/工具真实安装状态） */
+  candidateResults: protectedProcedure
+    .input(z.object({ examId: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const ws = scopeOf(ctx.identity).workspaceId;
+      return { candidates: await evalListCandidateResults(ws, input.examId) };
+    }),
   /** 题库（含结构×维度双标签） */
   listQuestions: protectedProcedure.query(async ({ ctx }) => {
     const ws = scopeOf(ctx.identity).workspaceId;
     return { questions: await evalListQuestions(ws) };
   }),
   /** 开考（手动/变更触发；P0 同步执行） */
-  runExam: writeProcedure
+  runExam: actionProcedure("exam.run")
     .input(z.object({
       examType: z.enum(["on-change", "weekly", "onboarding"]).default("weekly"),
       subjectScope: z.array(z.string()).optional(),
@@ -380,7 +388,7 @@ const evalRouter = router({
       return { exam: r.exam, wrongCount: r.answers.filter((a) => !a.passed).length };
     }),
   /** 播种示例题库（空库时） */
-  seedQuestions: writeProcedure.mutation(async ({ ctx }) => {
+  seedQuestions: actionProcedure("exam.run").mutation(async ({ ctx }) => {
     const ws = scopeOf(ctx.identity).workspaceId;
     return { seeded: await evalSeedQuestions(ws) };
   }),
@@ -390,12 +398,12 @@ const evalRouter = router({
     return { settings: await evalGetSettings(ws) };
   }),
   /** 卡晋升授权开关（默认关；开启即留痕——授权动作写事件库） */
-  setPromotionGate: writeProcedure
+  setPromotionGate: actionProcedure("exam.run")
     .input(z.object({ enabled: z.boolean() }))
     .mutation(async ({ ctx, input }) => {
       const scope = scopeOf(ctx.identity);
       const settings = await serviceTx(scope.workspaceId, async (client, sc) => {
-        const s = await evalSetPromotionGate(scope.workspaceId, input.enabled);
+        const s = await evalSetPromotionGateOn(client, scope.workspaceId, input.enabled);
         await appendEventOn(client, sc, { id: ctx.identity.memberNo, type: "human" }, {
           objectType: "eval_settings", objectId: scope.workspaceId,
           action: input.enabled ? "eval.promotion_gate.enable" : "eval.promotion_gate.disable",
@@ -447,6 +455,10 @@ const bundleRouter = router({
   activeInstall: protectedProcedure.query(async ({ ctx }) => {
     return { install: await activeInstall(scopeOf(ctx.identity).workspaceId) };
   }),
+  /** 定制向导恢复态（刷新/重开后从服务端事实继续） */
+  customizationStatus: protectedProcedure.query(async ({ ctx }) => {
+    return customizationStatus(scopeOf(ctx.identity).workspaceId);
+  }),
   /** 清空预览（明示范围：将卸什么/将留什么） */
   clearPreview: protectedProcedure.query(async ({ ctx }) => {
     return clearPreview(scopeOf(ctx.identity).workspaceId);
@@ -465,12 +477,50 @@ const bundleRouter = router({
   generateStaffing: writeProcedure
     .input(z.object({ industryText: z.string().min(4).max(2000) }))
     .mutation(async ({ ctx, input }) => {
-      return generateStaffing(scopeOf(ctx.identity).workspaceId, input.industryText);
+      try {
+        return await generateStaffing(
+          scopeOf(ctx.identity).workspaceId,
+          input.industryText,
+          { id: ctx.identity.memberNo, type: "human" },
+        );
+      } catch (error) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: error instanceof Error ? error.message : String(error) });
+      }
     }),
-  /** 上岗考（exam 门禁：达标才 activated） */
-  onboardingExam: writeProcedure.mutation(async ({ ctx }) => {
-    return onboardingExam(scopeOf(ctx.identity).workspaceId);
-  }),
+  /** 人审确认 → 原子形成 staged 候选；此时员工/围栏仍不可运行 */
+  confirmAndAssembleStaffing: writeProcedure
+    .input(z.object({
+      draftId: z.string().min(1).max(100),
+      expectedDraftHash: z.string().regex(/^[a-f0-9]{64}$/),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await confirmAndAssembleStaffing(
+          scopeOf(ctx.identity).workspaceId,
+          input,
+          { id: ctx.identity.memberNo, type: "human" },
+        );
+      } catch (error) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: error instanceof Error ? error.message : String(error) });
+      }
+    }),
+  /** 上岗考绑定 staged 版本/哈希；达标后才在服务端事务内激活 */
+  onboardingExam: writeProcedure
+    .input(z.object({
+      installId: z.string().min(1).max(120),
+      expectedAssemblyHash: z.string().regex(/^[a-f0-9]{64}$/),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await onboardingExam(
+          scopeOf(ctx.identity).workspaceId,
+          input,
+          { id: ctx.identity.memberNo, type: "human" },
+        );
+      } catch (error) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: error instanceof Error ? error.message : String(error) });
+      }
+    }),
 });
 
 /**

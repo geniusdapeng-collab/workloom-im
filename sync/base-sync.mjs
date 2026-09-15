@@ -260,6 +260,53 @@ function validateScope(scope, baseDir) {
     }
     assertNoSymlinkPath(baseDir, join(baseDir, safePath), `adopt migration source ${safePath}`, { allowMissing: false });
   }
+  for (const [path, config] of Object.entries(scope.anchorMerge ?? {})) {
+    assertSafeRelative(path, "anchor merge path");
+    if (!Array.isArray(config.mergeKeys)) throw new Error(`anchor merge ${path} 缺少 mergeKeys`);
+    if (config.ignoreDependencyKeys !== undefined && !Array.isArray(config.ignoreDependencyKeys)) {
+      throw new Error(`anchor merge ${path} 的 ignoreDependencyKeys 必须是数组`);
+    }
+  }
+  for (const capability of scope.registryCapabilities ?? []) {
+    if (typeof capability.package !== "string" || !capability.package) throw new Error("registry capability 缺少 package");
+    if (!Array.isArray(capability.consumers) || capability.consumers.length === 0) {
+      throw new Error(`registry capability ${capability.package} 缺少 consumers`);
+    }
+    for (const consumer of capability.consumers) assertSafeRelative(consumer, `${capability.package} consumer`);
+    const gate = assertSafeRelative(capability.consumerGate, `${capability.package} consumerGate`);
+    assertNoSymlinkPath(baseDir, join(baseDir, gate), `${capability.package} consumerGate`, { allowMissing: false });
+    if (capability.distribution !== "stable-registry-upgrade-pr") {
+      throw new Error(`registry capability ${capability.package} 必须通过 stable-registry-upgrade-pr 分发`);
+    }
+  }
+  const foundation = scope.clientFoundationCapability;
+  if (foundation) {
+    if (foundation.distribution !== "stable-tag-upgrade-pr") {
+      throw new Error("三端客户端基座必须通过 stable-tag-upgrade-pr 分发");
+    }
+    if (foundation.conflictPolicy !== "previous-source-sha256-fail-close") {
+      throw new Error("三端客户端基座必须采用旧基座 SHA-256 冲突关闭策略");
+    }
+    const foundationInstaller = assertSafeRelative(foundation.installer, "client foundation installer");
+    assertNoSymlinkPath(baseDir, join(baseDir, foundationInstaller), "client foundation installer", { allowMissing: false });
+    for (const clientRoot of ["apps/web", "apps/webb", "apps/webc"]) {
+      const probe = `${clientRoot}/__workloom_foundation_probe__`;
+      const excluded = (scope.exclude ?? []).some((pattern) => globToRegExp(pattern).test(probe));
+      if (!excluded) throw new Error(`三端受管根必须排除普通 base-sync，防止双通道覆盖：${clientRoot}`);
+    }
+    for (const pattern of foundation.industryExtensionPaths ?? []) {
+      if (typeof pattern !== "string" || !pattern.startsWith("apps/") || pattern.includes("..")) {
+        throw new Error(`非法三端行业扩展路径：${pattern}`);
+      }
+    }
+  }
+  const protectedFiles = scope.protectedChildAssets?.files ?? [];
+  for (const path of protectedFiles) {
+    const safePath = assertSafeRelative(path, "protected child asset");
+    const excluded = (scope.exclude ?? []).some((pattern) => globToRegExp(pattern).test(safePath));
+    if (!excluded) throw new Error(`受保护的子仓资产必须显式排除整文件同步：${safePath}`);
+    if (scope.anchorMerge?.[safePath]) throw new Error(`受保护的子仓资产不得作为锚点合并目标：${safePath}`);
+  }
 }
 
 function loadScope(baseDir) {
@@ -386,7 +433,7 @@ function mergeManagedSection(baseContent, childContent, config, path = "AGENTS.m
   return mergeManagedSectionDetailed(baseContent, childContent, config, path).content;
 }
 
-function mergeKeepChildExtra(baseObj, childObj, mergeKeys) {
+function mergeKeepChildExtra(baseObj, childObj, mergeKeys, ignoreDependencyKeys = []) {
   const out = JSON.parse(JSON.stringify(baseObj));
   for (const key of mergeKeys) {
     const baseValue = baseObj[key];
@@ -399,13 +446,19 @@ function mergeKeepChildExtra(baseObj, childObj, mergeKeys) {
       const baseRecord = baseValue ?? {};
       const childRecord = childValue ?? {};
       out[key] = { ...baseRecord };
+      if (["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"].includes(key)) {
+        for (const ignored of ignoreDependencyKeys) {
+          if (ignored in childRecord) out[key][ignored] = childRecord[ignored];
+          else delete out[key][ignored];
+        }
+      }
       for (const [name, value] of Object.entries(childRecord)) if (!(name in baseRecord)) out[key][name] = value;
     }
   }
   return out;
 }
 
-function anchorNeedsSync(baseObj, childObj, mergeKeys) {
+function anchorNeedsSync(baseObj, childObj, mergeKeys, ignoreDependencyKeys = []) {
   const topKeys = new Set([...Object.keys(baseObj), ...mergeKeys]);
   for (const key of topKeys) {
     const baseValue = baseObj[key];
@@ -419,6 +472,7 @@ function anchorNeedsSync(baseObj, childObj, mergeKeys) {
         const baseRecord = baseValue ?? {};
         const childRecord = childValue ?? {};
         for (const [name, value] of Object.entries(baseRecord)) {
+          if (["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"].includes(key) && ignoreDependencyKeys.includes(name)) continue;
           if (!(name in childRecord) || JSON.stringify(childRecord[name]) !== JSON.stringify(value)) return true;
         }
       }
@@ -433,12 +487,62 @@ function fileNeedsSync(scope, rel, src, dst) {
   const anchor = scope.anchorMerge[rel];
   if (anchor) {
     try {
-      return anchorNeedsSync(JSON.parse(readFileSync(src, "utf8")), JSON.parse(readFileSync(dst, "utf8")), anchor.mergeKeys);
+      return anchorNeedsSync(
+        JSON.parse(readFileSync(src, "utf8")),
+        JSON.parse(readFileSync(dst, "utf8")),
+        anchor.mergeKeys,
+        anchor.ignoreDependencyKeys ?? [],
+      );
     } catch {
       return true;
     }
   }
   return !readFileSync(dst).equals(readFileSync(src));
+}
+
+function registryCapabilityReadiness(childDir, scope) {
+  return (scope.registryCapabilities ?? []).map((capability) => {
+    const presentConsumers = [];
+    const missingConsumers = [];
+    const connectedConsumers = [];
+    const unconnectedConsumers = [];
+    for (const consumer of capability.consumers) {
+      const packagePath = join(childDir, consumer, "package.json");
+      if (!existsSync(packagePath)) {
+        missingConsumers.push(consumer);
+        continue;
+      }
+      presentConsumers.push(consumer);
+      try {
+        const packageJson = JSON.parse(readFileSync(packagePath, "utf8"));
+        const version = packageJson.dependencies?.[capability.package]
+          ?? packageJson.devDependencies?.[capability.package]
+          ?? packageJson.peerDependencies?.[capability.package]
+          ?? packageJson.optionalDependencies?.[capability.package];
+        if (typeof version === "string" && version && !version.startsWith("workspace:")) connectedConsumers.push(consumer);
+        else unconnectedConsumers.push(consumer);
+      } catch {
+        unconnectedConsumers.push(consumer);
+      }
+    }
+    const phase = missingConsumers.length > 0
+      ? "phase-1-client-structure-required"
+      : unconnectedConsumers.length > 0
+        ? "phase-2-stable-artifact-upgrade-required"
+        : "consumer-gate-required";
+    return {
+      package: capability.package,
+      distribution: capability.distribution,
+      consumerGate: capability.consumerGate,
+      requiredConsumers: capability.consumers,
+      presentConsumers,
+      missingConsumers,
+      connectedConsumers,
+      unconnectedConsumers,
+      phase,
+      compliance: "unverified",
+    };
+  });
 }
 
 function readState(childDir, repoRoot = targetRepoRoot(childDir)) {
@@ -493,7 +597,12 @@ function makePlan(baseDir, childDir, repoRoot, scope, options = {}) {
     }
     const anchor = scope.raw.anchorMerge[rel];
     if (anchor && existsSync(dst)) {
-      const merged = JSON.stringify(mergeKeepChildExtra(JSON.parse(readFileSync(src, "utf8")), JSON.parse(readFileSync(dst, "utf8")), anchor.mergeKeys), null, 2) + "\n";
+      const merged = JSON.stringify(mergeKeepChildExtra(
+        JSON.parse(readFileSync(src, "utf8")),
+        JSON.parse(readFileSync(dst, "utf8")),
+        anchor.mergeKeys,
+        anchor.ignoreDependencyKeys ?? [],
+      ), null, 2) + "\n";
       operations.push({ kind: "merge", rel, dst, content: merged, stagePath: relative(repoRoot, dst) });
     } else {
       operations.push({ kind: "copy", rel, src, dst, stagePath: relative(repoRoot, dst) });
@@ -735,6 +844,8 @@ function syncToChild(baseDir, childDir, scope, report, extraExclude = [], option
   report.baseSha = baseSha;
   report.requiredRootAssetsSha256 = digests;
   report.pathPrefix = pathPrefix;
+  report.scopeVersion = scope.raw.version ?? null;
+  report.registryCapabilities = registryCapabilityReadiness(childDir, scope.raw);
   report.committed = false;
 
   const updateState = stateNeedsUpdate(oldState, baseSha, digests, extraExclude, options, pathPrefix) || changed > 0 || !existsSync(join(repoRoot, STATE_FILE));
@@ -918,6 +1029,8 @@ function modeDetect(options) {
       files: [...contentFiles, ...(stateDrift ? [`root:${STATE_FILE}`] : [])],
       requiredRootAssetsSha256: digests,
       requiredOnly: options.requiredOnly,
+      scopeVersion: scope.raw.version ?? null,
+      registryCapabilities: registryCapabilityReadiness(childDir, scope.raw),
     };
     if (!report.behind) {
       output(options, report, `✅ 基座内容与同步状态已对齐（${baseSha.slice(0, 8)}；required assets 已逐项验真）`);
@@ -1059,6 +1172,7 @@ export {
   main,
   mergeKeepChildExtra,
   mergeManagedSection,
+  registryCapabilityReadiness,
   redact,
   repoUrl,
 };

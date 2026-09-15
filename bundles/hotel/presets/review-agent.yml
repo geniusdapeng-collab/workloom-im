@@ -8,6 +8,8 @@ readonly: false
 night_shift: true
 high_risk: false
 fence_bindings: [R6]       # 差评必审
+coverage:
+  - { eventPrefix: "review.", label: 口碑回复 }
 skills: [review-crisis]
 tools:
   - { name: review.list, access: read,  desc: 拉取各渠道新评价 }

@@ -8,6 +8,8 @@ readonly: false
 night_shift: true
 high_risk: false
 fence_bindings: ['R-PM1', 'R-PM2']
+coverage:
+  - { eventPrefix: "team.", label: 团队统筹 }
 skills: ['metric-digest', 'meeting-digest', 'prd-forge']
 tools:
   - { name: team.briefing.write, access: write, desc: 晨报汇总与发布 }

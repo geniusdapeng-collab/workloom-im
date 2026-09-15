@@ -1,42 +1,36 @@
-# WorkLoom Candy Design System v1.1
+# WorkLoom 旧版设计快照（只读、待下线）
 
-统一设计资源包。每个项目仓库保留独立副本，拉取即用，**无外部依赖**。
+> **禁止新接入、禁止复制。** 本目录仅用于旧页面迁移时比对历史视觉；WorkLoom 三端唯一生产事实源已经迁移到 `packages/ui`，并以 `@workloom/ui` 稳定版本发布。
 
-## 文件清单
+## 历史文件
 
-| 文件 | 作用 |
+| 文件 | 当前用途 |
 |---|---|
-| `design_spec.md` | 面向 AI 编程 Agent 的设计规范（颜色/字体/布局/组件/交互/断点 + 代码示例） |
-| `tokens.web.css` | B 端设计令牌（Tailwind v4 `@theme`，事实源） |
-| `tokens.webc.css` | C 端设计令牌（同色系，动效集不同） |
-| `components.css` | 可复用组件库（`.wl-*` 类：按钮/输入/卡片/色块/弹窗/AskRail/手机壳…） |
+| `design_spec.md` | 历史设计规范和迁移参考 |
+| `tokens.web.css` | 历史 B 端令牌快照，不再是事实源 |
+| `tokens.webc.css` | 历史 C 端令牌快照，不再是事实源 |
+| `components.css` | 历史组件 CSS 快照，不得新增引用 |
 
-## 接入方式
-
-**Tailwind v4 工程（apps/web、apps/webc）**
+## 生产接入
 
 ```css
-@import "tailwindcss";
-@import "./tokens.web.css";   /* 或 tokens.webc.css */
-@import "./components.css";
+@import "@workloom/ui/tokens.css";
+@import "@workloom/ui/content-safety.css";
 ```
 
-> 各仓 `apps/*/src/styles/tokens.css` 与本包 `tokens.*.css` 逐值一致；如需改值，先改本包再全仓同步（流程见 design_spec.md §10）。
+行业仓必须锁定 `sync/base-capabilities.json` 指定的稳定版本；基座仓使用 `workspace:*`。不得把包内容复制回本地样式目录。
 
-**纯 HTML 演示页（docs/demo/*.html）**
+静态演示页不再算作 B 端移动生产客户端，也不得作为新功能验收证据。迁移完成后由共享 React/PWA 壳替代。
 
-```html
-<link rel="stylesheet" href="../../design-system/components.css">
-<!-- 内建 :root 回退变量，无需 tokens 文件即可使用 .wl-* 组件类 -->
-```
+## 修改与发布
 
-## 独立修改样式
+1. 只在 WorkLoom IM 的 `packages/ui` 修改 token、基础组件和交互契约。
+2. 在基座完成三端、无障碍、长中文、缩放和视觉回归门禁。
+3. 更新稳定版本清单并发布 `ui-v*` 标签。
+4. 发布流程为每个现有行业仓创建依赖升级 PR；行业仓 CI 通过后逐仓合并。
+5. 新行业通过 `sync/adopt.sh --new-industry` 一次生成并锁定当时最新版的共享 UI 与三端客户端基座；没有稳定版本、独立产品身份或任一真实生产入口时拒绝接入。
 
-1. 改颜色/字号/圆角 → 编辑 `tokens.*.css` 中对应 `--*` 变量（组件全部消费变量，会自动跟随）。
-2. 改组件外观/交互 → 编辑 `components.css` 中对应 `.wl-*` 类。
-3. 改完按 `design_spec.md §10` 同步到其余仓库，保持各仓副本一致。
+## 历史版本
 
-## 版本
-
-- v1.1（2026-08-26）：新增模块色块五淡色、AskRail 通栏组件、手机壳边框规范、文案命名纪律；初版组件库封装。
-- v1.0（2026-08）：糖果色系确立，深空蓝主题终结。
+- v1.1（2026-08-26）：旧版快照；已进入迁移期。
+- v1.0（2026-08）：旧版快照。

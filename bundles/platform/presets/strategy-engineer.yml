@@ -8,6 +8,8 @@ readonly: false
 night_shift: true
 high_risk: false
 fence_bindings: ['R-PL9']
+coverage:
+  - { eventPrefix: "strategy.", label: 策略运营 }
 skills: ['strategy-forge']
 tools:
   - { name: insights.read, access: read, desc: 读取洞察报告 }

@@ -7,6 +7,8 @@ import { SignJWT, jwtVerify } from "jose";
 import type { MemberRole, PlanTier } from "@workloom/shared";
 
 export interface Identity {
+  /** 旧演示令牌没有 kind；校验后会统一补成 member。 */
+  kind?: "member";
   memberId: string;
   memberNo: string;
   name: string;
@@ -15,6 +17,17 @@ export interface Identity {
   workspaceId: string;
   plan: PlanTier;
 }
+
+/** 伙伴令牌与成员令牌严格分域，不能被普通 protectedProcedure 当作成员消费。 */
+export interface PartnerSessionIdentity {
+  kind: "partner";
+  partnerId: string;
+  contactAccountId: string;
+  name: string;
+  grants: Array<{ grantId: string; tenantId: string; workspaces: string[]; capabilities: string[] }>;
+}
+
+export type SessionIdentity = Identity | PartnerSessionIdentity;
 
 const DEV_SECRET = "workloom-dev-secret-change-me";
 
@@ -34,7 +47,7 @@ function key(): Uint8Array {
 
 /** 签发演示 JWT（24h，对齐审批超时口径 G6 的一天会话） */
 export async function signDemoToken(identity: Identity): Promise<string> {
-  return new SignJWT({ ...identity })
+  return new SignJWT({ ...identity, kind: "member" })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setIssuer("workloom-im")
@@ -42,20 +55,71 @@ export async function signDemoToken(identity: Identity): Promise<string> {
     .sign(key());
 }
 
-/** 校验并还原身份；失败返回 null（调用方按 401 处理） */
-export async function verifyToken(token: string): Promise<Identity | null> {
+function stringClaim(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function memberIdentity(payload: Record<string, unknown>): Identity | null {
+  const memberId = stringClaim(payload.memberId);
+  const memberNo = stringClaim(payload.memberNo);
+  const name = stringClaim(payload.name);
+  const tenantId = stringClaim(payload.tenantId);
+  const workspaceId = stringClaim(payload.workspaceId);
+  const roles = new Set<MemberRole>(["owner", "manager", "staff", "readonly", "group", "channel"]);
+  const plans = new Set<PlanTier>(["community", "pro", "teams", "vpc"]);
+  if (!memberId || !memberNo || !name || !tenantId || !workspaceId
+    || !roles.has(payload.role as MemberRole) || !plans.has(payload.plan as PlanTier)) return null;
+  return {
+    kind: "member",
+    memberId,
+    memberNo,
+    name,
+    role: payload.role as MemberRole,
+    tenantId,
+    workspaceId,
+    plan: payload.plan as PlanTier,
+  };
+}
+
+function partnerIdentity(payload: Record<string, unknown>): PartnerSessionIdentity | null {
+  const partnerId = stringClaim(payload.partnerId);
+  const contactAccountId = stringClaim(payload.contactAccountId);
+  const name = stringClaim(payload.name);
+  if (!partnerId || !contactAccountId || !name || !Array.isArray(payload.grants)) return null;
+  const grants: PartnerSessionIdentity["grants"] = [];
+  for (const raw of payload.grants) {
+    if (!raw || typeof raw !== "object") return null;
+    const grant = raw as Record<string, unknown>;
+    const grantId = stringClaim(grant.grantId);
+    const tenantId = stringClaim(grant.tenantId);
+    if (!grantId || !tenantId || !Array.isArray(grant.workspaces) || !Array.isArray(grant.capabilities)
+      || !grant.workspaces.every((item) => typeof item === "string")
+      || !grant.capabilities.every((item) => typeof item === "string")) return null;
+    grants.push({
+      grantId,
+      tenantId,
+      workspaces: grant.workspaces as string[],
+      capabilities: grant.capabilities as string[],
+    });
+  }
+  return { kind: "partner", partnerId, contactAccountId, name, grants };
+}
+
+/** 验签后按 kind 严格解析会话；未知/缺字段载荷一律失败关闭。 */
+export async function verifySessionToken(token: string): Promise<SessionIdentity | null> {
   try {
     const { payload } = await jwtVerify(token, key(), { issuer: "workloom-im" });
-    return {
-      memberId: String(payload.memberId),
-      memberNo: String(payload.memberNo),
-      name: String(payload.name),
-      role: payload.role as MemberRole,
-      tenantId: String(payload.tenantId),
-      workspaceId: String(payload.workspaceId),
-      plan: payload.plan as PlanTier,
-    };
+    const record = payload as Record<string, unknown>;
+    if (record.kind === "partner") return partnerIdentity(record);
+    if (record.kind !== undefined && record.kind !== "member") return null;
+    return memberIdentity(record);
   } catch {
     return null;
   }
+}
+
+/** 校验并还原身份；失败返回 null（调用方按 401 处理） */
+export async function verifyToken(token: string): Promise<Identity | null> {
+  const session = await verifySessionToken(token);
+  return session?.kind === "partner" ? null : session;
 }

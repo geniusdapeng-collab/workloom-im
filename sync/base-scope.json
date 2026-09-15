@@ -1,6 +1,49 @@
 {
-  "version": 3,
-  "description": "WorkLoom IM 基座能力同步范围声明——base-sync 引擎的唯一事实源。只有基座能力（include）会从基座受控分发到子仓；行业属性与演示能力（exclude）永不同步。requiredRootAssets 无视行业代码的 pathPrefix，始终安装并校验在 Git 仓库根目录。修改本文件即修改同步边界，需基座 owner 评审。",
+  "version": 5,
+  "description": "WorkLoom IM 基座能力同步范围声明——base-sync 引擎的唯一事实源。文件型公共能力按 include/exclude 受控分发；三端组件/视觉语言通过 @workloom/ui 稳定制品下发，三端应用壳/导航/布局/状态/API 接线通过同一 ui-v* 稳定标签和逐文件指纹升级 PR 下发。行业属性与演示能力永不同步。requiredRootAssets 无视行业代码的 pathPrefix，始终安装并校验在 Git 仓库根目录。修改本文件即修改同步边界，需基座 owner 评审。",
+
+  "registryCapabilities": [
+    {
+      "package": "@workloom/ui",
+      "source": "packages/ui/**",
+      "consumers": ["apps/web", "apps/webb", "apps/webc"],
+      "distribution": "stable-registry-upgrade-pr",
+      "consumerGate": "scripts/verify-ui-consumer.mjs",
+      "migration": "two-phase-required",
+      "comment": "第一阶段先补齐三个真实生产客户端与产品身份配置，第二阶段再锁定稳定制品并运行消费门禁；缺少 apps/webb 等客户端时必须报告迁移未完成，禁止按三端合规处理。"
+    }
+  ],
+
+  "clientFoundationCapability": {
+    "source": "apps/web/** + apps/webb/** + apps/webc/**",
+    "configuration": "sync/base-capabilities.json#clientFoundation",
+    "installer": "sync/client-foundation.mjs",
+    "stateFile": ".workloom-client-foundation.json",
+    "distribution": "stable-tag-upgrade-pr",
+    "conflictPolicy": "previous-source-sha256-fail-close",
+    "industryExtensionPaths": [
+      "apps/*/src/extensions/**",
+      "apps/*/src/projections/**",
+      "apps/*/src/config/industry/**",
+      "apps/*/src/theme/industry/**",
+      "apps/*/public/industry/**"
+    ],
+    "comment": "这些路径仍显式排除普通 base-sync，避免双通道覆盖。新行业用 adopt.sh --new-industry 从 latest stable 一次生成三端；存量仓只经 ui-upgrade-pr 波次 PR 更新。"
+  },
+
+  "protectedChildAssets": {
+    "files": [
+      "electron-builder.yml",
+      "product.manifest.json"
+    ],
+    "identityFields": [
+      "appId",
+      "productName",
+      "ports",
+      "publish"
+    ],
+    "comment": "桌面应用标识、产品名、端口和发布身份属于部署实例资产；base-sync 不得整文件覆盖。新行业应由 product.manifest.json 显式配置，存量仓先完成身份迁移再接收稳定基座升级。"
+  },
 
   "requiredRootAssets": {
     "files": [
@@ -42,17 +85,15 @@
 
   "include": [
     "packages/base/**",
+    "packages/industry-contract/**",
     "packages/runtime/**",
     "packages/shared/**",
     "packages/db/**",
     "apps/server/src/**",
     "apps/server/package.json",
     "apps/desktop/**",
-    "apps/web/src/lib/**",
-    "apps/web/package.json",
     "scripts/**",
-    "docker-compose.yml",
-    "electron-builder.yml"
+    "docker-compose.yml"
   ],
 
   "exclude": [
@@ -63,7 +104,12 @@
     "vendor/**",
     "design-system/**",
     "apps/site/**",
+    "apps/web/**",
+    "apps/webb/**",
     "apps/webc/**",
+
+    "electron-builder.yml",
+    "product.manifest.json",
 
     "apps/web/src/App.tsx",
     "apps/web/src/shell/**",
@@ -85,6 +131,7 @@
     "apps/server/src/service/gateway.ts",
     "apps/server/src/service/ticket.ts",
     "apps/server/src/service/adapters/**",
+    "apps/server/src/industry/**",
 
     "packages/base/captain/charter.ts",
     "packages/base/captain/decision.ts",
@@ -146,11 +193,6 @@
       "strategy": "json-merge-keep-child-extra",
       "mergeKeys": ["include"],
       "comment": "基座版为底；子仓独有的 include 目录（如 audit-core 试验田）必须保留"
-    },
-    "apps/web/package.json": {
-      "strategy": "json-merge-keep-child-extra",
-      "mergeKeys": ["dependencies", "devDependencies"],
-      "comment": "基座版为底；子仓独有依赖保留"
     },
     "apps/server/package.json": {
       "strategy": "json-merge-keep-child-extra",

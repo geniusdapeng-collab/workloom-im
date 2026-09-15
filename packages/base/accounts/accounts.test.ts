@@ -1,15 +1,19 @@
 /**
  * accounts 测试：
  *  ① 纯函数（kdf/token/模板结构）——常跑；
- *  ② PG 集成（RUN_DB_TESTS=1 + DATABASE_APP_URL）——0027 迁移后的全链路：
+ *  ② PG 集成（RUN_DB_TESTS=1 + DATABASE_URL）——0027 迁移后的业务全链路：
  *     注册→验证码登录→刷新旋转→切店→邀请接受→移除失效→伙伴授权/登录/吊销→API 密钥→审批模板。
+ *     该链路包含“身份建立前”和跨工作区聚合，按服务端正式入口使用受控 owner 连接；
+ *     workloom_app 的精确权限与 RLS 另由 accounts/role-access.test.ts 独立回归。
  */
-import { describe, expect, it, beforeAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { hashPassword, verifyPassword, hashSecret, newId } from "./kdf.js";
 import { mintRefreshToken, hashRefreshToken, signAccessToken, signPartnerToken, ACCESS_TTL_SEC } from "./tokens.js";
 import { APPROVAL_TEMPLATES } from "./policies.js";
-import { DevEchoSms } from "./providers.js";
+import { createSmsSender, DevEchoSms, UnavailableSms } from "./providers.js";
 import { verifyToken } from "../tenancy/auth.js";
+import { issueGrant, revokeGrant } from "./partner.js";
+import { suggestedWorkspaceSlug, type AccountsDeps } from "./service.js";
 
 /* ================= ① 纯函数 ================= */
 
@@ -26,6 +30,19 @@ describe("kdf 口令散列", () => {
   it("hashSecret 稳定且带盐隔离", () => {
     expect(hashSecret("123456", "13800001111")).toBe(hashSecret("123456", "13800001111"));
     expect(hashSecret("123456", "13800001111")).not.toBe(hashSecret("123456", "13800002222"));
+  });
+});
+
+describe("工作区地址建议", () => {
+  it("中文名称不伪造拼音，使用稳定且合法的手机号尾号建议", () => {
+    expect(suggestedWorkspaceSlug("研发中心", "13800001234")).toBe("workspace-1234");
+  });
+
+  it("拉丁名称规范化并限制为客户端可接受的安全地址", () => {
+    expect(suggestedWorkspaceSlug(" Product  Team ", "13800001234")).toBe("product-team");
+    const value = suggestedWorkspaceSlug("A very very very very very long workspace name", "13800001234");
+    expect(value).toMatch(/^[a-z0-9][a-z0-9-]{2,31}$/);
+    expect(value.length).toBeLessThanOrEqual(32);
   });
 });
 
@@ -96,11 +113,75 @@ describe("providers（开发通道）", () => {
     expect(sms.sent[0]).toMatchObject({ target: "13800001111" });
     expect(sms.sent[0]!.text).toContain("123456");
   });
+
+  it("短信通道默认失败关闭，且生产环境禁止开发回声", async () => {
+    await expect(createSmsSender({}).send("13800001111", "验证码 123456"))
+      .rejects.toThrow("短信通道未配置");
+    await expect(createSmsSender({ driver: "dev", nodeEnv: "production" }).send("13800001111", "验证码 123456"))
+      .rejects.toThrow("生产环境禁止");
+    expect(createSmsSender({ driver: "dev", nodeEnv: "development" })).toBeInstanceOf(DevEchoSms);
+    expect(createSmsSender({ driver: "aliyun", nodeEnv: "production" })).toBeInstanceOf(UnavailableSms);
+  });
+});
+
+describe("伙伴授权租户边界", () => {
+  const grantInput = {
+    partnerId: "ptr-1",
+    tenantId: "tenant-a",
+    workspaces: ["ws-a"],
+    capabilities: ["ticket.handle" as const],
+    ttlDays: 30,
+    issuedBy: "mem-owner",
+  };
+
+  it("签发必须明确选择工作区，且所有工作区都属于当前租户", async () => {
+    let queryCount = 0;
+    const deps: AccountsDeps = {
+      sms: new DevEchoSms(),
+      q: async (text) => {
+        queryCount += 1;
+        if (text.includes("SELECT id FROM workspaces")) return { rows: [] };
+        return { rows: [] };
+      },
+    };
+
+    await expect(issueGrant(deps, { ...grantInput, workspaces: [] }))
+      .rejects.toThrow("至少一个工作区");
+    expect(queryCount).toBe(0);
+
+    await expect(issueGrant(deps, grantInput)).rejects.toThrow("当前租户");
+    expect(queryCount).toBe(1);
+  });
+
+  it("合法签发只写入已校验的工作区；吊销始终按租户收口", async () => {
+    const calls: Array<{ text: string; params?: unknown[] }> = [];
+    const deps: AccountsDeps = {
+      sms: new DevEchoSms(),
+      q: async (text, params) => {
+        calls.push({ text, params });
+        if (text.includes("SELECT id FROM workspaces")) return { rows: [{ id: "ws-a" }] };
+        if (text.includes("UPDATE partner_grants")) {
+          return { rows: params?.[2] === "tenant-a" ? [{ id: "grt-1" }] : [] };
+        }
+        return { rows: [] };
+      },
+    };
+
+    await expect(issueGrant(deps, grantInput)).resolves.toMatchObject({ grantId: expect.any(String) });
+    const insert = calls.find((call) => call.text.includes("INSERT INTO partner_grants"));
+    expect(insert?.params?.[3]).toBe('["ws-a"]');
+
+    await expect(revokeGrant(deps, "grt-1", "合作终止", "tenant-b"))
+      .rejects.toThrow("当前租户");
+    await expect(revokeGrant(deps, "grt-1", "合作终止", "tenant-a")).resolves.toBeUndefined();
+    const revokeCalls = calls.filter((call) => call.text.includes("UPDATE partner_grants"));
+    expect(revokeCalls.every((call) => call.text.includes("tenant_id=$3"))).toBe(true);
+  });
 });
 
 /* ================= ② PG 集成（RUN_DB_TESTS=1） ================= */
 
-const RUN_DB = process.env.RUN_DB_TESTS === "1" && !!process.env.DATABASE_APP_URL;
+const RUN_DB = process.env.RUN_DB_TESTS === "1" && !!process.env.DATABASE_URL;
 const d = RUN_DB ? describe : describe.skip;
 
 d("PG 集成 · 账号全链路（0027 迁移后）", () => {
@@ -118,11 +199,16 @@ d("PG 集成 · 账号全链路（0027 迁移后）", () => {
 
   beforeAll(async () => {
     const pg = (await import("pg")).default;
-    pool = new pg.Pool({ connectionString: process.env.DATABASE_APP_URL });
+    // 与 accountsRouter 的公开登录/激活例外保持一致：身份建立前无法设置 RLS scope。
+    pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
     svc = await import("./service.js");
     prt = await import("./partner.js");
     pol = await import("./policies.js");
     deps = { q: (t, p) => pool.query(t, p as never[]), sms: new DevEchoSms() };
+  });
+
+  afterAll(async () => {
+    await pool?.end();
   });
 
   it("自助开通：注册→建租户→首店→owner 身份→签发双令牌", async () => {
@@ -146,6 +232,21 @@ d("PG 集成 · 账号全链路（0027 迁移后）", () => {
   it("验证码一次性：重用被拒", async () => {
     const ok = await svc.consumeCode(deps, { channel: "phone", target: phone, purpose: "activate", code: devCode });
     expect(ok).toBe(false);
+  });
+
+  it("高风险验证码绑定具体动作，且消费后不能重放", async () => {
+    const challenge = await svc.requestCode(deps, {
+      channel: "phone", target: phone, purpose: "danger-confirm:member.remove",
+    });
+    expect(await svc.consumeCode(deps, {
+      channel: "phone", target: phone, purpose: "danger-confirm:api-key.revoke", code: challenge.devCode!,
+    })).toBe(false);
+    expect(await svc.consumeCode(deps, {
+      channel: "phone", target: phone, purpose: "danger-confirm:member.remove", code: challenge.devCode!,
+    })).toBe(true);
+    expect(await svc.consumeCode(deps, {
+      channel: "phone", target: phone, purpose: "danger-confirm:member.remove", code: challenge.devCode!,
+    })).toBe(false);
   });
 
   it("验证码登录 + 每日限发 5 次", async () => {
@@ -209,6 +310,12 @@ d("PG 集成 · 账号全链路（0027 迁移后）", () => {
     const agencyPhone = `137${String(Math.floor(Math.random() * 1e8)).padStart(8, "0")}`;
     const { partnerId } = await prt.ensurePartner(deps, { name: "安心代运营", type: "agency", contactPhone: agencyPhone });
     const wsId = (await pool.query(`SELECT id FROM workspaces WHERE slug=$1`, [wsSlug])).rows[0].id;
+    await expect(prt.issueGrant(deps, {
+      partnerId, tenantId, workspaces: [], capabilities: ["ticket.handle"], ttlDays: 90, issuedBy: "mem-test",
+    })).rejects.toThrow("至少一个工作区");
+    await expect(prt.issueGrant(deps, {
+      partnerId, tenantId, workspaces: ["ws-outside-current-tenant"], capabilities: ["ticket.handle"], ttlDays: 90, issuedBy: "mem-test",
+    })).rejects.toThrow("当前租户");
     const { grantId } = await prt.issueGrant(deps, {
       partnerId, tenantId, workspaces: [wsId], capabilities: ["ticket.handle", "report.view"], ttlDays: 90, issuedBy: "mem-test",
     });
@@ -224,7 +331,9 @@ d("PG 集成 · 账号全链路（0027 迁移后）", () => {
     expect((await prt.checkPartnerCapability(deps.q, { partnerId, tenantId, workspaceId: wsId, capability: "credit.adjust" })).ok).toBe(false);
     expect((await prt.checkPartnerCapability(deps.q, { partnerId, tenantId: "tenant-other", capability: "ticket.handle" })).ok).toBe(false);
     // 吊销 → 即时失效
-    await prt.revokeGrant(deps, grantId, "合作终止");
+    await expect(prt.revokeGrant(deps, grantId, "越权吊销", "tenant-other")).rejects.toThrow("当前租户");
+    expect((await prt.checkPartnerCapability(deps.q, { partnerId, tenantId, workspaceId: wsId, capability: "ticket.handle" })).ok).toBe(true);
+    await prt.revokeGrant(deps, grantId, "合作终止", tenantId);
     expect((await prt.checkPartnerCapability(deps.q, { partnerId, tenantId, workspaceId: wsId, capability: "ticket.handle" })).ok).toBe(false);
   });
 
@@ -237,7 +346,7 @@ d("PG 集成 · 账号全链路（0027 迁移后）", () => {
     expect(r.passCode).toMatch(/^\d{6}$/);
   });
 
-  it("API 密钥：签发→校验→吊销后拒绝", async () => {
+  it("API 密钥：签发→双密钥轮换→确认切换→吊销", async () => {
     const wsId = (await pool.query(`SELECT id FROM workspaces WHERE slug=$1`, [wsSlug])).rows[0].id;
     const { keyId, plainKey } = await pol.createApiKey(deps, {
       workspaceId: wsId, name: "PMS 对接", capabilities: ["read:orders"], createdBy: "mem-test",
@@ -245,8 +354,38 @@ d("PG 集成 · 账号全链路（0027 迁移后）", () => {
     expect(plainKey.startsWith("wlk_")).toBe(true);
     const id1 = await pol.verifyApiKey(deps.q, plainKey);
     expect(id1).toMatchObject({ workspaceId: wsId, capabilities: ["read:orders"] });
-    await pol.revokeApiKey(deps.q, wsId, keyId);
+    const rotated = await pol.rotateApiKey(deps, {
+      workspaceId: wsId, keyId, overlapMinutes: 5, createdBy: "mem-test",
+    });
+    expect(rotated.plainKey.startsWith("wlk_")).toBe(true);
+    expect(rotated.plainKey).not.toBe(plainKey);
+    expect(await pol.verifyApiKey(deps.q, plainKey)).toMatchObject({ keyId });
+    expect(await pol.verifyApiKey(deps.q, rotated.plainKey)).toMatchObject({ keyId: rotated.keyId });
+
+    const duringRotation = await pol.listApiKeys(deps.q, wsId);
+    expect(duringRotation.find((row) => row.id === keyId)).toMatchObject({ replaced_by: rotated.keyId });
+    expect(duringRotation.find((row) => row.id === rotated.keyId)).toMatchObject({ rotation_of: keyId });
+
+    await pol.completeApiKeyRotation(deps.q, wsId, keyId);
     expect(await pol.verifyApiKey(deps.q, plainKey)).toBeNull();
+    expect(await pol.verifyApiKey(deps.q, rotated.plainKey)).toMatchObject({ keyId: rotated.keyId });
+    await pol.revokeApiKey(deps.q, wsId, rotated.keyId);
+    expect(await pol.verifyApiKey(deps.q, rotated.plainKey)).toBeNull();
+  });
+
+  it("API 密钥：并存窗口到期自动落成失效状态", async () => {
+    const wsId = (await pool.query(`SELECT id FROM workspaces WHERE slug=$1`, [wsSlug])).rows[0].id;
+    const source = await pol.createApiKey(deps, {
+      workspaceId: wsId, name: "自动到期回归", capabilities: ["read:events"], createdBy: "mem-test",
+    });
+    const rotated = await pol.rotateApiKey(deps, {
+      workspaceId: wsId, keyId: source.keyId, overlapMinutes: 5, createdBy: "mem-test",
+    });
+    await pool.query(`UPDATE api_keys SET overlap_expires_at=now()-interval '1 second' WHERE id=$1`, [source.keyId]);
+    expect(await pol.verifyApiKey(deps.q, source.plainKey)).toBeNull();
+    expect(await pol.verifyApiKey(deps.q, rotated.plainKey)).toMatchObject({ keyId: rotated.keyId });
+    const rows = await pol.listApiKeys(deps.q, wsId);
+    expect(rows.find((row) => row.id === source.keyId)?.revoked_at).toBeTruthy();
   });
 
   it("审批模板应用：预填四行且幂等", async () => {

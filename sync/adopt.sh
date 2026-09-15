@@ -1,17 +1,47 @@
 #!/usr/bin/env bash
 # WorkLoom IM · 新子仓安全接入
 #
-# 只安装根级必备资产（完整产品上下文、AGENTS 受控块、同步 state）与心跳
-# workflow，不触碰行业代码。所有产物留在工作树中供人工复核、白名单暂存和提交。
+# 存量模式只安装根级必备资产；--new-industry 额外从最新版稳定标签一次安装
+# 三端客户端基座。两种模式都不触碰 Bundle/行业扩展，且不暂存、不提交、不推送。
 #
-# 用法：bash sync/adopt.sh <子仓本地路径> [--path-prefix governance/]
+# 存量仓只接入治理：bash sync/adopt.sh <子仓本地路径> [--path-prefix governance/]
+# 新行业完整脚手架：bash sync/adopt.sh <子仓本地路径> --new-industry [--path-prefix governance/] [--dry-run]
 set -euo pipefail
 
-CHILD="${1:?用法: bash sync/adopt.sh <子仓路径> [--path-prefix <prefix>]}"
+CHILD="${1:?用法: bash sync/adopt.sh <子仓路径> [--new-industry] [--path-prefix <prefix>] [--dry-run]}"
+shift
 PREFIX=""
-if [ "${2:-}" = "--path-prefix" ]; then
-  [ -n "${3:-}" ] || { echo "❌ --path-prefix 需要目录参数"; exit 64; }
-  RAW_PREFIX="${3%/}"
+NEW_INDUSTRY=false
+DRY_RUN=false
+FOUNDATION_VERSION=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --new-industry)
+      NEW_INDUSTRY=true
+      shift
+      ;;
+    --dry-run)
+      DRY_RUN=true
+      shift
+      ;;
+    --version)
+      [ -n "${2:-}" ] || { echo "❌ --version 需要精确稳定版本"; exit 64; }
+      FOUNDATION_VERSION="$2"
+      shift 2
+      ;;
+    --path-prefix)
+      [ -n "${2:-}" ] || { echo "❌ --path-prefix 需要目录参数"; exit 64; }
+      RAW_PREFIX="${2%/}"
+      shift 2
+      ;;
+    *)
+      echo "❌ 未知参数：$1"
+      exit 64
+      ;;
+  esac
+done
+
+if [ -n "${RAW_PREFIX:-}" ]; then
   case "$RAW_PREFIX" in
     ""|/*|*//*|*\\*|*[!A-Za-z0-9._/-]*) echo "❌ --path-prefix 必须是仓库内安全相对目录"; exit 64 ;;
   esac
@@ -23,9 +53,6 @@ if [ "${2:-}" = "--path-prefix" ]; then
     }
   done
   PREFIX="$RAW_PREFIX/"
-elif [ -n "${2:-}" ]; then
-  echo "❌ 未知参数：$2"
-  exit 64
 fi
 
 SYNC_DIR="$(cd "$(dirname "$0")" && pwd -P)"
@@ -61,14 +88,33 @@ ADOPT_HEAD_HASH="$(git -C "$BASE_DIR" rev-parse HEAD:sync/adopt.sh 2>/dev/null |
 echo "== WorkLoom IM 根级上下文接入 =="
 echo "   子仓：${REPO_NAME}（行业基座目录：${PREFIX:-（根）}）"
 
+FOUNDATION_ARGS=(--repo "$CHILD" --base-dir "$BASE_DIR")
+[ -n "$PREFIX" ] && FOUNDATION_ARGS+=(--path-prefix "${PREFIX%/}")
+[ -n "$FOUNDATION_VERSION" ] && FOUNDATION_ARGS+=(--version "$FOUNDATION_VERSION")
+
+# 新行业先对稳定标签、独立产品身份、三端受管路径与全部潜在冲突做零写入
+# 预检。首个稳定版未发布、身份仍是基座默认值或既有文件无可信指纹时，必须
+# 在写根级接入资产之前终止。
+if [ "$NEW_INDUSTRY" = true ]; then
+  node "$SYNC_DIR/client-foundation.mjs" scaffold "${FOUNDATION_ARGS[@]}" --dry-run
+  echo "  ✅ 新行业三端脚手架预检通过（默认采用 latest stable）"
+fi
+
 # ① 只安装根级 required assets。引擎先写内容、逐项复验，再写根级 state。
 # --no-commit 使既有工作树也能安全接入，且不会偷偷暂存或提交任何用户文件。
-node "$SYNC_DIR/base-sync.mjs" pull \
+BASE_SYNC_ARGS=(pull \
   --repo "$WORKDIR" \
   --base-dir "$BASE_DIR" \
   --required-only \
   --no-commit \
-  --adopt
+  --adopt)
+[ "$DRY_RUN" = true ] && BASE_SYNC_ARGS+=(--dry-run)
+node "$SYNC_DIR/base-sync.mjs" "${BASE_SYNC_ARGS[@]}"
+
+if [ "$DRY_RUN" = true ]; then
+  echo "  ✅ dry-run 完成：根级资产与三端客户端均未写入"
+  exit 0
+fi
 
 # ② 独立复验；即使 state 的 SHA 看似相同，也会重新读取文件并比较受控区块/哈希。
 node "$SYNC_DIR/base-sync.mjs" detect \
@@ -86,15 +132,61 @@ echo "  ✅ 根级产品上下文、AGENTS 受控块与 state 已安装并验真
 # 运行时从根级 state.pathPrefix 读取行业基座目录，因此无需仓别模板渲染。
 echo "  ✅ 通用 heartbeat workflow 已安装（行业基座目录由根级 state.pathPrefix 解析）"
 
+# 新行业不是“报告缺端后留给人工复制”：通过预检后一次安装同一稳定标签里的
+# PC/B移动/C移动应用壳，并建立逐文件旧基座指纹。随后锁定同版本 @workloom/ui
+# 且运行真实消费门禁。product.manifest.json 始终由行业仓预先提供，两个脚本均
+# 不生成、不覆盖该身份文件。
+if [ "$NEW_INDUSTRY" = true ]; then
+  node "$SYNC_DIR/client-foundation.mjs" scaffold "${FOUNDATION_ARGS[@]}"
+  UI_ARGS=(--repo "$CHILD")
+  [ -n "$PREFIX" ] && UI_ARGS+=(--path-prefix "${PREFIX%/}")
+  [ -n "$FOUNDATION_VERSION" ] && UI_ARGS+=(--version "$FOUNDATION_VERSION")
+  node "$SYNC_DIR/set-ui-version.mjs" "${UI_ARGS[@]}"
+  mkdir -p "$WORKDIR/scripts" "$CHILD/.github/workflows"
+  cp "$BASE_DIR/scripts/verify-ui-consumer.mjs" "$WORKDIR/scripts/verify-ui-consumer.mjs"
+  cp "$BASE_DIR/scripts/verify-client-foundation-consumer.mjs" "$WORKDIR/scripts/verify-client-foundation-consumer.mjs"
+  REPO_DIR="${PREFIX%/}"
+  [ -n "$REPO_DIR" ] || REPO_DIR="."
+  sed "s|__REPO_DIR__|$REPO_DIR|g" "$SYNC_DIR/ui-consumer-template.yml" > "$CHILD/.github/workflows/workloom-ui-contract.yml"
+  node "$WORKDIR/scripts/verify-ui-consumer.mjs" --repo "$WORKDIR"
+  node "$WORKDIR/scripts/verify-client-foundation-consumer.mjs" --repo "$WORKDIR"
+  echo "  ✅ 最新稳定三端客户端基座与共享 UI 已一次接入"
+fi
+
+# ④ 报告三端/身份迁移阶段。存量模式不复制客户端；新行业模式已在上一步
+# 安装并验真完整三端。任何缺端都不能因为根资产对齐就被宣称合规。
+MISSING_CLIENTS=()
+for CLIENT_PACKAGE in apps/web/package.json apps/webb/package.json apps/webc/package.json; do
+  [ -f "$WORKDIR/$CLIENT_PACKAGE" ] || MISSING_CLIENTS+=("$CLIENT_PACKAGE")
+done
+if [ "$NEW_INDUSTRY" = true ]; then
+  echo "  ✅ 新行业三端结构、客户端基座指纹与 UI 消费契约已通过"
+elif [ "${#MISSING_CLIENTS[@]}" -gt 0 ]; then
+  echo "  ⚠️ 第一阶段迁移未完成：缺少 ${MISSING_CLIENTS[*]}"
+  echo "     请先从最新版基座模板补齐真实生产客户端；当前不得登记为三端合规。"
+elif [ ! -f "$WORKDIR/product.manifest.json" ]; then
+  echo "  ⚠️ 第一阶段迁移未完成：缺少 product.manifest.json（产品身份、端口与发布标识不得继承基座默认值）"
+elif [ ! -f "$WORKDIR/.workloom-ui.json" ]; then
+  echo "  ⚠️ 第二阶段迁移未完成：三端结构已存在，但尚未锁定 @workloom/ui 稳定制品"
+else
+  echo "  ℹ️ 三端结构与 UI 清单已存在；仍须通过 scripts/verify-ui-consumer.mjs 才能认定合规"
+fi
+
 cat <<EOF
 
   📋 接入文件已写入但未暂存、未提交、未推送。请先审查：
        git -C "$CHILD" diff -- WORKLOOM_PRODUCT_CONTEXT.md AGENTS.md AGENTS.repo.md .workloom-base-sync.json .github/workflows/base-sync-heartbeat.yml .github/workflows/base-sync-push.yml
 
+  --new-industry 还须审查：$WORKDIR/.workloom-ui.json、
+  $WORKDIR/.workloom-client-foundation.json、三个 apps 客户端、两个消费门禁脚本，
+  以及 .github/workflows/workloom-ui-contract.yml。
+
   若目标由 workloom-im fork/template 派生，adopt 仅在逐字节 fingerprint
   完全相同时把父仓 AGENTS.repo.md 改为通用待填写 scaffold，并移除父仓专属
   base-sync-push workflow；任何已定制内容都会保留。审查通过后只白名单暂存
-  上述接入变更并提交。随后把本仓登记到
-  workloom-im/sync/child-repos.json。GitHub Actions 使用仓库自带的短期
+  上述接入变更并提交。随后先完成“三端真实入口 + product.manifest.json”
+  结构迁移，再通过稳定 UI + 三端客户端基座升级 PR 锁定 @workloom/ui、应用壳
+  指纹并执行消费门禁；两阶段
+  都通过后才把本仓登记到 workloom-im/sync/child-repos.json。GitHub Actions 使用仓库自带的短期
   GITHUB_TOKEN 建同步 PR；不要配置或提交个人访问令牌。
 EOF

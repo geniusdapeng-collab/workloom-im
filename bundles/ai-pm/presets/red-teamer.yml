@@ -8,6 +8,8 @@ readonly: false
 night_shift: true
 high_risk: true
 fence_bindings: ['R-PM13']
+coverage:
+  - { eventPrefix: "redteam.", label: 红队检查 }
 skills: ['redteam-scan']
 tools:
   - { name: redteam.targets.read, access: read, desc: 读取待测目标清单 }

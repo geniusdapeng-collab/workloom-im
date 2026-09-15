@@ -35,9 +35,9 @@ export const workspaces = pgTable("workspaces", {
   tenantId: text("tenant_id").notNull().references(() => tenants.id),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
-  /** 行业 bundle 名：hotel / marketing / ...（§2.2 装配槽） */
-  industry: text("industry").notNull().default("hotel"),
-  /** 经营阶段（枚举行业化，bundles/hotel/schemas/stages.json） */
+  /** 当前 Bundle 行业标识；尚未装配时使用中性 general（§2.2 装配槽） */
+  industry: text("industry").notNull().default("general"),
+  /** 经营阶段（枚举来自活动 Bundle 的 schemas/stages.json） */
   stage: text("stage"),
   /** 夜班配置 F4.8：{ enabled, startTime, packageTime, candidateTime, timezone } */
   nightConfig: jsonb("night_config").notNull().default({}),

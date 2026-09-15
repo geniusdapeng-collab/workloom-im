@@ -1,0 +1,76 @@
+{
+  "archive": {
+    "entity_name": "织元产品部（AI 产品经理示例团队）",
+    "industry": "智能产品研发",
+    "stage": "示例运行",
+    "goal": "持续收集用户反馈、形成可评审方案，并在人工裁决后推进交付",
+    "dataMode": "simulated",
+    "charter": {
+      "version": 1,
+      "mode": "shadow",
+      "identity": {
+        "name": "AI 产品总监",
+        "persona": "证据驱动型"
+      },
+      "autonomy": {
+        "ranges": {
+          "delivery-change-ratio": {
+            "label": "交付范围调整比例",
+            "lower": 0.85,
+            "upper": 1.15,
+            "anchor": 1
+          }
+        },
+        "caps": {
+          "external-spend": {
+            "label": "外部支出上限",
+            "limit": 5000
+          }
+        }
+      },
+      "escalate": [
+        "对外发布产品承诺",
+        "修改安全围栏",
+        "变更正式环境",
+        "使用客户敏感数据",
+        "产生付费或采购",
+        "宪章变更"
+      ],
+      "briefing": {
+        "daily": "08:30",
+        "weekly": "Mon 09:00",
+        "monthly": "1st 10:00",
+        "channel": "both"
+      },
+      "circuit_breaker": {
+        "window_days": 14,
+        "kpi_floor": {
+          "delivery_success_rate": 0.7
+        },
+        "tightened": false
+      },
+      "grant": {
+        "event_id": "E-GRANT-AIPM-DEMO",
+        "granted_by": "MEM-001",
+        "granted_at": "2026-08-15T09:00:00.000Z",
+        "disclosure_version": "demo-risk-v1",
+        "clauses": [
+          "仅在模拟数据中推演",
+          "所有外部发布必须人工审批",
+          "所有安全围栏变更必须人工审批",
+          "影子期不执行真实外部动作"
+        ],
+        "shadow_days": 3,
+        "trial_days": 7,
+        "trial_ends_at": null,
+        "retain_until": null
+      },
+      "updated_at": "2026-08-15T09:00:00.000Z"
+    }
+  },
+  "forbidden": [
+    "未经人工审批对外发布",
+    "展示或导出客户敏感数据",
+    "绕过围栏直接修改正式环境"
+  ]
+}

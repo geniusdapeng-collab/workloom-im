@@ -8,6 +8,8 @@ readonly: false
 night_shift: true
 high_risk: false
 fence_bindings: ['R-PL1']
+coverage:
+  - { eventPrefix: "billing.", label: 账单管理 }
 skills: ['credit-reconcile']
 tools:
   - { name: credits.read, access: read, desc: 读取账本投影与消耗分布 }

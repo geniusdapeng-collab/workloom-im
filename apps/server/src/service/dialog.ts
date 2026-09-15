@@ -1,23 +1,29 @@
 /**
  * service · 对话（接口对齐 packages/base/service-dialog 签名；表结构为底座迁移版）
  * 意图流水线（M8：与 packages/base/service-dialog/intents.ts 同一张规则表 ruleBasedIntent）：
- *   complaint（投诉）> biz_query（订单/会员/房价/工单进度）> service_request（报修服务类，产 ticketDraft）
+ *   complaint（投诉）> 已验证行业适配器业务查询 / 通用工单进度 > service_request（产 ticketDraft）
  *   > kb_qa（KB 检索三档分流）> chat（规则未命中兜底）
- *   疑问句（几点/时间/吗/呢/怎么/如何）优先 kb_qa 不建单；「修/修一下/坏了」直连 service_request。
+ *   疑问句（几点/时间/吗/呢/怎么/如何）优先 kb_qa；行业写操作只由已验证适配器识别。
  * 置信度三档（H5：检索 score 归一化 0..1，复用 base scoreChunkFallback）：
  *   ≥0.72 直接作答（带引用）；0.45–0.72 作答但附「可能不完全准确」提示；<0.45 诚实拒答 + ticketDraft。
  * 命中 KB 必带 citations，无据不答（诚实拒答）。
  * 全量消息落 c_messages（stats.overview 聚合数据源；mock 仅在响应标注）。
  */
 import { ruleBasedIntent } from "@workloom/base/service-dialog";
+import { isWeakKbToken, type KbSearchLexicon } from "@workloom/base/service-kb";
 import { ensureServiceSchema } from "./store.js";
 import { searchKB, type KbHit } from "./kb.js";
 import { llmCall } from "./llm.js";
 import { serviceTx, svcQuery } from "./events.js";
 import type { Channel } from "./channels.js";
+import {
+  projectBusinessDialogMatch,
+  type BusinessTool,
+  type ServiceFrontBusinessAdapter,
+} from "./adapters/business.js";
 
 export type Intent = "chat" | "kb_qa" | "biz_query" | "service_request" | "complaint";
-export type BizToolName = "query_order" | "query_member" | "query_catalog" | "query_ticket";
+export type BizToolName = BusinessTool | "query_ticket";
 
 export interface DialogResult {
   conversationId: string;
@@ -39,38 +45,43 @@ function newId(prefix: string): string {
 
 /* ================= 意图（M8：复用 base 同一张规则表） ================= */
 
-/** 工单进度查询（server 侧特有 biz_query 子类，先于规则表判定） */
+/** 工单进度属于基座公共能力，不依赖行业适配器。 */
 const RE_TICKET_STATUS = /工单.*(进度|状态|怎么样)|进度.*工单/;
-const RE_ORDER = /订单|预订|订房|入住记录|房费|账单/;
-const RE_MEMBER = /会员|积分|等级|权益|余额/;
-const RE_CATALOG = /房价|房型|多少钱|价格/;
-/**
- * 客房价格查询直连（server 侧目录查询子类，先于规则表判定）：
- * 「豪华大床房多少钱一晚」= 房型目录业务查询（query_catalog）——判定锚是**房型名词**，
- * 与「面膜多少钱」「加床一张多少钱」类通用询价严格区分（后者无房型词，仍走 kb_qa 查 FAQ，
- * M8 评测口径 R04/A16/A19/A24 不破坏；base 规则表保持行业无关，D17/D18 不受影响）。
- */
-const RE_ROOM_RATE = /房价|房型|大床房|双床房|单人房|标准间|套房|海景房|钟点房/;
 
-export function classify(text: string): { intent: Intent; tool?: BizToolName } {
+export function classify(
+  text: string,
+  businessAdapter?: ServiceFrontBusinessAdapter | null,
+): { intent: Intent; tool?: BizToolName; answer?: string; params?: Record<string, unknown> } {
   if (RE_TICKET_STATUS.test(text)) return { intent: "biz_query", tool: "query_ticket" };
-  if (RE_ROOM_RATE.test(text)) return { intent: "biz_query", tool: "query_catalog" };
   const ruled = ruleBasedIntent(text);
   if (ruled === "complaint") return { intent: "complaint" };
-  if (ruled === "service_request") return { intent: "service_request" };
-  if (ruled === "biz_query") {
-    if (RE_MEMBER.test(text)) return { intent: "biz_query", tool: "query_member" };
-    if (RE_CATALOG.test(text)) return { intent: "biz_query", tool: "query_catalog" };
-    return { intent: "biz_query", tool: "query_order" };
+  const industryMatch = projectBusinessDialogMatch(businessAdapter?.classify(text) ?? null);
+  if (industryMatch) {
+    return {
+      intent: "biz_query",
+      tool: industryMatch.tool,
+      answer: industryMatch.answer,
+      params: industryMatch.params,
+    };
   }
+  // 通用疑问句优先知识问答；行业适配器不能仅因句中出现履约动词就误建单。
+  // 明确的行业业务查询已在上方由 classify 精确识别，因此不受此优先级影响。
   if (ruled === "kb_qa") return { intent: "kb_qa" };
+  // 行业履约意图由活动 Bundle 适配器识别，基座规则不保存行业词表。
+  if (businessAdapter?.ticketKind?.(text)) return { intent: "service_request" };
+  if (ruled === "service_request") return { intent: "service_request" };
+  // 通用规则只能判断“像业务查询”，不能猜测行业工具；未启用适配器时回到有据可查的知识库。
+  if (ruled === "biz_query") return { intent: "kb_qa" };
   return { intent: "kb_qa" }; // 规则未命中：默认先查知识库（低置信走诚实拒答三档）
 }
 
-/** service_request 文本 → 工单类型（修/坏类 → repair；送/拿/打扫类 → delivery；其余 other） */
-export function ticketKindOf(text: string): "repair" | "delivery" | "other" {
-  if (/维修|修|坏|故障|漏水|不制冷|不制热|空调|热水|马桶/.test(text)) return "repair";
-  if (/送|拿|打扫|换床单|加一|多要|再来/.test(text)) return "delivery";
+/** service_request → 通用工单类型；行业细分由已验证适配器优先提供。 */
+export function ticketKindOf(
+  text: string,
+  businessAdapter?: ServiceFrontBusinessAdapter | null,
+): "repair" | "delivery" | "other" {
+  const industryKind = businessAdapter?.ticketKind?.(text);
+  if (industryKind === "repair" || industryKind === "delivery" || industryKind === "other") return industryKind;
   return "other";
 }
 
@@ -89,7 +100,7 @@ export function tierOfScore(score: number | undefined): ConfidenceTier {
   return "low";
 }
 
-export const MEDIUM_HINT = "以上回答可能不完全准确，仅供参考；如需确认可联系客服。";
+export const MEDIUM_HINT = "以上回答可能不完全准确，仅供参考；如需确认可转人工服务。";
 export const LOW_REFUSAL = "抱歉，这个问题我暂时无法准确回答，不敢随意编造。已为您准备好工单草稿，确认后转人工跟进；您也可以换个说法再问我。";
 
 async function ensureConversation(input: {
@@ -134,8 +145,32 @@ function citationsOf(hits: KbHit[]): Array<{ documentTitle: string; heading: str
   return hits.slice(0, 3).map((h) => ({ documentTitle: h.documentTitle, heading: h.heading, content: h.content.slice(0, 300) }));
 }
 
+function normalizedEvidenceTokens(
+  hit: Pick<KbHit, "heading" | "content">,
+  lexicon?: KbSearchLexicon,
+): Set<string> {
+  const text = `${hit.heading}\n${hit.content}`
+    .toLowerCase()
+    .replace(/(?<=[a-z0-9])-(?=[a-z0-9])/g, "");
+  return new Set(
+    (text.match(/[a-z0-9]+|[\u4e00-\u9fff]{2}/g) ?? [])
+      .filter((token) => !isWeakKbToken(token, lexicon)),
+  );
+}
+
+/** top-2 合并只采用显式词表的弱词定义；省略词表时不理解任何行业弱词。 */
+export function sharesDistinctiveEvidence(
+  first: Pick<KbHit, "heading" | "content">,
+  second: Pick<KbHit, "heading" | "content">,
+  lexicon?: KbSearchLexicon,
+): boolean {
+  const firstTokens = normalizedEvidenceTokens(first, lexicon);
+  return [...normalizedEvidenceTokens(second, lexicon)].some((token) => firstTokens.has(token));
+}
+
 export async function handleMessage(input: {
   workspaceId: string; cUserId: string; channel: Channel; text: string; conversationId?: string;
+  businessAdapter?: ServiceFrontBusinessAdapter | null;
 }): Promise<DialogResult> {
   await ensureServiceSchema();
   const t0 = Date.now();
@@ -144,28 +179,26 @@ export async function handleMessage(input: {
   const conversationId = await ensureConversation(input);
   await logMessage({ workspaceId: input.workspaceId, conversationId, role: "user", content: input.text });
 
-  const cls = classify(input.text);
+  const cls = classify(input.text, input.businessAdapter);
   let result: Omit<DialogResult, "conversationId" | "latencyMs" | "mock">;
 
   if (cls.intent === "biz_query") {
     const tool = cls.tool!;
-    const answers: Record<BizToolName, string> = {
-      query_order: "为您查询到以下订单：",
-      query_member: "为您查询到会员信息：",
-      query_catalog: "为您查询到房型价格：",
-      query_ticket: "为您查询到工单进度：",
+    const answer = tool === "query_ticket" ? "正在为您查询工单进度。" : cls.answer ?? "正在为您查询相关信息。";
+    result = {
+      intent: "biz_query", answer, confidence: 0.95, citations: [],
+      toolCall: { tool, params: cls.params ?? {} },
     };
-    result = { intent: "biz_query", answer: answers[tool], confidence: 0.95, citations: [], toolCall: { tool, params: {} } };
   } else if (cls.intent === "complaint") {
     result = {
       intent: "complaint",
-      answer: "非常抱歉给您带来不便。我可以立即为您生成投诉工单，客服部将优先跟进。请确认是否提交？",
+      answer: "非常抱歉给您带来不便。我可以立即为您生成投诉工单，相关服务团队将优先跟进。请确认是否提交？",
       confidence: 0.9,
       citations: [],
       ticketDraft: { kind: "complaint", title: input.text.slice(0, 40), payload: { text: input.text } },
     };
   } else if (cls.intent === "service_request") {
-    const kind = ticketKindOf(input.text);
+    const kind = ticketKindOf(input.text, input.businessAdapter);
     result = {
       intent: "service_request",
       answer: "好的，我可以为您生成服务工单，相关部门会尽快处理。请确认是否提交？",
@@ -175,7 +208,8 @@ export async function handleMessage(input: {
     };
   } else {
     // kb_qa：检索三档分流（H5）——score 已归一化 0..1
-    const hits = await searchKB({ workspaceId: input.workspaceId, query: input.text, limit: 5 });
+    const lexicon = input.businessAdapter?.kbLexicon;
+    const hits = await searchKB({ workspaceId: input.workspaceId, query: input.text, limit: 5, lexicon });
     const top = hits[0];
     const tier = tierOfScore(top?.score);
     if (tier === "low") {
@@ -192,18 +226,11 @@ export async function handleMessage(input: {
         },
       };
     } else if (top) {
-      // top-2 合并：次命中与首命中共享非弱词 token 且自身 ≥0.45 时并入（跨块事实，如「早餐多少钱」）
-      const WEAK = new Set(["时间", "免费", "收费", "可以", "服务", "商品", "店铺", "半天", "一份", "一瓶", "东西", "地方", "怎么", "如何", "一下", "价格", "多少钱", "订单", "买家", "顾客", "客服", "工作", "两张", "一张", "几位", "一些"]);
-      const norm = (t: string) => t.toLowerCase().replace(/(?<=[a-z0-9])-(?=[a-z0-9])/g, "");
-      const topHay = norm(`${top.heading}\n${top.content}`);
-      const topTokens = new Set(topHay.match(/[a-z0-9]+|[\u4e00-\u9fff]{2}/g) ?? []);
-      const topDistinctive = new Set([...topTokens].filter((t) => !WEAK.has(t)));
+      // top-2 合并：次命中与首命中共享非弱词 token 且自身 ≥0.45 时并入（跨知识块事实）
       const second = hits[1];
-      const mergeSecond = second && second.score >= CONFIDENCE_MEDIUM && (() => {
-        const sHay = norm(`${second.heading}\n${second.content}`);
-        const sTokens = (sHay.match(/[a-z0-9]+|[\u4e00-\u9fff]{2}/g) ?? []).filter((t) => !WEAK.has(t));
-        return sTokens.some((t) => topDistinctive.has(t));
-      })();
+      const mergeSecond = second
+        && second.score >= CONFIDENCE_MEDIUM
+        && sharesDistinctiveEvidence(top, second, lexicon);
       const blocks = [top, ...(mergeSecond ? [second] : [])];
       let answer = blocks
         .map((h) => `${h.heading ? `【${h.heading}】` : ""}${h.content.replace(/^#\s.*$/m, "").trim().slice(0, 300)}`)
@@ -211,7 +238,7 @@ export async function handleMessage(input: {
       if (llm) {
         try {
           answer = await llm(
-            `你是智能客服。仅依据以下资料回答顾客问题，不要编造资料之外的信息，回答控制在 80 字内。\n顾客：${input.text}\n资料：${blocks.map((h) => h.content.slice(0, 400)).join("\n---\n")}`,
+            `你是智能服务助手。仅依据以下资料回答用户问题，不要编造资料之外的信息，回答控制在 80 字内。\n用户：${input.text}\n资料：${blocks.map((h) => h.content.slice(0, 400)).join("\n---\n")}`,
           );
         } catch (err) {
           console.warn("[service-c] kb_qa 组答 LLM 失败，使用确定性拼装答案：", err instanceof Error ? err.message : err);

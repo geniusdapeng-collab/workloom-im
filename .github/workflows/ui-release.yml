@@ -1,0 +1,262 @@
+name: ui-base-release
+
+on:
+  push:
+    tags:
+      - "ui-v*"
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "只做下游盘点，或对已发布稳定版继续下一波 rollout"
+        required: true
+        type: choice
+        options: [preflight, rollout]
+        default: preflight
+      stable_version:
+        description: "仅手动 rollout 使用：已发布稳定版本，如 1.2.3；只读盘点默认检查当前候选版"
+        required: false
+        type: string
+      wave:
+        description: "可选波次 W1/W2/W3A/W3B/W4/W5；留空自动选择最早未完成波次"
+        required: false
+        type: string
+      repositories:
+        description: "可选同波次仓白名单，逗号分隔；不得越过未完成的前序波次"
+        required: false
+        type: string
+
+jobs:
+  verify-and-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: workloom
+          POSTGRES_DB: workloom
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+      DATABASE_URL: postgres://postgres:workloom@localhost:5432/workloom
+      DATABASE_APP_URL: postgres://workloom_app:workloom_dev_app@localhost:5432/workloom
+      DATABASE_GATEWAY_URL: postgres://workloom_gateway:workloom_dev_gateway@localhost:5432/workloom
+      APP_DB_PASSWORD: workloom_dev_app
+      GATEWAY_DB_PASSWORD: workloom_dev_gateway
+      JWT_SECRET: ui-release-gate-secret
+      LLM_PROVIDER: mock
+      IM_DRIVER: mock
+      RUN_DB_TESTS: "1"
+      TOOL_UNVERIFIED_RATE: "0"
+      RELEASE_WORKSPACE_ID: ws-aipm-demo
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: "https://registry.npmjs.org"
+
+      - run: corepack enable && corepack prepare pnpm@10.14.0 --activate
+      - run: pnpm install --frozen-lockfile
+
+      - name: 稳定行业包发布签名与生产验签
+        if: startsWith(github.ref, 'refs/tags/ui-v')
+        env:
+          BUNDLE_SIGNING_PRIVATE_KEY: ${{ secrets.BUNDLE_SIGNING_PRIVATE_KEY }}
+          BUNDLE_SIGNING_KEY_ID: ${{ vars.BUNDLE_SIGNING_KEY_ID || 'workloom-release-v1' }}
+        run: |
+          test -n "$BUNDLE_SIGNING_PRIVATE_KEY" || { echo "❌ 缺少 BUNDLE_SIGNING_PRIVATE_KEY，拒绝稳定发布"; exit 1; }
+          pnpm bundle:release
+          test -s build/bundle-trust.json || { echo "❌ 独立 Bundle 公钥环未生成"; exit 1; }
+          pnpm projections:generate
+
+      - run: pnpm product:verify && pnpm bundle:governance && pnpm projections:check
+      - run: pnpm ui:governance
+      - run: pnpm -C packages/industry-contract test && pnpm -C packages/industry-contract build
+      - run: pnpm -C packages/ui test && pnpm -C packages/ui build
+      - run: node --test scripts/verify-ui-consumer.test.mjs sync/base-sync.test.mjs sync/client-foundation.test.mjs sync/set-ui-version.test.mjs sync/ui-upgrade-pr.test.mjs
+
+      - name: 基座数据库、全场景与三端生产门禁
+        run: |
+          cp .env.example .env
+          pnpm db:migrate
+          pnpm db:seed:aipm
+          BUNDLE_DIR=bundles/hotel pnpm db:seed
+          pnpm suite
+          pnpm -C apps/web build
+          pnpm -C apps/webb build
+          pnpm -C apps/webc build
+          pnpm exec playwright install --with-deps chromium
+          pnpm ui:e2e
+
+      - name: 发布前核心链路门禁
+        run: |
+          pnpm -C apps/server start > "$RUNNER_TEMP/workloom-server.log" 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:8787/health >/dev/null && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8787/health >/dev/null
+          pnpm release:gate
+
+      - name: 校验 tag、稳定清单与包版本一致
+        if: startsWith(github.ref, 'refs/tags/ui-v')
+        run: |
+          VERSION="${GITHUB_REF_NAME#ui-v}"
+          node -e 'const fs=require("fs"); const v=process.argv[1]; const p=JSON.parse(fs.readFileSync("packages/ui/package.json")); const m=JSON.parse(fs.readFileSync("sync/base-capabilities.json")); if(p.version!==v||m.ui.latestStableVersion!==v||m.clientFoundation.latestStableVersion!==v) throw new Error(`版本不一致: tag=${v}, package=${p.version}, uiStable=${m.ui.latestStableVersion}, clientStable=${m.clientFoundation.latestStableVersion}`)' "$VERSION"
+          node sync/client-foundation.mjs verify-source --version "$VERSION"
+          test -n "$NODE_AUTH_TOKEN" || { echo "❌ 缺少 NPM_TOKEN，拒绝进入发布"; exit 1; }
+          test -n "$SYNC_TOKEN" || { echo "❌ 缺少 SYNC_TOKEN，无法在发布后创建八个独立升级 PR"; exit 1; }
+
+      - name: 八个下游仓访问与迁移现状只读预检
+        if: startsWith(github.ref, 'refs/tags/ui-v') || inputs.action == 'preflight'
+        env:
+          REPORT_PATH: ${{ runner.temp }}/ui-downstream-preflight.json
+        run: node sync/ui-upgrade-pr.mjs --preflight --report "$REPORT_PATH"
+
+      - name: 留存下游访问与迁移现状
+        if: always() && (startsWith(github.ref, 'refs/tags/ui-v') || inputs.action == 'preflight')
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-downstream-preflight
+          path: ${{ runner.temp }}/ui-downstream-preflight.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: 生成待发布的不可变 UI 制品
+        if: startsWith(github.ref, 'refs/tags/ui-v')
+        run: |
+          mkdir -p "$RUNNER_TEMP/ui-package"
+          cd packages/ui
+          npm pack --json --pack-destination "$RUNNER_TEMP/ui-package" > "$RUNNER_TEMP/ui-package/pack-metadata.json"
+
+      - name: 留存待发布 UI 制品
+        if: startsWith(github.ref, 'refs/tags/ui-v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: workloom-ui-package
+          path: ${{ runner.temp }}/ui-package
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-and-rollout:
+    if: startsWith(github.ref, 'refs/tags/ui-v')
+    needs: verify-and-preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: "https://registry.npmjs.org"
+
+      - run: corepack enable && corepack prepare pnpm@10.14.0 --activate
+      - run: pnpm install --frozen-lockfile
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: workloom-ui-package
+          path: ${{ runner.temp }}/ui-package
+
+      - name: 发布或核验完全相同的稳定 UI 制品
+        run: |
+          VERSION="${GITHUB_REF_NAME#ui-v}"
+          LOCAL_INTEGRITY="$(node -e 'const fs=require("fs"); const m=JSON.parse(fs.readFileSync(process.argv[1])); if(!Array.isArray(m)||m.length!==1||!m[0].integrity) throw new Error("pack 元数据无效"); process.stdout.write(m[0].integrity)' "$RUNNER_TEMP/ui-package/pack-metadata.json")"
+          REMOTE_INTEGRITY="$(npm view "@workloom/ui@$VERSION" dist.integrity --json 2>/dev/null | tr -d '"' || true)"
+          if [ -n "$REMOTE_INTEGRITY" ]; then
+            test "$REMOTE_INTEGRITY" = "$LOCAL_INTEGRITY" || { echo "❌ registry 已存在同版本异内容制品，拒绝 rollout"; exit 1; }
+            echo "✅ registry 已存在完全相同的不可变制品，继续幂等 rollout"
+          else
+            mapfile -t TARBALLS < <(find "$RUNNER_TEMP/ui-package" -maxdepth 1 -name '*.tgz' -type f)
+            test "${#TARBALLS[@]}" -eq 1 || { echo "❌ 待发布 tarball 数量必须为 1"; exit 1; }
+            npm publish "${TARBALLS[0]}"
+          fi
+          for _ in $(seq 1 12); do
+            PUBLISHED="$(npm view "@workloom/ui@$VERSION" version --json 2>/dev/null | tr -d '"' || true)"
+            [ "$PUBLISHED" = "$VERSION" ] && exit 0
+            sleep 5
+          done
+          echo "❌ registry 未确认 @workloom/ui@$VERSION，拒绝 rollout"
+          exit 1
+
+      - name: 发布后仅创建八个独立升级 PR
+        env:
+          REPORT_PATH: ${{ runner.temp }}/ui-rollout.json
+        run: node sync/ui-upgrade-pr.mjs --rollout --report "$REPORT_PATH"
+
+      - name: 留存升级 PR 结果
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-rollout-result
+          path: ${{ runner.temp }}/ui-rollout.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  continue-rollout:
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'rollout'
+    needs: verify-and-preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+      STABLE_VERSION: ${{ inputs.stable_version }}
+      ROLLOUT_WAVE: ${{ inputs.wave }}
+      ROLLOUT_REPOSITORIES: ${{ inputs.repositories }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 固定到已发布稳定基座标签
+        run: |
+          test -n "$STABLE_VERSION" || { echo "❌ 手动 rollout 必须指定 stable_version"; exit 1; }
+          test -n "$SYNC_TOKEN" || { echo "❌ 缺少 SYNC_TOKEN"; exit 1; }
+          git checkout --detach "ui-v$STABLE_VERSION"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: "https://registry.npmjs.org"
+      - run: corepack enable && corepack prepare pnpm@10.14.0 --activate
+      - run: pnpm install --frozen-lockfile
+      - name: 按严格波次继续创建独立升级 PR
+        env:
+          REPORT_PATH: ${{ runner.temp }}/ui-rollout.json
+        run: |
+          ARGS=(--rollout --version "$STABLE_VERSION" --report "$REPORT_PATH")
+          [ -n "$ROLLOUT_WAVE" ] && ARGS+=(--wave "$ROLLOUT_WAVE")
+          [ -n "$ROLLOUT_REPOSITORIES" ] && ARGS+=(--repos "$ROLLOUT_REPOSITORIES")
+          node sync/ui-upgrade-pr.mjs "${ARGS[@]}"
+      - name: 留存本波次 rollout 结果
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-rollout-${{ inputs.stable_version }}-${{ inputs.wave || 'automatic' }}
+          path: ${{ runner.temp }}/ui-rollout.json
+          if-no-files-found: warn
+          retention-days: 30

@@ -1,10 +1,19 @@
 {
+  "schemaVersion": "workloom.bundle/v1",
   "name": "@workloom/platform",
   "version": "1.0.0",
   "workloom": {
     "industry": "platform",
     "displayName": "仙女座运营运维系统 · WorkLoom 平台运营包（platform-bundle）",
     "description": "平台运营运维系统 V1：以工单为账本、以技术支持为桥梁、以知识库为弹药、以自生长为引擎。七个数字员工班组 17 名（FAE 工单组/知识管理组/客户成功组/计费账务组/平台运维组/行业包运营组/策略运营组）+ 平台基线围栏 R-PL1~R-PL10（含 default_level 兜底）+ 11 个平台技能（意图分诊/需求澄清/工单记账/知识沉淀/知识保鲜/健康扫描/关怀触达/积分对账/故障应急/灰度观察/策略锻造）+ 需求确认单 schemas + 上架考题 + 运行态种子数据。与 ai-pm V3 研发流水线通过「需求转运官」标准接口衔接：确认后的需求注入产品经理负责制流水线，交付状态自动回传关单。",
+    "status": "candidate",
+    "owner": "WorkLoom 平台运营组",
+    "example": false,
+    "compatibility": {
+      "base": ">=0.1.0 <1.0.0",
+      "ui": ">=0.1.0 <1.0.0",
+      "contract": "1.0.0"
+    },
     "provides": {
       "presets": [
         "presets/fae-chief.yml",
@@ -62,6 +71,112 @@
         "seeds/approvals.json",
         "seeds/night-jobs.json"
       ]
+    },
+    "ui": {
+      "schemaVersion": "workloom.bundle.ui/v1",
+      "terminology": {
+        "businessObject": "平台工单",
+        "customer": "租户客户",
+        "operation": "平台运营"
+      },
+      "navigation": {
+        "slots": []
+      },
+      "home": {
+        "widgets": [
+          {
+            "slot": "home.quick-tasks",
+            "component": "QuickTaskList",
+            "clients": [
+              "pc",
+              "b-mobile"
+            ],
+            "props": {
+              "tasks": [
+                "查看平台健康度",
+                "排查异常告警",
+                "跟进客户工单",
+                "生成运营周报"
+              ]
+            }
+          }
+        ]
+      },
+      "objects": [
+        "客户工单",
+        "知识条目",
+        "账单",
+        "行业包版本",
+        "策略"
+      ],
+      "workflows": [
+        "工单处置",
+        "知识保鲜",
+        "客户运营",
+        "计费对账",
+        "行业包发布"
+      ],
+      "serviceFront": {
+        "enabled": false,
+        "identityPolicy": "disabled",
+        "tabs": [],
+        "services": []
+      },
+      "theme": {
+        "brand": {}
+      },
+      "permissions": [],
+      "experiments": []
+    }
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "digest": "8a2a57c9a1d45c4011f42db6c10c2f3e95f171586a262dc7fcca32fbede4d9c1",
+    "assets": {
+      "eval/questions.json": "7ec77d60f206882208b3ed1dfbdb013544d66656e9d0de1283cc3ec23b7e3e32",
+      "feedback-enums.yml": "8f74c92981d840bfa897cc2a6530c10768e72bc20aaddb46a3cbbf2c546b0e7b",
+      "fences/platform-baseline.yml": "51ed11522f9e550e1f63a9298c0e7c248e791ebdcba92a630ad99cc823bbf8e7",
+      "floor-scene.json": "faf5c84bfec6e985b2d2202475e5295f6c4eef8d61df2d8ac24668f6c219885b",
+      "model-policy.yml": "b9ba8a2457bceecfc55729428ef0ab532cb57d174558e16c3b33f8ee69fea017",
+      "presets/billing-officer.yml": "d543f16fe20079328636760e79c78459475e957e204b52970b1062c489fd12c8",
+      "presets/bundle-version-officer.yml": "fda1a187b8113e4a64a60af59a9e175280646a2460c5d09b170ec8e750a8f47d",
+      "presets/credit-reconciler.yml": "768ef1b55e19749ec934fdf89d3a06a66e6c13f733c79b8698bdb581c4227e42",
+      "presets/customer-health-officer.yml": "acb3237c9083979dd3b765690bc00235bafb1d2cc2bfc655e53aafd4bd2f4efb",
+      "presets/effect-evaluator.yml": "9091b7912813bee13d6f0abac81db89b8ab181f1ad2a510cd3adff8d3e92866b",
+      "presets/fae-chief.yml": "29db2819ef72f06385c1fa20578d8f42e634c65f5912e3c81fd8913f0ae4633a",
+      "presets/incident-responder.yml": "d945832ec3a6caddc37e76a2a73327b1dfbeae9bf456caa04aafaf85737a22eb",
+      "presets/insight-analyst.yml": "e4118fb6ef4c1d2b9e03308c8964e12a7a7c39a41bf2e94ec7e21c1ce0312468",
+      "presets/inspector.yml": "e990b066a754349de1a171a76111758cc3ac176402c867bf400f89c8b5b36455",
+      "presets/kb-curator.yml": "e05e7c43dbbb129f89a4a7069e2470018c1109026ea70c96720d5744d8860981",
+      "presets/kb-freshness-officer.yml": "0bec70d4611b8ec02dee8c4a7619f9847b0610ef5b7cd2f8b6c1a3e11680cdb6",
+      "presets/onboarding-guide.yml": "8f8badb44bb3e1bcd789518ed15195741ab26b8637747053c2f0e61442252a9e",
+      "presets/release-reviewer.yml": "2a2f74d4d097c427a65bd75f12142c2efe50ac3cc5672ff0e93fe9176700b2d8",
+      "presets/renewal-watchman.yml": "fee7178fe411d71f00a2aca5ceee5bbd966f3adb35d9a53507eb05e267304ffe",
+      "presets/requirement-dispatcher.yml": "b6c5d92a1123ab1b64bd221a92c008048b13224910513aafbbaffdcc4fff5f0c",
+      "presets/strategy-engineer.yml": "c9d57de0c5a19a1d131a06fe13d922b65719423b229c8d70b6acc1c683da339d",
+      "presets/ticket-triage-officer.yml": "5fb140bee9b8010156861f3da095ec76961643b2a4dc2b796dbb1466f9662de6",
+      "schemas/archive.schema.json": "e49202e3264fa47e4966b7905e3261f9793a966b05b2c46c6fae48c992db5276",
+      "schemas/objects.json": "f13e081e4d5c135fc473bda597cfe85495bf48a851256153a9a5aecbcef95094",
+      "schemas/stages.json": "18c16e862eb73a0a6f58310f4d6aa92fc7e56f02d77e3569fb5acaa6c43752fe",
+      "seeds/approvals.json": "ccea472940da433c04f140648fef3e75bda037da4c86b6205c3e90fcd674fbd3",
+      "seeds/health.json": "27c42cdbb960fb618675338c523ff02e168b01bc0b5f3ac2de265ed7d9aac5b4",
+      "seeds/kb.json": "497e39ea7f430cf15000ab43b0c97996c878fb33ea02da269e366bc07ac260d4",
+      "seeds/night-jobs.json": "a6140b3f3b503da30df5234aca18e0e6216113dcb8df13bb17b72e7addd8bf37",
+      "seeds/requirements.json": "66ddbba459c14571a66a9d8e057466d2230ac70f5371c0d4ee6aa492affbe87f",
+      "seeds/strategies.json": "cb45418cb91953860186a7151bdeba0b65b40c5521018d35e0298f9a854d54b4",
+      "seeds/tickets.json": "ed9dea206e3affb060ce82ebbec3da11be8032b1a66a0b439a5beea227112ef9",
+      "service-front/faq.json": "6f3cd26d6990e1f2f26c8a9521e9a831564ffb4f398a604937734f2069477933",
+      "skills/care-outreach/SKILL.md": "099df90b3686e7ffad2afc5dfea773a11882c9b4346e012643f63e9aaa865e2b",
+      "skills/credit-reconcile/SKILL.md": "68a10e35269755e4cd08cd0c8fd42dfdaff31982a03cce6ca65a739f912e5bcb",
+      "skills/health-scan/SKILL.md": "6bc1ab9b0cf1a9e314db0eac3468d0684564f69712a8fa92711bbb0436d43991",
+      "skills/incident-playbook/SKILL.md": "b6fb0206b13f91212592d16c020bdb930b6912da974ed72791ecef3b8a8e2fe9",
+      "skills/intent-triage/SKILL.md": "20c329aae30b12aa06041587ff329de7a9a87b3d185f6758de6f296134df2cdd",
+      "skills/kb-fresh/SKILL.md": "e53af360fc0c53d3025e9d8f03f6d412f3df5382f26c6e35b5fdc2c1c0a8d4c1",
+      "skills/kb-harvest/SKILL.md": "dd99ddaa823bc7444cedfbdb151613535d2bf1b9b82fa12392e1d37374f35b7d",
+      "skills/requirement-clarify/SKILL.md": "722011c8c286c228efdbf3a711d060386bd1b0243547b1cfd43e385505b94e4d",
+      "skills/rollout-watch/SKILL.md": "c39ccfce23a71fb9758d92ceb3ac079e8139cebbce16cd0698cdf08123251dc1",
+      "skills/strategy-forge/SKILL.md": "de5ef640227390a3342fa4dacbe2d97b9598603d798b0e1d1f403a2f7da38620",
+      "skills/ticket-ledger/SKILL.md": "c030dbdecdfe8b28b836e18b226974528e7b47e94058927b961420780a14c20f"
     }
   }
 }

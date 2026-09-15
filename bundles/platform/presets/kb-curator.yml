@@ -8,6 +8,8 @@ readonly: false
 night_shift: true
 high_risk: false
 fence_bindings: ['R-PL8']
+coverage:
+  - { eventPrefix: "knowledge.", label: 知识发布 }
 skills: ['kb-harvest']
 tools:
   - { name: kb.read, access: read, desc: 读取知识条目与命中统计 }

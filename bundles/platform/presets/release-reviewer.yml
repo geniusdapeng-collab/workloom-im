@@ -8,6 +8,8 @@ readonly: false
 night_shift: false
 high_risk: false
 fence_bindings: ['R-PL5']
+coverage:
+  - { eventPrefix: "review.", label: 上架审核 }
 skills: ['rollout-watch']
 tools:
   - { name: bundles.read, access: read, desc: 读取待上架包与检查单结果 }

@@ -2,7 +2,7 @@
 
 `base-sync` 把 WorkLoom IM 的公共能力安全分发给行业仓，同时保护行业仓自有代码。同步边界的唯一事实源是 `sync/base-scope.json`。
 
-## 两类同步资产
+## 三类基座资产
 
 ### 根级必备资产
 
@@ -19,9 +19,34 @@
 
 ### 公共基座文件
 
-`include` 选中公共包、运行时和共享服务；`exclude`、仓级 `extraExclude`、锚点合并与污染守卫共同保护行业 bundle、种子、页面、迁移链、平台运维代码及行业依赖。
+`include` 选中公共包、运行时、`packages/industry-contract` 和共享服务；`exclude`、仓级 `extraExclude`、锚点合并与污染守卫共同保护行业 bundle、种子、页面、迁移链、平台运维代码及行业依赖。
 
 `AGENTS.md` 不在普通复制范围内，避免整文件覆盖子仓约定。根级必备资产也不受 `docs/**` 排除或行业 `pathPrefix` 影响。
+
+### 稳定 UI 制品与三端客户端基座
+
+`packages/ui` 是 B 端 PC、B 端移动和 C 端移动三端基础组件、设计令牌、图标与交互原语的唯一源码。`apps/web`、`apps/webb`、`apps/webc` 则是同样属于基座的三端应用基础层，统一承载应用壳、左侧/底部导航、布局、状态接线和客户端 API 契约。两者都不走普通 base-sync：前者发布为稳定 `@workloom/ui`，后者由 `sync/client-foundation.mjs` 从同一不可变 `ui-v*` 稳定标签读取。`base-scope.json` 完整排除三个 app 根，防止普通文件同步和客户端基座形成双写通道。
+
+行业仓的 `.workloom-client-foundation.json` 保存上一稳定版每个受管文件的 SHA-256 与模式。升级先把目标文件和旧来源指纹逐一比较，发现行业仓直接修改、删除或放入非白名单客户端文件即 fail closed，整次计划零写入；不会用“新版看起来更像基座”作为覆盖依据。行业差异只允许放在 Bundle、投影和下列显式扩展路径：
+
+C 端的 `apps/webc/public/service-front.config.json` 是必备受管加载壳，只能指向 `apps/webc/public/industry/service-front.config.json`。后者由当前仓的默认 Bundle 生成，位于行业扩展白名单内，不进入稳定客户端快照；因此新行业自动获得最新版加载能力，但不会继承 WorkLoom IM 的 AI 产品经理品牌、入口或种子文案。
+
+- `apps/*/src/extensions/**`
+- `apps/*/src/projections/**`
+- `apps/*/src/config/industry/**`
+- `apps/*/src/theme/industry/**`
+- `apps/*/public/industry/**`
+
+`product.manifest.json` 和 `electron-builder.yml` 是仓根受保护身份资产，永不进入客户端快照；脚手架要求行业仓先显式提供独立 `productId`、非基座 `appId`、端口偏移、仓库名和三个客户端入口，应用前后再逐字节验真。
+
+存量行业仓必须分两阶段迁移：
+
+1. 先补齐独立产品身份；存量仓若已有三端文件，把行业差异迁入 Bundle/投影/配置/extension，再建立可信旧版指纹。缺少任一真实生产入口时，不得声称“三端合规”。
+2. 再接收稳定 UI + 三端客户端基座升级 PR。三个客户端必须同时锁定相同精确版本、受管文件指纹零漂移并通过消费门禁，才可进入行业仓验收。
+
+`electron-builder.yml` 与 `product.manifest.json` 是下游部署实例的受保护身份资产。它们显式位于 `exclude`，base-sync 不做整文件复制，也不覆盖 `appId`、`productName`、端口或发布身份。新行业必须从最新版基座模板生成自己的 manifest；存量行业先完成产品身份迁移，再进入第二阶段。
+
+当前 `apps/server/src/industry/**` 明确排除，避免 `apps/server/src/**` 的宽范围把酒店 catalog 等行业语义下发到其他经营体。现有 business registry 适配层仍位于已排除的 `apps/server/src/service/adapters/**`，且实现会引用行业 catalog，因此本版不把它伪装成可自动下发的通用能力。后续须先把“无行业语义的注册接口/运行时”与“各行业 catalog 实现”物理拆分并补兼容测试，再单独扩大同步范围。
 
 ## 命令
 
@@ -67,6 +92,12 @@ node sync/base-sync.mjs push --base . --dry-run --required-only
 ```bash
 bash sync/adopt.sh /path/to/new-industry
 bash sync/adopt.sh /path/to/workroom-tiger --path-prefix governance/
+
+# 新开行业：先创建独立 product.manifest.json，再一次生成最新版稳定三端
+bash sync/adopt.sh /path/to/new-industry --new-industry
+
+# 全流程零写入预演；省略 --version 时只能选择 latestStableVersion
+bash sync/adopt.sh /path/to/new-industry --new-industry --dry-run
 ```
 
 `adopt.sh` 支持普通 clone 和 `.git` 为文件的 linked worktree。执行顺序是：
@@ -74,16 +105,25 @@ bash sync/adopt.sh /path/to/workroom-tiger --path-prefix governance/
 1. 验证普通 clone/linked worktree、规范化 `pathPrefix`、基座脚本来源和全部路径边界；
 2. 安装根级产品上下文、AGENTS 受控块与静态 heartbeat，并在写 state 前逐项复验、执行密钥扫描；
 3. 若仓库由 workloom-im fork/template 派生，仅在内容与基座逐字节相同时，把父仓专属 `AGENTS.repo.md` 替换为通用待填写 scaffold，并删除父仓专属 `.github/workflows/base-sync-push.yml`；未知或已定制内容绝不覆盖，其他 workflow 不受影响；
-4. 写入带 `pathPrefix` 的根级 state，再运行独立 detect 与四项接入资产密钥扫描。
+4. 写入带 `pathPrefix` 的根级 state，再运行独立 detect 与四项接入资产密钥扫描；
+5. `--new-industry` 模式从 `base-capabilities.json.clientFoundation.latestStableVersion` 对应的 `ui-v*` 标签一次安装 PC/B移动/C移动，建立受管文件指纹，锁定同版 `@workloom/ui` 并执行消费门禁。候选版、未发布版、版本错位和基座默认产品身份全部阻断。
 
-脚本不暂存、不提交、不推送。审查根级接入资产和可选的两项精确派生迁移后，由操作者白名单提交，并把新仓登记进 `sync/child-repos.json`。任何扫描或安装失败都会回滚本次写入，不把受阻内容留在目标工作树。
+脚本不暂存、不提交、不推送，也不把缺少 `apps/webb` 的二端仓登记成三端产品。新行业模式在任何写入前先做完整客户端 dry-run；存量治理接入仍只安装根资产。审查根级接入资产、三端基座 state 和可选的两项精确派生迁移后，由操作者白名单提交，再把新仓登记进 `sync/child-repos.json`。
+
+## 存量八仓按波次升级
+
+`sync/ui-upgrade-pr.mjs --rollout` 在确认 `@workloom/ui` registry 制品后，从同版本 `ui-v*` 标签加载完整客户端基座，只在临时 clone 中做指纹升级、lockfile 更新和消费门禁。验证通过才推送 `chore/workloom-ui-v<版本>` 独立分支并创建 PR，永不直推 `main`。W1 → W5 顺序是可执行门禁；更晚波次不能越过未完成前序。dry-run 会在临时 clone 中运行同一真实迁移和门禁，但不写远端仓、分支或 PR。
+
+每个脚手架/升级 PR 还安装 `scripts/verify-client-foundation-consumer.mjs` 与 `workloom-ui-contract` 工作流。后续任何 PR 或 main 推送都会重新计算全部受管摘要、三端入口、UI 同版关系与扩展白名单；不是只在中央 rollout 当时检查一次。
+
+没有 `.workloom-client-foundation.json` 的存量仓不会被猜测覆盖：与目标稳定标签逐字节相同的文件可建立初始指纹；任何不同内容都以 `UNTRACKED_MANAGED_FILE` 阻断，要求人工先把合法行业差异迁入白名单扩展路径。已登记 state 后，`MANAGED_FILE_MODIFIED`、`MANAGED_FILE_DELETED`、非法客户端路径同样阻断整个 PR。
 
 ## 自动化与凭据
 
 - 父仓 plan 在不接触跨仓凭据时先执行 YAML、密钥扫描器和同步引擎测试；PR 事件停在本地验证；
 - 可选 fan-out 只使用限定到清单仓库的短期 GitHub App installation token：先做 private-safe 跨仓 dry-run，再以精确 `base_sha` 和 `mode=required-only|full` 发送 `repository_dispatch`，并仅对 GitHub 标记为 `disabled_inactivity` 的 heartbeat 做恢复与运行监控；未配置 App 时公开九仓仍由各自 schedule 工作；
 - 子仓 heartbeat 先以公开只读、无 token 的方式把基座 `main` 固定为不可变提交，再执行该提交里的引擎；同步阶段显式拒绝残留认证 header；
-- 发生变更后，子仓在注入写令牌前执行 `pnpm install --frozen-lockfile --ignore-scripts`，并按脚本存在性运行 typecheck/test，且要求验证后工作树干净；最后才用本仓短期、最小权限 `GITHUB_TOKEN` 推同仓分支并创建 PR；
+- 发生变更后，子仓在注入写令牌前执行 `pnpm install --frozen-lockfile --ignore-scripts`，并按脚本存在性运行 typecheck/test；heartbeat 同时输出三端迁移状态：缺端或未锁定稳定制品时明确标记为未合规，已接入 UI 清单时必须通过消费门禁；验证后要求工作树干净，最后才用本仓短期、最小权限 `GITHUB_TOKEN` 推同仓分支并创建 PR；
 - Git 远端 URL 永不拼入令牌。确需命令行认证时，引擎只通过临时 Git 环境配置传递 HTTP header，并对错误做二次脱敏；
 - 成功、失败和 dry-run 路径都会清理临时 clone。
 
@@ -101,6 +141,8 @@ bash sync/adopt.sh /path/to/workroom-tiger --path-prefix governance/
 
 state 只用于审计和加速理解，不是“已对齐”的证明。`detect` 总会重新读取基座与目标文件；SHA 相同但上下文缺失、被改写或标记异常仍会返回退出码 `2`。反过来，内容已一致但根级 state 缺失或过期也会以独立的 `stateDrift` 返回退出码 `2`，从而触发一次 state-only pull。标记缺失时可安全追加，标记残缺、重复或顺序错误时 fail closed，等待人工修复。
 
+客户端目录另有 `.workloom-client-foundation.json`，记录稳定版本、标签、不可变提交、三端映射、行业扩展白名单和逐文件 SHA-256。该 state 同样不是自我证明：`inspect` 会重新读取每个受管文件并检查额外路径；升级会同时用旧 state 和新稳定标签做双向验真。
+
 ## 提交与失败边界
 
 - 同步计划在落盘前完成污染黑名单和单次文件数检查；
@@ -114,9 +156,10 @@ state 只用于审计和加速理解，不是“已对齐”的证明。`detect`
 ## 测试
 
 ```bash
-node --test sync/base-sync.test.mjs
+node --test sync/base-sync.test.mjs sync/client-foundation.test.mjs sync/set-ui-version.test.mjs sync/ui-upgrade-pr.test.mjs
 bash -n sync/adopt.sh
 node --check sync/base-sync.mjs
+node --check sync/client-foundation.mjs
 ```
 
-测试覆盖 AGENTS 三态迁移与 report、同 SHA 文件验真、Tiger 根级落点、旧 state 迁移、静态 heartbeat 自升级、来源 HEAD 约束、白名单提交、脏树拒绝、`--required-only --no-commit`、required-only push、lockfile/密钥扫描事务回滚、凭据脱敏、源/目标/dangling/pathPrefix symlink 对抗、临时 clone 全路径清理、linked worktree 跨仓前缀接入，以及父仓专属文件的精确派生清理。
+测试覆盖 AGENTS 三态迁移与 report、同 SHA 文件验真、Tiger 根级落点、旧 state 迁移、静态 heartbeat 自升级、来源 HEAD 约束、白名单提交、脏树拒绝、`--required-only --no-commit`、required-only push、lockfile/密钥扫描事务回滚、凭据脱敏、源/目标/dangling/pathPrefix symlink 对抗、临时 clone 全路径清理、linked worktree 跨仓前缀接入、父仓专属文件的精确派生清理，以及三端 scaffold、latest-stable-only、稳定标签取源、dry-run、更新/新增/删除、旧摘要冲突关闭、扩展路径白名单和产品身份保护。

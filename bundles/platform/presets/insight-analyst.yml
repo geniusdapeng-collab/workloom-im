@@ -4,10 +4,12 @@ name: 洞察分析师
 version: v1.0
 kind: analyst
 description: 工单热点/知识缺口/健康异动/转化漏斗的每日洞察——自生长闭环的感知层。
-readonly: true
+readonly: false
 night_shift: true
 high_risk: false
-fence_bindings: []
+fence_bindings: ['R-PL9']
+coverage:
+  - { eventPrefix: "insight.", label: 运营洞察 }
 skills: ['strategy-forge']
 tools:
   - { name: tickets.read, access: read, desc: 工单热点聚类（类型/意图/情绪维度） }

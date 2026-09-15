@@ -8,6 +8,8 @@ readonly: false
 night_shift: true
 high_risk: false
 fence_bindings: ['R-PL1']
+coverage:
+  - { eventPrefix: "credit.", label: 积分对账 }
 skills: ['credit-reconcile']
 tools:
   - { name: credits.read, access: read, desc: 读取三池账本投影（赠送池/加油包池/本金池） }

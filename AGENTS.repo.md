@@ -18,7 +18,7 @@ WorkLoom 的正式产品形态是桌面客户端；浏览器三端用于开发�
 - 浏览器三端预览：pnpm preview:all
 - 安装包：pnpm app:pack；正式分发包：pnpm app:dist
 
-桌面端采用 1440×900 逻辑画布并等比缩放，不因窗口比例改变而重排。关闭窗口应最小化到托盘，只有托盘“退出”才终止夜班和后台任务。涉及这些行为的修改必须在真实桌面入口验证，不能只启动 apps/web。
+桌面端必须按窗口真实可用宽度响应式重排，禁止用固定 1440×900 逻辑画布或整页等比缩放冒充响应式。PC 工作区应支持面板折叠、隐藏、拖拽缩放、恢复默认和全屏；窄窗口中的辅助面板降级为抽屉，正文在系统标准缩放和 200% 页面缩放下不得横向溢出。关闭窗口应最小化到托盘，只有托盘“退出”才终止夜班和后台任务。涉及这些行为的修改必须在真实桌面入口验证，不能只启动 apps/web。
 
 浏览器验收以 PREVIEW_CHECKLIST.md 和 mock/README.md 为准。运行测试前先确认没有残留服务占用 8787/5173，避免 E2E 连接错误实例或受到后台节拍干扰。
 
@@ -66,7 +66,9 @@ WorkLoom 的正式产品形态是桌面客户端；浏览器三端用于开发�
 | 路径 | 主仓职责 |
 |---|---|
 | apps/server | tRPC 服务端与公共服务入口 |
-| apps/web、apps/webc | B 端 PC 与 C 端 H5 |
+| apps/web、apps/webb、apps/webc | B 端 PC、B 端移动与 C 端移动服务前台 |
+| packages/ui | 三端唯一基础组件、设计令牌、图标、布局控制、中文显示与交互范式源 |
+| packages/industry-contract | 行业 Bundle 的三端投影、兼容性与中文展示契约 |
 | apps/desktop | 正式桌面客户端 |
 | packages/base | WorkData、围栏、Captain、computer-use 等底座能力 |
 | packages/runtime | Agent 与编排运行时 |

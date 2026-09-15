@@ -10,6 +10,8 @@ readonly: false
 night_shift: true
 high_risk: false
 fence_bindings: ['R-PM7']
+coverage:
+  - { eventPrefix: "devtools.", label: 研发编排 }
 skills: ['dev-dispatch', 'session-watch', 'changeset-harvest', 'release-cut', 'prd-forge']
 tools:
   - { name: devtools.task.write, access: write, desc: 创建/确认/派发/取消开发任务单 }

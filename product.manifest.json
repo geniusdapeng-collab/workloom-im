@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "workloom.product/v1",
+  "productId": "workloom-im",
+  "role": "base",
+  "displayName": "WorkLoom 织元",
+  "packageName": "workloom-im",
+  "repository": "geniusdapeng-collab/workloom-im",
+  "defaultBundle": "ai-pm",
+  "release": {
+    "appId": "com.workloom.im",
+    "channel": "stable",
+    "artifactPrefix": "WorkLoom 织元",
+    "website": "apps/site"
+  },
+  "desktop": {
+    "portOffset": 0
+  },
+  "clients": {
+    "bPc": { "enabled": true, "entry": "apps/web" },
+    "bMobile": { "enabled": true, "entry": "apps/webb" },
+    "cMobile": { "enabled": true, "entry": "apps/webc" }
+  }
+}
