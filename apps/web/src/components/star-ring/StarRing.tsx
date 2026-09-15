@@ -76,7 +76,9 @@ function emitRailWidth(w: number) {
 export function StarRing() {
   const nav = useNavigate();
   const { pathname } = useLocation();
-  const [collapsed, setCollapsed] = useState(false);
+  // 首次提交就必须与当前视口一致；若等 useEffect 再收起，窄屏会先闪现一帧
+  // 全宽助手，同时令主区从展开栏预留宽度跳到紧凑栏宽度。
+  const [collapsed, setCollapsed] = useState(() => window.matchMedia("(max-width: 820px)").matches);
   const [hidden, setHidden] = useState(false);
   const [compactViewport, setCompactViewport] = useState(() => window.matchMedia("(max-width: 820px)").matches);
   const [pendingCount, setPendingCount] = useState(0);

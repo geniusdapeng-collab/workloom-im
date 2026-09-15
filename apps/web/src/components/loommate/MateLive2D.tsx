@@ -758,7 +758,7 @@ function Live2DBackend({ size, mood = "neutral", gesture = null, modelUrl = "/li
         position: "relative", width: size, height: size, borderRadius: 16,
         overflow: "hidden", pointerEvents: "none",
       }}
-      aria-label="织伴数字人（Live2D）"
+      aria-label="织伴数字人"
     >
       {!renderReady && !loadError && <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#68707a", fontSize: 14 }}>数字人正在登台…</div>}
     </div>

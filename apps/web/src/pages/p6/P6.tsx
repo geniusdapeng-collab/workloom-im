@@ -347,7 +347,7 @@ export default function P6() {
             {suggSlow && !suggSlowDismissed && (
               <div className="mb-3">
                 <BannerAlert level="info" actionLabel="关闭" onAction={() => setSuggSlowDismissed(true)}>
-                  意识系统分析中（建议生成 &gt;10s）…可关闭稍后再看
+                  意识系统分析中（建议生成超过 10 秒）…可关闭稍后再看
                 </BannerAlert>
               </div>
             )}

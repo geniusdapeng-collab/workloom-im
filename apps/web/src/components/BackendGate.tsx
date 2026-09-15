@@ -130,6 +130,29 @@ function GuidePage() {
   );
 }
 
+/** 生产客户端只呈现可执行的人类说明，不释放本机端口、进程名或启动命令。 */
+function ServiceUnavailablePage() {
+  return (
+    <main
+      aria-label="服务连接状态"
+      style={{
+        minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
+        background: "linear-gradient(180deg, #0e1013 0%, #12161c 100%)",
+        color: "#e8ebef", fontFamily: "-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif",
+        padding: 24, textAlign: "center",
+      }}
+    >
+      <div style={{ maxWidth: 520, width: "100%" }}>
+        <div style={{ marginBottom: 12, color: "#d6dce4" }}><Icon name="warning" size={36} /></div>
+        <h1 style={{ margin: "0 0 10px", fontSize: 22 }}>WorkLoom 服务暂时无法连接</h1>
+        <p style={{ margin: 0, color: "#9aa2ac", fontSize: 14, lineHeight: 1.8 }}>
+          系统正在自动重新连接。当前页面没有把连接失败显示成空数据，也没有执行任何业务操作；若长时间未恢复，请联系管理员。
+        </p>
+      </div>
+    </main>
+  );
+}
+
 export function BackendGate({ children }: { children: ReactNode }) {
   const [state, setState] = useState<GateState>("probing");
 
@@ -157,5 +180,5 @@ export function BackendGate({ children }: { children: ReactNode }) {
       </div>
     );
   }
-  return <GuidePage />;
+  return import.meta.env.DEV ? <GuidePage /> : <ServiceUnavailablePage />;
 }
