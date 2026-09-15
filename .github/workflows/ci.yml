@@ -44,12 +44,26 @@ jobs:
       RELEASE_WORKSPACE_ID: ws-aipm-demo
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Node 24 + pnpm
         uses: actions/setup-node@v4
         with:
           node-version: 24
       - run: corepack enable && corepack prepare pnpm@10.14.0 --activate
+
+      - name: 基座代码增量秘密扫描
+        env:
+          EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          HEAD_SHA="$(git rev-parse --verify HEAD^{commit})"
+          git rev-parse --verify "${EVENT_BASE_SHA}^{commit}" >/dev/null
+          BASE_SHA="$(git merge-base "$EVENT_BASE_SHA" "$HEAD_SHA")"
+          test -n "$BASE_SHA"
+          node scripts/secret-scan.mjs --self-test
+          node scripts/secret-scan.mjs --range "$BASE_SHA" "$HEAD_SHA" --acceptance-manifest sync/base-scope.json
 
       - name: 依赖
         run: pnpm install --frozen-lockfile
@@ -76,7 +90,7 @@ jobs:
           cp .env.example .env
           pnpm db:migrate
           pnpm db:seed:aipm
-          pnpm db:seed:aipm # 基座出厂示例包幂等复跑
+          pnpm db:seed:aipm:verify-idempotence
           # 既有 326 项引擎集成套件使用 hotel 作为受控测试夹具；不进入桌面出厂数据。
           BUNDLE_DIR=bundles/hotel pnpm db:seed
           BUNDLE_DIR=bundles/hotel pnpm db:seed # 行业夹具同库复跑，验证事件物理序列与幂等

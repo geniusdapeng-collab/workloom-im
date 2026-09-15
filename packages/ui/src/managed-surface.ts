@@ -10,6 +10,7 @@ export type ManagedSurfaceKind =
   | "navigation-drawer"
   | "assistant-rail"
   | "assistant-companion"
+  | "popover"
   | "welcome";
 
 export interface ManagedSurfaceOptions {

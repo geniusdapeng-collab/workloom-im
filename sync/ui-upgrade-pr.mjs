@@ -10,19 +10,24 @@
  *    验真；行业修改冲突会 fail closed。只创建独立 PR，不直推 main。
  */
 import { execFileSync } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
 import {
   copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { verifyUiConsumerRepo } from "../scripts/verify-ui-consumer.mjs";
+import { ADOPTION_SCRIPTS, ADOPTION_WORKFLOW } from "./install-adoption-assets.mjs";
+import { GOVERNANCE_FILES, GOVERNANCE_STATE, installUiGovernance } from "./install-ui-governance.mjs";
 import {
   applyClientFoundation,
   inspectClientFoundationState,
@@ -34,6 +39,23 @@ import { resolveUiVersion, setUiVersion } from "./set-ui-version.mjs";
 const syncDir = dirname(fileURLToPath(import.meta.url));
 const baseDir = resolve(syncDir, "..");
 const EXPECTED_DOWNSTREAM_COUNT = 8;
+const CANONICAL_BASE_REPOSITORY = "geniusdapeng-collab/workloom-im";
+const OFFICIAL_NPM_REGISTRY = "https://registry.npmjs.org";
+const RELEASE_PAYLOAD_SCHEMA = "workloom.ui-release-payload/v1";
+const RELEASE_GOVERNANCE_PAYLOAD_PATHS = Object.freeze([
+  ...GOVERNANCE_FILES,
+  ...ADOPTION_SCRIPTS,
+  "sync/ui-consumer-template.yml",
+  "sync/base-capabilities.json",
+  "sync/child-repos.json",
+  // 这些控制器会决定从标签读取什么、写入哪些下游文件以及如何验真，属于 rollout
+  // TCB；仅封存最终 payload 而不封存控制器本身，脏工作树仍可绕过全部门禁。
+  "sync/ui-upgrade-pr.mjs",
+  "sync/client-foundation.mjs",
+  "sync/set-ui-version.mjs",
+  "sync/install-ui-governance.mjs",
+  "sync/install-adoption-assets.mjs",
+]);
 const PRODUCT_CLIENTS = Object.freeze({
   bPc: "apps/web",
   bMobile: "apps/webb",
@@ -46,9 +68,13 @@ function parseArgs(argv) {
     return index >= 0 ? argv[index + 1] : undefined;
   };
   const legacyValidate = argv.includes("--validate-only");
+  const verifyArtifact = argv.includes("--verify-artifact");
+  if (verifyArtifact && argv.includes("--rollout")) {
+    throw new Error("--verify-artifact 与 --rollout 不得同时使用");
+  }
   const repositories = (value("--repos") ?? "").split(",").map((item) => item.trim()).filter(Boolean);
   return {
-    mode: argv.includes("--rollout") ? "rollout" : "preflight",
+    mode: verifyArtifact ? "verify-artifact" : argv.includes("--rollout") ? "rollout" : "preflight",
     requestedVersion: value("--version"),
     reportPath: value("--report"),
     wave: value("--wave")?.trim() || undefined,
@@ -57,13 +83,129 @@ function parseArgs(argv) {
   };
 }
 
+export function sanitizedSubprocessEnvironment(ambient = process.env, explicit = {}) {
+  const subprocessEnvironment = { ...ambient };
+  // 跨仓写 token 只留在升级编排器内存中。pnpm/npm/verifier 与普通 git 子进程
+  // 不得继承它；只有显式传入 githubGitEnvironment(token) 的 GitHub 网络操作
+  // 才获得一次性 extraheader，PR API 则直接使用内存中的 token。
+  for (const key of Object.keys(subprocessEnvironment)) {
+    if (
+      /^(?:SYNC_TOKEN|GH_TOKEN|GITHUB_TOKEN|NPM_TOKEN|NODE_AUTH_TOKEN|AUTHORIZATION|HTTP_AUTHORIZATION)$/iu.test(key)
+      || /^NPM_CONFIG_/iu.test(key)
+      || /^GIT_CONFIG(?:_|$)/iu.test(key)
+      || /^(?:GIT|SSH)_ASKPASS$/iu.test(key)
+      || /^GIT_HTTP_/iu.test(key)
+    ) delete subprocessEnvironment[key];
+  }
+  for (const [key, value] of Object.entries(explicit)) {
+    if (/^(?:SYNC_TOKEN|GH_TOKEN|GITHUB_TOKEN|NPM_TOKEN|NODE_AUTH_TOKEN|AUTHORIZATION|HTTP_AUTHORIZATION)$/iu.test(key)
+      || /^NPM_CONFIG_/iu.test(key)) continue;
+    subprocessEnvironment[key] = value;
+  }
+  return subprocessEnvironment;
+}
+
 function run(command, commandArgs, cwd, env = {}) {
   return execFileSync(command, commandArgs, {
     cwd,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
-    env: { ...process.env, ...env },
+    env: sanitizedSubprocessEnvironment(process.env, env),
   }).trim();
+}
+
+function normalizeRepositoryPath(path, label = "升级路径") {
+  const value = String(path ?? "");
+  if (
+    !value
+    || value.startsWith("/")
+    || value.includes("\\")
+    || value.includes("\0")
+    || value.includes("\n")
+    || value.includes("\r")
+    || value.split("/").some((part) => !part || part === "." || part === "..")
+  ) {
+    throw new Error(`${label} 必须是 Git 仓内安全相对路径：${JSON.stringify(value)}`);
+  }
+  return value;
+}
+
+function parseNulPaths(value, label) {
+  return String(value ?? "")
+    .split("\0")
+    .filter(Boolean)
+    .map((path) => normalizeRepositoryPath(path, label));
+}
+
+function sortedUniquePaths(paths, label) {
+  return [...new Set(paths.map((path) => normalizeRepositoryPath(path, label)))].sort((left, right) => left.localeCompare(right));
+}
+
+function listWorkingTreeChanges(repoRoot, declaredPaths = []) {
+  const tracked = parseNulPaths(
+    run("git", ["diff", "--name-only", "--no-renames", "-z", "HEAD", "--"], repoRoot),
+    "工作树变更路径",
+  );
+  const untracked = parseNulPaths(
+    run("git", ["ls-files", "--others", "--exclude-standard", "-z", "--"], repoRoot),
+    "未跟踪变更路径",
+  );
+  // 新 clone 不携带 ignored 文件。若安装器创建了一个被目标仓 ignore 的声明资产，
+  // 也必须把它识别为实际变化并让后续显式 git add fail closed，不能误报 already-current。
+  const declaredUntracked = declaredPaths.length
+    ? parseNulPaths(
+      run("git", ["--literal-pathspecs", "ls-files", "--others", "-z", "--", ...declaredPaths], repoRoot),
+      "声明资产的未跟踪路径",
+    )
+    : [];
+  return sortedUniquePaths([...tracked, ...untracked, ...declaredUntracked], "工作树变更路径");
+}
+
+export function assertExactUpgradePathSet({ allowedPaths, changedPaths, stagedPaths = changedPaths }) {
+  const allowed = new Set(sortedUniquePaths(allowedPaths, "升级白名单路径"));
+  const changed = sortedUniquePaths(changedPaths, "实际变更路径");
+  const staged = sortedUniquePaths(stagedPaths, "已暂存路径");
+  const unexpected = changed.filter((path) => !allowed.has(path));
+  if (unexpected.length) {
+    throw new Error(`升级产生未声明变更，拒绝暂存：${unexpected.join("、")}`);
+  }
+  const changedSet = new Set(changed);
+  const omitted = changed.filter((path) => !staged.includes(path));
+  const extra = staged.filter((path) => !changedSet.has(path));
+  if (omitted.length || extra.length) {
+    throw new Error([
+      "升级暂存路径与实际变更不一致",
+      omitted.length ? `遗漏：${omitted.join("、")}` : "",
+      extra.length ? `额外：${extra.join("、")}` : "",
+    ].filter(Boolean).join("；"));
+  }
+  return changed;
+}
+
+/**
+ * rollout 只暂存本轮安装器明确声明且确实发生变化的文件。先把工作树实际路径与
+ * 白名单比对，再逐路径 git add，最后从 index 反查并要求与原实际集合完全相等；
+ * pnpm/verifier 生成任何额外资产或发生遗漏时均 fail closed。
+ */
+export function stageExactUpgradeChanges({ repoRoot, allowedPaths }) {
+  const allowed = sortedUniquePaths(allowedPaths, "升级白名单路径");
+  const changed = listWorkingTreeChanges(repoRoot, allowed);
+  assertExactUpgradePathSet({ allowedPaths: allowed, changedPaths: changed });
+  if (!changed.length) return [];
+  run("git", ["--literal-pathspecs", "add", "--", ...changed], repoRoot);
+  const staged = parseNulPaths(
+    run("git", ["diff", "--cached", "--name-only", "--no-renames", "-z", "HEAD", "--"], repoRoot),
+    "已暂存路径",
+  );
+  assertExactUpgradePathSet({ allowedPaths: allowed, changedPaths: changed, stagedPaths: staged });
+  const unstaged = sortedUniquePaths([
+    ...parseNulPaths(run("git", ["diff", "--name-only", "--no-renames", "-z", "--"], repoRoot), "未暂存路径"),
+    ...parseNulPaths(run("git", ["ls-files", "--others", "--exclude-standard", "-z", "--"], repoRoot), "未跟踪路径"),
+  ], "未暂存路径");
+  if (unstaged.length) {
+    throw new Error(`逐路径暂存后仍有未暂存变更，拒绝提交：${unstaged.join("、")}`);
+  }
+  return changed;
 }
 
 function githubGitEnvironment(token) {
@@ -80,6 +222,71 @@ function githubGitEnvironment(token) {
 
 function repositoryUrl(repo) {
   return `https://github.com/${repo}.git`;
+}
+
+const READ_ONLY_CLONE_ATTEMPTS = 3;
+const READ_ONLY_CLONE_BACKOFF_MS = 100;
+
+function waitSynchronously(milliseconds) {
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0) return;
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+export function redactCloneDiagnostic(value, token = "") {
+  let text = String(value ?? "");
+  const encodedToken = token ? encodeURIComponent(token) : "";
+  const basicToken = token ? Buffer.from(`x-access-token:${token}`).toString("base64") : "";
+  for (const secret of [token, encodedToken, basicToken].filter(Boolean)) {
+    text = text.split(secret).join("[REDACTED]");
+  }
+  return text
+    .replace(/\bgh[pousr]_[A-Za-z0-9_]{20,}\b/gu, "[REDACTED_GITHUB_TOKEN]")
+    .replace(/\bgithub_pat_[A-Za-z0-9_]{20,}\b/gu, "[REDACTED_GITHUB_TOKEN]")
+    .replace(/(authorization:\s*(?:basic|bearer)\s+)[^\s]+/giu, "$1[REDACTED]")
+    .replace(/(https?:\/\/)[^/@\s]+@/giu, "$1[REDACTED]@")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .slice(0, 500);
+}
+
+export function classifyCloneFailure(value) {
+  const diagnostic = String(value ?? "").toLowerCase();
+  if (/authentication failed|could not read username|permission denied|invalid credentials|access denied/u.test(diagnostic)) {
+    return "authentication";
+  }
+  if (/repository not found|does not appear to be a git repository|not found/u.test(diagnostic)) {
+    return "repository-unavailable";
+  }
+  if (/too many requests|rate.?limit|http[^\n]*429/u.test(diagnostic)) return "rate-limited";
+  if (/rpc failed|http\/2|http\/1\.1|stream .*closed|early eof|tls|connection (?:reset|closed|timed out|refused)|operation timed out|could not resolve host|network is unreachable|remote end hung up|failed to connect/u.test(diagnostic)) {
+    return "network-transient";
+  }
+  return "unknown";
+}
+
+function cloneFailureMetadata(error, token = "") {
+  if (error?.code === "WORKLOOM_READ_ONLY_CLONE_FAILED") {
+    return {
+      classification: error.classification,
+      attempts: error.attempts,
+      diagnostic: redactCloneDiagnostic(error.diagnostic ?? error.message, token),
+    };
+  }
+  const raw = error?.stderr ? String(error.stderr) : error?.message ?? error;
+  const diagnostic = redactCloneDiagnostic(raw, token) || "Git 未返回诊断信息";
+  return { classification: classifyCloneFailure(diagnostic), attempts: 1, diagnostic };
+}
+
+function readOnlyCloneError({ child, failures }) {
+  const finalFailure = failures.at(-1) ?? { classification: "unknown", diagnostic: "Git 未返回诊断信息" };
+  const error = new Error(
+    `${child.repo} 只读克隆失败（${finalFailure.classification}，${failures.length} 次）：${finalFailure.diagnostic}`,
+  );
+  error.code = "WORKLOOM_READ_ONLY_CLONE_FAILED";
+  error.classification = finalFailure.classification;
+  error.attempts = failures.length;
+  error.diagnostic = finalFailure.diagnostic;
+  return error;
 }
 
 function prefixedPath(child, path) {
@@ -143,6 +350,9 @@ export function validateChildInventory(children, waveOrder) {
 }
 
 export function validateRelease(manifest, packageJson, version) {
+  if (manifest.baseRepository !== CANONICAL_BASE_REPOSITORY) {
+    throw new Error(`稳定发布基座必须为 ${CANONICAL_BASE_REPOSITORY}`);
+  }
   if (!manifest.ui.latestStableVersion) throw new Error("base-capabilities.json 尚未登记 latestStableVersion");
   if (manifest.releasePolicy !== "base-first-stable-only") throw new Error("releasePolicy 必须为 base-first-stable-only");
   if (manifest.ui.latestStableVersion !== version) throw new Error(`稳定清单版本 ${manifest.ui.latestStableVersion} 与目标版本 ${version} 不一致`);
@@ -407,8 +617,56 @@ export function inspectMigratedConsumer(repoRoot, child, manifest) {
   });
 }
 
-function cloneChildReadOnly(child, target, token) {
-  run("git", ["clone", "--depth", "1", "--no-tags", repositoryUrl(child.repo), target], baseDir, githubGitEnvironment(token));
+export function cloneChildReadOnly(child, attemptRoot, token = "", options = {}) {
+  const maxAttempts = options.maxAttempts ?? READ_ONLY_CLONE_ATTEMPTS;
+  const backoffMs = options.backoffMs ?? READ_ONLY_CLONE_BACKOFF_MS;
+  const sleep = options.sleep ?? waitSynchronously;
+  const cloneRunner = options.cloneRunner ?? (({ args, cwd, env }) => run("git", args, cwd, env));
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 5) {
+    throw new Error("公开下游只读克隆重试次数必须为 1 到 5 的整数");
+  }
+  if (!Number.isFinite(backoffMs) || backoffMs < 0 || backoffMs > 2_000) {
+    throw new Error("公开下游只读克隆退避必须为 0 到 2000 毫秒");
+  }
+
+  const failures = [];
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const attemptDirectory = mkdtempSync(join(attemptRoot, `clone-attempt-${attempt}-`));
+    const checkout = join(attemptDirectory, "repository");
+    try {
+      cloneRunner({
+        attempt,
+        target: checkout,
+        args: [
+          "-c",
+          "http.version=HTTP/1.1",
+          "clone",
+          "--depth",
+          "1",
+          "--no-tags",
+          repositoryUrl(child.repo),
+          checkout,
+        ],
+        cwd: baseDir,
+        env: githubGitEnvironment(token),
+      });
+      if (!existsSync(join(checkout, ".git"))) {
+        throw new Error("git clone 未生成可验证的工作树");
+      }
+      return checkout;
+    } catch (error) {
+      const raw = error?.stderr ? String(error.stderr) : error?.message ?? error;
+      const diagnostic = redactCloneDiagnostic(raw, token) || "Git 未返回诊断信息";
+      const classification = classifyCloneFailure(diagnostic);
+      failures.push({ classification, diagnostic });
+      rmSync(attemptDirectory, { recursive: true, force: true });
+
+      const retryable = ["network-transient", "rate-limited", "unknown"].includes(classification);
+      if (!retryable || attempt === maxAttempts) throw readOnlyCloneError({ child, failures });
+      sleep(backoffMs * attempt);
+    }
+  }
+  throw readOnlyCloneError({ child, failures });
 }
 
 export function preflightChildren({ children, waveOrder, manifest, version, targetChannel = "stable", token = "", cloneChild = cloneChildReadOnly }) {
@@ -417,10 +675,10 @@ export function preflightChildren({ children, waveOrder, manifest, version, targ
   for (const child of children) {
     const temp = mkdtempSync(join(tmpdir(), "workloom-ui-preflight-"));
     try {
-      cloneChild(child, temp, token);
-      const defaultBranch = run("git", ["branch", "--show-current"], temp);
-      const headSha = run("git", ["rev-parse", "HEAD"], temp);
-      const blockers = inspectMigratedConsumer(temp, child, manifest);
+      const checkout = cloneChild(child, temp, token) ?? temp;
+      const defaultBranch = run("git", ["branch", "--show-current"], checkout);
+      const headSha = run("git", ["rev-parse", "HEAD"], checkout);
+      const blockers = inspectMigratedConsumer(checkout, child, manifest);
       if (defaultBranch !== "main") {
         blockers.push(blocker(
           "DEFAULT_BRANCH_NOT_MAIN",
@@ -432,7 +690,7 @@ export function preflightChildren({ children, waveOrder, manifest, version, targ
       }
       const stageOneBlockers = blockers.filter((item) => item.phase === "phase-1");
       const phaseTwoBlockers = blockers.filter((item) => item.phase === "phase-2");
-      const workdir = child.pathPrefix ? join(temp, child.pathPrefix.replace(/\/$/, "")) : temp;
+      const workdir = child.pathPrefix ? join(checkout, child.pathPrefix.replace(/\/$/, "")) : checkout;
       let currentVersion = null;
       let currentFoundationVersion = null;
       try {
@@ -465,6 +723,7 @@ export function preflightChildren({ children, waveOrder, manifest, version, targ
         blockers,
       });
     } catch (error) {
+      const failure = cloneFailureMetadata(error, token);
       repositories.push({
         repo: child.repo,
         pathPrefix: child.pathPrefix || ".",
@@ -479,10 +738,14 @@ export function preflightChildren({ children, waveOrder, manifest, version, targ
         blockers: [blocker(
           "CLONE_FAILED",
           ".",
-          `只读克隆失败：${String(error?.message ?? error).split("\n")[0].slice(0, 500)}`,
+          `只读克隆失败（${failure.classification}，已尝试 ${failure.attempts} 次）：${failure.diagnostic}`,
           "检查仓库可访问性和 SYNC_TOKEN 只读权限后重试；不得跳过该仓发布。",
           "access",
-        )],
+        )].map((item) => ({
+          ...item,
+          failureClass: failure.classification,
+          attempts: failure.attempts,
+        })),
       });
     } finally {
       rmSync(temp, { recursive: true, force: true });
@@ -639,9 +902,426 @@ async function createPullRequest({ repo, token, branch, version }) {
   throw new Error(`创建 PR 失败 ${response.status}: ${detail.slice(0, 500)}`);
 }
 
-function verifyPublishedArtifact(manifest, version) {
-  const published = JSON.parse(run("npm", ["view", `${manifest.ui.package}@${version}`, "version", "--json"], baseDir));
-  if (published !== version) throw new Error(`registry 尚未确认 ${manifest.ui.package}@${version}，拒绝提前 rollout`);
+function parseJson(value, label) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    throw new Error(`${label} 未返回有效 JSON`);
+  }
+}
+
+function validIntegrity(value) {
+  return typeof value === "string" && /^sha512-[A-Za-z0-9+/]+={0,2}$/.test(value);
+}
+
+const sha256 = (value) => createHash("sha256").update(value).digest("hex");
+
+function normalizedRemoteIdentity(value) {
+  const remote = String(value ?? "").trim();
+  if (!remote || /[\0\r\n]/u.test(remote)) throw new Error("canonical origin URL 无效");
+  const scp = remote.match(/^git@([^:]+):(.+)$/u);
+  if (scp) return `${scp[1].toLowerCase()}/${scp[2].replace(/^\/+|\.git\/?$/gu, "")}`;
+  if (/^[a-z][a-z0-9+.-]*:\/\//iu.test(remote)) {
+    let url;
+    try { url = new URL(remote); } catch { throw new Error("canonical origin URL 无效"); }
+    if (url.password || (url.username && !(url.protocol === "ssh:" && url.username === "git"))) {
+      throw new Error("canonical origin URL 禁止内嵌凭据");
+    }
+    if (url.protocol === "file:") return `file:${resolve(decodeURIComponent(url.pathname))}`;
+    return `${url.hostname.toLowerCase()}/${url.pathname.replace(/^\/+|\.git\/?$/gu, "")}`;
+  }
+  return `file:${resolve(remote)}`;
+}
+
+function gitCommandSucceeds(root, args) {
+  try {
+    execFileSync("git", args, {
+      cwd: root,
+      stdio: "ignore",
+      env: sanitizedSubprocessEnvironment(process.env, { GIT_TERMINAL_PROMPT: "0" }),
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * rollout 的本地同名 tag 不构成信任锚。每次都从 canonical origin 抓取 main 与
+ * 目标 tag 到一次性 refs，要求本地 tag 与远端精确同提交且该提交属于远端 main。
+ */
+export function verifyCanonicalReleaseTag({
+  root = baseDir,
+  sourceRef,
+  expectedOriginUrl = `https://github.com/${CANONICAL_BASE_REPOSITORY}.git`,
+}) {
+  const repositoryRoot = resolve(root);
+  if (!/^refs\/tags\/ui-v\d+\.\d+\.\d+$/u.test(sourceRef ?? "")) {
+    throw new Error(`canonical 校验只接受精确 ui-v 稳定标签：${sourceRef ?? "未提供"}`);
+  }
+  let originUrl;
+  try {
+    originUrl = run("git", ["remote", "get-url", "origin"], repositoryRoot);
+  } catch {
+    throw new Error("缺少 canonical origin；拒绝仅凭本地 tag rollout");
+  }
+  const actualIdentity = normalizedRemoteIdentity(originUrl);
+  const expectedIdentity = normalizedRemoteIdentity(expectedOriginUrl);
+  if (actualIdentity !== expectedIdentity) {
+    throw new Error(`origin 不是 canonical 基座远端；期望 ${expectedIdentity}，实际 ${actualIdentity}`);
+  }
+  if (expectedIdentity === `github.com/${CANONICAL_BASE_REPOSITORY}`
+    && !/^https:\/\/github\.com\//iu.test(originUrl)) {
+    throw new Error("canonical GitHub origin 必须使用无内嵌凭据的 HTTPS 公共只读地址");
+  }
+
+  const namespace = `refs/workloom-release-verification/${process.pid}-${randomUUID()}`;
+  const mainRef = `${namespace}/main`;
+  const tagRef = `${namespace}/tag`;
+  try {
+    try {
+      // canonical 基座是公开只读来源；普通 fetch 必须走净化环境，绝不借用 rollout token。
+      run("git", [
+        "-c", "credential.helper=",
+        "-c", "http.extraHeader=",
+        "fetch", "--force", "--no-tags", "origin",
+        `+refs/heads/main:${mainRef}`,
+        `+${sourceRef}:${tagRef}`,
+      ], repositoryRoot, { GIT_TERMINAL_PROMPT: "0" });
+    } catch {
+      throw new Error(`无法从 canonical origin 同时获取 main 与 ${sourceRef}`);
+    }
+    const localTagCommit = run("git", ["rev-parse", "--verify", `${sourceRef}^{commit}`], repositoryRoot);
+    const canonicalTagCommit = run("git", ["rev-parse", "--verify", `${tagRef}^{commit}`], repositoryRoot);
+    const canonicalMainCommit = run("git", ["rev-parse", "--verify", `${mainRef}^{commit}`], repositoryRoot);
+    if (localTagCommit !== canonicalTagCommit) {
+      throw new Error(`${sourceRef} 本地提交与 canonical origin 同名标签不一致；拒绝歧义标签 rollout`);
+    }
+    if (!gitCommandSucceeds(repositoryRoot, ["merge-base", "--is-ancestor", canonicalTagCommit, canonicalMainCommit])) {
+      throw new Error(`${sourceRef} 不是 canonical origin/main 的祖先；拒绝旁路标签 rollout`);
+    }
+    return {
+      origin: actualIdentity,
+      tagCommit: canonicalTagCommit,
+      mainCommit: canonicalMainCommit,
+    };
+  } finally {
+    for (const ref of [tagRef, mainRef]) {
+      try { run("git", ["update-ref", "-d", ref], repositoryRoot); } catch { /* best-effort cleanup */ }
+    }
+  }
+}
+
+function taggedBlob(root, sourceRef, path) {
+  const tree = run("git", ["ls-tree", "-z", sourceRef, "--", path], root);
+  const records = tree.split("\0").filter(Boolean);
+  if (records.length !== 1) throw new Error(`${sourceRef} 的治理载荷缺少唯一文件：${path}`);
+  const match = /^(100644|100755)\s+blob\s+[0-9a-f]+\t(.+)$/u.exec(records[0]);
+  if (!match || match[2] !== path) throw new Error(`${sourceRef} 的治理载荷文件类型非法：${path}`);
+  return {
+    content: execFileSync("git", ["show", `${sourceRef}:${path}`], {
+      cwd: root,
+      encoding: null,
+      maxBuffer: 32 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: sanitizedSubprocessEnvironment(process.env, { GIT_TERMINAL_PROMPT: "0" }),
+    }),
+    mode: match[1] === "100755" ? 0o755 : 0o644,
+  };
+}
+
+function digestPayloadEntries(entries) {
+  return sha256(Buffer.from(`${JSON.stringify(entries)}\n`));
+}
+
+function releasePayload({ repositoryRoot, taggedManifest, version, sourceRef, sourceCommit, canonical }) {
+  const snapshot = loadStableFoundationSnapshot(repositoryRoot, taggedManifest, version);
+  if (snapshot.sourceCommit !== sourceCommit) throw new Error(`${sourceRef} 的客户端基座提交与 canonical tag 不一致`);
+  const clientEntries = [...snapshot.files.entries()].map(([path, file]) => ({
+    category: "client-foundation",
+    path,
+    mode: file.mode,
+    sha256: sha256(file.content),
+  })).sort((left, right) => left.path.localeCompare(right.path));
+  const governanceEntries = RELEASE_GOVERNANCE_PAYLOAD_PATHS.map((path) => {
+    const file = taggedBlob(repositoryRoot, sourceRef, path);
+    return { category: "governance", path, mode: file.mode, sha256: sha256(file.content) };
+  }).sort((left, right) => left.path.localeCompare(right.path));
+  const files = [...clientEntries, ...governanceEntries];
+  const unsigned = {
+    schemaVersion: RELEASE_PAYLOAD_SCHEMA,
+    version,
+    sourceRef,
+    sourceCommit,
+    canonical: {
+      origin: canonical.origin,
+      tagCommit: canonical.tagCommit,
+      mainCommit: canonical.mainCommit,
+    },
+    clientFoundation: { fileCount: clientEntries.length, digest: digestPayloadEntries(clientEntries) },
+    governance: { fileCount: governanceEntries.length, digest: digestPayloadEntries(governanceEntries) },
+    files,
+  };
+  return { ...unsigned, digest: sha256(Buffer.from(`${JSON.stringify(unsigned)}\n`)) };
+}
+
+export function assertReleasePayloadIntegrity(payload, { version, sourceRef, sourceCommit } = {}) {
+  if (!payload || payload.schemaVersion !== RELEASE_PAYLOAD_SCHEMA || !Array.isArray(payload.files)) {
+    throw new Error("稳定发布缺少 clientFoundation + governance 载荷清单");
+  }
+  if (!/^\d+\.\d+\.\d+$/u.test(payload.version ?? "")
+    || payload.sourceRef !== `refs/tags/ui-v${payload.version}`
+    || !/^[0-9a-f]{40}$/u.test(payload.sourceCommit ?? "")) {
+    throw new Error("稳定发布载荷来源元数据无效");
+  }
+  if ((version && payload.version !== version)
+    || (sourceRef && payload.sourceRef !== sourceRef)
+    || (sourceCommit && payload.sourceCommit !== sourceCommit)) {
+    throw new Error("稳定发布载荷与本地标签元数据不一致");
+  }
+  if (payload.canonical?.tagCommit !== payload.sourceCommit
+    || !/^[0-9a-f]{40}$/u.test(payload.canonical?.mainCommit ?? "")
+    || typeof payload.canonical?.origin !== "string"
+    || !payload.canonical.origin) {
+    throw new Error("稳定发布载荷缺少 canonical origin 信任证明");
+  }
+  const seen = new Set();
+  for (const file of payload.files) {
+    normalizeRepositoryPath(file?.path, "发布载荷路径");
+    if (!["client-foundation", "governance"].includes(file?.category)
+      || ![0o644, 0o755].includes(file?.mode)
+      || !/^[0-9a-f]{64}$/u.test(file?.sha256 ?? "")) {
+      throw new Error(`稳定发布载荷文件契约无效：${file?.path ?? "未知"}`);
+    }
+    const identity = `${file.category}:${file.path}`;
+    if (seen.has(identity)) throw new Error(`稳定发布载荷文件重复：${file.path}`);
+    seen.add(identity);
+  }
+  const expectedOrder = [...payload.files].sort((left, right) => (
+    left.category.localeCompare(right.category) || left.path.localeCompare(right.path)
+  ));
+  if (JSON.stringify(expectedOrder) !== JSON.stringify(payload.files)) {
+    throw new Error("稳定发布载荷文件清单未按类别和路径确定性排序");
+  }
+  const clientEntries = payload.files.filter((file) => file.category === "client-foundation");
+  const governanceEntries = payload.files.filter((file) => file.category === "governance");
+  if (payload.clientFoundation?.fileCount !== clientEntries.length
+    || payload.clientFoundation?.digest !== digestPayloadEntries(clientEntries)
+    || payload.governance?.fileCount !== governanceEntries.length
+    || payload.governance?.digest !== digestPayloadEntries(governanceEntries)) {
+    throw new Error("稳定发布 clientFoundation 或 governance 载荷摘要不一致");
+  }
+  const { digest, ...unsigned } = payload;
+  if (!/^[0-9a-f]{64}$/u.test(digest ?? "")
+    || digest !== sha256(Buffer.from(`${JSON.stringify(unsigned)}\n`))) {
+    throw new Error("稳定发布载荷总摘要不一致");
+  }
+  return true;
+}
+
+function assertWorkingGovernancePayloadMatchesTag(root, sourceRef) {
+  for (const path of RELEASE_GOVERNANCE_PAYLOAD_PATHS) {
+    const tagged = taggedBlob(root, sourceRef, path).content;
+    const workingPath = join(root, path);
+    if (!existsSync(workingPath) || !lstatSync(workingPath).isFile() || readFileSync(workingPath).equals(tagged) === false) {
+      throw new Error(`${path} 工作树字节与 canonical ${sourceRef} 不一致；拒绝下发未封存治理载荷`);
+    }
+  }
+}
+
+/**
+ * 从 ui-v* Git 标签而非可变工作树生成 npm pack。临时源只包含标签里的发布输入，
+ * node_modules 只作为构建工具链接且不会进入制品；因此脏工作树和残留 dist 均不能
+ * 冒充已发布的稳定制品。
+ */
+export function packTaggedUiArtifact({
+  root = baseDir,
+  manifest,
+  version,
+  expectedOriginUrl = `https://github.com/${CANONICAL_BASE_REPOSITORY}.git`,
+  readNpmVersion = () => run("npm", ["--version"], resolve(root)),
+  readPnpmVersion = () => run("pnpm", ["--version"], resolve(root)),
+  pack = ({ cwd, artifactRoot, sourceRef }) => parseJson(
+    run("npm", ["pack", "--json", "--pack-destination", artifactRoot], cwd),
+    `${sourceRef} 的 npm pack 元数据`,
+  ),
+}) {
+  const repositoryRoot = resolve(root);
+  const npmVersion = readNpmVersion();
+  const pnpmVersion = readPnpmVersion();
+  if (npmVersion !== "11.6.2" || pnpmVersion !== "10.14.0") {
+    throw new Error(`UI 稳定制品复算工具链必须固定为 npm 11.6.2 / pnpm 10.14.0，当前为 npm ${npmVersion} / pnpm ${pnpmVersion}`);
+  }
+  const stableVersion = resolveStableFoundationVersion(manifest, version);
+  const sourceRef = manifest.clientFoundation.stableSourceRefPattern.replace("{version}", stableVersion);
+  const canonical = verifyCanonicalReleaseTag({
+    root: repositoryRoot,
+    sourceRef,
+    expectedOriginUrl,
+  });
+  const sourceCommit = canonical.tagCommit;
+  const headCommit = run("git", ["rev-parse", "--verify", "HEAD^{commit}"], repositoryRoot);
+  if (headCommit !== sourceCommit) {
+    throw new Error(`rollout 必须在已固定 ${sourceRef} 的提交 ${sourceCommit.slice(0, 12)} 上执行，当前 HEAD 为 ${headCommit.slice(0, 12)}`);
+  }
+
+  const taggedManifest = parseJson(
+    run("git", ["show", `${sourceRef}:sync/base-capabilities.json`], repositoryRoot),
+    `${sourceRef} 的 base-capabilities.json`,
+  );
+  const taggedPackage = parseJson(
+    run("git", ["show", `${sourceRef}:packages/ui/package.json`], repositoryRoot),
+    `${sourceRef} 的 packages/ui/package.json`,
+  );
+  validateRelease(taggedManifest, taggedPackage, stableVersion);
+  if (taggedPackage.name !== manifest.ui.package) {
+    throw new Error(`${sourceRef} 的包名 ${taggedPackage.name ?? "未登记"} 与 ${manifest.ui.package} 不一致`);
+  }
+  if (taggedPackage.publishConfig?.registry !== OFFICIAL_NPM_REGISTRY
+    || taggedPackage.publishConfig?.access !== "public") {
+    throw new Error(`${sourceRef} 的 @workloom/ui 必须固定 publishConfig.registry=${OFFICIAL_NPM_REGISTRY} 且 access=public`);
+  }
+  assertWorkingGovernancePayloadMatchesTag(repositoryRoot, sourceRef);
+  const payload = releasePayload({
+    repositoryRoot,
+    taggedManifest,
+    version: stableVersion,
+    sourceRef,
+    sourceCommit,
+    canonical,
+  });
+  assertReleasePayloadIntegrity(payload, { version: stableVersion, sourceRef, sourceCommit });
+
+  const archivedPaths = ["package.json", "pnpm-workspace.yaml", "tsconfig.base.json", "packages/ui"];
+  const tree = run("git", ["ls-tree", "-rz", sourceRef, "--", ...archivedPaths], repositoryRoot);
+  for (const record of tree.split("\0").filter(Boolean)) {
+    const mode = record.match(/^(\d+)\s/u)?.[1];
+    if (!mode || !["100644", "100755"].includes(mode)) {
+      throw new Error(`${sourceRef} 的 UI pack 输入包含不支持的 Git tree 类型：${record.slice(0, 160)}`);
+    }
+  }
+
+  const temp = mkdtempSync(join(tmpdir(), "workloom-ui-integrity-"));
+  const sourceRoot = join(temp, "source");
+  const artifactRoot = join(temp, "artifact");
+  const archivePath = join(temp, "source.tar");
+  mkdirSync(sourceRoot, { recursive: true });
+  mkdirSync(artifactRoot, { recursive: true });
+  try {
+    const archive = execFileSync("git", ["archive", "--format=tar", sourceRef, "--", ...archivedPaths], {
+      cwd: repositoryRoot,
+      encoding: null,
+      maxBuffer: 256 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: sanitizedSubprocessEnvironment(process.env, { GIT_TERMINAL_PROMPT: "0" }),
+    });
+    writeFileSync(archivePath, archive);
+    run("tar", ["-xf", archivePath, "-C", sourceRoot], repositoryRoot);
+    rmSync(archivePath, { force: true });
+
+    // npm pack 的 prepack 会构建并测试标签源码。依赖来自调用方刚以固定 lockfile
+    // 安装的工作区；链接仅存在于即将销毁的临时目录且不会进入 files 白名单。
+    for (const relativeDependencyPath of ["node_modules", "packages/ui/node_modules"]) {
+      const dependencyPath = join(repositoryRoot, relativeDependencyPath);
+      if (!existsSync(dependencyPath)) continue;
+      const linkPath = join(sourceRoot, relativeDependencyPath);
+      mkdirSync(dirname(linkPath), { recursive: true });
+      symlinkSync(dependencyPath, linkPath, process.platform === "win32" ? "junction" : "dir");
+    }
+
+    const metadata = pack({ cwd: join(sourceRoot, "packages/ui"), artifactRoot, sourceRef });
+    if (!Array.isArray(metadata) || metadata.length !== 1) {
+      throw new Error(`${sourceRef} 的 npm pack 必须且只能生成一个制品`);
+    }
+    const artifact = metadata[0];
+    if (artifact?.name !== manifest.ui.package || artifact?.version !== stableVersion || !validIntegrity(artifact?.integrity)) {
+      throw new Error(`${sourceRef} 的 npm pack 元数据与 ${manifest.ui.package}@${stableVersion} 不一致`);
+    }
+    return {
+      package: artifact.name,
+      version: artifact.version,
+      sourceRef,
+      sourceCommit,
+      integrity: artifact.integrity,
+      releasePayload: payload,
+    };
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+}
+
+export function assertPublishedArtifactIntegrity(localArtifact, remoteIntegrity, packageName, version) {
+  if (
+    localArtifact?.package !== packageName
+    || localArtifact?.version !== version
+    || !validIntegrity(localArtifact?.integrity)
+  ) {
+    throw new Error(`本地标签未生成有效的 ${packageName}@${version} npm pack`);
+  }
+  if (!validIntegrity(remoteIntegrity)) {
+    throw new Error(`registry 尚未返回 ${packageName}@${version} 的 dist.integrity，拒绝 rollout`);
+  }
+  if (remoteIntegrity !== localArtifact.integrity) {
+    throw new Error(`registry 中 ${packageName}@${version} 与 ${localArtifact.sourceRef} 的 dist.integrity 不一致，拒绝同版本异内容 rollout`);
+  }
+  assertReleasePayloadIntegrity(localArtifact.releasePayload, {
+    version,
+    sourceRef: localArtifact.sourceRef,
+    sourceCommit: localArtifact.sourceCommit,
+  });
+  return { ...localArtifact, registryIntegrity: remoteIntegrity };
+}
+
+/**
+ * registry 信任锚固定到 npmjs。查询在空 cwd、临时 HOME 与空 user/global npmrc 中
+ * 执行，且 CLI 再显式指定官方 registry，避免用户或项目 @scope registry 重定向。
+ */
+export function readOfficialRegistryIntegrity({
+  packageName,
+  targetVersion,
+  ambientEnvironment = process.env,
+  execute = execFileSync,
+}) {
+  const temp = mkdtempSync(join(tmpdir(), "workloom-npmjs-integrity-"));
+  const userConfig = join(temp, "user.npmrc");
+  const globalConfig = join(temp, "global.npmrc");
+  writeFileSync(userConfig, "");
+  writeFileSync(globalConfig, "");
+  try {
+    const output = execute("npm", [
+      "view",
+      `${packageName}@${targetVersion}`,
+      "dist.integrity",
+      "--json",
+      `--registry=${OFFICIAL_NPM_REGISTRY}`,
+      `--userconfig=${userConfig}`,
+      `--globalconfig=${globalConfig}`,
+    ], {
+      cwd: temp,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      env: sanitizedSubprocessEnvironment(ambientEnvironment, {
+        HOME: temp,
+        GIT_TERMINAL_PROMPT: "0",
+      }),
+    });
+    return parseJson(String(output).trim(), `npmjs ${packageName}@${targetVersion} dist.integrity`);
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+}
+
+export function verifyPublishedArtifact(manifest, version, {
+  root = baseDir,
+  packArtifact = packTaggedUiArtifact,
+  readRemoteIntegrity = readOfficialRegistryIntegrity,
+} = {}) {
+  const localArtifact = packArtifact({ root, manifest, version });
+  const remoteIntegrity = readRemoteIntegrity({
+    packageName: manifest.ui.package,
+    targetVersion: version,
+  });
+  return assertPublishedArtifactIntegrity(localArtifact, remoteIntegrity, manifest.ui.package, version);
 }
 
 async function upgradeChild(child, manifest, version, token, dryRun, foundationSnapshot) {
@@ -649,11 +1329,11 @@ async function upgradeChild(child, manifest, version, token, dryRun, foundationS
   const branch = `chore/workloom-ui-v${version}`;
   assertIndependentUpgradeBranch(branch);
   try {
-    cloneChildReadOnly(child, temp, token);
-    run("git", ["switch", "-c", branch], temp);
-    const workdir = child.pathPrefix ? join(temp, child.pathPrefix.replace(/\/$/, "")) : temp;
+    const checkout = cloneChildReadOnly(child, temp, token);
+    run("git", ["switch", "-c", branch], checkout);
+    const workdir = child.pathPrefix ? join(checkout, child.pathPrefix.replace(/\/$/, "")) : checkout;
     const foundation = applyClientFoundation({
-      repoRoot: temp,
+      repoRoot: checkout,
       targetRoot: workdir,
       manifest,
       snapshot: foundationSnapshot,
@@ -663,40 +1343,49 @@ async function upgradeChild(child, manifest, version, token, dryRun, foundationS
       dryRun: false,
     });
     const touched = setUiVersion({
-      repo: temp,
+      repo: checkout,
       prefix: child.pathPrefix?.replace(/\/$/, "") ?? "",
       version,
       manifest,
       requireAll: true,
     });
-    mkdirSync(join(temp, ".github/workflows"), { recursive: true });
+    mkdirSync(join(checkout, ".github/workflows"), { recursive: true });
     mkdirSync(join(workdir, "scripts"), { recursive: true });
     const workflow = renderConsumerWorkflow(child.pathPrefix);
-    writeFileSync(join(temp, ".github/workflows/workloom-ui-contract.yml"), workflow);
+    writeFileSync(join(checkout, ".github/workflows/workloom-ui-contract.yml"), workflow);
     // 门禁脚本属于消费契约，不是可分叉的 UI 源码；随升级 PR 一并落到行业仓。
-    copyFileSync(join(baseDir, "scripts/verify-ui-consumer.mjs"), join(workdir, "scripts/verify-ui-consumer.mjs"));
-    copyFileSync(
-      join(baseDir, "scripts/verify-client-foundation-consumer.mjs"),
-      join(workdir, "scripts/verify-client-foundation-consumer.mjs"),
-    );
-    // apps/web 的生产 build 会执行这道文案边界；升级 PR 必须自带与稳定
-    // 客户端壳同源的验证器，不能假设某次独立 base-sync 已经先落地。
-    copyFileSync(
-      join(baseDir, "scripts/verify-production-client-boundary.mjs"),
-      join(workdir, "scripts/verify-production-client-boundary.mjs"),
-    );
+    const governance = installUiGovernance({ repo: workdir, repositoryRoot: checkout, sourceRoot: baseDir });
+    for (const path of ADOPTION_SCRIPTS) {
+      // apps/web 的生产 build 会执行文案边界；升级 PR 必须自带与稳定
+      // 客户端壳同源的验证器，不能假设独立 base-sync 已先落地。
+      copyFileSync(join(baseDir, path), join(workdir, path));
+    }
     run("pnpm", ["install", "--lockfile-only", "--ignore-scripts"], workdir);
+    // verifier 静态依赖 typescript-governance。rollout 的临时 clone 必须按刚生成
+    // 的锁文件建立真实依赖树，不能从基座工作树的 node_modules 偶然解析成功。
+    run("pnpm", ["install", "--frozen-lockfile", "--ignore-scripts"], workdir);
     run("node", [join(workdir, "scripts/verify-ui-consumer.mjs"), "--repo", workdir], workdir);
     run("node", [join(workdir, "scripts/verify-client-foundation-consumer.mjs"), "--repo", workdir], workdir);
-    const status = run("git", ["status", "--porcelain"], temp);
     const foundationTouched = foundation.filesTouched ?? [];
-    if (!status) return { repo: child.repo, status: "already-current", touched, foundationTouched };
+    const inWorkdir = (path) => prefixedPath(child, path);
+    const allowedUpgradePaths = [
+      ...foundationTouched.map(inWorkdir),
+      ...touched.map(inWorkdir),
+      inWorkdir(".workloom-ui.json"),
+      inWorkdir("package.json"),
+      inWorkdir("pnpm-lock.yaml"),
+      ...governance.files.map(inWorkdir),
+      inWorkdir(GOVERNANCE_STATE),
+      ...ADOPTION_SCRIPTS.map(inWorkdir),
+      ADOPTION_WORKFLOW,
+    ];
+    const stagedPaths = stageExactUpgradeChanges({ repoRoot: checkout, allowedPaths: allowedUpgradePaths });
+    if (!stagedPaths.length) return { repo: child.repo, status: "already-current", touched, foundationTouched };
     if (dryRun) return { repo: child.repo, status: "planned", touched, foundationTouched };
-    run("git", ["add", "-A"], temp);
-    run("git", ["-c", "user.name=WorkLoom Base Release", "-c", "user.email=base-release@workloom.im", "commit", "-m", `chore(base): 升级三端客户端基座至 ${version}`], temp);
-    const remoteHead = run("git", ["ls-remote", "--heads", "origin", `refs/heads/${branch}`], temp, githubGitEnvironment(token)).split(/\s+/)[0] || "";
+    run("git", ["-c", "user.name=WorkLoom Base Release", "-c", "user.email=base-release@workloom.im", "commit", "-m", `chore(base): 升级三端客户端基座至 ${version}`], checkout);
+    const remoteHead = run("git", ["ls-remote", "--heads", "origin", `refs/heads/${branch}`], checkout, githubGitEnvironment(token)).split(/\s+/)[0] || "";
     const lease = remoteHead ? `--force-with-lease=refs/heads/${branch}:${remoteHead}` : "--force-with-lease";
-    run("git", ["push", lease, "origin", `HEAD:refs/heads/${branch}`], temp, githubGitEnvironment(token));
+    run("git", ["push", lease, "origin", `HEAD:refs/heads/${branch}`], checkout, githubGitEnvironment(token));
     const pull = await createPullRequest({ repo: child.repo, token, branch, version });
     return { repo: child.repo, status: "pr-opened", url: pull.html_url, touched, foundationTouched };
   } finally {
@@ -714,17 +1403,39 @@ async function main() {
   const options = parseArgs(process.argv.slice(2));
   const manifest = JSON.parse(readFileSync(join(syncDir, "base-capabilities.json"), "utf8"));
   const packageJson = JSON.parse(readFileSync(join(baseDir, "packages/ui/package.json"), "utf8"));
-  const childManifest = JSON.parse(readFileSync(join(syncDir, "child-repos.json"), "utf8"));
-  const children = childManifest.children;
-  const waveOrder = childManifest.uiRolloutWaveOrder;
-  validateChildInventory(children, waveOrder);
-  const token = process.env.SYNC_TOKEN || process.env.GH_TOKEN || "";
 
   const target = options.mode === "preflight"
     ? resolvePreflightTarget(manifest, packageJson, options.requestedVersion)
     : { version: resolveUiVersion(manifest, options.requestedVersion), channel: "stable" };
   const version = target.version;
-  if (options.mode === "rollout") validateRelease(manifest, packageJson, version);
+  if (options.mode !== "preflight") validateRelease(manifest, packageJson, version);
+  if (options.mode === "verify-artifact") {
+    const artifact = verifyPublishedArtifact(manifest, version);
+    emitReport({
+      schemaVersion: "workloom.ui-artifact-integrity/v1",
+      verified: true,
+      ...artifact,
+    }, options.reportPath);
+    return;
+  }
+
+  // 所有 rollout（包括本地 dry-run）均在访问任何下游仓之前重新生成固定标签的
+  // npm pack，并与 registry 完整性逐字节核对；只验证 version 不再构成授权条件。
+  const verifiedArtifact = options.mode === "rollout"
+    ? verifyPublishedArtifact(manifest, version)
+    : null;
+  // rollout 的写目标与波次同样属于授权 TCB：只从已验证 canonical tag 读取，
+  // 绝不能让合法形状的脏工作树清单把跨仓 token 导向另一组仓库。
+  const childManifest = options.mode === "rollout"
+    ? parseJson(
+      taggedBlob(baseDir, verifiedArtifact.sourceRef, "sync/child-repos.json").content.toString("utf8"),
+      `${verifiedArtifact.sourceRef} 的 child-repos.json`,
+    )
+    : JSON.parse(readFileSync(join(syncDir, "child-repos.json"), "utf8"));
+  const children = childManifest.children;
+  const waveOrder = childManifest.uiRolloutWaveOrder;
+  validateChildInventory(children, waveOrder);
+  const token = process.env.SYNC_TOKEN || process.env.GH_TOKEN || "";
 
   const preflight = preflightChildren({ children, waveOrder, manifest, version, targetChannel: target.channel, token });
   if (options.mode === "preflight") {
@@ -739,7 +1450,6 @@ async function main() {
     return;
   }
   if (!options.dryRun && !token) throw new Error("缺少 SYNC_TOKEN/GH_TOKEN；拒绝创建无法审计的半成品分支");
-  if (!options.dryRun) verifyPublishedArtifact(manifest, version);
   const foundationSnapshot = loadStableFoundationSnapshot(baseDir, manifest, version);
 
   const batch = selectRolloutBatch({
@@ -822,7 +1532,13 @@ async function main() {
     targetVersion: version,
     targetArtifacts: {
       sharedUi: `${manifest.ui.package}@${version}`,
+      sharedUiIntegrity: verifiedArtifact.integrity,
       clientFoundation: `ui-v${version}`,
+      clientFoundationDigest: verifiedArtifact.releasePayload.clientFoundation.digest,
+      governanceDigest: verifiedArtifact.releasePayload.governance.digest,
+      payloadDigest: verifiedArtifact.releasePayload.digest,
+      payloadFileCount: verifiedArtifact.releasePayload.files.length,
+      canonicalSourceCommit: verifiedArtifact.sourceCommit,
     },
     directMainPush: false,
     selection: {

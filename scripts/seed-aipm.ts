@@ -7,7 +7,7 @@
  *      夜班编排 / bundle_installs 装配台账登记（一键清空依据）
  */
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import pg from "pg";
 import YAML from "yaml";
 import {
@@ -65,7 +65,7 @@ const MEMBERS = [
   { id: "MEM-003", name: "运营同学", role: "readonly" },
 ];
 
-async function main(): Promise<void> {
+export async function seedAiPm(): Promise<void> {
   // 清单、摘要/签名与题集 Schema 必须在建立数据库连接前全部通过。
   const evalPack = loadVerifiedBundleEvalQuestions("ai-pm", join(REPO_ROOT, "bundles"));
   const presets = loadVerifiedBundleWorkforcePresets("ai-pm", join(REPO_ROOT, "bundles"));
@@ -275,7 +275,7 @@ async function main(): Promise<void> {
       await q(
         `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, gesture, snapshot, decided_by, decided_at)
          VALUES ($1,$2,$3,$4,'inapp','pending',NULL,$5,NULL,NULL)
-         ON CONFLICT DO NOTHING`,
+         ON CONFLICT (approval_id) DO NOTHING`,
         [approvalId, TENANT_ID, WS_ID, evId,
          JSON.stringify({ action: a.kind, after: { title: a.title }, expires_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString() })],
       );
@@ -356,4 +356,6 @@ async function main(): Promise<void> {
   console.log(`\n✅ ai-pm 示例包装配完成：${WS_NAME}——打开客户端即见 AI 产品经理团队在岗`);
 }
 
-main().catch((e) => { console.error("seed-aipm 失败:", e); process.exit(1); });
+if (resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) {
+  seedAiPm().catch((e) => { console.error("seed-aipm 失败:", e); process.exit(1); });
+}

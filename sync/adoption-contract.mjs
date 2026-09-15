@@ -6,7 +6,8 @@
  * 公共基座 state、三端稳定基座、共享 UI 状态和消费 CI 所需脚本均已落盘。
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -18,12 +19,21 @@ const CLIENT_PACKAGES = Object.freeze([
 const POST_FILES = Object.freeze([
   ".workloom-ui.json",
   ".workloom-client-foundation.json",
+  ".workloom-ui-governance.json",
   "scripts/verify-ui-consumer.mjs",
+  "scripts/ui-governance-rules.mjs",
   "scripts/verify-client-foundation-consumer.mjs",
   "scripts/verify-production-client-boundary.mjs",
   "scripts/verify-product-content.mjs",
   "scripts/bundle-governance.mts",
 ]);
+const GOVERNANCE_TYPESCRIPT = "npm:typescript@5.9.3";
+const GOVERNANCE_FILES = Object.freeze([
+  "scripts/verify-ui-consumer.mjs",
+  "scripts/ui-governance-rules.mjs",
+]);
+
+const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
 function readJson(path, label, errors) {
   if (!existsSync(path)) {
@@ -55,12 +65,37 @@ function hasWorkspaceEntry(content, entry) {
   return new RegExp(`^\\s*-\\s*["']?${escaped}["']?\\s*$`, "mu").test(content);
 }
 
+function findNodeModules(workdir) {
+  const found = [];
+  const walk = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (entry.name === ".git") continue;
+      const absolute = join(directory, entry.name);
+      const stat = lstatSync(absolute);
+      if (entry.name === "node_modules") {
+        found.push(relative(workdir, absolute).split(sep).join("/") || "node_modules");
+        continue;
+      }
+      if (stat.isDirectory() && !stat.isSymbolicLink()) walk(absolute);
+    }
+  };
+  walk(workdir);
+  return found.sort();
+}
+
 export function verifyAdoptionContract({ repoRoot, workdir, mode = "preflight" }) {
   if (!["preflight", "post"].includes(mode)) throw new Error(`未知接入契约阶段：${mode}`);
   const root = realpathSync(resolve(repoRoot));
   const target = safeTarget(root, resolve(workdir), "行业基座目录");
   if (!existsSync(target) || !lstatSync(target).isDirectory()) throw new Error("行业基座目录不存在");
   const errors = [];
+
+  if (mode === "preflight") {
+    const dependencyTrees = findNodeModules(target);
+    if (dependencyTrees.length) {
+      errors.push(`新行业接入要求无既有依赖树；请先移除 ${dependencyTrees.join("、")}`);
+    }
+  }
 
   const product = readJson(join(root, "product.manifest.json"), "product.manifest.json", errors);
   const packageJson = readJson(join(target, "package.json"), `${relative(root, target) || "."}/package.json`, errors);
@@ -74,6 +109,14 @@ export function verifyAdoptionContract({ repoRoot, workdir, mode = "preflight" }
       errors.push("package.json 缺少 bundle:governance → scripts/bundle-governance.mts");
     }
     if (!(packageJson.dependencies?.tsx || packageJson.devDependencies?.tsx)) errors.push("package.json 缺少固定的 tsx 执行器依赖");
+    const governanceTypescript = packageJson.devDependencies?.["typescript-governance"]
+      ?? packageJson.dependencies?.["typescript-governance"];
+    if (governanceTypescript && governanceTypescript !== GOVERNANCE_TYPESCRIPT) {
+      errors.push(`typescript-governance 已固定为 ${governanceTypescript}，接入程序不得静默覆盖`);
+    }
+    if (mode === "post" && governanceTypescript !== GOVERNANCE_TYPESCRIPT) {
+      errors.push(`package.json 必须精确依赖 typescript-governance=${GOVERNANCE_TYPESCRIPT}`);
+    }
   }
 
   const workspacePath = join(target, "pnpm-workspace.yaml");
@@ -103,6 +146,27 @@ export function verifyAdoptionContract({ repoRoot, workdir, mode = "preflight" }
       errors.push("base-sync state 未证明当前行业目录完成 full 同步");
     }
     for (const path of POST_FILES) if (!existsSync(join(target, path))) errors.push(`完整接入缺少 ${path}`);
+    const governanceState = readJson(join(target, ".workloom-ui-governance.json"), ".workloom-ui-governance.json", errors);
+    if (governanceState && (governanceState.schemaVersion !== "workloom.ui-governance-state/v1"
+      || governanceState.dependency !== GOVERNANCE_TYPESCRIPT
+      || governanceState.updatePolicy !== "stable-upgrade-pr-only"
+      || !governanceState.files?.["scripts/verify-ui-consumer.mjs"]?.sha256
+      || !governanceState.files?.["scripts/ui-governance-rules.mjs"]?.sha256)) {
+      errors.push(".workloom-ui-governance.json 未证明 verifier、AST 规则与固定解析器原子安装");
+    }
+    if (governanceState) {
+      for (const path of GOVERNANCE_FILES) {
+        const absolute = join(target, path);
+        const expected = governanceState.files?.[path]?.sha256 ?? "";
+        if (existsSync(absolute) && (!/^[0-9a-f]{64}$/u.test(expected)
+          || sha256(readFileSync(absolute)) !== expected)) {
+          errors.push(`${path} 与 .workloom-ui-governance.json 指纹不一致`);
+        }
+      }
+    }
+    const lockSource = existsSync(workspacePath) && existsSync(join(target, "pnpm-lock.yaml"))
+      ? readFileSync(join(target, "pnpm-lock.yaml"), "utf8") : "";
+    if (!lockSource.includes("typescript-governance")) errors.push("pnpm-lock.yaml 未锁定 typescript-governance");
     if (!existsSync(join(root, ".github/workflows/workloom-ui-contract.yml"))) {
       errors.push("完整接入缺少 .github/workflows/workloom-ui-contract.yml");
     }

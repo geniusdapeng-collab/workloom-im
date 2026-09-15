@@ -13,6 +13,7 @@
  *
  * 环境变量（调试覆盖，正常分发无需设置）：
  *   WORKLOOM_RESOURCES   Resources 根目录（默认 process.resourcesPath）
+ *   WORKLOOM_SOURCE_MODE 仅由 pnpm app 源码编排器设为 1；复用外部源码 server/web
  *   WORKLOOM_SUPPORT_DIR 支持目录（默认当前应用独立 userData）
  *   WORKLOOM_APP_SMOKE   设为 1 时执行后端首启冒烟后退出
  *   WORKLOOM_RENDER_SMOKE 设为 1 时创建真实窗口并验证页面/数字人/像素后退出
@@ -58,6 +59,7 @@ const { bootstrap } = require("./bootstrap.cjs");
 const TITLE = process.env.WORKLOOM_APP_TITLE ?? app.getName();
 const APP_SMOKE = process.env.WORKLOOM_APP_SMOKE === "1";
 const RENDER_SMOKE = process.env.WORKLOOM_RENDER_SMOKE === "1";
+const SOURCE_MODE = process.env.WORKLOOM_SOURCE_MODE === "1";
 const SAFE_RENDERING = process.env.WORKLOOM_SAFE_RENDERING === "1" || process.argv.includes("--safe-rendering");
 const WEB_PORT = Number(process.env.WORKLOOM_WEB_PORT || 5173);
 const WEB_URL = `http://127.0.0.1:${WEB_PORT}`;
@@ -556,17 +558,38 @@ app.whenReady().then(async () => {
         await handle.stop();
         handle = null;
       }
-      handle = await bootstrap({
-        resourcesDir,
-        supportDir,
-        smoke: APP_SMOKE,
-        onStatus: (msg, progress) => { if (splash) showSplash(msg, "", "", progress); },
-      });
+      if (SOURCE_MODE) {
+        if (app.isPackaged) {
+          throw new Error("正式安装包禁止源码模式，必须从签名 Resources 装配完整载荷");
+        }
+        if (RENDER_SMOKE) {
+          throw new Error("源码模式禁止执行发布渲染冒烟；请对已打包程序运行 WORKLOOM_RENDER_SMOKE=1");
+        }
+        const sourceRoot = process.env.WORKLOOM_SOURCE_ROOT;
+        const sourceNode = process.env.WORKLOOM_SOURCE_NODE;
+        if (!sourceRoot || !sourceNode || !path.isAbsolute(sourceRoot) || !path.isAbsolute(sourceNode)) {
+          throw new Error("源码启动上下文不完整，请通过 pnpm app 启动");
+        }
+        const sourceMain = fs.realpathSync(path.join(sourceRoot, "apps", "desktop", "electron", "main.cjs"));
+        if (sourceMain !== fs.realpathSync(__filename) || !fs.statSync(sourceNode).isFile()) {
+          throw new Error("源码启动上下文与当前主进程不匹配，请重新执行 pnpm app");
+        }
+        // 源码 server/web 由 desktop-app.mts 编排并在拉起 Electron 前完成健康检查。
+        // 这里仍保留 handle 契约，让托盘退出/重试与正式安装包走相同生命周期。
+        handle = { stop: async () => {}, webUrl: WEB_URL };
+      } else {
+        handle = await bootstrap({
+          resourcesDir,
+          supportDir,
+          smoke: APP_SMOKE,
+          onStatus: (msg, progress) => { if (splash) showSplash(msg, "", "", progress); },
+        });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       lastBootstrapError = message;
       lastBootstrapReference = `启动-${Date.now().toString(36).toUpperCase()}`;
-      if (APP_SMOKE) {
+      if (APP_SMOKE || RENDER_SMOKE) {
         console.error(`WorkLoom 启动失败：${message}\n日志目录：${path.join(supportDir, "logs")}`);
         app.exit(1);
       } else {

@@ -501,7 +501,12 @@ pnpm doctor            # 环境自检
 
 # 日常开发
 pnpm dev               # server(:8787) + web(:5173)
+pnpm app               # 源码 server/web + Electron 桌面窗口；不需要 dist-payload
+pnpm app:dev           # 同一源码桌面入口，web 使用 HMR
+pnpm app --smoke       # 无头验证源码服务与 Electron 主进程；不代替安装包渲染冒烟
 ```
+
+`dist-payload/` 与 `dist-payload.tar.gz` 是安装包流水线产物，只在 `app:pack` / `app:dist` 之前按目标平台装配。正式安装包的后端首启与 `WORKLOOM_RENDER_SMOKE=1` 真实窗口验收始终从安装包 Resources 读取并校验完整载荷；源码启动不会伪造或复用这条发布路径。
 
 ### 6.3 真实模型接入（三模式真实运行态）
 

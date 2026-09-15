@@ -38,6 +38,38 @@
   .wl-badge--danger { background: color-mix(in srgb, var(--wl-color-danger) 16%, transparent); color: var(--wl-color-danger); }
   .wl-badge--info { background: color-mix(in srgb, var(--wl-color-info) 16%, transparent); color: var(--wl-color-info); }
 
+  .wl-banner-alert {
+    align-items: flex-start;
+    border: 1px solid currentColor;
+    border-radius: var(--wl-radius-md);
+    box-sizing: border-box;
+    display: flex;
+    flex-wrap: wrap;
+    font-size: var(--wl-text-body);
+    gap: var(--wl-space-2) var(--wl-space-3);
+    line-height: var(--wl-line-body);
+    max-inline-size: 100%;
+    min-width: 0;
+    padding: var(--wl-space-3) var(--wl-space-4);
+  }
+  .wl-banner-alert--alert { background: color-mix(in srgb, var(--wl-color-danger) 8%, transparent); border-color: color-mix(in srgb, var(--wl-color-danger) 50%, transparent); color: var(--wl-color-danger); }
+  .wl-banner-alert--warn { background: color-mix(in srgb, var(--wl-color-warning) 8%, transparent); border-color: color-mix(in srgb, var(--wl-color-warning) 46%, transparent); color: var(--wl-color-warning); }
+  .wl-banner-alert--info { background: color-mix(in srgb, var(--wl-color-info) 8%, transparent); border-color: color-mix(in srgb, var(--wl-color-info) 42%, transparent); color: var(--wl-color-info); }
+  .wl-banner-alert__body {
+    align-items: flex-start;
+    display: grid;
+    flex: 1 1 20rem;
+    gap: var(--wl-space-2);
+    grid-template-columns: auto minmax(0, 1fr);
+    max-inline-size: 100%;
+    min-width: 0;
+  }
+  .wl-banner-alert__icon { flex: 0 0 auto; margin-block-start: 0.2em; }
+  .wl-banner-alert__copy { min-width: 0; overflow-wrap: anywhere; word-break: normal; }
+  .wl-banner-alert__copy > * { max-inline-size: 100%; overflow-wrap: anywhere; }
+  .wl-banner-alert__actions { align-items: flex-start; display: flex; flex: 0 1 auto; flex-wrap: wrap; gap: var(--wl-space-2); max-inline-size: 100%; min-width: 0; }
+  .wl-banner-alert__action.wl-button { border-color: currentColor; color: currentColor; flex: 0 1 auto; max-inline-size: 100%; }
+
   .wl-state { align-items: center; display: flex; flex-direction: column; gap: var(--wl-space-2); justify-content: center; min-block-size: 180px; padding: var(--wl-space-6); text-align: center; }
   .wl-state p { color: var(--wl-color-text-muted); margin: 0; max-inline-size: 52ch; }
   .wl-state__visual { font-size: 2rem; line-height: 1; max-inline-size: 100%; }

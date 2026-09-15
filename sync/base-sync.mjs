@@ -251,6 +251,30 @@ function validateScope(scope, baseDir) {
   if (typeof scope.preCommitSecretScanner !== "string") throw new Error("base-scope.json 缺少 preCommitSecretScanner");
   const scanner = assertSafeRelative(scope.preCommitSecretScanner, "preCommitSecretScanner");
   assertNoSymlinkPath(baseDir, join(baseDir, scanner), `pre-commit scanner ${scanner}`, { allowMissing: false });
+  for (const [path, acceptance] of Object.entries(scope.acceptedBaseSecretScanFindings ?? {})) {
+    const safePath = assertSafeRelative(path, "accepted base secret finding path");
+    const source = join(baseDir, safePath);
+    assertNoSymlinkPath(baseDir, source, `accepted base secret finding source ${safePath}`, { allowMissing: false });
+    if (!/^[0-9a-f]{64}$/.test(acceptance?.sha256 ?? "") || sha256(readFileSync(source)) !== acceptance.sha256) {
+      throw new Error(`accepted base secret finding 内容摘要失配：${safePath}`);
+    }
+    if (typeof acceptance.reason !== "string" || !acceptance.reason.trim() || !Array.isArray(acceptance.findings) || !acceptance.findings.length) {
+      throw new Error(`accepted base secret finding 缺少审计理由或精确 finding：${safePath}`);
+    }
+    const findings = new Set();
+    const lineCount = readFileSync(source, "utf8").split("\n").length;
+    for (const finding of acceptance.findings) {
+      if (
+        typeof finding?.rule !== "string" || !finding.rule ||
+        !Number.isInteger(finding?.line) || finding.line < 1 || finding.line > lineCount
+      ) {
+        throw new Error(`accepted base secret finding 非法：${safePath}`);
+      }
+      const key = `${finding.rule}\0${finding.line}`;
+      if (findings.has(key)) throw new Error(`accepted base secret finding 重复：${safePath}:${finding.line}`);
+      findings.add(key);
+    }
+  }
   for (const [path, config] of Object.entries(scope.adoptMigrations ?? {})) {
     const safePath = assertSafeRelative(path, "adopt migration path");
     if (!["replace-if-identical-to-base", "remove-if-identical-to-base"].includes(config.strategy)) {
@@ -307,6 +331,31 @@ function validateScope(scope, baseDir) {
         throw new Error(`非法三端行业扩展路径：${pattern}`);
       }
     }
+  }
+  const uiGovernance = scope.uiGovernanceCapability;
+  if (!uiGovernance || uiGovernance.distribution !== "stable-upgrade-pr-only") {
+    throw new Error("UI 消费治理单元必须通过 stable-upgrade-pr-only 分发");
+  }
+  const governanceInstaller = assertSafeRelative(uiGovernance.installer, "UI governance installer");
+  assertNoSymlinkPath(baseDir, join(baseDir, governanceInstaller), "UI governance installer", { allowMissing: false });
+  if (uiGovernance.stateFile !== ".workloom-ui-governance.json") {
+    throw new Error("UI 消费治理单元必须使用受控 .workloom-ui-governance.json state");
+  }
+  if (uiGovernance.dependency !== "npm:typescript@5.9.3") {
+    throw new Error("UI 消费治理单元必须固定 typescript-governance 解析器");
+  }
+  if (!Array.isArray(uiGovernance.managedFiles) || uiGovernance.managedFiles.length === 0) {
+    throw new Error("UI 消费治理单元缺少 managedFiles");
+  }
+  const governanceFiles = new Set();
+  for (const path of uiGovernance.managedFiles) {
+    const safePath = assertSafeRelative(path, "UI governance managed file");
+    if (governanceFiles.has(safePath)) throw new Error(`UI governance managed file 重复：${safePath}`);
+    governanceFiles.add(safePath);
+    assertNoSymlinkPath(baseDir, join(baseDir, safePath), `UI governance managed file ${safePath}`, { allowMissing: false });
+    const excluded = (scope.exclude ?? []).some((pattern) => globToRegExp(pattern).test(safePath));
+    if (!excluded) throw new Error(`UI governance managed file 必须排除普通 base-sync，防止双通道覆盖：${safePath}`);
+    if (scope.anchorMerge?.[safePath]) throw new Error(`UI governance managed file 不得作为锚点合并目标：${safePath}`);
   }
   const protectedFiles = scope.protectedChildAssets?.files ?? [];
   for (const path of protectedFiles) {
@@ -878,6 +927,75 @@ function scanStateContent(baseDir, repoRoot, content) {
   }
 }
 
+function scanTransactionChanges(baseDir, repoRoot, transaction, plan, scope) {
+  const dir = mkdtempSync(join(tmpdir(), "workloom-sync-secret-diff-"));
+  const files = [];
+  const operations = new Map(plan.operations.map((operation) => [resolve(operation.dst), operation]));
+  try {
+    for (const [index, snapshot] of transaction.snapshots.entries()) {
+      const logicalPath = relative(repoRoot, snapshot.path).split(sep).join("/");
+      const before = snapshot.existed ? join(dir, `before-${index}`) : null;
+      if (before !== null) writeFileSync(before, snapshot.content, { mode: 0o600 });
+
+      let after = null;
+      if (existsSync(snapshot.path)) {
+        const safePath = assertNoSymlinkPath(repoRoot, snapshot.path, `密钥扫描目标 ${logicalPath}`, { allowMissing: false });
+        const stat = lstatSync(safePath);
+        if (!stat.isFile()) throw new Error(`密钥扫描目标必须是普通文件：${logicalPath}`);
+        after = safePath;
+      }
+      if (before === null && after === null) continue;
+      const operation = operations.get(resolve(snapshot.path));
+      let acceptedFindings = [];
+      let afterSha256;
+      // 审计接受项只适用于从受控基座 HEAD 逐字节复制的文件。锚点合并、生成内容、
+      // lockfile 与任何目标侧注入都没有此豁免；目标字节不等于基座源时摘要也会失配。
+      if (after !== null && operation?.src && operation.content === undefined && !operation.delete) {
+        const sourcePath = relative(baseDir, operation.src).split(sep).join("/");
+        const acceptance = scope.raw.acceptedBaseSecretScanFindings?.[sourcePath];
+        if (acceptance && readFileSync(after).equals(readFileSync(operation.src))) {
+          acceptedFindings = acceptance.findings;
+          afterSha256 = acceptance.sha256;
+        }
+      }
+      files.push({ file: logicalPath, before, after, afterSha256, acceptedFindings });
+    }
+    if (!files.length) return;
+    const manifest = join(dir, "manifest.json");
+    writeFileSync(manifest, JSON.stringify({ version: 1, files }), { mode: 0o600 });
+    runSecretScanner(baseDir, repoRoot, ["--diff-manifest", manifest]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function scanStagedChanges(baseDir, repoRoot, plan, scope) {
+  const dir = mkdtempSync(join(tmpdir(), "workloom-sync-staged-secret-"));
+  try {
+    const files = [];
+    for (const operation of plan.operations) {
+      if (!operation.src || operation.content !== undefined || operation.delete || !existsSync(operation.dst)) continue;
+      const sourcePath = relative(baseDir, operation.src).split(sep).join("/");
+      const acceptance = scope.raw.acceptedBaseSecretScanFindings?.[sourcePath];
+      if (!acceptance || !readFileSync(operation.dst).equals(readFileSync(operation.src))) continue;
+      files.push({
+        file: operation.stagePath.split(sep).join("/"),
+        afterSha256: acceptance.sha256,
+        acceptedFindings: acceptance.findings,
+      });
+    }
+    if (!files.length) {
+      runSecretScanner(baseDir, repoRoot, ["--staged"]);
+      return;
+    }
+    const manifest = join(dir, "manifest.json");
+    writeFileSync(manifest, JSON.stringify({ version: 1, files }), { mode: 0o600 });
+    runSecretScanner(baseDir, repoRoot, ["--staged", "--acceptance-manifest", manifest]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 function captureFileSnapshot(repoRoot, path, label) {
   const safePath = assertNoSymlinkPath(repoRoot, path, label);
   let stat;
@@ -1023,11 +1141,7 @@ function syncToChild(baseDir, childDir, scope, report, extraExclude = [], option
 
     if (options.noCommit) {
       try {
-        const writtenTargets = [...new Set([
-          ...plan.operations.filter((item) => !item.delete && existsSync(item.dst)).map((item) => item.dst),
-          ...stagedPaths.map((path) => join(repoRoot, path)).filter((path) => existsSync(path)),
-        ])];
-        if (writtenTargets.length) runSecretScanner(baseDir, repoRoot, ["--files", ...writtenTargets]);
+        scanTransactionChanges(baseDir, repoRoot, transaction, plan, scope);
         if (stateContent !== null) scanStateContent(baseDir, repoRoot, stateContent);
       } catch (error) {
         throw new Error(`no-commit 写入后密钥扫描失败；未写 state、未提交：${redact(error?.message).slice(0, 500)}`);
@@ -1044,12 +1158,19 @@ function syncToChild(baseDir, childDir, scope, report, extraExclude = [], option
       return report;
     }
 
-    // 自动提交前先只暂存本次内容白名单并扫描。state 先在仓外扫描，扫描成功后才写入。
+    // 先按同步前事务快照扫描本次新增内容，避免把目标仓历史文本误算为本次泄漏。
+    // 自动提交仍会在暂存后复扫，确保最终提交白名单与已审内容一致。
+    try {
+      scanTransactionChanges(baseDir, repoRoot, transaction, plan, scope);
+      if (stateContent !== null) scanStateContent(baseDir, repoRoot, stateContent);
+    } catch (error) {
+      throw new Error(`提交前密钥扫描失败；未写 state、未提交：${redact(error?.message).slice(0, 500)}`);
+    }
+
     didStage = true;
     stageWhitelist(repoRoot, stagedPaths);
     try {
-      runSecretScanner(baseDir, repoRoot, ["--staged"]);
-      if (stateContent !== null) scanStateContent(baseDir, repoRoot, stateContent);
+      scanStagedChanges(baseDir, repoRoot, plan, scope);
     } catch (error) {
       throw new Error(`提交前密钥扫描失败；未写 state、未提交：${redact(error?.message).slice(0, 500)}`);
     }
@@ -1066,7 +1187,7 @@ function syncToChild(baseDir, childDir, scope, report, extraExclude = [], option
     }
     stageWhitelist(repoRoot, stagedPaths);
     try {
-      runSecretScanner(baseDir, repoRoot, ["--staged"]);
+      scanStagedChanges(baseDir, repoRoot, plan, scope);
     } catch (error) {
       throw new Error(`提交前最终密钥扫描失败；未提交：${redact(error?.message).slice(0, 500)}`);
     }

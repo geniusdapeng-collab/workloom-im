@@ -76,6 +76,7 @@ case "${WORKDIR}/" in
   *) echo "❌ pathPrefix 解析后逃逸出目标 Git 工作树"; exit 64 ;;
 esac
 command -v node >/dev/null 2>&1 || { echo "❌ 未找到 Node.js（需要 Node >= 20）"; exit 1; }
+[ "$NEW_INDUSTRY" = false ] || command -v pnpm >/dev/null 2>&1 || { echo "❌ 未找到 pnpm（需要 10.14.0）"; exit 1; }
 
 # 所有在写入前承担决策的控制器都必须来自当前基座 HEAD；不允许用尚未提交的
 # 本地脚本给子仓登记一个来源提交中不存在的“完成状态”。
@@ -93,14 +94,37 @@ verify_head_file "sync/adopt.sh"
 if [ "$NEW_INDUSTRY" = true ]; then
   for CONTROL_FILE in \
     sync/adoption-contract.mjs \
+    sync/adoption-transaction.mjs \
     sync/client-foundation.mjs \
+    sync/install-adoption-assets.mjs \
+    sync/install-ui-governance.mjs \
     sync/set-ui-version.mjs \
     sync/base-capabilities.json \
-    sync/ui-consumer-template.yml
+    sync/ui-consumer-template.yml \
+    scripts/verify-client-foundation-consumer.mjs \
+    scripts/verify-production-client-boundary.mjs \
+    scripts/verify-ui-consumer.mjs \
+    scripts/ui-governance-rules.mjs
   do
     verify_head_file "$CONTROL_FILE"
   done
 fi
+
+ADOPTION_TRANSACTION=""
+rollback_adoption() {
+  local STATUS="${1:-1}"
+  trap - ERR INT TERM
+  if [ -n "$ADOPTION_TRANSACTION" ]; then
+    if node "$SYNC_DIR/adoption-transaction.mjs" rollback "$ADOPTION_TRANSACTION"; then
+      echo "  ↩️ 新行业接入失败，Git 工作树与 index 已恢复到接入前状态" >&2
+      ADOPTION_TRANSACTION=""
+    else
+      echo "❌ 新行业接入事务自动回滚失败；保留事务目录供人工恢复：$ADOPTION_TRANSACTION" >&2
+      exit 70
+    fi
+  fi
+  exit "$STATUS"
+}
 
 echo "== WorkLoom IM 根级上下文接入 =="
 echo "   子仓：${REPO_NAME}（行业基座目录：${PREFIX:-（根）}）"
@@ -113,6 +137,13 @@ FOUNDATION_ARGS=(--repo "$CHILD" --base-dir "$BASE_DIR")
 # 三端受管路径与全部潜在冲突做零写入预检。任一失败都必须在写根资产前终止。
 if [ "$NEW_INDUSTRY" = true ]; then
   node "$SYNC_DIR/adoption-contract.mjs" preflight --repo "$CHILD" --workdir "$WORKDIR"
+  node "$SYNC_DIR/install-ui-governance.mjs" --repo "$WORKDIR" --repository-root "$CHILD" --source-root "$BASE_DIR" --dry-run
+  node "$SYNC_DIR/install-adoption-assets.mjs" \
+    --repo "$CHILD" \
+    --workdir "$WORKDIR" \
+    --source-root "$BASE_DIR" \
+    --template "$SYNC_DIR/ui-consumer-template.yml" \
+    --dry-run
   node "$SYNC_DIR/base-sync.mjs" pull \
     --repo "$WORKDIR" \
     --base-dir "$BASE_DIR" \
@@ -121,6 +152,16 @@ if [ "$NEW_INDUSTRY" = true ]; then
     --dry-run
   node "$SYNC_DIR/client-foundation.mjs" scaffold "${FOUNDATION_ARGS[@]}" --dry-run
   echo "  ✅ 新行业完整基座、工程契约与三端脚手架预检通过（默认采用 latest stable）"
+fi
+
+# 预检全部通过后才创建跨阶段事务。事务保存接入前所有 Git 可见文件、用户脏树
+# 与 index；后续任一安装、lockfile 或 verifier 失败都会恢复原状。
+if [ "$NEW_INDUSTRY" = true ] && [ "$DRY_RUN" = false ]; then
+  TRANSACTION_ARGS=(begin "$CHILD" "$WORKDIR" --base-dir "$BASE_DIR")
+  [ -n "$FOUNDATION_VERSION" ] && TRANSACTION_ARGS+=(--version "$FOUNDATION_VERSION")
+  ADOPTION_TRANSACTION="$(node "$SYNC_DIR/adoption-transaction.mjs" "${TRANSACTION_ARGS[@]}")"
+  trap 'rollback_adoption $?' ERR
+  trap 'rollback_adoption 130' INT TERM
 fi
 
 # ① 存量接入只安装根级 required assets；新行业必须安装完整公共基座。引擎先
@@ -171,16 +212,28 @@ if [ "$NEW_INDUSTRY" = true ]; then
   [ -n "$PREFIX" ] && UI_ARGS+=(--path-prefix "${PREFIX%/}")
   [ -n "$FOUNDATION_VERSION" ] && UI_ARGS+=(--version "$FOUNDATION_VERSION")
   node "$SYNC_DIR/set-ui-version.mjs" "${UI_ARGS[@]}"
-  mkdir -p "$WORKDIR/scripts" "$CHILD/.github/workflows"
-  cp "$BASE_DIR/scripts/verify-ui-consumer.mjs" "$WORKDIR/scripts/verify-ui-consumer.mjs"
-  cp "$BASE_DIR/scripts/verify-client-foundation-consumer.mjs" "$WORKDIR/scripts/verify-client-foundation-consumer.mjs"
-  cp "$BASE_DIR/scripts/verify-production-client-boundary.mjs" "$WORKDIR/scripts/verify-production-client-boundary.mjs"
-  REPO_DIR="${PREFIX%/}"
-  [ -n "$REPO_DIR" ] || REPO_DIR="."
-  sed "s|__REPO_DIR__|$REPO_DIR|g" "$SYNC_DIR/ui-consumer-template.yml" > "$CHILD/.github/workflows/workloom-ui-contract.yml"
+  node "$SYNC_DIR/install-ui-governance.mjs" --repo "$WORKDIR" --repository-root "$CHILD" --source-root "$BASE_DIR"
+  node "$SYNC_DIR/install-adoption-assets.mjs" \
+    --repo "$CHILD" \
+    --workdir "$WORKDIR" \
+    --source-root "$BASE_DIR" \
+    --template "$SYNC_DIR/ui-consumer-template.yml"
+  (cd "$WORKDIR" && pnpm install --lockfile-only --ignore-scripts) || {
+    STATUS=$?
+    rollback_adoption "$STATUS"
+  }
+  # verifier 静态导入固定解析器；临时 clone/新仓不能依赖基座 node_modules 偶然兜底。
+  # 先生成锁文件，再按该锁文件真实安装，随后才允许执行消费门禁。
+  (cd "$WORKDIR" && pnpm install --frozen-lockfile --ignore-scripts) || {
+    STATUS=$?
+    rollback_adoption "$STATUS"
+  }
   node "$WORKDIR/scripts/verify-ui-consumer.mjs" --repo "$WORKDIR"
   node "$WORKDIR/scripts/verify-client-foundation-consumer.mjs" --repo "$WORKDIR"
   node "$SYNC_DIR/adoption-contract.mjs" post --repo "$CHILD" --workdir "$WORKDIR"
+  node "$SYNC_DIR/adoption-transaction.mjs" commit "$ADOPTION_TRANSACTION"
+  ADOPTION_TRANSACTION=""
+  trap - ERR INT TERM
   echo "  ✅ 完整公共基座、最新稳定三端客户端基座与共享 UI 已一次接入"
 fi
 
@@ -209,7 +262,8 @@ cat <<EOF
        git -C "$CHILD" diff -- WORKLOOM_PRODUCT_CONTEXT.md AGENTS.md AGENTS.repo.md .workloom-base-sync.json .github/workflows/base-sync-heartbeat.yml .github/workflows/base-sync-push.yml
 
   --new-industry 还须审查：完整公共基座文件、$WORKDIR/.workloom-ui.json、
-  $WORKDIR/.workloom-client-foundation.json、三个 apps 客户端、三个消费/生产门禁脚本，
+  $WORKDIR/.workloom-client-foundation.json、$WORKDIR/.workloom-ui-governance.json、三个 apps 客户端、
+  UI verifier + AST 规则与其余两个消费/生产门禁脚本，
   以及 .github/workflows/workloom-ui-contract.yml。
 
   若目标由 workloom-im fork/template 派生，adopt 仅在逐字节 fingerprint

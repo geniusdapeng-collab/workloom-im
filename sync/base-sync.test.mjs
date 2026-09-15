@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
@@ -24,7 +24,10 @@ const ADOPT = join(HERE, "adopt.sh");
 const REAL_BASE = resolve(HERE, "..");
 const SCANNER = join(REAL_BASE, "scripts/secret-scan.mjs");
 const ADOPTION_CONTRACT = join(HERE, "adoption-contract.mjs");
+const ADOPTION_TRANSACTION = join(HERE, "adoption-transaction.mjs");
 const CLIENT_FOUNDATION = join(HERE, "client-foundation.mjs");
+const INSTALL_ADOPTION_ASSETS = join(HERE, "install-adoption-assets.mjs");
+const INSTALL_UI_GOVERNANCE = join(HERE, "install-ui-governance.mjs");
 const SET_UI_VERSION = join(HERE, "set-ui-version.mjs");
 const UI_CONSUMER_TEMPLATE = join(HERE, "ui-consumer-template.yml");
 const NODE = process.execPath;
@@ -70,8 +73,11 @@ function fixture() {
   write(join(base, "sync/heartbeat-template.yml"), "name: base-sync-heartbeat\n");
   copyFileSync(ENGINE, join(base, "sync/base-sync.mjs"));
   copyFileSync(ADOPT, join(base, "sync/adopt.sh"));
+  copyFileSync(INSTALL_UI_GOVERNANCE, join(base, "sync/install-ui-governance.mjs"));
   mkdirSync(join(base, "scripts"), { recursive: true });
   copyFileSync(SCANNER, join(base, "scripts/secret-scan.mjs"));
+  write(join(base, "scripts/verify-ui-consumer.mjs"), "// fixture UI consumer verifier\n");
+  write(join(base, "scripts/ui-governance-rules.mjs"), "// fixture UI governance rules\n");
   write(join(base, "shared/core.txt"), "core-v2\n");
   write(join(base, "sync/base-scope.json"), JSON.stringify({
     version: 3,
@@ -83,6 +89,16 @@ function fixture() {
       managedSections: { "AGENTS.md": MANAGED },
     },
     preCommitSecretScanner: "scripts/secret-scan.mjs",
+    uiGovernanceCapability: {
+      installer: "sync/install-ui-governance.mjs",
+      stateFile: ".workloom-ui-governance.json",
+      dependency: "npm:typescript@5.9.3",
+      managedFiles: [
+        "scripts/verify-ui-consumer.mjs",
+        "scripts/ui-governance-rules.mjs",
+      ],
+      distribution: "stable-upgrade-pr-only",
+    },
     adoptMigrations: {
       "AGENTS.repo.md": {
         strategy: "replace-if-identical-to-base",
@@ -97,7 +113,10 @@ function fixture() {
       allowedExcludedTargets: [],
     },
     include: ["shared/**"],
-    exclude: [],
+    exclude: [
+      "scripts/verify-ui-consumer.mjs",
+      "scripts/ui-governance-rules.mjs",
+    ],
     anchorMerge: {},
     appendOnlyDirs: [],
     pollutionGuard: { pathBlacklist: [], maxFilesPerSync: 20, maxFilesPerAdopt: 40 },
@@ -137,10 +156,14 @@ function newIndustryFixture() {
   const stable = "1.2.3";
   for (const [source, target] of [
     [ADOPTION_CONTRACT, "sync/adoption-contract.mjs"],
+    [ADOPTION_TRANSACTION, "sync/adoption-transaction.mjs"],
     [CLIENT_FOUNDATION, "sync/client-foundation.mjs"],
+    [INSTALL_ADOPTION_ASSETS, "sync/install-adoption-assets.mjs"],
+    [INSTALL_UI_GOVERNANCE, "sync/install-ui-governance.mjs"],
     [SET_UI_VERSION, "sync/set-ui-version.mjs"],
     [UI_CONSUMER_TEMPLATE, "sync/ui-consumer-template.yml"],
     [join(REAL_BASE, "scripts/verify-ui-consumer.mjs"), "scripts/verify-ui-consumer.mjs"],
+    [join(REAL_BASE, "scripts/ui-governance-rules.mjs"), "scripts/ui-governance-rules.mjs"],
     [join(REAL_BASE, "scripts/verify-client-foundation-consumer.mjs"), "scripts/verify-client-foundation-consumer.mjs"],
     [join(REAL_BASE, "scripts/verify-production-client-boundary.mjs"), "scripts/verify-production-client-boundary.mjs"],
   ]) copyFileSync(source, join(fx.base, target));
@@ -235,15 +258,42 @@ function newIndustryFixture() {
   write(join(fx.child, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
   write(join(fx.child, "bundles/example/bundle.json"), "{}\n");
   commitAll(fx.child, "minimal industry contract");
-  return { ...fx, stable, stableSha };
+  const bin = join(fx.root, "bin");
+  const fakePnpm = join(bin, "pnpm");
+  const parserTarget = realpathSync(join(REAL_BASE, "node_modules/typescript-governance"));
+  write(fakePnpm, `#!/usr/bin/env node
+const { existsSync, mkdirSync, symlinkSync, writeFileSync } = require("node:fs");
+const { join } = require("node:path");
+writeFileSync(join(process.cwd(), "pnpm-lock.yaml"), "lockfileVersion: '9.0'\\n# typescript-governance\\n");
+if (process.argv.includes("--frozen-lockfile")) {
+  const target = join(process.cwd(), "node_modules/typescript-governance");
+  mkdirSync(join(process.cwd(), "node_modules"), { recursive: true });
+  if (!existsSync(target)) symlinkSync(${JSON.stringify(parserTarget)}, target, "dir");
+}
+`);
+  chmodSync(fakePnpm, 0o755);
+  return { ...fx, stable, stableSha, bin };
 }
 
 function cli(args, cwd, env = process.env) {
-  return spawnSync(NODE, [ENGINE, ...args], { cwd, encoding: "utf8", env });
+  // 每次 CLI 调用使用独立临时根。Node 的 test runner 会并发执行多个测试文件；
+  // 若直接枚举系统 tmpdir，同期测试创建/清理的同名前缀目录会让泄漏断言竞态。
+  const tempRoot = mkdtempSync(join(tmpdir(), "workloom-sync-cli-test-"));
+  try {
+    const result = spawnSync(NODE, [ENGINE, ...args], {
+      cwd,
+      encoding: "utf8",
+      env: { ...env, TMPDIR: tempRoot, TMP: tempRoot, TEMP: tempRoot },
+    });
+    result.syncTempEntries = readdirSync(tempRoot);
+    return result;
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
 }
 
-function tempEntries(prefix) {
-  return new Set(readdirSync(tmpdir()).filter((name) => name.startsWith(prefix)));
+function tempEntries(result, prefix) {
+  return new Set(result.syncTempEntries.filter((name) => name.startsWith(prefix)));
 }
 
 function readScope(base) {
@@ -400,9 +450,10 @@ test("缺少 B 端移动客户端时只报告第一阶段迁移，绝不伪装�
   }
 });
 
-test("v8 scope 明确保护产品身份、同步认证、依赖闭包与 Bundle 装配契约，并将三端应用壳交给稳定标签指纹分发", () => {
+test("v9 scope 明确保护产品身份、同步认证、依赖闭包与 Bundle 装配契约，并将三端应用壳和 UI 治理交给稳定升级分发", () => {
   const scope = JSON.parse(readFileSync(join(REAL_BASE, "sync/base-scope.json"), "utf8"));
-  assert.equal(scope.version, 8);
+  const ci = readFileSync(join(REAL_BASE, ".github/workflows/ci.yml"), "utf8");
+  assert.equal(scope.version, 9);
   assert.ok(scope.protectedChildAssets.files.includes("electron-builder.yml"));
   assert.ok(scope.protectedChildAssets.files.includes("product.manifest.json"));
   assert.ok(scope.exclude.includes("electron-builder.yml"));
@@ -436,15 +487,53 @@ test("v8 scope 明确保护产品身份、同步认证、依赖闭包与 Bundle 
   ]) assert.ok(!scope.exclude.includes(publicCaptain), `${publicCaptain} 不得形成断链`);
   assert.equal(scope.dependencyClosure.relativeImports, "fail-closed");
   assert.ok(scope.dependencyClosure.allowedExcludedTargets.length > 0);
+  assert.ok(Object.values(scope.acceptedBaseSecretScanFindings).every((entry) => (
+    /^[0-9a-f]{64}$/.test(entry.sha256) && entry.findings.length > 0 && entry.reason.length > 0
+  )));
   assert.ok(scope.exclude.includes("apps/server/src/industry/**"));
   assert.ok(scope.exclude.includes("apps/server/src/service/adapters/**"));
   assert.equal(scope.registryCapabilities[0].distribution, "stable-registry-upgrade-pr");
   assert.equal(scope.clientFoundationCapability.distribution, "stable-tag-upgrade-pr");
   assert.equal(scope.clientFoundationCapability.conflictPolicy, "previous-source-sha256-fail-close");
+  assert.equal(scope.uiGovernanceCapability.distribution, "stable-upgrade-pr-only");
+  assert.equal(scope.uiGovernanceCapability.installer, "sync/install-ui-governance.mjs");
+  assert.equal(scope.uiGovernanceCapability.stateFile, ".workloom-ui-governance.json");
+  assert.equal(scope.uiGovernanceCapability.dependency, "npm:typescript@5.9.3");
+  assert.deepEqual(scope.uiGovernanceCapability.managedFiles, [
+    "scripts/verify-ui-consumer.mjs",
+    "scripts/ui-governance-rules.mjs",
+  ]);
+  for (const governanceFile of scope.uiGovernanceCapability.managedFiles) {
+    assert.ok(scope.exclude.includes(governanceFile), `${governanceFile} 必须排除普通 base-sync`);
+  }
+  for (const baseOnlyGovernanceFile of [
+    "scripts/verify-ui-consumer.test.mjs",
+    "scripts/ui-governance-rules.test.mjs",
+    "scripts/verify-ui-governance.mjs",
+  ]) assert.ok(scope.exclude.includes(baseOnlyGovernanceFile), `${baseOnlyGovernanceFile} 必须保留在基座仓`);
   assert.ok(scope.exclude.includes("apps/web/**"));
   assert.ok(scope.exclude.includes("apps/webb/**"));
   assert.ok(scope.exclude.includes("apps/webc/**"));
   assert.ok(!scope.include.includes("apps/web/src/lib/**"));
+  assert.match(ci, /fetch-depth:\s*0/);
+  assert.match(ci, /git merge-base "\$EVENT_BASE_SHA" "\$HEAD_SHA"/);
+  assert.match(ci, /secret-scan\.mjs --range "\$BASE_SHA" "\$HEAD_SHA" --acceptance-manifest sync\/base-scope\.json/);
+});
+
+test("UI 治理受管文件一旦重新进入普通 base-sync，scope 契约立即 fail closed", () => {
+  const fx = fixture();
+  try {
+    const scope = readScope(fx.base);
+    scope.exclude = scope.exclude.filter((path) => path !== "scripts/verify-ui-consumer.mjs");
+    writeScope(fx.base, scope);
+    commitAll(fx.base, "break UI governance distribution boundary");
+
+    const result = cli(["detect", "--repo", "governance", "--base-dir", fx.base], fx.child);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /UI governance managed file 必须排除普通 base-sync/);
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
 });
 
 test("完整同步对相对依赖断链和缺失的子仓保留实现均 fail closed", () => {
@@ -719,13 +808,173 @@ test("--no-commit 密钥扫描失败时回滚本次 required assets，保留同�
   }
 });
 
+test("--no-commit 只扫描相对事务快照的新增行，不误报目标文件既有敏感样例", () => {
+  const fx = fixture();
+  try {
+    const historical = `password=${["historical", "fixture", "value"].join("-")}`;
+    write(join(fx.base, "shared/core.txt"), `${historical}\ncore-v2\n`);
+    commitAll(fx.base, "base keeps historical fixture");
+    write(join(fx.child, "governance/shared/core.txt"), `${historical}\ncore-v1\n`);
+    commitAll(fx.child, "child already has historical fixture");
+
+    const result = cli(["pull", "--repo", "governance", "--base-dir", fx.base, "--no-commit", "--json"], fx.child);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(readFileSync(join(fx.child, "governance/shared/core.txt"), "utf8"), `${historical}\ncore-v2\n`);
+    assert.equal(git(fx.child, "diff", "--cached", "--name-only"), "");
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("自动提交路径按新增行扫描并保留二次 staged 防线", () => {
+  const fx = fixture();
+  try {
+    const historical = `secret=${["historical", "fixture", "value"].join("-")}`;
+    write(join(fx.base, "shared/core.txt"), `${historical}\ncore-v2\n`);
+    commitAll(fx.base, "base keeps historical fixture");
+    write(join(fx.child, "governance/shared/core.txt"), `${historical}\ncore-v1\n`);
+    commitAll(fx.child, "child already has historical fixture");
+    const before = git(fx.child, "rev-parse", "HEAD");
+
+    const result = cli(["pull", "--repo", "governance", "--base-dir", fx.base, "--json"], fx.child);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.notEqual(git(fx.child, "rev-parse", "HEAD"), before);
+    assert.equal(readFileSync(join(fx.child, "governance/shared/core.txt"), "utf8"), `${historical}\ncore-v2\n`);
+    assert.equal(git(fx.child, "status", "--porcelain"), "");
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("新增文件中的密钥仍 fail closed 并完整回滚", () => {
+  const fx = fixture();
+  try {
+    const secretLike = ["ghp", "N".repeat(36)].join("_");
+    write(join(fx.base, "shared/new.txt"), `credential=${secretLike}\n`);
+    commitAll(fx.base, "new unsafe managed file");
+    const beforeStatus = git(fx.child, "status", "--porcelain");
+
+    const result = cli(["pull", "--repo", "governance", "--base-dir", fx.base, "--no-commit"], fx.child);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /no-commit 写入后密钥扫描失败.*未写 state、未提交/);
+    assert.equal(existsSync(join(fx.child, "governance/shared/new.txt")), false);
+    assert.equal(git(fx.child, "status", "--porcelain"), beforeStatus);
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("基座已评审 finding 仅在源文件摘要、规则和行号完全匹配时接受", () => {
+  const fx = fixture();
+  try {
+    const acceptedValue = ["ghp", "A".repeat(36)].join("_");
+    const source = join(fx.base, "shared/reviewed-fixture.txt");
+    write(source, `credential=${acceptedValue}\n`);
+    const scope = readScope(fx.base);
+    scope.acceptedBaseSecretScanFindings = {
+      "shared/reviewed-fixture.txt": {
+        sha256: createHash("sha256").update(readFileSync(source)).digest("hex"),
+        findings: [{ rule: "github-token", line: 1 }],
+        reason: "精确内容寻址的测试夹具",
+      },
+    };
+    writeScope(fx.base, scope);
+    commitAll(fx.base, "add reviewed scanner fixture");
+
+    const accepted = cli(["pull", "--repo", "governance", "--base-dir", fx.base, "--no-commit", "--json"], fx.child);
+    assert.equal(accepted.status, 0, accepted.stderr || accepted.stdout);
+    assert.equal(readFileSync(join(fx.child, "governance/shared/reviewed-fixture.txt"), "utf8"), `credential=${acceptedValue}\n`);
+    commitAll(fx.child, "accept reviewed base fixture");
+
+    const secondValue = ["ghp", "S".repeat(36)].join("_");
+    const secondSource = join(fx.base, "shared/reviewed-second.txt");
+    write(secondSource, `credential=${secondValue}\n`);
+    const secondScope = readScope(fx.base);
+    secondScope.acceptedBaseSecretScanFindings["shared/reviewed-second.txt"] = {
+      sha256: createHash("sha256").update(readFileSync(secondSource)).digest("hex"),
+      findings: [{ rule: "github-token", line: 1 }],
+      reason: "自动提交精确接受测试夹具",
+    };
+    writeScope(fx.base, secondScope);
+    commitAll(fx.base, "add second reviewed scanner fixture");
+    const committed = cli(["pull", "--repo", "governance", "--base-dir", fx.base, "--json"], fx.child);
+    assert.equal(committed.status, 0, committed.stderr || committed.stdout);
+    assert.equal(readFileSync(join(fx.child, "governance/shared/reviewed-second.txt"), "utf8"), `credential=${secondValue}\n`);
+    assert.equal(git(fx.child, "status", "--porcelain"), "");
+
+    write(source, `credential=${acceptedValue}\nchanged\n`);
+    commitAll(fx.base, "change accepted fixture without re-review");
+    const rejected = cli(["pull", "--repo", "governance", "--base-dir", fx.base, "--no-commit"], fx.child);
+    assert.equal(rejected.status, 1);
+    assert.match(rejected.stderr, /accepted base secret finding 内容摘要失配/);
+
+    const realSecret = ["ghp", "R".repeat(36)].join("_");
+    write(source, `credential=${acceptedValue}\ncredential=${realSecret}\n`);
+    const reviewedScope = readScope(fx.base);
+    reviewedScope.acceptedBaseSecretScanFindings["shared/reviewed-fixture.txt"].sha256 = createHash("sha256")
+      .update(readFileSync(source)).digest("hex");
+    writeScope(fx.base, reviewedScope);
+    commitAll(fx.base, "re-review known finding without accepting new token");
+    const blocked = cli(["pull", "--repo", "governance", "--base-dir", fx.base, "--no-commit"], fx.child);
+    assert.equal(blocked.status, 1);
+    assert.match(blocked.stderr, /no-commit 写入后密钥扫描失败/);
+    assert.equal(readFileSync(join(fx.child, "governance/shared/reviewed-fixture.txt"), "utf8"), `credential=${acceptedValue}\n`);
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("纯删除与普通含 NUL 图片遵循差异扫描边界", () => {
+  const fx = fixture();
+  try {
+    const historical = `password=${["historical", "fixture", "value"].join("-")}`;
+    write(join(fx.base, ".github/workflows/base-sync-push.yml"), `${historical}\n`);
+    write(join(fx.child, ".github/workflows/base-sync-push.yml"), `${historical}\n`);
+    const png = Buffer.alloc(2 * 1024 * 1024, 0);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(png);
+    writeFileSync(join(fx.base, "shared/asset.png"), png);
+    commitAll(fx.base, "delete and binary fixtures");
+    commitAll(fx.child, "legacy deletable fixture");
+
+    const result = cli([
+      "pull", "--repo", "governance", "--base-dir", fx.base,
+      "--no-commit", "--adopt", "--json",
+    ], fx.child);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(existsSync(join(fx.child, ".github/workflows/base-sync-push.yml")), false);
+    assert.equal(readFileSync(join(fx.child, "governance/shared/asset.png")).includes(0), true);
+    assert.equal(git(fx.child, "diff", "--cached", "--name-only"), "");
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("base-sync 对含 NUL 二进制中的高置信 token 失败关闭并回滚", () => {
+  const fx = fixture();
+  try {
+    const secretFile = join(fx.base, "shared/secret-asset.bin");
+    writeFileSync(secretFile, Buffer.from(`\u0000token=${["ghp", "B".repeat(36)].join("_")}`));
+    commitAll(fx.base, "binary secret fixture");
+
+    const result = cli([
+      "pull", "--repo", "governance", "--base-dir", fx.base,
+      "--no-commit", "--adopt", "--json",
+    ], fx.child);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /no-commit 写入后密钥扫描失败/);
+    assert.equal(existsSync(join(fx.child, "governance/shared/secret-asset.bin")), false);
+    assert.equal(git(fx.child, "status", "--porcelain"), "");
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
 test("临时 base/child clone 在失败与 dry-run 路径都清理", () => {
   const fx = fixture();
   try {
-    const basesBefore = tempEntries("workloom-base-");
     const failed = cli(["detect", "--repo", "governance", "--base-url", `file://${join(fx.root, "missing-remotes")}`], fx.child);
     assert.equal(failed.status, 1);
-    assert.deepEqual(tempEntries("workloom-base-"), basesBefore);
+    assert.deepEqual(tempEntries(failed, "workloom-base-"), new Set());
 
     const remotes = join(fx.root, "remotes");
     mkdirSync(join(remotes, "owner"), { recursive: true });
@@ -734,7 +983,6 @@ test("临时 base/child clone 在失败与 dry-run 路径都清理", () => {
       children: [{ repo: "owner/child", pathPrefix: "governance/", extraExclude: [] }],
     }, null, 2));
     commitAll(fx.base, "add child list");
-    const childrenBefore = tempEntries("workloom-child-");
     const dry = cli(["push", "--base", fx.base, "--base-url", `file://${remotes}`, "--dry-run", "--required-only", "--json"], fx.base);
     assert.equal(dry.status, 0, dry.stderr || dry.stdout);
     const pushReport = JSON.parse(dry.stdout);
@@ -746,7 +994,7 @@ test("临时 base/child clone 在失败与 dry-run 路径都清理", () => {
     ].sort());
     assert.deepEqual(pushReport.results[0].managed, ["root:AGENTS.md#managed-section"]);
     assert.doesNotMatch(JSON.stringify(pushReport.results[0]), /shared\/core\.txt/);
-    assert.deepEqual(tempEntries("workloom-child-"), childrenBefore);
+    assert.deepEqual(tempEntries(dry, "workloom-child-"), new Set());
   } finally {
     rmSync(fx.root, { recursive: true, force: true });
   }
@@ -767,7 +1015,6 @@ test("push 对 manifest pathPrefix symlink（含 dangling）fail closed", () => 
       children: [{ repo: "owner/malicious", pathPrefix: "governance/", extraExclude: [] }],
     }, null, 2));
     commitAll(fx.base, "add malicious child list");
-    const before = tempEntries("workloom-child-");
     const result = cli([
       "push", "--base", fx.base, "--base-url", `file://${remotes}`,
       "--dry-run", "--required-only", "--json",
@@ -776,7 +1023,7 @@ test("push 对 manifest pathPrefix symlink（含 dangling）fail closed", () => 
     const report = JSON.parse(result.stdout);
     assert.equal(report.results[0].ok, false);
     assert.match(report.results[0].error, /pathPrefix 不允许 symlink/);
-    assert.deepEqual(tempEntries("workloom-child-"), before);
+    assert.deepEqual(tempEntries(result, "workloom-child-"), new Set());
   } finally {
     rmSync(fx.root, { recursive: true, force: true });
   }
@@ -857,7 +1104,7 @@ test("新行业缺少消费 CI 工程契约时零写入 fail closed", () => {
     const result = spawnSync("bash", [join(fx.base, "sync/adopt.sh"), fx.child, "--new-industry"], {
       cwd: fx.base,
       encoding: "utf8",
-      env: { ...process.env, PATH: `${dirname(NODE)}:${process.env.PATH}` },
+      env: { ...process.env, PATH: `${fx.bin}:${dirname(NODE)}:${process.env.PATH}` },
     });
     assert.equal(result.status, 1);
     assert.match(result.stderr, /新行业接入前置契约失败.*pnpm-workspace\.yaml/s);
@@ -872,12 +1119,13 @@ test("新行业缺少消费 CI 工程契约时零写入 fail closed", () => {
 test("最小新行业仓一次完成 full 基座、三端稳定壳与消费门禁资产", () => {
   const fx = newIndustryFixture();
   try {
+    assert.equal(existsSync(join(fx.child, "node_modules")), false, "fixture 必须从无依赖树的新仓开始");
     const beforeHead = git(fx.child, "rev-parse", "HEAD");
     const result = spawnSync("bash", [join(fx.base, "sync/adopt.sh"), fx.child, "--new-industry"], {
       cwd: fx.base,
       encoding: "utf8",
       timeout: 30_000,
-      env: { ...process.env, PATH: `${dirname(NODE)}:${process.env.PATH}` },
+      env: { ...process.env, PATH: `${fx.bin}:${dirname(NODE)}:${process.env.PATH}` },
     });
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
     assert.match(result.stdout, /完整公共基座.*共享 UI 已一次接入/s);
@@ -901,11 +1149,189 @@ test("最小新行业仓一次完成 full 基座、三端稳定壳与消费门�
       "apps/web/src/main.tsx",
       "apps/webb/src/main.tsx",
       "apps/webc/src/main.tsx",
+      ".workloom-ui-governance.json",
       "scripts/verify-ui-consumer.mjs",
+      "scripts/ui-governance-rules.mjs",
       "scripts/verify-client-foundation-consumer.mjs",
       "scripts/verify-production-client-boundary.mjs",
       ".github/workflows/workloom-ui-contract.yml",
     ]) assert.equal(existsSync(join(fx.child, path)), true, `${path} 应已安装`);
+    const packageJson = JSON.parse(readFileSync(join(fx.child, "package.json"), "utf8"));
+    assert.equal(packageJson.devDependencies["typescript-governance"], "npm:typescript@5.9.3");
+    assert.match(readFileSync(join(fx.child, "pnpm-lock.yaml"), "utf8"), /typescript-governance/u);
+    assert.equal(existsSync(join(fx.child, "node_modules/typescript-governance")), true, "消费门禁前必须真实安装解析器");
+    const governanceState = JSON.parse(readFileSync(join(fx.child, ".workloom-ui-governance.json"), "utf8"));
+    assert.equal(governanceState.schemaVersion, "workloom.ui-governance-state/v1");
+    assert.ok(governanceState.files["scripts/verify-ui-consumer.mjs"].sha256);
+    assert.ok(governanceState.files["scripts/ui-governance-rules.mjs"].sha256);
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("新行业后置 verifier 失败时恢复原有 staged、unstaged、untracked 与全部接入资产", () => {
+  const fx = newIndustryFixture();
+  try {
+    write(join(fx.child, "notes.txt"), "user staged\n");
+    git(fx.child, "add", "notes.txt");
+    write(join(fx.child, "notes.txt"), "user staged plus unstaged\n");
+    write(join(fx.child, "user-draft.txt"), "keep draft\n");
+    const beforeStatus = git(fx.child, "status", "--porcelain=v1", "--untracked-files=all");
+    const beforeNotes = readFileSync(join(fx.child, "notes.txt"));
+    const beforePackage = readFileSync(join(fx.child, "package.json"));
+    const beforeLock = readFileSync(join(fx.child, "pnpm-lock.yaml"));
+
+    write(join(fx.base, "scripts/verify-client-foundation-consumer.mjs"), "console.error('injected final verifier failure'); process.exit(17);\n");
+    commitAll(fx.base, "inject late verifier failure");
+    const result = spawnSync("bash", [join(fx.base, "sync/adopt.sh"), fx.child, "--new-industry"], {
+      cwd: fx.base,
+      encoding: "utf8",
+      timeout: 30_000,
+      env: { ...process.env, PATH: `${fx.bin}:${dirname(NODE)}:${process.env.PATH}` },
+    });
+    assert.equal(result.status, 17, `${result.stdout}\n${result.stderr}`);
+    assert.match(result.stderr, /injected final verifier failure/u);
+    assert.match(`${result.stdout}\n${result.stderr}`, /已恢复到接入前状态/u);
+    assert.equal(git(fx.child, "status", "--porcelain=v1", "--untracked-files=all"), beforeStatus);
+    assert.deepEqual(readFileSync(join(fx.child, "notes.txt")), beforeNotes);
+    assert.deepEqual(readFileSync(join(fx.child, "package.json")), beforePackage);
+    assert.deepEqual(readFileSync(join(fx.child, "pnpm-lock.yaml")), beforeLock);
+    assert.equal(readFileSync(join(fx.child, "user-draft.txt"), "utf8"), "keep draft\n");
+    for (const path of [
+      ".workloom-base-sync.json",
+      ".workloom-ui.json",
+      ".workloom-client-foundation.json",
+      ".workloom-ui-governance.json",
+      "apps/web/package.json",
+      "scripts/verify-ui-consumer.mjs",
+      ".github/workflows/workloom-ui-contract.yml",
+      "node_modules",
+    ]) assert.equal(existsSync(join(fx.child, path)), false, `${path} 不得残留半接入状态`);
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("新行业后置失败不得覆盖被 ignore 的既有 UI state", () => {
+  const fx = newIndustryFixture();
+  try {
+    write(join(fx.child, ".gitignore"), ".workloom-ui.json\n.workloom-client-foundation.json\n.workloom-ui-governance.json\n");
+    commitAll(fx.child, "ignore generated adoption state");
+    const previousUiState = "{\"version\":\"industry-preserved\"}\n";
+    write(join(fx.child, ".workloom-ui.json"), previousUiState);
+    const beforeStatus = git(fx.child, "status", "--porcelain=v1", "--untracked-files=all");
+
+    write(join(fx.base, "scripts/verify-client-foundation-consumer.mjs"), "console.error('injected ignored-state rollback failure'); process.exit(19);\n");
+    commitAll(fx.base, "inject ignored-state rollback failure");
+    const result = spawnSync("bash", [join(fx.base, "sync/adopt.sh"), fx.child, "--new-industry"], {
+      cwd: fx.base,
+      encoding: "utf8",
+      timeout: 30_000,
+      env: { ...process.env, PATH: `${fx.bin}:${dirname(NODE)}:${process.env.PATH}` },
+    });
+    assert.equal(result.status, 19, `${result.stdout}\n${result.stderr}`);
+    assert.match(`${result.stdout}\n${result.stderr}`, /已恢复到接入前状态/u);
+    assert.equal(git(fx.child, "status", "--porcelain=v1", "--untracked-files=all"), beforeStatus);
+    assert.equal(readFileSync(join(fx.child, ".workloom-ui.json"), "utf8"), previousUiState);
+    assert.equal(existsSync(join(fx.child, ".workloom-client-foundation.json")), false);
+    assert.equal(existsSync(join(fx.child, ".workloom-ui-governance.json")), false);
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("新行业 lockfile 安装失败时回滚 pnpm 写入与所有先前阶段", () => {
+  const fx = newIndustryFixture();
+  try {
+    const fakePnpm = join(fx.bin, "pnpm");
+    write(fakePnpm, `#!/usr/bin/env node
+const { mkdirSync, writeFileSync } = require("node:fs");
+const { join } = require("node:path");
+writeFileSync(join(process.cwd(), "pnpm-lock.yaml"), "half generated lock\\n");
+mkdirSync(join(process.cwd(), "apps/web/node_modules"), { recursive: true });
+writeFileSync(join(process.cwd(), "apps/web/node_modules/half.txt"), "half dependency\\n");
+process.exit(42);
+`);
+    chmodSync(fakePnpm, 0o755);
+    const beforeStatus = git(fx.child, "status", "--porcelain=v1", "--untracked-files=all");
+    const beforeLock = readFileSync(join(fx.child, "pnpm-lock.yaml"));
+    const result = spawnSync("bash", [join(fx.base, "sync/adopt.sh"), fx.child, "--new-industry"], {
+      cwd: fx.base,
+      encoding: "utf8",
+      timeout: 30_000,
+      env: { ...process.env, PATH: `${fx.bin}:${dirname(NODE)}:${process.env.PATH}` },
+    });
+    assert.equal(result.status, 42, `${result.stdout}\n${result.stderr}`);
+    assert.match(`${result.stdout}\n${result.stderr}`, /已恢复到接入前状态/u);
+    assert.equal(git(fx.child, "status", "--porcelain=v1", "--untracked-files=all"), beforeStatus);
+    assert.deepEqual(readFileSync(join(fx.child, "pnpm-lock.yaml")), beforeLock);
+    assert.equal(existsSync(join(fx.child, "apps/web/node_modules")), false);
+    assert.equal(existsSync(join(fx.child, ".workloom-base-sync.json")), false);
+    assert.equal(existsSync(join(fx.child, ".github/workflows/workloom-ui-contract.yml")), false);
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("新行业已有任意 workspace node_modules 时在写入前 fail closed", () => {
+  const fx = newIndustryFixture();
+  try {
+    write(join(fx.child, "tools/local/node_modules/keep.txt"), "user dependency\n");
+    const beforeStatus = git(fx.child, "status", "--porcelain=v1", "--untracked-files=all");
+    const result = spawnSync("bash", [join(fx.base, "sync/adopt.sh"), fx.child, "--new-industry"], {
+      cwd: fx.base,
+      encoding: "utf8",
+      env: { ...process.env, PATH: `${fx.bin}:${dirname(NODE)}:${process.env.PATH}` },
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /要求无既有依赖树.*tools\/local\/node_modules/su);
+    assert.equal(readFileSync(join(fx.child, "tools/local/node_modules/keep.txt"), "utf8"), "user dependency\n");
+    assert.equal(git(fx.child, "status", "--porcelain=v1", "--untracked-files=all"), beforeStatus);
+    assert.equal(existsSync(join(fx.child, ".workloom-base-sync.json")), false);
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("新行业已有冲突解析器版本时在基座写入前 fail closed", () => {
+  const fx = newIndustryFixture();
+  try {
+    const packagePath = join(fx.child, "package.json");
+    const packageJson = JSON.parse(readFileSync(packagePath, "utf8"));
+    packageJson.devDependencies["typescript-governance"] = "^5.8.0";
+    write(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
+    commitAll(fx.child, "custom governance parser");
+    const result = spawnSync("bash", [join(fx.base, "sync/adopt.sh"), fx.child, "--new-industry"], {
+      cwd: fx.base,
+      encoding: "utf8",
+      env: { ...process.env, PATH: `${fx.bin}:${dirname(NODE)}:${process.env.PATH}` },
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /不得静默覆盖|拒绝静默覆盖/u);
+    assert.equal(existsSync(join(fx.child, ".workloom-base-sync.json")), false);
+    assert.equal(existsSync(join(fx.child, ".workloom-ui-governance.json")), false);
+    assert.equal(existsSync(join(fx.child, "apps/web/package.json")), false);
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("新行业已有自定义 verifier 时在基座写入前 fail closed", () => {
+  const fx = newIndustryFixture();
+  try {
+    write(join(fx.child, "scripts/verify-ui-consumer.mjs"), "console.log('industry custom');\n");
+    commitAll(fx.child, "custom ui verifier");
+    const result = spawnSync("bash", [join(fx.base, "sync/adopt.sh"), fx.child, "--new-industry"], {
+      cwd: fx.base,
+      encoding: "utf8",
+      env: { ...process.env, PATH: `${fx.bin}:${dirname(NODE)}:${process.env.PATH}` },
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /已被行业仓定制；拒绝静默覆盖/u);
+    assert.equal(readFileSync(join(fx.child, "scripts/verify-ui-consumer.mjs"), "utf8"), "console.log('industry custom');\n");
+    assert.equal(existsSync(join(fx.child, ".workloom-base-sync.json")), false);
+    assert.equal(existsSync(join(fx.child, ".workloom-ui-governance.json")), false);
+    assert.equal(existsSync(join(fx.child, "apps/web/package.json")), false);
   } finally {
     rmSync(fx.root, { recursive: true, force: true });
   }

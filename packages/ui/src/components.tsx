@@ -8,6 +8,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
+import type { IconName } from "./navigation";
 import { useManagedSurface } from "./managed-surface";
 import { useOverlayEnvironment } from "./overlay-manager";
 
@@ -40,6 +41,56 @@ export function Card({ className = "", ...props }: HTMLAttributes<HTMLElement>) 
 
 export function Badge({ tone = "neutral", className = "", ...props }: HTMLAttributes<HTMLSpanElement> & { tone?: "neutral" | "success" | "warning" | "danger" | "info" }) {
   return <span {...props} className={`wl-badge wl-badge--${tone} ${className}`.trim()} />;
+}
+
+export type BannerAlertLevel = "alert" | "warn" | "info";
+
+export interface BannerAlertProps extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
+  level: BannerAlertLevel;
+  children: ReactNode;
+  actionLabel?: string;
+  onAction?: () => void;
+  action?: ReactNode;
+}
+
+const BANNER_ALERT_ICONS: Record<BannerAlertLevel, IconName> = {
+  alert: "brake",
+  warn: "warning",
+  info: "radar",
+};
+
+/**
+ * 三端共享告警条。正文与图标组成一个可收缩但不会塌陷的区域；动作空间不足时
+ * 自动换到下一行，避免侧栏/缩放场景中按钮把正文挤成单字窄列。
+ */
+export function BannerAlert({
+  level,
+  children,
+  actionLabel,
+  onAction,
+  action,
+  className = "",
+  ...props
+}: BannerAlertProps) {
+  const actionContent = action ?? (actionLabel ? (
+    <Button variant="quiet" onClick={onAction} className="wl-banner-alert__action">
+      {actionLabel}
+    </Button>
+  ) : null);
+  return (
+    <div
+      {...props}
+      className={`wl-banner-alert wl-banner-alert--${level} ${className}`.trim()}
+      role={props.role ?? (level === "alert" ? "alert" : "status")}
+      aria-live={props["aria-live"] ?? (level === "alert" ? "assertive" : "polite")}
+    >
+      <div className="wl-banner-alert__body">
+        <Icon name={BANNER_ALERT_ICONS[level]} size={16} className="wl-banner-alert__icon" />
+        <div className="wl-banner-alert__copy">{children}</div>
+      </div>
+      {actionContent && <div className="wl-banner-alert__actions">{actionContent}</div>}
+    </div>
+  );
 }
 
 export type AsyncStatus = "loading" | "empty" | "error" | "forbidden" | "ready";

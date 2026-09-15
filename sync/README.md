@@ -114,11 +114,13 @@ bash sync/adopt.sh /path/to/new-industry --new-industry --dry-run
 4. 写入带 `pathPrefix` 的根级 state，再运行独立 detect 与接入资产密钥扫描；新行业的 state 必须明确证明 `full` 同步，不能用 `required-only` 冒充；
 5. `--new-industry` 模式从 `base-capabilities.json.clientFoundation.latestStableVersion` 对应的 `ui-v*` 标签一次安装 PC/B移动/C移动，建立受管文件指纹，锁定同版 `@workloom/ui`，安装生产边界/消费门禁与 CI 工作流，并在结束前复验完整接入契约。候选版、未发布版、版本错位、缺工程依赖和基座默认产品身份全部阻断。
 
+新行业第一次写入前会创建跨阶段事务快照，覆盖 Git index、原有 staged/unstaged/untracked 文件、full/UI/client/governance state、工作流与 lockfile；任一安装或最终 verifier 失败都会恢复接入前状态。多文件治理安装器自身也采用局部事务，所有目标路径拒绝 symlink（含仓外逃逸）。为避免 `pnpm` 改写无法逐字节快照的已有依赖树，`--new-industry` 要求行业基座目录下所有层级均不存在 `node_modules`；这是新仓一次接入的 fail-close 前置条件，存量仓升级流程不受此约束。
+
 脚本不暂存、不提交、不推送，也不把缺少 `apps/webb` 的二端仓登记成三端产品。新行业模式在任何写入前依次完成工程契约、完整基座计划和客户端基座 dry-run；存量治理接入仍只安装根资产。审查公共基座、根级接入资产、三端基座 state 和可选的两项精确派生迁移后，由操作者白名单提交，再把新仓登记进 `sync/child-repos.json`。
 
 ## 存量八仓按波次升级
 
-`sync/ui-upgrade-pr.mjs --rollout` 在确认 `@workloom/ui` registry 制品后，从同版本 `ui-v*` 标签加载完整客户端基座，只在临时 clone 中做指纹升级、lockfile 更新和消费门禁。验证通过才推送 `chore/workloom-ui-v<版本>` 独立分支并创建 PR，永不直推 `main`。W1 → W5 顺序是可执行门禁；更晚波次不能越过未完成前序。dry-run 会在临时 clone 中运行同一真实迁移和门禁，但不写远端仓、分支或 PR。
+`sync/ui-upgrade-pr.mjs --rollout` 每次都先要求执行提交固定在同版本 `ui-v*` 标签，以 npm 11.6.2 / pnpm 10.14.0 从标签隔离生成本地 `npm pack`，并将其 `dist.integrity` 与 registry 的 `@workloom/ui@<版本>` 精确比较；只确认版本号不授予 rollout 权限。完整性一致后才加载客户端基座，并只在临时 clone 中做指纹升级、lockfile 更新和消费门禁。验证通过才推送 `chore/workloom-ui-v<版本>` 独立分支并创建 PR，永不直推 `main`。W1 → W5 顺序是可执行门禁；更晚波次不能越过未完成前序。dry-run 同样执行制品完整性核验，并在临时 clone 中运行真实迁移和门禁，但不写远端仓、分支或 PR。
 
 每个脚手架/升级 PR 还安装 `scripts/verify-client-foundation-consumer.mjs` 与 `workloom-ui-contract` 工作流。后续任何 PR 或 main 推送都会重新计算全部受管摘要、三端入口、UI 同版关系与扩展白名单；不是只在中央 rollout 当时检查一次。
 
@@ -126,6 +128,9 @@ bash sync/adopt.sh /path/to/new-industry --new-industry --dry-run
 
 ## 自动化与凭据
 
+- `@workloom/ui` 只发布到 npmjs 公共 Registry。包首次创建必须由 `@workloom` scope 管理员在本地交互登录并通过 2FA，发布经门禁生成的唯一 tarball，随后立即注销；不得把 npm 登录令牌粘贴到聊天、源码或日志。首发后在 npm 包设置中把 Trusted Publisher 精确绑定到 `geniusdapeng-collab/workloom-im` 的 `ui-release.yml` 和 `production` environment，后续版本由独立最小权限 job 以 GitHub Actions OIDC 短期身份发布，并启用 provenance，不再保存长期 `NPM_TOKEN`；
+- GitHub 仓库必须把 `production` environment 配置为 required reviewers + 受保护部署分支/标签，并用 ruleset 限制 `ui-v*` 标签创建。workflow 还会把发布/续跑对象固定到不可变提交并验证其属于 `origin/main` 历史；代码内祖先校验不能替代仓库侧保护规则；
+- 八个公开下游仓的只读 preflight 永远无 token 执行。npm 发布身份与八仓写入身份严格分离；跨仓升级继续使用最小权限 GitHub App installation token 或经审计的人工本地凭据，且只在实际 rollout step 注入，编排器不会把它继承给 pnpm/npm/verifier 子进程。绝不把 npm 凭据复用为 GitHub 凭据，也不以个人 PAT 充当长期自动化秘密；
 - 父仓 plan 在不接触跨仓凭据时先执行 YAML、密钥扫描器和同步引擎测试；PR 事件停在本地验证；
 - 可选 fan-out 只使用限定到清单仓库的短期 GitHub App installation token：先做 private-safe 跨仓 dry-run，再以精确 `base_sha` 和 `mode=required-only|full` 发送 `repository_dispatch`，并仅对 GitHub 标记为 `disabled_inactivity` 的 heartbeat 做恢复与运行监控；未配置 App 时公开九仓仍由各自 schedule 工作；
 - 子仓 heartbeat 先以公开只读、无 token 的方式把基座 `main` 固定为不可变提交，再执行该提交里的引擎；同步阶段显式拒绝残留认证 header；

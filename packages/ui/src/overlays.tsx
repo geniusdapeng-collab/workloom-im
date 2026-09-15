@@ -8,6 +8,7 @@ import {
   useRef,
 } from "react";
 import { Button, Overlay, type ButtonVariant, type OverlayProps } from "./components";
+import { useManagedSurface } from "./managed-surface";
 import { acquireModalDocumentState, restoreOverlayFocus } from "./modal-document-state";
 import { activateOverlayLayer, isTopOverlayLayer } from "./overlay-stack";
 
@@ -123,33 +124,29 @@ export function Popover({
   ...props
 }: PopoverProps) {
   const id = useId();
-  const layerId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const closeRef = useRef(onOpenChange);
-  closeRef.current = onOpenChange;
+  const popoverSurface = useManagedSurface<HTMLDivElement>({
+    open,
+    kind: "popover",
+    onDismiss: () => onOpenChange(false),
+    modal: false,
+    dismissOnEscape,
+    restoreFocusOnClose: true,
+    returnFocusRef: triggerRef,
+  });
 
   useEffect(() => {
     if (!open || typeof document === "undefined") return;
-    const deactivateLayer = activateOverlayLayer(layerId);
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || !dismissOnEscape || !isTopOverlayLayer(layerId)) return;
-      event.preventDefault();
-      closeRef.current(false);
-    };
     const onPointerDown = (event: PointerEvent) => {
       if (!dismissOnOutside || rootRef.current?.contains(event.target as Node)) return;
-      closeRef.current(false);
+      onOpenChange(false);
     };
-    document.addEventListener("keydown", onKeyDown);
     document.addEventListener("pointerdown", onPointerDown);
     return () => {
-      document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("pointerdown", onPointerDown);
-      deactivateLayer();
-      restoreOverlayFocus(triggerRef.current);
     };
-  }, [dismissOnEscape, dismissOnOutside, layerId, open]);
+  }, [dismissOnOutside, onOpenChange, open]);
 
   return (
     <div {...props} ref={rootRef} className={`wl-popover wl-popover--${placement} ${className}`.trim()}>
@@ -166,7 +163,7 @@ export function Popover({
         {trigger}
       </Button>
       {open && (
-        <div className="wl-popover__surface" id={id} role="dialog" aria-label={title ?? triggerLabel}>
+        <div {...popoverSurface} className="wl-popover__surface" id={id} role="dialog" aria-label={title ?? triggerLabel}>
           {title && <strong className="wl-popover__title">{title}</strong>}
           <div className="wl-popover__body">{children}</div>
         </div>

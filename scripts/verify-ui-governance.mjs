@@ -1,22 +1,36 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { findUiReleaseWorkflowRisks } from "../sync/ui-release-workflow-contract.mjs";
+import { industryAssetDependencyRisks, provableRelativeSurfaceImports, registeredServiceWorkerRisks } from "./verify-ui-consumer.mjs";
 import {
   findBundleDisplayLanguageRisks,
+  findBannerAlertContractRisks,
   findClientTextSinkRisks,
   findComponentMatrixIsolationRisks,
   findContentSafetyRisks,
   findDiagnosticIsolationRisks,
   findEntryStyleRisks,
+  findHtmlVisibleLanguageRisks,
   findIconAccessibilityRisks,
   findSharedIconRisks,
   findStylesheetLayoutRisks,
+  findStylesheetGeneratedContentRisks,
+  findStylesheetSurfaceRisks,
   findTypographyRisks,
   findViewportRisks,
   findRawDynamicValueRisks,
+  findUnmanagedSurfaceRisks,
+  findPcExtensionNavigationRisks,
   findVisibleLanguageRisks,
   isBundleUiConfig,
+  isClientPublicHtml,
+  findClientWebManifestRisks,
+  isClientWebManifest,
   isClientSurfaceSource,
+  isIndustryExtensionStylesheet,
+  isPcIndustryNavigationSource,
+  GOVERNED_INDUSTRY_EXTENSION_PATHS,
 } from "./ui-governance-rules.mjs";
 
 const root = resolve(import.meta.dirname, "..");
@@ -43,6 +57,10 @@ if (manifest.clientFoundation?.distribution !== "stable-tag-upgrade-pr") {
 }
 if (!Number.isInteger(manifest.clientFoundation?.maxManagedFiles) || manifest.clientFoundation.maxManagedFiles > 2000) {
   errors.push("三端客户端基座缺少合理的受管文件数上限");
+}
+if (JSON.stringify(manifest.clientFoundation?.allowedIndustryExtensionPaths)
+  !== JSON.stringify(GOVERNED_INDUSTRY_EXTENSION_PATHS)) {
+  errors.push("clientFoundation 行业可写路径必须与 UI 导航治理覆盖范围逐项一致");
 }
 const foundationCapability = scope.clientFoundationCapability;
 if (foundationCapability?.distribution !== "stable-tag-upgrade-pr") {
@@ -79,6 +97,7 @@ for (const entryPath of ["apps/web/src/main.tsx", "apps/webb/src/main.tsx", "app
 for (const indexPath of ["apps/web/index.html", "apps/webb/index.html", "apps/webc/index.html"]) {
   const source = readFileSync(join(root, indexPath), "utf8");
   for (const risk of findViewportRisks(source)) errors.push(`${indexPath}：${risk}`);
+  for (const risk of findHtmlVisibleLanguageRisks(source, indexPath)) errors.push(`${indexPath}:${risk.line} ${risk.rule}（${risk.text}）`);
 }
 
 const pcTokenPath = "apps/web/src/styles/tokens.css";
@@ -134,12 +153,25 @@ const rootPackage = readJson("package.json");
 if (!rootPackage.scripts?.["bundle:governance"]) errors.push("根包缺少 bundle:governance 行业契约门禁");
 const ciSource = readFileSync(join(root, ".github/workflows/ci.yml"), "utf8");
 if (!ciSource.includes("pnpm bundle:governance")) errors.push("CI 未执行行业包契约门禁");
+const expectedUiRepository = "git+https://github.com/geniusdapeng-collab/workloom-im.git";
+if (uiPackage.license !== "Apache-2.0") errors.push("共享 UI 包必须声明与主仓一致的 Apache-2.0 许可证");
+if (uiPackage.repository?.type !== "git" || uiPackage.repository?.url !== expectedUiRepository
+  || uiPackage.repository?.directory !== "packages/ui") {
+  errors.push("共享 UI 包 repository 必须精确指向 workloom-im/packages/ui，防止制品来源漂移");
+}
+const uiReleaseSource = readFileSync(join(root, ".github/workflows/ui-release.yml"), "utf8");
+for (const risk of findUiReleaseWorkflowRisks(uiReleaseSource)) errors.push(`共享 UI 发布：${risk}`);
 
 const contentSafetyPath = "packages/ui/src/content-safety.css";
 const contentSafety = readFileSync(join(root, contentSafetyPath), "utf8");
 for (const risk of findContentSafetyRisks(contentSafety, pcTokens)) {
   errors.push(`${contentSafetyPath}：${risk}`);
 }
+for (const risk of findBannerAlertContractRisks(
+  readFileSync(join(root, "packages/ui/src/components.tsx"), "utf8"),
+  readFileSync(join(root, "packages/ui/src/components.css"), "utf8"),
+  readFileSync(join(root, "apps/web/src/components/hud/feedback.tsx"), "utf8"),
+)) errors.push(`共享告警条：${risk}`);
 
 const uiSource = ["packages/ui/src/language.ts", "packages/ui/src/tokens.css", "packages/ui/src/content-safety.css"]
   .map((path) => readFileSync(join(root, path), "utf8"))
@@ -152,21 +184,42 @@ for (const forbidden of ["云栖酒店", "总导演", "hotel-baseline", "panda-c
 function projectFiles(directory) {
   const absolute = join(root, directory);
   const rows = [];
+  const rootStat = readdirRootStat(absolute, directory);
+  if (!rootStat) return rows;
   for (const entry of readdirSync(absolute, { withFileTypes: true })) {
     const relative = join(directory, entry.name);
-    if (entry.isDirectory()) rows.push(...projectFiles(relative));
+    if (entry.isSymbolicLink()) {
+      errors.push(`${relative} 不得使用符号链接隐藏或逃逸 UI 治理扫描`);
+    } else if (entry.isDirectory()) rows.push(...projectFiles(relative));
     else rows.push(relative);
   }
   return rows;
 }
 
+function readdirRootStat(absolute, directory) {
+  const stat = lstatSync(absolute);
+  if (stat.isSymbolicLink()) {
+    errors.push(`${directory} 不得使用符号链接隐藏或逃逸 UI 治理扫描`);
+    return null;
+  }
+  if (!stat.isDirectory()) {
+    errors.push(`${directory} 不是 UI 治理目录`);
+    return null;
+  }
+  return stat;
+}
+
 function clientStyleFiles(directory) {
   const absolute = join(root, directory);
   const rows = [];
+  const rootStat = readdirRootStat(absolute, directory);
+  if (!rootStat) return rows;
   for (const entry of readdirSync(absolute, { withFileTypes: true })) {
     const relative = join(directory, entry.name);
-    if (entry.isDirectory()) rows.push(...clientStyleFiles(relative));
-    else if (entry.name.endsWith(".css")) rows.push(relative);
+    if (entry.isSymbolicLink()) {
+      errors.push(`${relative} 不得使用符号链接隐藏或逃逸 UI 样式治理扫描`);
+    } else if (entry.isDirectory()) rows.push(...clientStyleFiles(relative));
+    else if (/\.(?:css|scss)$/i.test(entry.name)) rows.push(relative);
   }
   return rows;
 }
@@ -177,7 +230,11 @@ const clientSurfaceFiles = [
   ...projectFiles("apps/webb/src"),
   ...projectFiles("apps/webc/src"),
   ...projectFiles("packages/ui/src"),
-].filter(isClientSurfaceSource);
+  ...projectFiles("apps/web/public"),
+  ...projectFiles("apps/webb/public"),
+  ...projectFiles("apps/webc/public"),
+].filter((filePath) => isClientSurfaceSource(filePath) || isPcIndustryNavigationSource(filePath));
+const trustedRelativeSurfaces = provableRelativeSurfaceImports(root, clientSurfaceFiles);
 for (const filePath of clientSurfaceFiles) {
   const source = readFileSync(join(root, filePath), "utf8");
   for (const risk of findVisibleLanguageRisks(source, filePath)) {
@@ -187,6 +244,14 @@ for (const filePath of clientSurfaceFiles) {
     languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.text.slice(0, 72)}）`);
   }
   for (const risk of findClientTextSinkRisks(source, filePath)) {
+    languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.text.slice(0, 72)}）`);
+  }
+  for (const risk of findUnmanagedSurfaceRisks(source, filePath, {
+    trustedRelativeSurfaceImports: trustedRelativeSurfaces.get(filePath) ?? [],
+  })) {
+    languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.text.slice(0, 72)}）`);
+  }
+  for (const risk of findPcExtensionNavigationRisks(source, filePath)) {
     languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.text.slice(0, 72)}）`);
   }
   if (/\.(?:tsx|jsx)$/i.test(filePath) && filePath !== "apps/web/src/pages/dev/DevMatrix.tsx") {
@@ -214,13 +279,51 @@ for (const filePath of [
   }
 }
 for (const filePath of [
+  ...projectFiles("apps/web/public"),
+  ...projectFiles("apps/webb/public"),
+  ...projectFiles("apps/webc/public"),
+].filter(isClientWebManifest)) {
+  const source = readFileSync(join(root, filePath), "utf8");
+  for (const risk of findClientWebManifestRisks(source, filePath)) {
+    languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.path ?? "$"}=${risk.text.slice(0, 60)}）`);
+  }
+}
+for (const filePath of [
+  ...projectFiles("apps/web/public"),
+  ...projectFiles("apps/webb/public"),
+  ...projectFiles("apps/webc/public"),
+].filter(isClientPublicHtml)) {
+  const source = readFileSync(join(root, filePath), "utf8");
+  for (const risk of findHtmlVisibleLanguageRisks(source, filePath)) {
+    languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.text.slice(0, 72)}）`);
+  }
+}
+for (const clientRoot of ["apps/web", "apps/webb", "apps/webc"]) {
+  languageRisks.push(...registeredServiceWorkerRisks(root, clientRoot));
+}
+languageRisks.push(...industryAssetDependencyRisks(root));
+for (const filePath of [
+  ...clientStyleFiles("packages/ui/src"),
   ...clientStyleFiles("apps/web/src"),
   ...clientStyleFiles("apps/webb/src"),
   ...clientStyleFiles("apps/webc/src"),
+  ...clientStyleFiles("apps/web/public"),
+  ...clientStyleFiles("apps/webb/public"),
+  ...clientStyleFiles("apps/webc/public"),
 ]) {
   const source = readFileSync(join(root, filePath), "utf8");
-  for (const risk of findStylesheetLayoutRisks(source)) {
+  if (!filePath.startsWith("packages/ui/")) {
+    for (const risk of findStylesheetLayoutRisks(source)) {
+      languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.text.slice(0, 72)}）`);
+    }
+  }
+  for (const risk of findStylesheetGeneratedContentRisks(source)) {
     languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.text.slice(0, 72)}）`);
+  }
+  if (isIndustryExtensionStylesheet(filePath)) {
+    for (const risk of findStylesheetSurfaceRisks(source, filePath)) {
+      languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.text.slice(0, 72)}）`);
+    }
   }
 }
 if (languageRisks.length > 30) {

@@ -57,45 +57,93 @@ async function assertClientFrame(page: Page, client: string) {
   expect(stableFrame.clientRight, JSON.stringify(stableFrame)).toBeLessThanOrEqual(stableFrame.viewportWidth + 2);
 }
 
+async function assertLongContentAndTextScale(page: Page) {
+  const before = await page.evaluate(() => {
+    const sample = document.querySelector<HTMLElement>("h1, h2, h3, p, button");
+    return sample ? Number.parseFloat(getComputedStyle(sample).fontSize) : 0;
+  });
+  await page.evaluate(() => {
+    const heading = document.querySelector<HTMLElement>("h1, h2, h3");
+    const action = document.querySelector<HTMLElement>("button, [role='button']");
+    if (heading) heading.textContent = "这是来自行业投影的超长中文页面标题，需要在当前内容区域内自然换行且绝不越界";
+    if (action) action.textContent = "这是来自行业投影的超长中文动态操作名称，需要在当前按钮内自然换行且绝不越界";
+    document.documentElement.style.fontSize = "200%";
+  });
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  });
+  const report = await page.evaluate(() => {
+    const sample = document.querySelector<HTMLElement>("h1, h2, h3, p, button");
+    const offenders = Array.from(document.querySelectorAll<HTMLElement>(
+      "h1, h2, h3, p, button, [role='button'], .wl-badge, .wl-status-chip, .wl-bottom-tabs__label",
+    )).filter((element) => {
+      const style = getComputedStyle(element);
+      if (style.display === "none" || style.visibility === "hidden") return false;
+      return element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 2;
+    }).slice(0, 8).map((element) => ({
+      tag: element.tagName.toLowerCase(),
+      text: (element.textContent ?? "").trim().slice(0, 60),
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    }));
+    return {
+      scaledFontSize: sample ? Number.parseFloat(getComputedStyle(sample).fontSize) : 0,
+      documentWidth: document.documentElement.scrollWidth,
+      viewportWidth: document.documentElement.clientWidth,
+      offenders,
+    };
+  });
+  expect(report.documentWidth, JSON.stringify(report)).toBeLessThanOrEqual(report.viewportWidth + 2);
+  expect(report.offenders, JSON.stringify(report)).toEqual([]);
+  if (before > 0) expect(report.scaledFontSize).toBeGreaterThanOrEqual(before * 1.8);
+}
+
 test("B 端 PC：生产登录主入口和首帧不横向溢出", async ({ page }) => {
-  await page.setViewportSize({ width: 1024, height: 640 });
   await installFirstFrameProbe(page);
   await page.route("**/health", (route) => route.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true}' }));
-  await page.goto("http://127.0.0.1:4310/login");
-
-  await expect(page.getByRole("heading", { name: "登录 WorkLoom" })).toBeVisible();
-  await page.getByRole("button", { name: "邮箱密码" }).click();
-  await expect(page.getByLabel("邮箱")).toBeVisible();
-  await expect(page.getByLabel("密码")).toBeVisible();
-  await assertClientFrame(page, "b-pc");
+  for (const width of [1024, 640]) {
+    await page.setViewportSize({ width, height: 640 });
+    await page.goto("http://127.0.0.1:4310/login");
+    await expect(page.getByRole("heading", { name: "登录 WorkLoom" })).toBeVisible();
+    await page.getByRole("button", { name: "邮箱密码" }).click();
+    await expect(page.getByLabel("邮箱")).toBeVisible();
+    await expect(page.getByLabel("密码")).toBeVisible();
+    await assertClientFrame(page, "b-pc");
+    await assertLongContentAndTextScale(page);
+  }
 });
 
 test("B 端移动：登录主入口和首帧不横向溢出", async ({ page }) => {
-  await page.setViewportSize({ width: 360, height: 800 });
   await installFirstFrameProbe(page);
-  await page.goto("http://127.0.0.1:4311/");
-
-  await expect(page.getByRole("heading", { name: "登录 WorkLoom" })).toBeVisible();
-  await page.getByLabel("工作区识别码").fill("consumer-smoke");
-  await page.getByLabel("手机号").fill("13800000000");
-  await page.getByLabel("验证码").fill("123456");
-  await expect(page.getByRole("button", { name: "登录工作区" })).toBeEnabled();
-  await assertClientFrame(page, "b-mobile");
+  for (const width of [360, 320]) {
+    await page.setViewportSize({ width, height: width === 320 ? 568 : 800 });
+    await page.goto("http://127.0.0.1:4311/");
+    await expect(page.getByRole("heading", { name: "登录 WorkLoom" })).toBeVisible();
+    await page.getByLabel("工作区识别码").fill("consumer-smoke");
+    await page.getByLabel("手机号").fill("13800000000");
+    await page.getByLabel("验证码").fill("123456");
+    await expect(page.getByRole("button", { name: "登录工作区" })).toBeEnabled();
+    await assertClientFrame(page, "b-mobile");
+    await assertLongContentAndTextScale(page);
+  }
 });
 
 test("C 端移动：服务前台导航主流程和首帧不横向溢出", async ({ page }) => {
-  await page.setViewportSize({ width: 360, height: 800 });
   await installFirstFrameProbe(page);
-  await page.goto("http://127.0.0.1:4312/");
-
-  const navigation = page.getByRole("navigation", { name: "服务前台主导航" });
-  await expect(navigation).toBeVisible();
-  const tabs = navigation.getByRole("button");
-  expect(await tabs.count()).toBeGreaterThan(1);
-  // 行业投影就绪时第二项通常是服务大厅；安全态下则是工单。
-  // 两者都验证真实路由切换，同时不假设行业仓必须启用某个可选入口。
-  const target = tabs.nth(1);
-  await target.click();
-  await expect(target).toHaveAttribute("aria-current", "page");
-  await assertClientFrame(page, "c-mobile");
+  for (const width of [360, 320]) {
+    await page.setViewportSize({ width, height: width === 320 ? 568 : 800 });
+    await page.goto("http://127.0.0.1:4312/");
+    const navigation = page.getByRole("navigation", { name: "服务前台主导航" });
+    await expect(navigation).toBeVisible();
+    const tabs = navigation.getByRole("button");
+    expect(await tabs.count()).toBeGreaterThan(1);
+    // 行业投影就绪时第二项通常是服务大厅；安全态下则是工单。
+    // 两者都验证真实路由切换，同时不假设行业仓必须启用某个可选入口。
+    const target = tabs.nth(1);
+    await target.click();
+    await expect(target).toHaveAttribute("aria-current", "page");
+    await assertClientFrame(page, "c-mobile");
+    await assertLongContentAndTextScale(page);
+  }
 });

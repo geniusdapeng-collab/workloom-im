@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { describe, it } = require("node:test");
-const { installPayloadAtomically, writeInstallCheckpoint } = require("./bootstrap.cjs");
+const { bootstrap, installPayloadAtomically, writeInstallCheckpoint } = require("./bootstrap.cjs");
 
 function fixture(version, withCurrent = true) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "workloom-bootstrap-"));
@@ -34,6 +34,43 @@ function transientDirectories(supportDir) {
 }
 
 describe("桌面载荷原子装配", () => {
+  it("正式打包入口缺少载荷时在启动任何服务前失败关闭", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "workloom-packaged-payload-missing-"));
+    const resourcesDir = path.join(root, "resources");
+    const supportDir = path.join(root, "support");
+    fs.mkdirSync(resourcesDir, { recursive: true });
+    try {
+      await assert.rejects(
+        bootstrap({ resourcesDir, supportDir, smoke: true }),
+        /载荷版本标记缺失/u,
+      );
+      assert.equal(fs.existsSync(path.join(supportDir, "runtime")), false);
+      assert.equal(fs.existsSync(path.join(supportDir, "node")), false);
+      assert.equal(fs.existsSync(path.join(supportDir, "pg")), false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("正式打包入口不会把源码 dist-payload 双重嵌套误认作 Resources", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "workloom-packaged-no-double-payload-"));
+    const resourcesDir = path.join(root, "resources");
+    const supportDir = path.join(root, "support");
+    fs.mkdirSync(path.join(resourcesDir, "dist-payload", "runtime"), { recursive: true });
+    fs.writeFileSync(path.join(resourcesDir, "dist-payload", "PAYLOAD_VERSION"), "9.9.9\n");
+    fs.writeFileSync(path.join(resourcesDir, "dist-payload", "runtime", "VERSION"), "9.9.9\n");
+    fs.writeFileSync(path.join(resourcesDir, "dist-payload.tar.gz"), "not-a-release-resource\n");
+    try {
+      await assert.rejects(
+        bootstrap({ resourcesDir, supportDir, smoke: true }),
+        /载荷版本标记缺失/u,
+      );
+      assert.equal(fs.existsSync(path.join(supportDir, "runtime")), false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("完整暂存后换入；提交前可回滚，提交后清理临时目录", () => {
     const f = fixture("2.0.0");
     const tx = installPayloadAtomically({
@@ -96,5 +133,12 @@ describe("桌面载荷原子装配", () => {
     assert.match(source, /aria-valuenow=/);
     assert.match(source, /进度按已完成的启动检查点更新/);
     assert.doesNotMatch(source, /animation:slide/);
+  });
+
+  it("源码主进程只复用已验活服务，正式安装包与渲染冒烟不能绕过载荷", () => {
+    const source = fs.readFileSync(path.join(__dirname, "main.cjs"), "utf8");
+    assert.match(source, /if \(SOURCE_MODE\)[\s\S]*if \(app\.isPackaged\)[\s\S]*正式安装包禁止源码模式/u);
+    assert.match(source, /if \(SOURCE_MODE\)[\s\S]*if \(RENDER_SMOKE\)[\s\S]*源码模式禁止执行发布渲染冒烟/u);
+    assert.match(source, /else \{[\s\S]*handle = await bootstrap\(\{[\s\S]*resourcesDir/u);
   });
 });

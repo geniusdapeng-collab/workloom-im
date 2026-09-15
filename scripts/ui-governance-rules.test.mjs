@@ -2,21 +2,42 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   collectVisibleStrings,
+  findBannerAlertContractRisks,
   findBundleDisplayLanguageRisks,
   findClientTextSinkRisks,
   findComponentMatrixIsolationRisks,
   findContentSafetyRisks,
   findDiagnosticIsolationRisks,
   findEntryStyleRisks,
+  findHtmlVisibleLanguageRisks,
+  findIndustryConfigDisplayRisks,
+  findIndustryConfigImports,
+  findIndustryEmbeddedUiReferences,
+  findIndustryEmbeddedUiRisks,
+  findIndustryHtmlResourceReferences,
   findIconAccessibilityRisks,
   findSharedIconRisks,
   findStylesheetLayoutRisks,
+  findStylesheetGeneratedContentRisks,
+  findStylesheetSurfaceRisks,
+  findStylesheetImports,
   findTypographyRisks,
   findViewportRisks,
   findRawDynamicValueRisks,
+  findServiceWorkerRegistrations,
+  findUnmanagedSurfaceRisks,
+  findSurfaceModuleFacts,
+  findWorkerScriptImports,
+  findPcExtensionNavigationRisks,
   findVisibleLanguageRisks,
   isBundleUiConfig,
+  isClientPublicHtml,
+  isClientWebManifest,
+  isPcIndustryNavigationSource,
+  findClientWebManifestRisks,
   isClientSurfaceSource,
+  isIndustryExtensionStylesheet,
+  isIndustryUiConfig,
 } from "./ui-governance-rules.mjs";
 
 test("viewport 门禁允许正常缩放并拒绝锁定缩放", () => {
@@ -69,6 +90,22 @@ test("动态值门禁拦截 JSX 文本与可见属性中的裸底层字段", () 
   assert.equal(risks.some((item) => item.text === "eventId"), true);
 });
 
+test("共享组件的可见后缀属性与表格展示字段不能绕过中文映射", () => {
+  const source = `<><Input error="tenant_id console"/><Button busyLabel="raw_status">保存</Button>
+    <ConfirmDialog confirmLabel={response.detail}/><Table columns={[{
+      header: "workspace_id console", mobileLabel: "raw_status", sortLabel: response.message,
+      displayValue: response.detail, valueText: "tenant_id console"
+    }]}/></>`;
+  const literalRisks = findVisibleLanguageRisks(source);
+  const dynamicRisks = findRawDynamicValueRisks(source);
+  for (const value of ["tenant_id console", "raw_status", "workspace_id console"]) {
+    assert.ok(literalRisks.some((item) => item.text.includes(value)), `未拦截 ${value}`);
+  }
+  assert.ok(dynamicRisks.some((item) => item.text.includes("response.detail")));
+  assert.ok(dynamicRisks.some((item) => item.text.includes("response.message")));
+  assert.deepEqual(findVisibleLanguageRisks('<Input value="tenant_id" aria-valuetext="已选择"/>'), []);
+});
+
 test("自定义展示组件覆盖眉标、指标元数据与可见 value，表单 value 保持机器值语义", () => {
   const risky = `
     export function Page({ row }) {
@@ -119,6 +156,29 @@ test("AST 文字出口覆盖错误对象、通知、Toast、语音、字幕与�
   assert.deepEqual(findClientTextSinkRisks(safe), []);
 });
 
+test("JSX 外文字出口覆盖浏览器对话、系统分享、语音、画布与 DOM 注入", () => {
+  const source = `
+    alert(response.detail);
+    navigator.share({ title: response.detail, text: error.message });
+    new SpeechSynthesisUtterance(error.message);
+    ctx.strokeText(response.detail, 0, 0);
+    node.ariaDescription = response.detail;
+    node.insertAdjacentText("beforeend", response.detail);
+    node.innerHTML = response.detail;
+    node["innerHTML"] += response.detail;
+    node[\`outerHTML\`] = response.detail;
+    node["ariaLabel"] = response.detail;
+    node.insertAdjacentHTML("beforeend", "<b>raw_field</b>");
+    const view = <div dangerouslySetInnerHTML={{ __html: response.detail }} />;
+  `;
+  const risks = findClientTextSinkRisks(source);
+  assert.ok(risks.some((item) => item.text.includes("response.detail")));
+  assert.ok(risks.some((item) => item.text.includes("error.message")));
+  assert.ok(risks.filter((item) => item.rule.includes("innerHTML/outerHTML")).length >= 3);
+  assert.ok(risks.some((item) => item.rule.includes("dangerouslySetInnerHTML")));
+  assert.ok(risks.some((item) => item.rule.includes("HTML 字符串")));
+});
+
 test("显式安全映射白名单不能被大写字典、限定名或回调包装绕过", () => {
   const source = `<><p>{ANY[response.detail]}</p><p>{evil.clientChineseText(error.message)}</p>
     <p>{items.map((item) => item.error.message).join("、")}</p><Toast message={query.error.message} /></>`;
@@ -132,12 +192,342 @@ test("显式安全映射白名单不能被大写字典、限定名或回调包�
 test("文件发现覆盖四类脚本、三端、共享 UI 与 dev，并排除测试和构建产物", () => {
   for (const file of [
     "apps/web/src/Page.ts", "apps/webb/src/Page.tsx", "apps/webc/src/Page.js",
-    "packages/ui/src/Page.jsx", "apps/web/src/pages/dev/DevMatrix.tsx",
+    "packages/ui/src/Page.jsx", "apps/web/src/pages/dev/DevMatrix.tsx", "apps/webb/public/sw.js",
+    "apps/webc/public/firebase-messaging-sw.js", "apps/web/public/push/service-worker.js",
   ]) assert.equal(isClientSurfaceSource(file), true, file);
   for (const file of [
     "apps/web/src/Page.test.tsx", "apps/web/src/Page.spec.js", "apps/web/src/__tests__/Page.tsx",
     "packages/ui/dist/index.js", "packages/ui/src/index.d.ts", "apps/server/src/router.ts",
   ]) assert.equal(isClientSurfaceSource(file), false, file);
+});
+
+test("HTML 外壳、安装清单与行业 public 配置不能绕过中文边界", () => {
+  assert.deepEqual(findHtmlVisibleLanguageRisks('<html lang="zh-CN"><head><title>WorkLoom 工作台</title></head><body><noscript>请启用浏览器脚本</noscript></body></html>'), []);
+  assert.ok(findHtmlVisibleLanguageRisks('<html><head><title>raw_field console</title></head></html>').length >= 2);
+  const htmlRisks = findHtmlVisibleLanguageRisks(`<html lang=zh-CN><head>
+    <meta content="tenant_id console" name="description"><meta content=raw_status property=og:title>
+    </head><body><div>workspace_id console</div><input type=hidden value=tenant_id><input value="raw_field console"></body></html>`);
+  assert.ok(htmlRisks.some((item) => item.text.includes("tenant_id console") && item.rule.includes("英文底层字段")));
+  assert.ok(htmlRisks.some((item) => item.text.includes("raw_status") && item.rule.includes("英文底层字段")));
+  assert.ok(htmlRisks.some((item) => item.text.includes("workspace_id console") && item.rule.includes("英文底层字段")));
+  assert.ok(htmlRisks.some((item) => item.text.includes("raw_field console") && item.rule.includes("英文底层字段")));
+  assert.equal(htmlRisks.some((item) => item.text === "tenant_id"), false);
+  const encoded = findHtmlVisibleLanguageRisks('<html lang=zh-CN><body><div>&#116;&#101;&#110;&#97;&#110;&#116;&#95;&#105;&#100;</div><option label="raw_status">正常</option></body></html>');
+  assert.ok(encoded.some((item) => item.text === "tenant_id"));
+  assert.ok(encoded.some((item) => item.text === "raw_status"));
+  assert.equal(isClientWebManifest("apps/webb/public/manifest.webmanifest"), true);
+  assert.equal(isClientWebManifest("apps/web/public/manifest.json"), true);
+  assert.equal(isClientWebManifest("apps/webc/public/install/app.webmanifest"), true);
+  assert.equal(isClientWebManifest("apps/webc/public/install/site.webmanifest"), true);
+  assert.equal(isClientPublicHtml("apps/web/public/offline.html"), true);
+  assert.deepEqual(findClientWebManifestRisks('{"name":"WorkLoom 移动工作台","short_name":"WorkLoom","description":"经营工作台","lang":"zh-CN"}'), []);
+  assert.ok(findClientWebManifestRisks('{"name":"tenant_id console","lang":"en"}').length >= 2);
+  assert.equal(isBundleUiConfig("apps/web/public/industry/custom-dashboard.json"), true);
+  assert.equal(isBundleUiConfig("apps/web/public/live2d/model.json"), false);
+});
+
+test("Service Worker 注册使用 AST，覆盖元素访问和不可变别名但忽略注释、字符串与普通 Worker", () => {
+  assert.deepEqual(findServiceWorkerRegistrations('navigator.serviceWorker.register("./push-worker.js")'), [
+    { line: 1, path: "./push-worker.js", text: "./push-worker.js", rule: "" },
+  ]);
+  assert.deepEqual(findServiceWorkerRegistrations(`
+    const nav = window["navigator"];
+    const { serviceWorker: sw } = nav;
+    const registerWorker = sw["register"].bind(sw);
+    registerWorker("./aliased-worker.mjs");
+  `), [{ line: 5, path: "./aliased-worker.mjs", text: "./aliased-worker.mjs", rule: "" }]);
+  assert.deepEqual(findServiceWorkerRegistrations(
+    'navigator["service" + "Worker"]["reg" + "ister"]("/hidden-" + "worker.js")',
+  ), [{ line: 1, path: "/hidden-worker.js", text: "/hidden-worker.js", rule: "" }]);
+  assert.deepEqual(findServiceWorkerRegistrations([
+    'navigator.serviceWorker.register.call(navigator.serviceWorker, "/call-worker.js");',
+    'navigator.serviceWorker.register.apply(navigator.serviceWorker, ["/apply-worker.js"]);',
+    'Reflect.apply(navigator.serviceWorker.register, navigator.serviceWorker, ["/reflect-worker.js"]);',
+  ].join("\n")).map((item) => item.path), ["/call-worker.js", "/apply-worker.js", "/reflect-worker.js"]);
+  assert.ok(findServiceWorkerRegistrations(
+    "navigator.serviceWorker.register.apply(navigator.serviceWorker, workerArgs)",
+  )[0]?.rule.includes("静态展开"));
+  assert.deepEqual(findServiceWorkerRegistrations(`
+    // navigator.serviceWorker.register("./comment-worker.js");
+    const example = 'navigator["serviceWorker"]["register"]("./string-worker.js")';
+    new Worker("./ordinary-worker.js");
+  `), []);
+  assert.deepEqual(findServiceWorkerRegistrations(`<!doctype html><html><body>
+    <!-- <script>navigator.serviceWorker.register("./comment-worker.js")</script> -->
+    <script type="application/json">{"example":"navigator.serviceWorker.register('./json-worker.js')"}</script>
+    <script type="module">navigator["serviceWorker"].register("./html-worker.mjs")</script>
+  </body></html>`, "apps/web/index.html"), [
+    { line: 4, path: "./html-worker.mjs", text: "./html-worker.mjs", rule: "" },
+  ]);
+  assert.ok(findServiceWorkerRegistrations("navigator.serviceWorker.register(workerPath)")[0]?.rule.includes("静态本地路径"));
+  assert.ok(findServiceWorkerRegistrations("navigator.serviceWorker[method](workerPath)")[0]?.rule.includes("静态名称"));
+  assert.ok(findServiceWorkerRegistrations("navigator[serviceWorkerKey][registerKey]('/hidden.js')")[0]?.rule.includes("静态名称"));
+});
+
+test("已注册 Worker 的经典与模块依赖递归规则关闭动态、外部和裸说明符", () => {
+  assert.equal(findWorkerScriptImports('importScripts("./a.js", "./b.js")').length, 2);
+  assert.deepEqual(findWorkerScriptImports(`
+    import "./module-a.js";
+    export { copy } from "../module-b.mjs";
+    export * from "/module-c.js";
+  `).map((item) => item.path), ["./module-a.js", "../module-b.mjs", "/module-c.js"]);
+  assert.deepEqual(findWorkerScriptImports(`
+    const { importScripts: loadScripts } = self;
+    loadScripts("./classic-a.js");
+    new Worker("./ordinary-worker.js");
+  `).map((item) => item.path), ["./classic-a.js"]);
+  assert.deepEqual(findWorkerScriptImports('self["import" + "Scripts"]("./un" + "scanned.js")'), [
+    { line: 1, path: "./unscanned.js", text: "./unscanned.js", rule: "" },
+  ]);
+  assert.deepEqual(findWorkerScriptImports([
+    'self.importScripts.call(self, "./call.js");',
+    'self.importScripts.apply(self, ["./apply.js"]);',
+    'Reflect.apply(self.importScripts, self, ["./reflect.js"]);',
+  ].join("\n")).map((item) => item.path), ["./call.js", "./apply.js", "./reflect.js"]);
+  assert.ok(findWorkerScriptImports("self.importScripts.apply(self, workerArgs)")[0]?.rule.includes("静态展开"));
+  assert.ok(findWorkerScriptImports("importScripts(workerPath)")[0]?.rule.includes("静态本地路径"));
+  assert.ok(findWorkerScriptImports("self[importScriptsKey]('./hidden.js')")[0]?.rule.includes("静态名称"));
+  assert.ok(findWorkerScriptImports('import("./dynamic.js")')[0]?.rule.includes("禁止动态 import"));
+  assert.ok(findWorkerScriptImports('import "https://cdn.example/remote.js"')[0]?.rule.includes("外部或裸模块"));
+  assert.ok(findWorkerScriptImports('export * from "worker-package"')[0]?.rule.includes("外部或裸模块"));
+  assert.deepEqual(findWorkerScriptImports(`
+    // importScripts("./comment-copy.js");
+    const sample = 'import "./string-copy.js"';
+  `), []);
+});
+
+test("CSS 伪元素仅允许空装饰或受治理的中文展示属性", () => {
+  assert.deepEqual(findStylesheetGeneratedContentRisks('.ok::before{content:""}.cell::before{content:attr(data-label)}'), []);
+  const risks = findStylesheetGeneratedContentRisks('.raw::before{content:attr(data-status)}.hint::after{content:"tenant_id"}.variable::after{content:var(--raw-status)}');
+  assert.ok(risks.some((item) => item.text.includes("data-status")));
+  assert.ok(risks.some((item) => item.text.includes("tenant_id")));
+  assert.ok(risks.some((item) => item.text.includes("--raw-status") && item.rule.includes("变量注入")));
+});
+
+test("无 role、自建包装、class 与 style 浮面都必须接入共享受管表面", () => {
+  assert.equal(findUnmanagedSurfaceRisks('<div role="dialog" aria-modal="true">内容</div>').length, 1);
+  assert.equal(findUnmanagedSurfaceRisks('<div {...drawerSurface} role="dialog">内容</div>').length, 1);
+  assert.equal(findUnmanagedSurfaceRisks('<div data-wl-managed-surface="drawer" role="dialog">内容</div>').length, 1);
+  const appManaged = `import { useManagedSurface as useSurface } from "@workloom/ui";
+    const drawerBindings = useSurface({ open, kind: "drawer", onDismiss });
+    export function View(){ return <div {...drawerBindings} role="dialog">内容</div>; }`;
+  assert.deepEqual(findUnmanagedSurfaceRisks(appManaged, "apps/web/src/View.tsx"), []);
+  const sharedManaged = `import { useManagedSurface } from "./managed-surface";
+    const surface = useManagedSurface({ open, kind: "dialog", onDismiss });
+    export function Dialog(){ return <div {...surface} role="dialog">内容</div>; }`;
+  assert.deepEqual(findUnmanagedSurfaceRisks(sharedManaged, "packages/ui/src/Dialog.tsx"), []);
+  const forged = `const useManagedSurface = () => ({ }); const modalSurface = useManagedSurface();
+    export function View(){ return <div {...modalSurface} data-wl-managed-surface="dialog" role="dialog">内容</div>; }`;
+  assert.equal(findUnmanagedSurfaceRisks(forged, "apps/web/src/View.tsx").length, 1);
+  const shadowed = `import { useManagedSurface } from "@workloom/ui";
+    function View(useManagedSurface){ const surface = useManagedSurface(); return <div {...surface} role="dialog">内容</div>; }`;
+  assert.equal(findUnmanagedSurfaceRisks(shadowed, "apps/web/src/View.tsx").length, 1);
+  const localImposter = `import { useManagedSurface } from "./managed-surface";
+    const surface = useManagedSurface(); export function View(){ return <div {...surface} role="dialog">内容</div>; }`;
+  assert.equal(findUnmanagedSurfaceRisks(localImposter, "apps/web/src/View.tsx").length, 1);
+  assert.equal(findUnmanagedSurfaceRisks('<Dialog open title="确认" />').length, 1);
+  assert.equal(findUnmanagedSurfaceRisks('export function HotelModal(){ return <div>确认内容</div>; }').length, 1);
+  assert.equal(findUnmanagedSurfaceRisks('import { HotelModal } from "third-party-ui"; export const View=()=> <HotelModal />;').length, 1);
+  assert.equal(findUnmanagedSurfaceRisks('<div className="fixed inset-0 z-50">确认内容</div>').length, 1);
+  assert.equal(findUnmanagedSurfaceRisks('<div className={cn("fixed inset-[0]", open && "z-[999]")}>确认内容</div>').length, 1);
+  assert.equal(findUnmanagedSurfaceRisks('<section style={{ position: "fixed", inset: 0, zIndex: 999 }}>确认内容</section>').length, 1);
+  assert.equal(findUnmanagedSurfaceRisks('<dialog>确认内容</dialog>').length, 1);
+  assert.equal(findUnmanagedSurfaceRisks('<div aria-modal={true}>确认内容</div>').length, 1);
+  assert.equal(findUnmanagedSurfaceRisks('<div popover="manual">选择内容</div>').length, 1);
+  assert.deepEqual(findUnmanagedSurfaceRisks('<header className="fixed top-0 z-50">页头</header>'), []);
+  assert.deepEqual(findUnmanagedSurfaceRisks('<div aria-live="polite" className="pointer-events-none fixed bottom-0 z-50">字幕</div>'), []);
+  const imported = `import { Dialog as HotelDialog } from "@workloom/ui";
+    export const View=()=> <HotelDialog open title="确认" />;`;
+  assert.deepEqual(findUnmanagedSurfaceRisks(imported, "apps/web/src/View.tsx"), []);
+  const fakeSharedExport = `import { HotelModal } from "@workloom/ui";
+    export const View=()=> <HotelModal open title="确认" />;`;
+  assert.equal(findUnmanagedSurfaceRisks(fakeSharedExport, "apps/web/src/View.tsx").length, 1);
+  const shadowedDialog = `import { Dialog } from "@workloom/ui";
+    export function View(Dialog){ return <Dialog open title="确认" />; }`;
+  assert.ok(findUnmanagedSurfaceRisks(shadowedDialog, "apps/web/src/View.tsx").length >= 1);
+  const composed = `import { Dialog as BaseDialog } from "@workloom/ui";
+    export function HotelDialog(props){ return <BaseDialog {...props} />; }
+    export const View=()=> <HotelDialog open title="确认" />;`;
+  assert.deepEqual(findUnmanagedSurfaceRisks(composed, "apps/web/src/View.tsx"), []);
+  const managedOverlay = `import { useManagedSurface } from "@workloom/ui";
+    const surface=useManagedSurface({ open, kind:"drawer", onDismiss });
+    export const View=()=> <div {...surface} className="fixed inset-0 z-50">内容</div>;`;
+  assert.deepEqual(findUnmanagedSurfaceRisks(managedOverlay, "apps/web/src/View.tsx"), []);
+});
+
+test("跨文件 surface 只放行可证明直接委托共享表面的精确导出", () => {
+  const thirdPartyReExport = 'export { HotelDialog } from "third-party-ui";';
+  assert.equal(findUnmanagedSurfaceRisks(thirdPartyReExport, "apps/web/src/config/industry/barrel.ts").length, 1);
+  const unknownRelative = 'import { HotelDialog } from "./barrel"; export const View=()=> <HotelDialog />;';
+  assert.equal(findUnmanagedSurfaceRisks(unknownRelative, "apps/web/src/config/industry/View.tsx").length, 1);
+  const variableAlias = 'import { ThirdPartyModal } from "third-party-ui"; export const HotelDialog = ThirdPartyModal;';
+  assert.equal(findUnmanagedSurfaceRisks(variableAlias, "apps/web/src/config/industry/alias.ts").length, 1);
+  const defaultAssignment = 'import { ThirdPartyModal } from "third-party-ui"; export default ThirdPartyModal;';
+  assert.equal(findUnmanagedSurfaceRisks(defaultAssignment, "apps/web/src/config/industry/default.ts").length, 1);
+
+  const wrapper = `import { Dialog as BaseDialog } from "@workloom/ui";
+    export function RejectDialog(props){ return <BaseDialog {...props} />; }`;
+  assert.deepEqual(findUnmanagedSurfaceRisks(wrapper, "apps/web/src/components/RejectDialog.tsx"), []);
+  assert.deepEqual(findSurfaceModuleFacts(wrapper, "apps/web/src/components/RejectDialog.tsx").provableExports, ["RejectDialog"]);
+  const trustedUse = 'import { RejectDialog } from "./RejectDialog"; export const View=()=> <RejectDialog open />;';
+  assert.deepEqual(findUnmanagedSurfaceRisks(trustedUse, "apps/web/src/components/View.tsx", {
+    trustedRelativeSurfaceImports: ["RejectDialog"],
+  }), []);
+
+  const canonicalReExport = 'export { Dialog as HotelDialog } from "@workloom/ui";';
+  assert.deepEqual(findUnmanagedSurfaceRisks(canonicalReExport, "apps/web/src/config/industry/safe.ts"), []);
+  assert.deepEqual(findSurfaceModuleFacts(canonicalReExport, "apps/web/src/config/industry/safe.ts").provableExports, ["HotelDialog"]);
+});
+
+test("嵌套同名安全诱饵不能覆盖真实顶层 surface 导出", () => {
+  const shadowDecoy = `
+    import { Dialog } from "@workloom/ui";
+    import { VendorPanel } from "third-party-ui";
+    export function HotelDialog(){ return <VendorPanel />; }
+    function Decoy(){ function HotelDialog(){ return <Dialog open />; } return null; }
+  `;
+  const risks = findUnmanagedSurfaceRisks(shadowDecoy, "apps/web/src/config/industry/HotelDialog.tsx");
+  assert.ok(risks.some((risk) => risk.rule.includes("同名或词法阴影")));
+  assert.ok(risks.some((risk) => risk.rule.includes("必须委托")));
+  assert.deepEqual(findSurfaceModuleFacts(shadowDecoy, "apps/web/src/config/industry/HotelDialog.tsx").provableExports, []);
+
+  const scoped = `
+    import { Dialog as BaseDialog } from "@workloom/ui";
+    export function Feature(){
+      function LocalDialog(props){ return <BaseDialog {...props} />; }
+      return <LocalDialog open />;
+    }
+  `;
+  assert.deepEqual(findUnmanagedSurfaceRisks(scoped, "apps/web/src/config/industry/Feature.tsx"), []);
+  assert.deepEqual(findSurfaceModuleFacts(scoped, "apps/web/src/config/industry/Feature.tsx").provableExports, []);
+
+  const siblingDecoy = `
+    import { Dialog } from "@workloom/ui";
+    import { VendorPanel } from "third-party-ui";
+    export function HotelDialog(props){ return <><VendorPanel {...props} /><Dialog open={false} /></>; }
+  `;
+  assert.ok(findUnmanagedSurfaceRisks(siblingDecoy, "apps/web/src/config/industry/Sibling.tsx")
+    .some((risk) => risk.rule.includes("必须委托")));
+  assert.deepEqual(findSurfaceModuleFacts(siblingDecoy, "apps/web/src/config/industry/Sibling.tsx").provableExports, []);
+
+  const conditional = `
+    import { Dialog, Drawer } from "@workloom/ui";
+    export function DecisionDialog(props){ return props.compact ? <Dialog {...props} /> : <Drawer {...props} />; }
+  `;
+  assert.deepEqual(findUnmanagedSurfaceRisks(conditional, "apps/web/src/config/industry/Conditional.tsx"), []);
+  assert.deepEqual(findSurfaceModuleFacts(conditional, "apps/web/src/config/industry/Conditional.tsx").provableExports, ["DecisionDialog"]);
+});
+
+test("行业 CSS/SCSS 浮面门禁覆盖五类可写路径并精确豁免共享实现", () => {
+  for (const file of [
+    "apps/web/src/extensions/hotel/cover.module.css",
+    "apps/webb/src/projections/hotel/cover.scss",
+    "apps/webc/src/config/industry/cover.css",
+    "apps/web/src/theme/industry/cover.module.scss",
+    "apps/webc/public/industry/cover.css",
+  ]) assert.equal(isIndustryExtensionStylesheet(file), true, file);
+  assert.equal(isIndustryExtensionStylesheet("apps/web/src/styles/cover.css"), false);
+  const cssModuleOverlay = ".cover { position: fixed; inset: 0; z-index: 999; }";
+  assert.equal(findStylesheetSurfaceRisks(cssModuleOverlay, "apps/web/src/config/industry/cover.module.css").length, 1);
+  const scssOverlay = ".shell { .mask { position: fixed; top: 0; right: 0; bottom: 0; left: 0; } }";
+  assert.equal(findStylesheetSurfaceRisks(scssOverlay, "apps/webb/src/theme/industry/cover.scss").length, 1);
+  const backdropOverlay = ".mask { position: fixed; top: 0; backdrop-filter: blur(8px); }";
+  assert.equal(findStylesheetSurfaceRisks(backdropOverlay, "apps/webc/public/industry/cover.css").length, 1);
+  const ordinaryHeader = ".header { position: fixed; top: 0; z-index: 20; }";
+  assert.deepEqual(findStylesheetSurfaceRisks(ordinaryHeader, "apps/web/src/extensions/hotel/header.css"), []);
+  assert.deepEqual(findStylesheetSurfaceRisks(cssModuleOverlay, "packages/ui/src/components.css"), []);
+  assert.equal(findStylesheetSurfaceRisks(cssModuleOverlay, "packages/ui/src/industry-copy.css").length, 1);
+});
+
+test("行业 JSON/YAML 文案递归纳管并要求客户端导入时显式分区", () => {
+  const labelsPath = "apps/web/src/extensions/hotel/labels.json";
+  assert.equal(isIndustryUiConfig(labelsPath), true);
+  assert.ok(findIndustryConfigDisplayRisks('{"title":"tenant_id"}', labelsPath)
+    .some((risk) => risk.text === "tenant_id"));
+  assert.ok(findIndustryConfigDisplayRisks('title: tenant_id\n', "apps/webb/src/theme/industry/labels.yml")
+    .some((risk) => risk.text === "tenant_id"));
+  const separated = JSON.stringify({ machine: { tenant_id: "raw_tenant" }, display: { tenant: "租户" } });
+  assert.deepEqual(findIndustryConfigDisplayRisks(separated, labelsPath, { requirePartition: true }), []);
+  assert.ok(findIndustryConfigDisplayRisks('{"title":"酒店"}', labelsPath, { requirePartition: true })
+    .some((risk) => risk.rule.includes("display 与 machine")));
+  assert.deepEqual(findIndustryConfigImports('import labels from "./labels.json";', "apps/web/src/extensions/hotel/Page.tsx"), [
+    { line: 1, path: "./labels.json", text: "./labels.json", rule: "" },
+  ]);
+  for (const indicator of ["|", "|-", "|+", ">", ">-", ">+"]) {
+    const yaml = `display:\n  title: ${indicator}\n    tenant_id console\n`;
+    assert.ok(findIndustryConfigDisplayRisks(yaml, "apps/web/src/extensions/hotel/labels.yaml")
+      .some((risk) => risk.rule.includes("block scalar")), indicator);
+  }
+  for (const yaml of [
+    "---\ndisplay:\n  title: 酒店\n",
+    "base: &copy\n  title: 酒店\ndisplay: *copy\n",
+    "display: !copy\n  title: 酒店\n",
+    "display:\n  <<: *copy\n",
+  ]) assert.ok(findIndustryConfigDisplayRisks(yaml, "apps/web/src/extensions/hotel/labels.yml").length > 0, yaml);
+});
+
+test("行业 CSS/SCSS 与 HTML 资源只允许静态相对本地依赖", () => {
+  assert.deepEqual(findStylesheetImports('@import "./base.css"; @use "../tokens" as tokens;')
+    .map((item) => item.path), ["./base.css", "../tokens"]);
+  for (const source of [
+    '@import "https://cdn.example/fork.css";',
+    '@import url("//cdn.example/fork.css");',
+    '@import "data:text/css,body{}";',
+    '@import $themePath;',
+    '@use "#{$theme}/fork";',
+  ]) assert.ok(findStylesheetImports(source)[0]?.rule, source);
+
+  const htmlPath = "apps/web/public/industry/hotel/index.html";
+  assert.deepEqual(findIndustryHtmlResourceReferences(
+    '<script src="./app.js"></script><link rel="stylesheet" href="./app.css">', htmlPath,
+  ).map((item) => item.path), ["./app.js", "./app.css"]);
+  const external = findIndustryHtmlResourceReferences(
+    '<script src="https://cdn.example/app.js"></script><link rel="stylesheet" href="//cdn.example/app.css"><object data="https://fork.example/ui"></object><embed src="//fork.example/ui">', htmlPath,
+  );
+  assert.equal(external.length, 4);
+  assert.ok(external.every((item) => item.rule.includes("静态相对本地资源")));
+  assert.equal(findIndustryHtmlResourceReferences('<iframe src="/industry/hotel/nested.html"></iframe>', htmlPath)[0]?.path,
+    "/industry/hotel/nested.html");
+});
+
+test("行业 iframe/webview 禁止远端与动态界面但允许本地静态资源", () => {
+  const file = "apps/web/src/extensions/hotel/Help.tsx";
+  assert.equal(findIndustryEmbeddedUiRisks('<iframe src="https://fork.example/ui" />', file).length, 1);
+  assert.equal(findIndustryEmbeddedUiRisks('<webview src={remoteUrl} />', file).length, 1);
+  assert.equal(findIndustryEmbeddedUiRisks('<iframe srcDoc={html} />', file).length, 1);
+  assert.deepEqual(findIndustryEmbeddedUiRisks('<iframe src="/industry/hotel/help.html" />', file), []);
+  assert.equal(findIndustryEmbeddedUiRisks('<object data="https://fork.example/ui" />', file).length, 1);
+  assert.equal(findIndustryEmbeddedUiRisks('<embed src={remoteUrl} />', file).length, 1);
+  assert.equal(findIndustryEmbeddedUiReferences('<iframe src="/industry/hotel/help.html" />', file)[0]?.path,
+    "/industry/hotel/help.html");
+  assert.deepEqual(findIndustryEmbeddedUiRisks('<iframe src="https://fork.example/ui" />', "apps/web/src/pages/Help.tsx"), []);
+});
+
+test("PC 导航门禁覆盖 clientFoundation 的全部五类行业可写路径", () => {
+  for (const file of [
+    "apps/web/src/extensions/hotel/Page.tsx",
+    "apps/web/src/projections/hotel/Page.tsx",
+    "apps/web/src/config/industry/navigation.tsx",
+    "apps/web/src/theme/industry/navigation.jsx",
+    "apps/web/public/industry/navigation.js",
+  ]) assert.equal(isPcIndustryNavigationSource(file), true, file);
+  assert.equal(isPcIndustryNavigationSource("apps/web/src/config/industries/navigation.tsx"), false);
+  assert.equal(findPcExtensionNavigationRisks('<nav><button>概览</button></nav>', "apps/web/src/extensions/hotel/Page.tsx").length, 1);
+  assert.equal(findPcExtensionNavigationRisks('<PageNav />', "apps/web/src/projections/hotel/Page.tsx").length, 1);
+  assert.equal(findPcExtensionNavigationRisks('<nav />', "apps/web/src/config/industry/navigation.tsx").length, 1);
+  assert.equal(findPcExtensionNavigationRisks('<TopNav />', "apps/web/src/theme/industry/navigation.tsx").length, 1);
+  assert.equal(findPcExtensionNavigationRisks('<HotelNavigation />', "apps/web/src/theme/industry/navigation.tsx").length, 1);
+  assert.equal(findPcExtensionNavigationRisks('<Ui.PageNavigation />', "apps/web/public/industry/navigation.js").length, 1);
+  assert.equal(findPcExtensionNavigationRisks('<SectionNavigation items={items} />', "apps/web/src/extensions/hotel/Page.tsx").length, 1);
+  const sharedSection = 'import { SectionNavigation } from "@workloom/ui"; export const View=()=> <SectionNavigation items={items} />;';
+  assert.deepEqual(findPcExtensionNavigationRisks(sharedSection, "apps/web/src/config/industry/navigation.tsx"), []);
+  const sharedAlias = 'import { SectionNavigation as IndustrySections } from "@workloom/ui"; export const View=()=> <IndustrySections items={items} />;';
+  assert.deepEqual(findPcExtensionNavigationRisks(sharedAlias, "apps/web/src/theme/industry/navigation.tsx"), []);
+  const shadowedSection = 'import { SectionNavigation } from "@workloom/ui"; export function View(SectionNavigation){ return <SectionNavigation items={items} />; }';
+  assert.equal(findPcExtensionNavigationRisks(shadowedSection, "apps/web/src/theme/industry/navigation.tsx").length, 1);
+  const nonNavigationConfig = 'export const industryTheme = { placement: "left", density: "comfortable" };';
+  assert.deepEqual(findPcExtensionNavigationRisks(nonNavigationConfig, "apps/web/src/config/industry/theme.ts"), []);
+  assert.deepEqual(findPcExtensionNavigationRisks('<nav />', "apps/webb/src/extensions/hotel/Page.tsx"), []);
 });
 
 test("Bundle 客户端配置只检查可见字段并拒绝混合机器字段", () => {
@@ -255,6 +645,25 @@ test("客户端样式门禁拒绝小字号、固定根宽度与强制单行", ()
   assert.equal(risks.some((item) => item.rule.includes("最小宽度")), true);
   assert.equal(risks.some((item) => item.rule.includes("强制单行")), true);
   assert.deepEqual(findStylesheetLayoutRisks("body { min-width: 0; } button { font-size: var(--wl-text-body); }"), []);
+});
+
+test("共享告警条在窄面板和文字放大时保留正文宽度，PC 端不得复制实现", () => {
+  const component = `export function BannerAlert(){return <div className="wl-banner-alert"><div className="wl-banner-alert__body"><div className="wl-banner-alert__copy" /></div><div className="wl-banner-alert__actions" /></div>}`;
+  const css = `
+    .wl-banner-alert { display:flex; flex-wrap:wrap; min-width:0; max-inline-size:100%; }
+    .wl-banner-alert__body { display:grid; flex:1 1 20rem; min-width:0; grid-template-columns:auto minmax(0,1fr); }
+    .wl-banner-alert__copy { min-width:0; overflow-wrap:anywhere; }
+  `;
+  const adapter = `export { BannerAlert } from "@workloom/ui";`;
+  assert.deepEqual(findBannerAlertContractRisks(component, css, adapter), []);
+  const risks = findBannerAlertContractRisks(
+    component,
+    css.replace("flex-wrap:wrap", "flex-wrap:nowrap").replace("flex:1 1 20rem", "flex:1 1 0"),
+    `export function BannerAlert(){ return <div /> }`,
+  );
+  assert.ok(risks.some((risk) => risk.includes("空间不足时换行")));
+  assert.ok(risks.some((risk) => risk.includes("弹性基准宽度")));
+  assert.ok(risks.some((risk) => risk.includes("只能从 @workloom/ui 重导出")));
 });
 
 test("纯图标与纯表情按钮必须有可访问名称", () => {

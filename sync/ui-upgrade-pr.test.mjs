@@ -1,23 +1,37 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
+import YAML from "yaml";
+import { findUiReleaseWorkflowRisks } from "./ui-release-workflow-contract.mjs";
 import {
+  assertExactUpgradePathSet,
+  assertPublishedArtifactIntegrity,
+  assertReleasePayloadIntegrity,
   assertIndependentUpgradeBranch,
   buildUpgradePullRequestBody,
   canCreateUpgradePr,
+  classifyCloneFailure,
+  cloneChildReadOnly,
   inspectMigratedConsumer,
+  packTaggedUiArtifact,
   preflightChildren,
+  readOfficialRegistryIntegrity,
+  redactCloneDiagnostic,
   renderConsumerWorkflow,
   resolvePreflightTarget,
   rolloutHasFailure,
+  sanitizedSubprocessEnvironment,
   selectRolloutBatch,
+  stageExactUpgradeChanges,
   validateChildInventory,
   validateRelease,
+  verifyPublishedArtifact,
+  verifyCanonicalReleaseTag,
 } from "./ui-upgrade-pr.mjs";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
@@ -77,7 +91,7 @@ function createReadyConsumer(repo, repository = "geniusdapeng-collab/example") {
       "product:verify": "node scripts/verify-product-content.mjs",
       "bundle:governance": "tsx scripts/bundle-governance.mts",
     },
-    devDependencies: { tsx: "^4.23.12" },
+    devDependencies: { tsx: "^4.23.12", "typescript-governance": "npm:typescript@5.9.3" },
   });
   writeFileSync(join(repo, "pnpm-workspace.yaml"), [
     "packages:",
@@ -169,8 +183,65 @@ function initializeMainRepository(target) {
   mkdirSync(target, { recursive: true });
   writeFileSync(join(target, "README.md"), "fixture\n");
   execFileSync("git", ["init", "-b", "main"], { cwd: target, stdio: "ignore" });
-  execFileSync("git", ["add", "-A"], { cwd: target, stdio: "ignore" });
+  const fixturePaths = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "-z", "--"], {
+    cwd: target,
+    encoding: "utf8",
+  }).split("\0").filter(Boolean);
+  execFileSync("git", ["add", "--", ...fixturePaths], { cwd: target, stdio: "ignore" });
   execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@workloom.im", "commit", "-m", "fixture"], { cwd: target, stdio: "ignore" });
+}
+
+function commitFixture(target, message) {
+  execFileSync("git", ["add", "--all"], { cwd: target, stdio: "ignore" });
+  execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@workloom.im", "commit", "-m", message], { cwd: target, stdio: "ignore" });
+}
+
+function createBareOrigin(target, origin, { pushMain = true, pushTag = true } = {}) {
+  execFileSync("git", ["init", "--bare", "--initial-branch=main", origin], { stdio: "ignore" });
+  execFileSync("git", ["remote", "add", "origin", origin], { cwd: target, stdio: "ignore" });
+  if (pushMain) execFileSync("git", ["push", "origin", "main"], { cwd: target, stdio: "ignore" });
+  if (pushTag) execFileSync("git", ["push", "origin", "refs/tags/ui-v1.2.3"], { cwd: target, stdio: "ignore" });
+}
+
+function writeTaggedReleaseSource(root) {
+  writeJson(join(root, "package.json"), { name: "fixture-root", private: true, packageManager: "pnpm@10.14.0" });
+  writeFileSync(join(root, "pnpm-workspace.yaml"), 'packages:\n  - "packages/*"\n');
+  writeJson(join(root, "tsconfig.base.json"), { compilerOptions: {} });
+  writeJson(join(root, "sync/base-capabilities.json"), manifest);
+  writeJson(join(root, "sync/child-repos.json"), {
+    uiRolloutWaveOrder: ["W1"],
+    children: Array.from({ length: 8 }, (_, index) => ({ repo: `org/repo-${index}`, uiRolloutWave: "W1" })),
+  });
+  writeFileSync(join(root, "sync/ui-consumer-template.yml"), "name: consumer\n# __REPO_DIR__\n");
+  for (const path of [
+    "sync/ui-upgrade-pr.mjs",
+    "sync/client-foundation.mjs",
+    "sync/set-ui-version.mjs",
+    "sync/install-ui-governance.mjs",
+    "sync/install-adoption-assets.mjs",
+  ]) writeFileSync(join(root, path), `// release controller ${path}\n`);
+  for (const path of [
+    "scripts/verify-ui-consumer.mjs",
+    "scripts/ui-governance-rules.mjs",
+    "scripts/verify-client-foundation-consumer.mjs",
+    "scripts/verify-production-client-boundary.mjs",
+  ]) {
+    mkdirSync(dirname(join(root, path)), { recursive: true });
+    writeFileSync(join(root, path), `// release payload ${path}\n`);
+  }
+  writeJson(join(root, "packages/ui/package.json"), {
+    name: "@workloom/ui",
+    version: "1.2.3",
+    files: ["index.js"],
+    publishConfig: { access: "public", registry: "https://registry.npmjs.org" },
+  });
+  writeFileSync(join(root, "packages/ui/index.js"), "export const source = 'stable-tag';\n");
+  for (const client of ["web", "webb", "webc"]) {
+    writeJson(join(root, `apps/${client}/package.json`), { dependencies: { "@workloom/ui": "workspace:*" } });
+    mkdirSync(join(root, `apps/${client}/src`), { recursive: true });
+    writeFileSync(join(root, `apps/${client}/src/main.tsx`), `export const client = ${JSON.stringify(client)};\n`);
+  }
+  writeJson(join(root, "apps/webc/public/service-front.config.json"), { schemaVersion: "workloom.service-front-shell/v1" });
 }
 
 describe("UI 稳定发布门禁", () => {
@@ -185,6 +256,199 @@ describe("UI 稳定发布门禁", () => {
       () => validateRelease({ ...manifest, releasePolicy: "anything" }, { version: "1.2.3" }, "1.2.3"),
       /base-first-stable-only/,
     );
+  });
+
+  it("rollout 从固定 ui-v 标签生成 npm pack，并逐字节核对 registry dist.integrity", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "workloom-ui-tagged-pack-"));
+    const root = join(fixtureRoot, "base");
+    const origin = join(fixtureRoot, "origin.git");
+    const packFixture = ({ cwd }) => [{
+      name: "@workloom/ui",
+      version: "1.2.3",
+      integrity: `sha512-${createHash("sha512").update(readFileSync(join(cwd, "index.js"))).digest("base64")}`,
+    }];
+    const taggedPackOptions = {
+      root,
+      manifest,
+      version: "1.2.3",
+      pack: packFixture,
+      readNpmVersion: () => "11.6.2",
+      readPnpmVersion: () => "10.14.0",
+      expectedOriginUrl: origin,
+    };
+    try {
+      writeTaggedReleaseSource(root);
+      initializeMainRepository(root);
+      execFileSync("git", ["tag", "ui-v1.2.3"], { cwd: root, stdio: "ignore" });
+      createBareOrigin(root, origin);
+
+      const tagged = packTaggedUiArtifact(taggedPackOptions);
+      assert.equal(tagged.package, "@workloom/ui");
+      assert.equal(tagged.version, "1.2.3");
+      assert.equal(tagged.sourceRef, "refs/tags/ui-v1.2.3");
+      assert.match(tagged.integrity, /^sha512-/u);
+      assert.equal(assertReleasePayloadIntegrity(tagged.releasePayload), true);
+      assert.ok(tagged.releasePayload.clientFoundation.fileCount >= 7);
+      assert.equal(tagged.releasePayload.governance.fileCount, 12);
+      assert.equal(execFileSync("git", ["for-each-ref", "--format=%(refname)", "refs/workloom-release-verification"], { cwd: root, encoding: "utf8" }).trim(), "");
+
+      // 工作树即使出现未提交污染，重新 pack 仍只读取固定标签。
+      writeFileSync(join(root, "packages/ui/index.js"), "export const source = 'dirty-worktree';\n");
+      const repacked = packTaggedUiArtifact(taggedPackOptions);
+      assert.equal(repacked.integrity, tagged.integrity);
+      assert.deepEqual(
+        verifyPublishedArtifact(manifest, "1.2.3", {
+          root,
+          packArtifact: () => repacked,
+          readRemoteIntegrity: () => tagged.integrity,
+        }),
+        { ...repacked, registryIntegrity: tagged.integrity },
+      );
+      assert.throws(
+        () => assertPublishedArtifactIntegrity(repacked, `sha512-${"A".repeat(88)}`, "@workloom/ui", "1.2.3"),
+        /dist\.integrity 不一致/u,
+      );
+      assert.throws(
+        () => assertPublishedArtifactIntegrity(repacked, "1.2.3", "@workloom/ui", "1.2.3"),
+        /尚未返回.*dist\.integrity/u,
+      );
+      const tamperedPayload = structuredClone(repacked);
+      tamperedPayload.releasePayload.files[0].sha256 = "0".repeat(64);
+      assert.throws(
+        () => assertPublishedArtifactIntegrity(tamperedPayload, tagged.integrity, "@workloom/ui", "1.2.3"),
+        /载荷摘要不一致/u,
+      );
+      assert.throws(
+        () => packTaggedUiArtifact({ ...taggedPackOptions, readNpmVersion: () => "latest" }),
+        /工具链必须固定/u,
+      );
+
+      for (const controller of [
+        "sync/ui-upgrade-pr.mjs",
+        "sync/client-foundation.mjs",
+        "sync/set-ui-version.mjs",
+        "sync/install-ui-governance.mjs",
+        "sync/install-adoption-assets.mjs",
+      ]) {
+        const controllerPath = join(root, controller);
+        const original = execFileSync("git", ["show", `refs/tags/ui-v1.2.3:${controller}`], { cwd: root });
+        writeFileSync(controllerPath, "// dirty rollout controller\n");
+        assert.throws(
+          () => packTaggedUiArtifact(taggedPackOptions),
+          /工作树字节与 canonical .*拒绝下发未封存治理载荷/u,
+          `${controller} 脏改必须在任何下游访问前 fail closed`,
+        );
+        writeFileSync(controllerPath, original);
+      }
+      const childInventoryPath = join(root, "sync/child-repos.json");
+      const childInventory = execFileSync("git", ["show", "refs/tags/ui-v1.2.3:sync/child-repos.json"], { cwd: root });
+      writeJson(childInventoryPath, {
+        uiRolloutWaveOrder: ["W1"],
+        children: Array.from({ length: 8 }, (_, index) => ({ repo: `attacker/repo-${index}`, uiRolloutWave: "W1" })),
+      });
+      assert.throws(
+        () => packTaggedUiArtifact(taggedPackOptions),
+        /child-repos\.json 工作树字节与 canonical .*拒绝下发未封存治理载荷/u,
+      );
+      writeFileSync(childInventoryPath, childInventory);
+
+      execFileSync("git", ["add", "packages/ui/index.js"], { cwd: root, stdio: "ignore" });
+      execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@workloom.im", "commit", "-m", "after stable tag"], { cwd: root, stdio: "ignore" });
+      assert.throws(
+        () => packTaggedUiArtifact(taggedPackOptions),
+        /必须在已固定 refs\/tags\/ui-v1\.2\.3/u,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("canonical tag 信任锚拒绝无远端、同名歧义标签与非 main 祖先", () => {
+    const roots = [];
+    try {
+      const noRemote = mkdtempSync(join(tmpdir(), "workloom-ui-no-origin-"));
+      roots.push(noRemote);
+      initializeMainRepository(noRemote);
+      execFileSync("git", ["tag", "ui-v1.2.3"], { cwd: noRemote, stdio: "ignore" });
+      assert.throws(
+        () => verifyCanonicalReleaseTag({ root: noRemote, sourceRef: "refs/tags/ui-v1.2.3" }),
+        /缺少 canonical origin/u,
+      );
+
+      const ambiguousRoot = mkdtempSync(join(tmpdir(), "workloom-ui-ambiguous-tag-"));
+      roots.push(ambiguousRoot);
+      const ambiguousRepo = join(ambiguousRoot, "base");
+      const ambiguousOrigin = join(ambiguousRoot, "origin.git");
+      initializeMainRepository(ambiguousRepo);
+      execFileSync("git", ["tag", "ui-v1.2.3"], { cwd: ambiguousRepo, stdio: "ignore" });
+      createBareOrigin(ambiguousRepo, ambiguousOrigin);
+      mkdirSync(join(ambiguousRepo, "apps/web"), { recursive: true });
+      writeFileSync(join(ambiguousRepo, "apps/web/tampered.tsx"), "export const tampered = true;\n");
+      commitFixture(ambiguousRepo, "local payload tamper");
+      execFileSync("git", ["tag", "--force", "ui-v1.2.3"], { cwd: ambiguousRepo, stdio: "ignore" });
+      assert.throws(
+        () => verifyCanonicalReleaseTag({
+          root: ambiguousRepo,
+          sourceRef: "refs/tags/ui-v1.2.3",
+          expectedOriginUrl: ambiguousOrigin,
+        }),
+        /同名标签不一致/u,
+      );
+
+      const sideRoot = mkdtempSync(join(tmpdir(), "workloom-ui-side-tag-"));
+      roots.push(sideRoot);
+      const sideRepo = join(sideRoot, "base");
+      const sideOrigin = join(sideRoot, "origin.git");
+      initializeMainRepository(sideRepo);
+      execFileSync("git", ["tag", "ui-v1.2.3"], { cwd: sideRepo, stdio: "ignore" });
+      createBareOrigin(sideRepo, sideOrigin, { pushTag: false });
+      execFileSync("git", ["switch", "-c", "side-release"], { cwd: sideRepo, stdio: "ignore" });
+      writeFileSync(join(sideRepo, "SIDE.md"), "not merged to main\n");
+      commitFixture(sideRepo, "side release");
+      execFileSync("git", ["tag", "--force", "ui-v1.2.3"], { cwd: sideRepo, stdio: "ignore" });
+      execFileSync("git", ["push", "--force", "origin", "refs/tags/ui-v1.2.3"], { cwd: sideRepo, stdio: "ignore" });
+      assert.throws(
+        () => verifyCanonicalReleaseTag({
+          root: sideRepo,
+          sourceRef: "refs/tags/ui-v1.2.3",
+          expectedOriginUrl: sideOrigin,
+        }),
+        /不是 canonical origin\/main 的祖先/u,
+      );
+    } finally {
+      for (const root of roots) rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("registry 完整性查询忽略自定义 HOME scope registry 并只信任 npmjs", () => {
+    const root = mkdtempSync(join(tmpdir(), "workloom-malicious-npm-home-"));
+    const maliciousHome = join(root, "home");
+    mkdirSync(maliciousHome, { recursive: true });
+    writeFileSync(join(maliciousHome, ".npmrc"), "@workloom:registry=https://registry.attacker.invalid\n");
+    const expectedIntegrity = `sha512-${"A".repeat(88)}`;
+    try {
+      const actual = readOfficialRegistryIntegrity({
+        packageName: "@workloom/ui",
+        targetVersion: "1.2.3",
+        ambientEnvironment: { ...process.env, HOME: maliciousHome, NPM_CONFIG_REGISTRY: "https://registry.attacker.invalid" },
+        execute(command, args, options) {
+          assert.equal(command, "npm");
+          assert.ok(args.includes("--registry=https://registry.npmjs.org"));
+          assert.notEqual(options.cwd, root);
+          assert.equal(options.env.HOME, options.cwd);
+          assert.equal(options.env.NPM_CONFIG_REGISTRY, undefined);
+          for (const prefix of ["--userconfig=", "--globalconfig="]) {
+            const config = args.find((arg) => arg.startsWith(prefix))?.slice(prefix.length);
+            assert.ok(config?.startsWith(`${options.cwd}/`));
+            assert.equal(readFileSync(config, "utf8"), "");
+          }
+          return JSON.stringify(expectedIntegrity);
+        },
+      });
+      assert.equal(actual, expectedIntegrity);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("首个稳定版为空时仍可对候选版做只读盘点，但不能借此绕过稳定发布", () => {
@@ -247,9 +511,100 @@ describe("UI 稳定发布门禁", () => {
     assert.deepEqual(blockers, []);
   });
 
+  it("公开下游只读克隆固定 HTTP/1.1，并在两个瞬态失败后用全新目录成功", () => {
+    const root = mkdtempSync(join(tmpdir(), "workloom-ui-clone-retry-"));
+    const targets = [];
+    const delays = [];
+    try {
+      const checkout = cloneChildReadOnly({ repo: "org/example" }, root, "", {
+        backoffMs: 2,
+        sleep(milliseconds) { delays.push(milliseconds); },
+        cloneRunner({ attempt, target, args }) {
+          targets.push(target);
+          assert.deepEqual(args.slice(0, 3), ["-c", "http.version=HTTP/1.1", "clone"]);
+          assert.deepEqual(args.slice(3, 6), ["--depth", "1", "--no-tags"]);
+          assert.equal(args.at(-2), "https://github.com/org/example.git");
+          assert.equal(args.at(-1), target);
+          if (attempt < 3) {
+            mkdirSync(target, { recursive: true });
+            writeFileSync(join(target, "partial"), "incomplete\n");
+            const error = new Error("RPC failed");
+            error.stderr = Buffer.from("error: RPC failed; HTTP/2 stream closed; early EOF");
+            throw error;
+          }
+          initializeMainRepository(target);
+        },
+      });
+
+      assert.equal(new Set(targets).size, 3, "每次重试必须使用全新目标目录");
+      assert.deepEqual(delays, [2, 4]);
+      assert.equal(checkout, targets[2]);
+      assert.ok(existsSync(join(checkout, ".git")));
+      assert.equal(existsSync(dirname(targets[0])), false, "第一次失败残留必须清理");
+      assert.equal(existsSync(dirname(targets[1])), false, "第二次失败残留必须清理");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("瞬态克隆永久失败会在有限重试后 fail closed、清理残留并结构化脱敏", () => {
+    const root = mkdtempSync(join(tmpdir(), "workloom-ui-clone-permanent-"));
+    const token = ["ghp", "A".repeat(36)].join("_");
+    const encodedHeader = Buffer.from(`x-access-token:${token}`).toString("base64");
+    let attempts = 0;
+    let caught;
+    try {
+      cloneChildReadOnly({ repo: "org/missing" }, root, token, {
+        backoffMs: 0,
+        sleep() {},
+        cloneRunner({ target, args }) {
+          attempts += 1;
+          assert.equal(args.at(-2), "https://github.com/org/missing.git");
+          assert.doesNotMatch(args.join(" "), /x-access-token|ghp_/u, "认证不得进入 URL 或命令参数");
+          mkdirSync(target, { recursive: true });
+          writeFileSync(join(target, "partial"), "incomplete\n");
+          const error = new Error("clone failed");
+          error.stderr = Buffer.from([
+            "error: RPC failed; HTTP/2 stream closed; early EOF",
+            `Authorization: Basic ${encodedHeader}`,
+            ["fatal: unable to access '", "https://", `x-access-token:${token}`, "@github.com/org/missing.git'"].join(""),
+          ].join("\n"));
+          throw error;
+        },
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    assert.ok(caught);
+    assert.equal(caught.code, "WORKLOOM_READ_ONLY_CLONE_FAILED");
+    assert.equal(caught.classification, "network-transient");
+    assert.equal(caught.attempts, 3);
+    assert.equal(attempts, 3);
+    assert.doesNotMatch(caught.message, new RegExp(token, "u"));
+    assert.doesNotMatch(caught.message, new RegExp(encodedHeader, "u"));
+    assert.doesNotMatch(caught.message, /https:\/\/x-access-token:/u);
+    assert.match(caught.message, /\[REDACTED\]/u);
+    assert.deepEqual(readdirSync(root), [], "永久失败不得留下半克隆目录");
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("克隆错误分类与通用诊断脱敏保持确定性", () => {
+    assert.equal(classifyCloneFailure("RPC failed; HTTP/2 stream closed"), "network-transient");
+    assert.equal(classifyCloneFailure("HTTP 429 rate limit exceeded"), "rate-limited");
+    assert.equal(classifyCloneFailure("Authentication failed"), "authentication");
+    assert.equal(classifyCloneFailure("Repository not found"), "repository-unavailable");
+    assert.equal(classifyCloneFailure("unexpected git error"), "unknown");
+    assert.equal(
+      redactCloneDiagnostic(["fatal https://", "user:password", "@example.test/repo.git"].join("")),
+      "fatal https://[REDACTED]@example.test/repo.git",
+    );
+  });
+
   it("存量迁移缺口会结构化报告，但不反向阻断基座稳定制品", () => {
     const children = Array.from({ length: 8 }, (_, index) => ({ repo: `org/repo-${index}`, pathPrefix: "", uiRolloutWave: index < 2 ? "W1" : "W2" }));
     let cloneCalls = 0;
+    const cloneRoots = [];
     const report = preflightChildren({
       children,
       waveOrder,
@@ -257,10 +612,12 @@ describe("UI 稳定发布门禁", () => {
       version: "1.2.3",
       cloneChild(_child, target) {
         cloneCalls += 1;
+        cloneRoots.push(target);
         initializeMainRepository(target);
       },
     });
     assert.equal(cloneCalls, 8);
+    assert.ok(cloneRoots.every((target) => !existsSync(target)), "成功预检的临时工作树也必须全部清理");
     assert.equal(report.schemaVersion, "workloom.ui-downstream-preflight/v1");
     assert.equal(report.targetChannel, "stable");
     assert.equal(report.requiredRepositoryCount, 8);
@@ -276,19 +633,28 @@ describe("UI 稳定发布门禁", () => {
 
   it("仓库不可访问仍会阻断基座发布资格", () => {
     const children = Array.from({ length: 8 }, (_, index) => ({ repo: `org/repo-${index}`, pathPrefix: "", uiRolloutWave: "W1" }));
+    let failedTemp;
     const report = preflightChildren({
       children,
       waveOrder,
       manifest,
       version: "1.2.3",
       cloneChild(child, target) {
-        if (child.repo.endsWith("repo-7")) throw new Error("denied");
+        if (child.repo.endsWith("repo-7")) {
+          failedTemp = target;
+          writeFileSync(join(target, "partial"), "incomplete\n");
+          throw new Error("denied");
+        }
         initializeMainRepository(target);
       },
     });
     assert.equal(report.baseReleaseReady, false);
     assert.equal(report.summary.unreachable, 1);
-    assert.ok(report.repositories.at(-1).blockers.some((entry) => entry.code === "CLONE_FAILED" && entry.phase === "access"));
+    assert.equal(existsSync(failedTemp), false, "preflight 最终路径必须在失败后清理");
+    assert.ok(report.repositories.at(-1).blockers.some((entry) => entry.code === "CLONE_FAILED"
+      && entry.phase === "access"
+      && entry.failureClass === "unknown"
+      && entry.attempts === 1));
   });
 
   it("默认只选择最早未完成波次，显式选择也不得越级", () => {
@@ -336,6 +702,80 @@ describe("UI 稳定发布门禁", () => {
     assert.throws(() => assertIndependentUpgradeBranch("release/ui"), /非法升级分支/);
   });
 
+  it("升级编排只逐路径暂存声明且实际变化的精确白名单", () => {
+    const repo = mkdtempSync(join(tmpdir(), "workloom-ui-exact-stage-"));
+    try {
+      initializeMainRepository(repo);
+      writeFileSync(join(repo, "README.md"), "updated\n");
+      mkdirSync(join(repo, ".github/workflows"), { recursive: true });
+      writeFileSync(join(repo, ".github/workflows/workloom-ui-contract.yml"), "name: contract\n");
+      const staged = stageExactUpgradeChanges({
+        repoRoot: repo,
+        allowedPaths: ["README.md", ".github/workflows/workloom-ui-contract.yml", "pnpm-lock.yaml"],
+      });
+      assert.deepEqual(staged, [".github/workflows/workloom-ui-contract.yml", "README.md"]);
+      const cached = execFileSync(
+        "git",
+        ["diff", "--cached", "--name-only", "--no-renames", "-z", "HEAD", "--"],
+        { cwd: repo, encoding: "utf8" },
+      ).split("\0").filter(Boolean).sort();
+      assert.deepEqual(cached, staged);
+      assert.equal(execFileSync("git", ["diff", "--name-only", "--no-renames", "HEAD", "--"], { cwd: repo, encoding: "utf8" }).trim().split("\n").filter(Boolean).length, 2);
+      assert.equal(execFileSync("git", ["diff", "--name-only", "--no-renames", "--"], { cwd: repo, encoding: "utf8" }).trim(), "");
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("升级编排对生成的额外资产及暂存遗漏或夹带一律 fail closed", () => {
+    const repo = mkdtempSync(join(tmpdir(), "workloom-ui-exact-stage-blocked-"));
+    try {
+      initializeMainRepository(repo);
+      writeFileSync(join(repo, "README.md"), "updated\n");
+      mkdirSync(join(repo, "playwright-report"), { recursive: true });
+      writeFileSync(join(repo, "playwright-report/result.json"), "{}\n");
+      assert.throws(
+        () => stageExactUpgradeChanges({ repoRoot: repo, allowedPaths: ["README.md"] }),
+        /未声明变更.*playwright-report\/result\.json/u,
+      );
+      assert.equal(execFileSync("git", ["diff", "--cached", "--name-only"], { cwd: repo, encoding: "utf8" }).trim(), "");
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+
+    const ignoredRepo = mkdtempSync(join(tmpdir(), "workloom-ui-exact-stage-ignored-"));
+    try {
+      writeFileSync(join(ignoredRepo, ".gitignore"), ".workloom-ui.json\n");
+      initializeMainRepository(ignoredRepo);
+      writeFileSync(join(ignoredRepo, ".workloom-ui.json"), "{}\n");
+      assert.throws(
+        () => stageExactUpgradeChanges({ repoRoot: ignoredRepo, allowedPaths: [".workloom-ui.json"] }),
+        undefined,
+        "声明资产即使被目标仓 ignore 也不能漏报为 already-current",
+      );
+      assert.equal(execFileSync("git", ["diff", "--cached", "--name-only"], { cwd: ignoredRepo, encoding: "utf8" }).trim(), "");
+    } finally {
+      rmSync(ignoredRepo, { recursive: true, force: true });
+    }
+
+    assert.throws(
+      () => assertExactUpgradePathSet({
+        allowedPaths: ["package.json", "pnpm-lock.yaml"],
+        changedPaths: ["package.json", "pnpm-lock.yaml"],
+        stagedPaths: ["package.json"],
+      }),
+      /遗漏：pnpm-lock\.yaml/u,
+    );
+    assert.throws(
+      () => assertExactUpgradePathSet({
+        allowedPaths: ["package.json", "pnpm-lock.yaml"],
+        changedPaths: ["package.json"],
+        stagedPaths: ["package.json", "pnpm-lock.yaml"],
+      }),
+      /额外：pnpm-lock\.yaml/u,
+    );
+  });
+
   it("升级 PR 只列出消费工作流实际执行的门禁", () => {
     const body = buildUpgradePullRequestBody("1.2.3");
     assert.match(body, /三端逐一 typecheck 与生产 build/u);
@@ -344,6 +784,35 @@ describe("UI 稳定发布门禁", () => {
     assert.match(body, /存在 Python 测试时同时运行 pytest/u);
     assert.match(body, /Playwright.*基础主入口、首帧及稳定帧横向溢出冒烟/u);
     assert.doesNotMatch(body, /租户负向|视觉回归/u);
+  });
+
+  it("跨仓 token 不会被 pnpm、npm、verifier 或普通 git 子进程继承", () => {
+    const environment = sanitizedSubprocessEnvironment({
+      PATH: "/fixture/bin",
+      SYNC_TOKEN: "fixture-sync-secret",
+      GH_TOKEN: "fixture-gh-secret",
+      GITHUB_TOKEN: "fixture-github-secret",
+      NPM_TOKEN: "fixture-npm-secret",
+      NODE_AUTH_TOKEN: "fixture-node-auth-secret",
+      NPM_CONFIG_USERCONFIG: "/tmp/secret-npmrc",
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
+      GIT_CONFIG_VALUE_0: "AUTHORIZATION: basic sentinel",
+    }, {
+      LANG: "zh_CN.UTF-8",
+      SYNC_TOKEN: "explicit-secret-must-still-be-removed",
+    });
+    assert.equal(environment.PATH, "/fixture/bin");
+    assert.equal(environment.LANG, "zh_CN.UTF-8");
+    assert.equal(environment.SYNC_TOKEN, undefined);
+    assert.equal(environment.GH_TOKEN, undefined);
+    assert.equal(environment.GITHUB_TOKEN, undefined);
+    assert.equal(environment.NPM_TOKEN, undefined);
+    assert.equal(environment.NODE_AUTH_TOKEN, undefined);
+    assert.equal(environment.NPM_CONFIG_USERCONFIG, undefined);
+    assert.equal(environment.GIT_CONFIG_COUNT, undefined);
+    assert.equal(environment.GIT_CONFIG_KEY_0, undefined);
+    assert.equal(environment.GIT_CONFIG_VALUE_0, undefined);
   });
 
   it("消费工作流在普通仓和 Tiger governance 前缀下都指向真实客户端与证据路径", () => {
@@ -370,27 +839,104 @@ describe("UI 稳定发布门禁", () => {
     assert.throws(() => renderConsumerWorkflow("../governance"), /非法消费仓 pathPrefix/u);
   });
 
-  it("工作流严格先预检、再 publish、最后 rollout", () => {
+  it("工作流以固定 main 标签完成无凭据预检、最小权限 OIDC publish 与逐步 rollout", () => {
     const workflow = readFileSync(join(repoRoot, ".github/workflows/ui-release.yml"), "utf8");
+    const parsed = YAML.parse(workflow);
     assert.match(workflow, /^# ui-v\* 只封存共享 UI 与三端客户端基座/mu);
     assert.match(workflow, /^name: shared-ui-client-foundation-release$/mu);
     assert.match(workflow, /候选 Bundle 契约、摘要与投影一致性门禁/u);
     assert.doesNotMatch(workflow, /BUNDLE_SIGNING_PRIVATE_KEY|BUNDLE_SIGNING_KEY_ID|pnpm bundle:release|build\/bundle-trust\.json/u);
-    const preflight = workflow.indexOf("node sync/ui-upgrade-pr.mjs --preflight");
-    const publish = workflow.indexOf('npm publish "${TARBALLS[0]}"');
-    const rollout = workflow.indexOf("node sync/ui-upgrade-pr.mjs --rollout");
-    assert.ok(preflight >= 0 && publish > preflight && rollout > publish);
-    assert.match(workflow, /needs: verify-and-preflight/);
-    assert.match(workflow, /permissions:\n\s+contents: read/);
+    assert.deepEqual(findUiReleaseWorkflowRisks(workflow), []);
+
+    const verify = parsed.jobs["verify-and-preflight"];
+    const releaseTarget = verify.steps.find((step) => step.id === "release-target");
+    const preflight = verify.steps.find((step) => step.name === "八个下游仓访问与迁移现状只读预检");
+    assert.ok(releaseTarget && preflight);
+    assert.match(releaseTarget.run, /git merge-base --is-ancestor "\$TARGET_SHA" refs\/remotes\/origin\/main/u);
+    assert.match(releaseTarget.run, /git checkout --detach "\$TARGET_SHA"/u);
+    assert.equal(preflight.if, undefined, "公开八仓 preflight 不得被 token 条件跳过");
+    assert.doesNotMatch(JSON.stringify(preflight), /SYNC_TOKEN/u);
+
+    const publish = parsed.jobs["publish-ui"];
+    const automaticRollout = parsed.jobs["rollout-after-publish"];
+    const continueRollout = parsed.jobs["continue-rollout"];
+    assert.equal(publish.needs, "verify-and-preflight");
+    assert.deepEqual(automaticRollout.needs, ["verify-and-preflight", "publish-ui"]);
+    assert.equal(continueRollout.needs, "verify-and-preflight");
+    for (const job of [publish, automaticRollout, continueRollout]) assert.equal(job.environment, "production");
+    for (const job of Object.values(parsed.jobs)) assert.equal(job.env?.SYNC_TOKEN, undefined, "跨仓 token 不得放到 job scope");
+    const tokenSteps = Object.entries(parsed.jobs).flatMap(([jobName, job]) => (job.steps ?? [])
+      .filter((step) => step.env?.SYNC_TOKEN !== undefined)
+      .map((step) => `${jobName}:${step.name}`));
+    assert.deepEqual(tokenSteps, [
+      "rollout-after-publish:发布后仅创建八个独立升级 PR",
+      "continue-rollout:按严格波次继续创建独立升级 PR",
+    ]);
+    const fakeRollout = structuredClone(parsed);
+    fakeRollout.jobs["continue-rollout"].steps
+      .find((step) => step.name === "按严格波次继续创建独立升级 PR").run = [
+        "ARGS=(--rollout --version \"$STABLE_VERSION\")",
+        "# node sync/ui-upgrade-pr.mjs \"${ARGS[@]}\"",
+        "echo \"没有执行跨仓写入\"",
+      ].join("\n");
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(fakeRollout))
+      .some((risk) => risk.includes("只能在实际写 rollout 的 step")),
+    "只有 ARGS 或注释中的命令不得获得 SYNC_TOKEN");
+
+    const versionOnlyManualGate = structuredClone(parsed);
+    versionOnlyManualGate.jobs["continue-rollout"].steps
+      .find((step) => step.name === "从固定标签核验手动 rollout 的不可变 UI 制品").run =
+        'npm view "@workloom/ui@$STABLE_VERSION" version --json';
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(versionOnlyManualGate))
+      .some((risk) => risk.includes("dist.integrity 预校验")),
+    "手动 rollout 只查版本号不得通过语义契约");
+
+    const lateIntegrityGate = structuredClone(parsed);
+    const lateSteps = lateIntegrityGate.jobs["continue-rollout"].steps;
+    const integrityIndex = lateSteps.findIndex((step) => step.name === "从固定标签核验手动 rollout 的不可变 UI 制品");
+    lateSteps.push(...lateSteps.splice(integrityIndex, 1));
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(lateIntegrityGate))
+      .some((risk) => risk.includes("先通过 dist.integrity")),
+    "完整性核验位于跨仓写入之后不得通过");
+
+    const floatingPackCli = structuredClone(parsed);
+    floatingPackCli.jobs["continue-rollout"].steps
+      .find((step) => step.name === "固定复算不可变制品的 npm CLI").run = "npm install --global npm@latest";
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(floatingPackCli))
+      .some((risk) => risk.includes("固定 npm 11.6.2")),
+    "手动复算不得使用随时间漂移的 npm CLI");
+    const redirectedRegistry = structuredClone(parsed);
+    redirectedRegistry.jobs["publish-ui"].steps
+      .find((step) => step.name === "发布或核验完全相同的稳定 UI 制品").run =
+        redirectedRegistry.jobs["publish-ui"].steps
+          .find((step) => step.name === "发布或核验完全相同的稳定 UI 制品").run
+          .replaceAll(" --registry=https://registry.npmjs.org", "");
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(redirectedRegistry))
+      .some((risk) => risk.includes("显式固定官方 npmjs registry")),
+    "用户 npmrc 不得重定向发布、查询或确认 registry");
+    const floatingPublishConfig = structuredClone(parsed);
+    floatingPublishConfig.jobs["verify-and-preflight"].steps
+      .find((step) => step.name === "校验 UI 标签、稳定版本登记与包版本一致").run =
+        'node -e \'console.log("只检查版本")\' "$VERSION"';
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(floatingPublishConfig))
+      .some((risk) => risk.includes("npmjs/public publishConfig")),
+    "标签内 publishConfig 不得把 publish 重定向到其他 registry");
+    assert.equal(automaticRollout.steps[0].with.ref, "${{ needs.verify-and-preflight.outputs.release-sha }}");
+    assert.equal(continueRollout.steps[0].with.ref, "${{ needs.verify-and-preflight.outputs.release-sha }}");
+
+    const decoy = structuredClone(parsed);
+    decoy.jobs["publish-ui"].permissions["id-token"] = "read";
+    decoy.jobs.decoy = { permissions: { "id-token": "write" }, steps: [{ run: "echo npm publish fake --provenance" }] };
+    const decoyRisks = findUiReleaseWorkflowRisks(YAML.stringify(decoy));
+    assert.ok(decoyRisks.some((risk) => risk.includes("publish-ui 缺少") || risk.includes("只能授予 publish-ui")),
+      "错误 job 的 OIDC 文本不得让真正 publish job 通过");
+
     assert.match(workflow, /inputs\.action == 'rollout'/);
     assert.match(workflow, /--wave "\$ROLLOUT_WAVE"/);
     assert.match(workflow, /--repos "\$ROLLOUT_REPOSITORIES"/);
     assert.match(workflow, /sync\/client-foundation\.test\.mjs/u);
     assert.match(workflow, /m\.clientFoundation\.latestStableVersion!==v/u);
     assert.match(workflow, /client-foundation\.mjs verify-source/u);
-    const continueRollout = workflow.slice(workflow.indexOf("  continue-rollout:"));
-    assert.match(continueRollout, /uses: actions\/checkout@v4\n\s+with:\n\s+fetch-depth: 0/u);
-    assert.match(continueRollout, /git checkout --detach "ui-v\$STABLE_VERSION"/u);
     const desktopWorkflow = readFileSync(join(repoRoot, ".github/workflows/build-desktop.yml"), "utf8");
     assert.match(desktopWorkflow, /BUNDLE_SIGNING_PRIVATE_KEY/u);
     assert.match(desktopWorkflow, /pnpm bundle:release/u);
@@ -398,12 +944,47 @@ describe("UI 稳定发布门禁", () => {
     const implementation = readFileSync(join(repoRoot, "sync/ui-upgrade-pr.mjs"), "utf8");
     assert.match(implementation, /base: "main"/u);
     assert.match(implementation, /applyClientFoundation/u);
+    assert.match(implementation, /installUiGovernance/u);
+    assert.match(implementation, /installUiGovernance\(\{ repo: workdir, repositoryRoot: checkout, sourceRoot: baseDir \}\)/u);
     assert.match(implementation, /verify-client-foundation-consumer\.mjs/u);
-    assert.match(implementation, /verify-production-client-boundary\.mjs/u);
+    assert.match(implementation, /ADOPTION_SCRIPTS/u);
+    assert.match(implementation, /SYNC_TOKEN\|GH_TOKEN\|GITHUB_TOKEN\|NPM_TOKEN\|NODE_AUTH_TOKEN/u);
+    assert.match(implementation, /npm.*view.*dist\.integrity/su);
+    assert.match(implementation, /packTaggedUiArtifact/u);
+    assert.match(implementation, /verifyCanonicalReleaseTag/u);
+    assert.match(implementation, /merge-base.*--is-ancestor/su);
+    assert.match(implementation, /workloom\.ui-release-payload\/v1/u);
+    assert.match(implementation, /clientFoundationDigest/u);
+    assert.match(implementation, /governanceDigest/u);
+    assert.doesNotMatch(implementation, /npm", \["view"[^\n]+"version"/u);
+    assert.doesNotMatch(implementation, /git", \["add", "-A"/u);
+    assert.match(implementation, /stageExactUpgradeChanges/u);
+    const rolloutIntegrity = implementation.indexOf('const verifiedArtifact = options.mode === "rollout"');
+    const downstreamPreflight = implementation.indexOf("const preflight = preflightChildren");
+    assert.ok(rolloutIntegrity >= 0 && downstreamPreflight > rolloutIntegrity,
+      "任何下游访问都必须发生在固定标签与 registry 完整性核验之后");
     assert.doesNotMatch(implementation, /HEAD:main/u);
+    const governanceInstaller = readFileSync(join(repoRoot, "sync/install-ui-governance.mjs"), "utf8");
+    assert.match(governanceInstaller, /scripts\/verify-ui-consumer\.mjs/u);
+    assert.match(governanceInstaller, /scripts\/ui-governance-rules\.mjs/u);
+    assert.match(governanceInstaller, /npm:typescript@5\.9\.3/u);
+    assert.match(governanceInstaller, /拒绝静默覆盖/u);
+    const lockOnly = implementation.indexOf('"--lockfile-only"');
+    const frozenInstall = implementation.indexOf('"--frozen-lockfile"');
+    const consumerVerify = implementation.indexOf('scripts/verify-ui-consumer.mjs"), "--repo"');
+    assert.ok(lockOnly >= 0 && frozenInstall > lockOnly && consumerVerify > frozenInstall,
+      "rollout 必须先更新锁文件，再真实安装依赖，最后运行 verifier");
     const syncWorkflow = readFileSync(join(repoRoot, ".github/workflows/base-sync-push.yml"), "utf8");
     assert.match(syncWorkflow, /sync\/ui-consumer-template\.yml/u);
     const consumerWorkflow = readFileSync(join(repoRoot, "sync/ui-consumer-template.yml"), "utf8");
+    const consumerContract = YAML.parse(consumerWorkflow);
+    const consumerGate = consumerContract.jobs["ui-contract"].steps
+      .find((step) => step.name === "禁止 UI 分叉并校验三端版本");
+    assert.equal(
+      consumerGate?.run,
+      'node "$WORKLOOM_DIR/scripts/verify-ui-consumer.mjs" --repo "$WORKLOOM_DIR" --require-governance-state',
+      "行业仓 required check 不得移除治理 state 与指纹强制校验",
+    );
     assert.match(consumerWorkflow, /verify-client-foundation-consumer\.mjs/u);
     assert.match(consumerWorkflow, /pnpm -C "\$WORKLOOM_DIR" test/u);
     assert.match(consumerWorkflow, /python -m pytest -q/u);
@@ -417,6 +998,9 @@ describe("UI 稳定发布门禁", () => {
     assert.match(readFileSync(join(repoRoot, "apps/web/playwright.consumer.config.ts"), "utf8"), /consumer-e2e/u);
     assert.match(readFileSync(join(repoRoot, "apps/web/consumer-e2e/clients.playwright.ts"), "utf8"), /__workloomFirstClientFrame/u);
     const buildScriptDependencies = [...webPackage.scripts.build.matchAll(/\.\.\/\.\.\/(scripts\/[-A-Za-z0-9_.]+\.mjs)/gu)].map((match) => match[1]);
-    for (const dependency of buildScriptDependencies) assert.match(implementation, new RegExp(dependency.replaceAll(".", "\\."), "u"));
+    const adoptionInstaller = readFileSync(join(repoRoot, "sync/install-adoption-assets.mjs"), "utf8");
+    for (const dependency of buildScriptDependencies) {
+      assert.match(`${implementation}\n${adoptionInstaller}`, new RegExp(dependency.replaceAll(".", "\\."), "u"));
+    }
   });
 });

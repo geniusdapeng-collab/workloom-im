@@ -6,7 +6,7 @@
     "package": "@workloom/ui",
     "contractVersion": "2.0.0",
     "candidateVersion": "0.1.0",
-    "latestStableVersion": null,
+    "latestStableVersion": "0.1.0",
     "requiredClientPackages": [
       "apps/web/package.json",
       "apps/webb/package.json",
@@ -24,7 +24,7 @@
     "schemaVersion": "workloom.client-foundation/v1",
     "stateFile": ".workloom-client-foundation.json",
     "candidateVersion": "0.1.0",
-    "latestStableVersion": null,
+    "latestStableVersion": "0.1.0",
     "stableSourceRefPattern": "refs/tags/ui-v{version}",
     "distribution": "stable-tag-upgrade-pr",
     "maxManagedFiles": 500,

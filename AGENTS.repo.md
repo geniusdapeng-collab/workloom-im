@@ -14,9 +14,9 @@
 WorkLoom 的正式产品形态是桌面客户端；浏览器三端用于开发和验收。
 
 - 环境初始化：pnpm setup
-- 桌面客户端：pnpm app；开发模式：pnpm app --dev；无头冒烟：pnpm app --smoke
+- 桌面客户端源码入口：pnpm app；开发模式：pnpm app --dev（或 pnpm app:dev）；无头主进程冒烟：pnpm app --smoke。三者只依赖 pnpm setup 完成的源码环境，不依赖 dist-payload。
 - 浏览器三端预览：pnpm preview:all
-- 安装包：pnpm app:pack；正式分发包：pnpm app:dist
+- 安装包：先按目标平台执行 scripts/pack-electron-payload.sh，再运行 pnpm app:pack；正式分发包：pnpm app:dist。已打包程序及 WORKLOOM_RENDER_SMOKE=1 必须通过完整载荷校验，不得降级为源码模式。
 
 桌面端必须按窗口真实可用宽度响应式重排，禁止用固定 1440×900 逻辑画布或整页等比缩放冒充响应式。PC 工作区应支持面板折叠、隐藏、拖拽缩放、恢复默认和全屏；窄窗口中的辅助面板降级为抽屉，正文在系统标准缩放和 200% 页面缩放下不得横向溢出。关闭窗口应最小化到托盘，只有托盘“退出”才终止夜班和后台任务。涉及这些行为的修改必须在真实桌面入口验证，不能只启动 apps/web。
 

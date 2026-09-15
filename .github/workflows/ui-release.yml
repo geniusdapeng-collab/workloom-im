@@ -32,6 +32,11 @@ jobs:
     timeout-minutes: 55
     permissions:
       contents: read
+    outputs:
+      release-version: ${{ steps.release-target.outputs.version }}
+      release-tag: ${{ steps.release-target.outputs.tag }}
+      release-sha: ${{ steps.release-target.outputs.sha }}
+      stable-target: ${{ steps.release-target.outputs.stable }}
     services:
       postgres:
         image: pgvector/pgvector:pg17
@@ -44,8 +49,6 @@ jobs:
           --health-cmd "pg_isready -U postgres"
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
       DATABASE_URL: postgres://postgres:workloom@localhost:5432/workloom
       DATABASE_APP_URL: postgres://workloom_app:workloom_dev_app@localhost:5432/workloom
       DATABASE_GATEWAY_URL: postgres://workloom_gateway:workloom_dev_gateway@localhost:5432/workloom
@@ -61,12 +64,63 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: 固定验证对象并证明稳定标签来自 main
+        id: release-target
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_REF: ${{ github.ref }}
+          PUSH_REF_NAME: ${{ github.ref_name }}
+          REQUESTED_ACTION: ${{ inputs.action }}
+          REQUESTED_VERSION: ${{ inputs.stable_version }}
+        run: |
+          set -euo pipefail
+          TARGET_TAG=""
+          if [ "$EVENT_NAME" = "push" ] && [[ "$PUSH_REF" == refs/tags/ui-v* ]]; then
+            TARGET_TAG="$PUSH_REF_NAME"
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$REQUESTED_ACTION" = "rollout" ]; then
+            [[ "$REQUESTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+              echo "❌ 手动 rollout 必须指定精确稳定版本 stable_version（如 1.2.3）"
+              exit 1
+            }
+            TARGET_TAG="ui-v$REQUESTED_VERSION"
+          fi
+
+          if [ -z "$TARGET_TAG" ]; then
+            echo "stable=false" >> "$GITHUB_OUTPUT"
+            echo "version=" >> "$GITHUB_OUTPUT"
+            echo "tag=" >> "$GITHUB_OUTPUT"
+            echo "sha=$(git rev-parse --verify HEAD^{commit})" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          VERSION="${TARGET_TAG#ui-v}"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "❌ 非法稳定 UI 标签：$TARGET_TAG"
+            exit 1
+          }
+          TARGET_SHA="$(git rev-parse --verify "refs/tags/${TARGET_TAG}^{commit}")"
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$TARGET_SHA" refs/remotes/origin/main || {
+            echo "❌ $TARGET_TAG 不属于 origin/main 历史；拒绝以旁路标签发布或 rollout"
+            exit 1
+          }
+          git checkout --detach "$TARGET_SHA"
+          test "$(git rev-parse --verify HEAD^{commit})" = "$TARGET_SHA"
+          echo "stable=true" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TARGET_TAG" >> "$GITHUB_OUTPUT"
+          echo "sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
+          echo "✅ 验证对象已固定：$TARGET_TAG @ ${TARGET_SHA:0:12}（origin/main 祖先）"
 
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: "https://registry.npmjs.org"
 
+      - name: 固定生成不可变制品的 npm CLI
+        run: npm install --global --ignore-scripts npm@11.6.2
       - run: corepack enable && corepack prepare pnpm@10.14.0 --activate
       - run: pnpm install --frozen-lockfile
 
@@ -84,6 +138,7 @@ jobs:
           cp .env.example .env
           pnpm db:migrate
           pnpm db:seed:aipm
+          pnpm db:seed:aipm:verify-idempotence
           BUNDLE_DIR=bundles/hotel pnpm db:seed
           pnpm suite
           pnpm -C apps/web build
@@ -116,22 +171,25 @@ jobs:
           pnpm release:gate
 
       - name: 校验 UI 标签、稳定版本登记与包版本一致
-        if: startsWith(github.ref, 'refs/tags/ui-v')
+        if: steps.release-target.outputs.stable == 'true'
+        env:
+          VERSION: ${{ steps.release-target.outputs.version }}
         run: |
-          VERSION="${GITHUB_REF_NAME#ui-v}"
-          node -e 'const fs=require("fs"); const v=process.argv[1]; const p=JSON.parse(fs.readFileSync("packages/ui/package.json")); const m=JSON.parse(fs.readFileSync("sync/base-capabilities.json")); if(p.version!==v||m.ui.latestStableVersion!==v||m.clientFoundation.latestStableVersion!==v) throw new Error(`版本不一致: tag=${v}, package=${p.version}, uiStable=${m.ui.latestStableVersion}, clientStable=${m.clientFoundation.latestStableVersion}`)' "$VERSION"
+          node -e 'const fs=require("fs"); const v=process.argv[1]; const p=JSON.parse(fs.readFileSync("packages/ui/package.json")); const m=JSON.parse(fs.readFileSync("sync/base-capabilities.json")); if(p.version!==v||m.ui.latestStableVersion!==v||m.clientFoundation.latestStableVersion!==v) throw new Error(`版本不一致: tag=${v}, package=${p.version}, uiStable=${m.ui.latestStableVersion}, clientStable=${m.clientFoundation.latestStableVersion}`); if(p.publishConfig?.registry!=="https://registry.npmjs.org"||p.publishConfig?.access!=="public") throw new Error("@workloom/ui publishConfig 必须固定官方 npmjs/public")' "$VERSION"
           node sync/client-foundation.mjs verify-source --version "$VERSION"
-          test -n "$NODE_AUTH_TOKEN" || { echo "❌ 缺少 NPM_TOKEN，拒绝进入发布"; exit 1; }
-          test -n "$SYNC_TOKEN" || { echo "❌ 缺少 SYNC_TOKEN，无法在发布后创建八个独立升级 PR"; exit 1; }
 
       - name: 八个下游仓访问与迁移现状只读预检
-        if: startsWith(github.ref, 'refs/tags/ui-v') || inputs.action == 'preflight'
         env:
           REPORT_PATH: ${{ runner.temp }}/ui-downstream-preflight.json
-        run: node sync/ui-upgrade-pr.mjs --preflight --report "$REPORT_PATH"
+          STABLE_VERSION: ${{ steps.release-target.outputs.version }}
+        run: |
+          set -euo pipefail
+          ARGS=(--preflight --report "$REPORT_PATH")
+          [ -n "$STABLE_VERSION" ] && ARGS+=(--version "$STABLE_VERSION")
+          node sync/ui-upgrade-pr.mjs "${ARGS[@]}"
 
       - name: 留存下游访问与迁移现状
-        if: always() && (startsWith(github.ref, 'refs/tags/ui-v') || inputs.action == 'preflight')
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ui-downstream-preflight
@@ -140,14 +198,14 @@ jobs:
           retention-days: 30
 
       - name: 生成待发布的不可变 UI 制品
-        if: startsWith(github.ref, 'refs/tags/ui-v')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/ui-v')
         run: |
           mkdir -p "$RUNNER_TEMP/ui-package"
           cd packages/ui
           npm pack --json --pack-destination "$RUNNER_TEMP/ui-package" > "$RUNNER_TEMP/ui-package/pack-metadata.json"
 
       - name: 留存待发布 UI 制品
-        if: startsWith(github.ref, 'refs/tags/ui-v')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/ui-v')
         uses: actions/upload-artifact@v4
         with:
           name: workloom-ui-package
@@ -155,29 +213,24 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  publish-and-rollout:
-    if: startsWith(github.ref, 'refs/tags/ui-v')
+  publish-ui:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/ui-v')
     needs: verify-and-preflight
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 15
+    environment: production
     permissions:
-      contents: write
-      pull-requests: write
-    env:
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+      contents: read
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: "https://registry.npmjs.org"
 
-      - run: corepack enable && corepack prepare pnpm@10.14.0 --activate
-      - run: pnpm install --frozen-lockfile
+      # 不向 setup-node 写 registry-url，避免生成依赖空 NODE_AUTH_TOKEN 的用户级
+      # npmrc。OIDC job 不 checkout、不安装仓库依赖，只固定 npm CLI 后发布已验 tarball。
+      - name: 固定支持 Trusted Publisher 的 npm CLI
+        run: npm install --global --ignore-scripts npm@11.6.2
 
       - uses: actions/download-artifact@v4
         with:
@@ -185,30 +238,67 @@ jobs:
           path: ${{ runner.temp }}/ui-package
 
       - name: 发布或核验完全相同的稳定 UI 制品
+        env:
+          VERSION: ${{ needs.verify-and-preflight.outputs.release-version }}
         run: |
-          VERSION="${GITHUB_REF_NAME#ui-v}"
+          set -euo pipefail
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           LOCAL_INTEGRITY="$(node -e 'const fs=require("fs"); const m=JSON.parse(fs.readFileSync(process.argv[1])); if(!Array.isArray(m)||m.length!==1||!m[0].integrity) throw new Error("pack 元数据无效"); process.stdout.write(m[0].integrity)' "$RUNNER_TEMP/ui-package/pack-metadata.json")"
-          REMOTE_INTEGRITY="$(npm view "@workloom/ui@$VERSION" dist.integrity --json 2>/dev/null | tr -d '"' || true)"
+          REMOTE_INTEGRITY="$(npm view "@workloom/ui@$VERSION" dist.integrity --json --registry=https://registry.npmjs.org 2>/dev/null | tr -d '"' || true)"
           if [ -n "$REMOTE_INTEGRITY" ]; then
             test "$REMOTE_INTEGRITY" = "$LOCAL_INTEGRITY" || { echo "❌ registry 已存在同版本异内容制品，拒绝 rollout"; exit 1; }
             echo "✅ registry 已存在完全相同的不可变制品，继续幂等 rollout"
           else
             mapfile -t TARBALLS < <(find "$RUNNER_TEMP/ui-package" -maxdepth 1 -name '*.tgz' -type f)
             test "${#TARBALLS[@]}" -eq 1 || { echo "❌ 待发布 tarball 数量必须为 1"; exit 1; }
-            npm publish "${TARBALLS[0]}"
+            npm publish "${TARBALLS[0]}" --access public --provenance --registry=https://registry.npmjs.org
           fi
           for _ in $(seq 1 12); do
-            PUBLISHED="$(npm view "@workloom/ui@$VERSION" version --json 2>/dev/null | tr -d '"' || true)"
+            PUBLISHED="$(npm view "@workloom/ui@$VERSION" version --json --registry=https://registry.npmjs.org 2>/dev/null | tr -d '"' || true)"
             [ "$PUBLISHED" = "$VERSION" ] && exit 0
             sleep 5
           done
           echo "❌ registry 未确认 @workloom/ui@$VERSION，拒绝 rollout"
           exit 1
 
+  rollout-after-publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/ui-v')
+    needs: [verify-and-preflight, publish-ui]
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+          ref: ${{ needs.verify-and-preflight.outputs.release-sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: 固定复算不可变制品的 npm CLI
+        run: npm install --global --ignore-scripts npm@11.6.2
+      - run: corepack enable && corepack prepare pnpm@10.14.0 --activate
+      - run: pnpm install --frozen-lockfile
+
       - name: 发布后仅创建八个独立升级 PR
         env:
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+          STABLE_VERSION: ${{ needs.verify-and-preflight.outputs.release-version }}
           REPORT_PATH: ${{ runner.temp }}/ui-rollout.json
-        run: node sync/ui-upgrade-pr.mjs --rollout --report "$REPORT_PATH"
+        run: |
+          set -euo pipefail
+          if [ -z "${SYNC_TOKEN:-}" ]; then
+            echo "::warning title=等待人工逐仓升级::稳定 UI 已发布；跨仓凭据未进入工作流，因此未自动写入八仓。"
+            echo "稳定版本：$STABLE_VERSION。请按 W1→W5 使用本地受控凭据执行同一升级器，并逐仓验证后创建 PR。" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          node sync/ui-upgrade-pr.mjs --rollout --version "$STABLE_VERSION" --report "$REPORT_PATH"
 
       - name: 留存升级 PR 结果
         if: always()
@@ -224,34 +314,37 @@ jobs:
     needs: verify-and-preflight
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    environment: production
     permissions:
-      contents: write
-      pull-requests: write
-    env:
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
-      STABLE_VERSION: ${{ inputs.stable_version }}
-      ROLLOUT_WAVE: ${{ inputs.wave }}
-      ROLLOUT_REPOSITORIES: ${{ inputs.repositories }}
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: 固定到已发布稳定基座标签
-        run: |
-          test -n "$STABLE_VERSION" || { echo "❌ 手动 rollout 必须指定 stable_version"; exit 1; }
-          test -n "$SYNC_TOKEN" || { echo "❌ 缺少 SYNC_TOKEN"; exit 1; }
-          git checkout --detach "ui-v$STABLE_VERSION"
+          fetch-tags: true
+          persist-credentials: false
+          ref: ${{ needs.verify-and-preflight.outputs.release-sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: "https://registry.npmjs.org"
+      - name: 固定复算不可变制品的 npm CLI
+        run: npm install --global --ignore-scripts npm@11.6.2
       - run: corepack enable && corepack prepare pnpm@10.14.0 --activate
       - run: pnpm install --frozen-lockfile
+      - name: 从固定标签核验手动 rollout 的不可变 UI 制品
+        env:
+          STABLE_VERSION: ${{ needs.verify-and-preflight.outputs.release-version }}
+        run: node sync/ui-upgrade-pr.mjs --verify-artifact --version "$STABLE_VERSION"
       - name: 按严格波次继续创建独立升级 PR
         env:
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+          STABLE_VERSION: ${{ needs.verify-and-preflight.outputs.release-version }}
+          ROLLOUT_WAVE: ${{ inputs.wave }}
+          ROLLOUT_REPOSITORIES: ${{ inputs.repositories }}
           REPORT_PATH: ${{ runner.temp }}/ui-rollout.json
         run: |
+          set -euo pipefail
+          test -n "${SYNC_TOKEN:-}" || { echo "❌ 缺少最小权限短期 SYNC_TOKEN"; exit 1; }
           ARGS=(--rollout --version "$STABLE_VERSION" --report "$REPORT_PATH")
           [ -n "$ROLLOUT_WAVE" ] && ARGS+=(--wave "$ROLLOUT_WAVE")
           [ -n "$ROLLOUT_REPOSITORIES" ] && ARGS+=(--repos "$ROLLOUT_REPOSITORIES")

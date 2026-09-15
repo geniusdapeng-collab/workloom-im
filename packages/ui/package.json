@@ -2,6 +2,16 @@
   "name": "@workloom/ui",
   "version": "0.1.0",
   "description": "WorkLoom 三端共享交互、中文显示与内容安全基座",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/geniusdapeng-collab/workloom-im.git",
+    "directory": "packages/ui"
+  },
+  "homepage": "https://github.com/geniusdapeng-collab/workloom-im#readme",
+  "bugs": {
+    "url": "https://github.com/geniusdapeng-collab/workloom-im/issues"
+  },
   "type": "module",
   "sideEffects": [
     "*.css",

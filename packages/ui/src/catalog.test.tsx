@@ -34,7 +34,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe("PRD 共享组件目录", () => {
   it("完整导出 PRD 规定的共享组件，不要求消费端复制实现", () => {
     const required = [
-      "Button", "IconButton", "Link", "Input", "Select", "Combobox", "Textarea", "Checkbox", "Radio", "Switch", "Badge", "Tag", "Avatar", "StatusChip",
+      "Button", "IconButton", "Link", "Input", "Select", "Combobox", "Textarea", "Checkbox", "Radio", "Switch", "Badge", "Tag", "Avatar", "StatusChip", "BannerAlert",
       "AppShell", "SideNav", "TopContextBar", "BottomTabs", "Grid", "ResizablePanel", "SplitView", "WorkspaceSwitcher",
       "Dialog", "ConfirmDialog", "Drawer", "Sheet", "Popover", "Tooltip", "Toast", "OverlayManager", "FullscreenSurface",
       "AsyncState", "EmptyState", "ErrorState", "OfflineState", "PermissionState", "DemoBanner", "Skeleton", "Progress",
@@ -43,6 +43,22 @@ describe("PRD 共享组件目录", () => {
       "MetricCard", "Delta", "Table", "FilterBar", "Timeline", "Chart", "ExportDialog",
     ] as const;
     for (const name of required) expect(UI[name], `缺少共享导出：${name}`).toBeDefined();
+  });
+
+  it("告警条把长正文与动作分区，正文可换行且危险状态立即播报", () => {
+    const html = renderToStaticMarkup(
+      <UI.BannerAlert level="alert" actionLabel="刷新最新快照" onAction={() => undefined}>
+        审批对象已被后续动作修改或快照过期，禁止基于旧内容审批。
+      </UI.BannerAlert>,
+    );
+    expect(html).toContain('class="wl-banner-alert wl-banner-alert--alert"');
+    expect(html).toContain('role="alert"');
+    expect(html).toContain('aria-live="assertive"');
+    expect(html).toContain('class="wl-banner-alert__body"');
+    expect(html).toContain('class="wl-banner-alert__copy"');
+    expect(html).toContain('class="wl-banner-alert__actions"');
+    expect(html).toContain("审批对象已被后续动作修改");
+    expect(html).toContain("刷新最新快照");
   });
 
   it("基础组件处理新窗口安全、中文长标签和无图片头像", () => {
