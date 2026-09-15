@@ -17,7 +17,9 @@ process.env.no_proxy = noProxy;
 export default defineConfig({
   testDir: "./tests/ui",
   outputDir: "test-results/ui",
-  snapshotPathTemplate: "{testDir}/{testFilePath}-snapshots/{arg}{ext}",
+  // Chromium 一致不等于宿主字体度量一致；基线按操作系统隔离，避免把
+  // macOS 与 Linux 的 CJK 字体行高差异误报为布局回归。
+  snapshotPathTemplate: "{testDir}/{testFilePath}-snapshots/{arg}-{platform}{ext}",
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
