@@ -105,9 +105,28 @@ jobs:
           pnpm -C apps/webc build
 
       - name: 三端响应式、视觉与无障碍门禁
+        id: ui_e2e
         run: |
           pnpm exec playwright install --with-deps chromium
           pnpm ui:e2e
+
+      # 原门禁失败仍令 job 失败；这里仅在同一 Linux runner 上生成候选基线供人工
+      # 审阅，绝不自动提交或接受视觉变化。这样可区分跨平台字体差异与真实回归。
+      - name: 生成失败现场的 Linux 视觉候选基线
+        if: failure() && steps.ui_e2e.outcome == 'failure'
+        run: pnpm ui:e2e:update
+
+      - name: 留存 UI 失败现场与 Linux 视觉候选基线
+        if: failure() && steps.ui_e2e.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-failure-${{ github.sha }}
+          path: |
+            tests/ui/**/*-linux.png
+            test-results/ui
+            playwright-report
+          if-no-files-found: error
+          retention-days: 7
 
       - name: dsh-gate E6（围栏瀑布 + 事件桥 + H-5 崩溃重放）
         run: bash scripts/dsh-gate.sh
