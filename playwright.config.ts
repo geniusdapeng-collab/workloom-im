@@ -56,9 +56,8 @@ export default defineConfig({
     },
     {
       name: "b-pc",
-      command: "pnpm -C apps/web dev --host 127.0.0.1 --strictPort",
+      command: "VITE_ENABLE_UI_DIAGNOSTICS=true pnpm -C apps/web dev --host 127.0.0.1 --strictPort",
       env: {
-        VITE_ENABLE_UI_DIAGNOSTICS: "true",
         WEB_PORT: "3100",
         SERVER_PORT: "8877",
       },
