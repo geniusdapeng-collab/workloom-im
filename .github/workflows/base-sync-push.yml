@@ -120,7 +120,7 @@ jobs:
               end
             end
             ARGV.each { |file| check(Psych.parse_file(file), file) }
-          ' .github/workflows/base-sync-push.yml sync/heartbeat-template.yml
+          ' .github/workflows/base-sync-push.yml sync/heartbeat-template.yml sync/ui-consumer-template.yml
 
       - name: 判定本次同步范围
         id: mode

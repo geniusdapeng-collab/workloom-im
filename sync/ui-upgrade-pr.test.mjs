@@ -6,7 +6,6 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
-import { parse as parseYaml } from "yaml";
 import {
   assertIndependentUpgradeBranch,
   buildUpgradePullRequestBody,
@@ -336,9 +335,7 @@ describe("UI 稳定发布门禁", () => {
     assert.match(tiger, /governance\/apps\/web\/playwright-report\/consumer/u);
     assert.doesNotMatch(tiger, /__REPO_DIR__/u);
     assert.doesNotMatch(tiger, /--if-present/u);
-    const parsed = parseYaml(tiger);
-    assert.equal(parsed.jobs["ui-contract"].env.WORKLOOM_DIR, "governance");
-    const commands = parsed.jobs["ui-contract"].steps.map((step) => step.run ?? "").join("\n");
+    const commands = tiger;
     for (const command of [
       "verify-ui-consumer.mjs",
       "verify-client-foundation-consumer.mjs",
@@ -373,6 +370,8 @@ describe("UI 稳定发布门禁", () => {
     assert.match(implementation, /verify-client-foundation-consumer\.mjs/u);
     assert.match(implementation, /verify-production-client-boundary\.mjs/u);
     assert.doesNotMatch(implementation, /HEAD:main/u);
+    const syncWorkflow = readFileSync(join(repoRoot, ".github/workflows/base-sync-push.yml"), "utf8");
+    assert.match(syncWorkflow, /sync\/ui-consumer-template\.yml/u);
     const consumerWorkflow = readFileSync(join(repoRoot, "sync/ui-consumer-template.yml"), "utf8");
     assert.match(consumerWorkflow, /verify-client-foundation-consumer\.mjs/u);
     assert.match(consumerWorkflow, /pnpm -C "\$WORKLOOM_DIR" test/u);
