@@ -976,6 +976,13 @@ describe("UI 稳定发布门禁", () => {
       "rollout 必须先更新锁文件，再真实安装依赖，最后运行 verifier");
     const syncWorkflow = readFileSync(join(repoRoot, ".github/workflows/base-sync-push.yml"), "utf8");
     assert.match(syncWorkflow, /sync\/ui-consumer-template\.yml/u);
+    const syncSecretSelfTest = syncWorkflow.indexOf("node scripts/secret-scan.mjs --self-test");
+    const syncDependencyInstall = syncWorkflow.indexOf("CI=true pnpm install --frozen-lockfile --ignore-scripts");
+    const syncEngineTests = syncWorkflow.indexOf("node --test sync/base-sync.test.mjs");
+    assert.ok(
+      syncSecretSelfTest >= 0 && syncDependencyInstall > syncSecretSelfTest && syncEngineTests > syncDependencyInstall,
+      "base-sync plan 必须先自测密钥闸门，再以 ignore-scripts 安装锁定依赖，最后执行同步引擎测试",
+    );
     const consumerWorkflow = readFileSync(join(repoRoot, "sync/ui-consumer-template.yml"), "utf8");
     const consumerContract = YAML.parse(consumerWorkflow);
     const consumerGate = consumerContract.jobs["ui-contract"].steps

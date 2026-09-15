@@ -203,6 +203,12 @@ jobs:
       - name: 密钥扫描器自测
         run: node scripts/secret-scan.mjs --self-test
 
+      - name: pnpm 10.14.0
+        run: corepack enable && corepack prepare pnpm@10.14.0 --activate
+
+      - name: 同步引擎测试依赖
+        run: CI=true pnpm install --frozen-lockfile --ignore-scripts
+
       - name: 基座同步引擎测试
         run: node --test sync/base-sync.test.mjs sync/client-foundation.test.mjs sync/set-ui-version.test.mjs sync/ui-upgrade-pr.test.mjs
 
