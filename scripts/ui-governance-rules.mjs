@@ -1,6 +1,9 @@
+import ts from "typescript-governance";
+
 const VISIBLE_ATTRIBUTES = new Set([
   "alt",
   "aria-label",
+  "aria-description",
   "description",
   "hint",
   "label",
@@ -15,12 +18,22 @@ const VISIBLE_PROPERTY_NAMES = new Set([
   "hint",
   "label",
   "message",
+  "body",
+  "channelName",
+  "content",
+  "emptyLabel",
+  "emptyText",
+  "errorText",
+  "fallbackReason",
+  "helperText",
+  "noDataText",
   "summary",
   "text",
   "title",
+  "tooltip",
 ]);
 
-const VISIBLE_SETTER = /^(?:appendAi|setBanner|setBindingError|setDone|setErr|setError|setFeedback|setMessage|setMsg|setRateError|setSiteResult|setToast)$/;
+const VISIBLE_SETTER = /^(?:appendAi|enqueueSnackbar|notify|setBanner|setBindingError|setCaption|setDone|setErr|setError|setFeedback|setLoadMessage|setMessage|setMsg|setNotice|setRateError|setSiteResult|setSubtitle|setToast|showToast)$/;
 const ENGINEERING_CODE = /(?:^|[^A-Za-z0-9])(?:P|F|E|L|M|D|G)\d+(?:\.\d+)?(?:$|[^A-Za-z0-9])/;
 const RAW_CLIENT_TERM = /\b(?:Agent|Bundle|Profile|Rebase|schema|fence_bindings|preset_key|presetKey|overlay_version|base_version|bundle_id|bundleId|batchId|tenant_id|tenantId|workspace_id|workspaceId|event_id|eventId|request_id|requestId|requiredClauses|reasonEnum|input_tokens|output_tokens|latencyMs|cron|args|JSON|YAML|CLI|SQL|SSE|tRPC|npm|pip|git)\b/i;
 const RAW_FIELD_SHAPE = /\b(?:[a-z][a-z0-9]*_[a-z0-9_]+|[a-z][a-z0-9]*[A-Z][A-Za-z0-9]*)\b/;
@@ -31,15 +44,41 @@ const RAW_DYNAMIC_FIELD = new Set([
   "memberId", "member_id", "workspaceId", "workspace_id", "tenantId", "tenant_id",
   "bundleId", "bundle_id", "presetKey", "preset_key", "model_id", "agent_id",
   "baseline_branch", "assigned_tool", "change_kind", "exit_reason",
-  "credential_health", "rule_id", "latencyMs", "inputTokens", "outputTokens",
+  "credential_health", "rule_id",
 ]);
 const SAFE_DISPLAY_FORMATTERS = new Set([
-  "actionText", "actorText", "capabilityText", "clientChineseText", "clientIdentifierText",
+  "actionText", "actorText", "capabilityText", "clientChineseText", "clientIdentifierText", "clientNodeText",
   "clientStatusLabel", "clientValueText", "confidenceText", "cronText", "dictText",
-  "displayNameOf", "formatDate", "formatTime", "kindLabel", "latencyText", "roleTitleOf",
-  "shortId", "versionText",
+  "chineseMessage", "displayNameOf", "formatDate", "formatDateTime", "formatTime", "inboxSpeechText",
+  "docStatusChip", "kindLabel", "latencyText", "modelName", "operationFailure", "payloadText",
+  "publicationSystemText", "roleTitleOf", "ticketStatusChip",
+  "safeAiText", "safeMessage", "safeOnboardingError", "safeWizardError", "shortId", "speechText",
+  "versionText",
+]);
+const SAFE_DISPLAY_MAPS = new Set([
+  "ACTION_LABELS", "ATTRIBUTION_TEXT", "CHANNEL_STATUS", "ENVIRONMENT_LABELS", "EXAM_LABELS",
+  "EXAM_STATUS_TEXT", "EXAM_TYPE_TEXT", "KIND_TEXT", "LAYER_TEXT", "MODE_LABEL", "MODE_TEXT",
+  "NAVIGATION_GROUP_LABELS", "PERSONA_NAME", "POOL_LABEL", "PUBLICATION_STATUS", "RISK_LABELS",
+  "ROLE_LABELS", "SOURCE_TEXT", "STATE_DEFAULTS", "STATUS", "SUBJECT_TEXT", "TASK_STATUS",
+  "THREAD_MODE_TEXT", "TIER_TEXT", "TOAST_TITLES", "TOOL_TEXT", "TYPE_LABEL", "TYPE_TEXT",
+  "VERDICT", "VERDICT_META", "STRUCTURE_TEXT", "chunkCounts", "workspaceNames",
 ]);
 const AUTHORIZED_DIAGNOSTIC_FILE = /apps\/web\/src\/pages\/p25\/P25\.tsx$/;
+const AUTHORIZED_LOCAL_GUIDE_FILE = /apps\/web\/src\/components\/BackendGate\.tsx$/;
+const AUTHORIZED_COMPONENT_MATRIX_FILE = /apps\/web\/src\/pages\/dev\/DevMatrix\.tsx$/;
+const SAFE_VISIBLE_LATIN_TERM = /^(?:AI|API|B|C|CSV|DeepSeek|DOCX|DSL|Esc|Excel|FAE|FAQ|GEO|GLM|GPS|H5|IM|Kimi|KPI|Lightning|LLM|MB|MD|MVP|Moonshot|OAuth|OpenAI|PC|PDF|PRD|RLS|ROI|SLA|SOP|SPA|TSV|TXT|Type-C|URL|USB|WiFi|WorkLoom|XLSX|XP|XX|Yunqi-Hotel|deepseek-chat|retail|sk)$/i;
+const LATIN_TOKEN = /[A-Za-z][A-Za-z0-9]*(?:[._-][A-Za-z0-9]+)*/g;
+const UNTRUSTED_RESPONSE_FIELD = new Set(["answer", "code", "detail", "error", "message", "reason", "result", "summary"]);
+const UNTRUSTED_RESPONSE_ROOT = /^(?:apiError|cause|e|err|error|exception|failure|payload|reply|res|response|result|serverResponse)$/i;
+const CLIENT_SOURCE_FILE = /\.(?:[cm]?[jt]sx?)$/i;
+const CLIENT_SOURCE_ROOT = /^(?:apps\/(?:web|webb|webc)\/src|packages\/ui\/src)\//;
+const CLIENT_SOURCE_EXCLUSION = /(?:^|\/)(?:__tests__|coverage|dist|node_modules)(?:\/|$)|\.(?:test|spec)\.[cm]?[jt]sx?$|\.d\.[cm]?ts$/i;
+const BUNDLE_UI_CONFIG_FILE = /^(?:apps\/webc\/public\/(?:industry\/)?service-front\.config\.json|bundles\/[^/]+\/(?:floor-scene\.json|service-front\/client\.json))$/;
+const BUNDLE_DISPLAY_KEY = new Set([
+  "a", "agentName", "brandName", "desc", "description", "docTitle", "emptyOrders", "errorText",
+  "hint", "label", "logoText", "message", "name", "note", "q", "sendText", "sla", "summary",
+  "symptoms", "text", "tip", "title", "titlePlaceholder", "tooltip", "unit", "welcomeText",
+]);
 const CUSTOM_GRAPHICS = Object.freeze({
   "agent-avatar": { file: /apps\/web\/src\/components\/AgentAvatar\.tsx$/, accessible: "image" },
   "generated-qr-code": { file: /apps\/web\/src\/components\/UrlQrCode\.tsx$/, accessible: "image" },
@@ -88,82 +127,307 @@ function stripComments(source) {
   return result;
 }
 
+function scriptKindOf(fileName) {
+  if (/\.tsx$/i.test(fileName)) return ts.ScriptKind.TSX;
+  if (/\.jsx$/i.test(fileName)) return ts.ScriptKind.JSX;
+  if (/\.js$/i.test(fileName)) return ts.ScriptKind.JS;
+  if (/\.ts$/i.test(fileName)) return ts.ScriptKind.TS;
+  return /<\/?[A-Za-z][^>]*>/.test(fileName) ? ts.ScriptKind.TSX : ts.ScriptKind.TSX;
+}
+
+function parseClientSource(source, fileName = "client.tsx") {
+  return ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, scriptKindOf(fileName));
+}
+
+function jsxAttributeText(attribute) {
+  if (!ts.isJsxAttribute(attribute) || !attribute.initializer) return "";
+  if (ts.isStringLiteral(attribute.initializer)) return attribute.initializer.text;
+  if (ts.isJsxExpression(attribute.initializer) && attribute.initializer.expression
+    && (ts.isStringLiteral(attribute.initializer.expression) || ts.isNoSubstitutionTemplateLiteral(attribute.initializer.expression))) {
+    return attribute.initializer.expression.text;
+  }
+  return "";
+}
+
+function jsxTagName(node) {
+  const tag = node.tagName;
+  return ts.isIdentifier(tag) ? tag.text : "";
+}
+
+function componentDeclarations(sourceFile) {
+  const declarations = new Map();
+  for (const statement of sourceFile.statements) {
+    if (ts.isFunctionDeclaration(statement) && statement.name) declarations.set(statement.name.text, statement);
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue;
+      if (ts.isArrowFunction(declaration.initializer) || ts.isFunctionExpression(declaration.initializer)) {
+        declarations.set(declaration.name.text, declaration);
+      }
+    }
+  }
+  return declarations;
+}
+
+function componentNamesWithin(node) {
+  const names = new Set();
+  const visit = (current) => {
+    if (ts.isJsxOpeningElement(current) || ts.isJsxSelfClosingElement(current)) {
+      const name = jsxTagName(current);
+      if (/^[A-Z]/.test(name)) names.add(name);
+    }
+    ts.forEachChild(current, visit);
+  };
+  visit(node);
+  return names;
+}
+
+function componentReferenceOffsets(sourceFile, componentName) {
+  const offsets = [];
+  const visit = (node) => {
+    if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && jsxTagName(node) === componentName) {
+      offsets.push(node.getStart(sourceFile));
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return offsets;
+}
+
+function transitiveComponentRanges(sourceFile, seeds, authorizedCallSites = []) {
+  const declarations = componentDeclarations(sourceFile);
+  const ranges = [];
+  const queued = [...seeds];
+  const visited = new Set();
+  while (queued.length > 0) {
+    const name = queued.shift();
+    if (!name || visited.has(name)) continue;
+    visited.add(name);
+    const declaration = declarations.get(name);
+    if (!declaration) continue;
+    const allowedReferences = [...authorizedCallSites, ...ranges];
+    const references = componentReferenceOffsets(sourceFile, name);
+    if (references.length === 0 || references.some((offset) => !offsetInRanges(offset, allowedReferences))) continue;
+    ranges.push([declaration.getStart(sourceFile), declaration.getEnd()]);
+    for (const childName of componentNamesWithin(declaration)) queued.push(childName);
+  }
+  return ranges;
+}
+
+function devGuideCallSiteRanges(sourceFile) {
+  const ranges = [];
+  const visit = (node) => {
+    if (ts.isConditionalExpression(node)
+      && node.condition.getText(sourceFile).replace(/\s+/g, "") === "import.meta.env.DEV"
+      && componentNamesWithin(node.whenTrue).has("GuidePage")) {
+      ranges.push([node.whenTrue.getStart(sourceFile), node.whenTrue.getEnd()]);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return ranges;
+}
+
+function markedDiagnosticNodes(sourceFile, markerValue = "ai-pm.development") {
+  const nodes = [];
+  const visit = (node) => {
+    if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+      const opening = ts.isJsxElement(node) ? node.openingElement : node;
+      const marker = opening.attributes.properties.find((attribute) =>
+        ts.isJsxAttribute(attribute)
+        && attribute.name.getText(sourceFile) === "data-wl-authorized-diagnostics"
+        && jsxAttributeText(attribute) === markerValue);
+      if (marker) nodes.push(node);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return nodes;
+}
+
+/**
+ * 技术文案只在真实的授权 DOM 子树及其本地组件依赖中豁免。仅在注释或字符串中
+ * 写 marker 不会再放行整份 P25；生产 BackendGate 也只能放行 DEV 分支引用的向导组件。
+ */
+function authorizedTechnicalRanges(source, fileName) {
+  const normalized = fileName.replaceAll("\\", "/");
+  const sourceFile = parseClientSource(source, normalized);
+  const ranges = [];
+  if (AUTHORIZED_DIAGNOSTIC_FILE.test(normalized)) {
+    const marked = markedDiagnosticNodes(sourceFile);
+    const markedRanges = marked.map((node) => [node.getStart(sourceFile), node.getEnd()]);
+    const names = new Set();
+    for (const node of marked) {
+      for (const name of componentNamesWithin(node)) names.add(name);
+    }
+    ranges.push(...markedRanges, ...transitiveComponentRanges(sourceFile, names, markedRanges));
+  }
+  if (AUTHORIZED_LOCAL_GUIDE_FILE.test(normalized)) {
+    const callSites = devGuideCallSiteRanges(sourceFile);
+    ranges.push(...callSites, ...transitiveComponentRanges(sourceFile, new Set(["GuidePage"]), callSites));
+  }
+  if (AUTHORIZED_COMPONENT_MATRIX_FILE.test(normalized)) {
+    const marked = markedDiagnosticNodes(sourceFile, "ui-component-matrix");
+    const markedRanges = marked.map((node) => [node.getStart(sourceFile), node.getEnd()]);
+    const names = new Set();
+    for (const node of marked) {
+      for (const name of componentNamesWithin(node)) names.add(name);
+    }
+    ranges.push(...markedRanges, ...transitiveComponentRanges(sourceFile, names, markedRanges));
+  }
+  return ranges;
+}
+
+function offsetInRanges(offset, ranges) {
+  return ranges.some(([start, end]) => offset >= start && offset < end);
+}
+
+function literalLanguageRules(text, kind = "页面文本") {
+  const rules = [];
+  let literalText = stripTemplateInterpolations(String(text));
+  literalText = literalText.replace(/\{[A-Za-z][A-Za-z0-9_]*\}/g, "");
+  // 地址与明确的键盘快捷键属于可执行输入，不把域名、F11 误判为产品英文或工程代号。
+  literalText = literalText.replace(/\bhttps?:\/\/[^\s，。；）)]+/gi, "");
+  literalText = literalText.replace(/\b\d+(?:\.\d+)?\s*(?:ms|s|h|KB|MB|GB)\b/gi, "");
+  literalText = literalText.replace(/(?:⌘(?:\/Ctrl)?|Ctrl)(?:\+Shift)?\+?[A-Z0-9]\b/g, "");
+  if (/(?:快捷键|键盘|回车|方向键|按住)/.test(literalText)) literalText = literalText.replace(/\b(?:Shift|Ctrl|Alt|Cmd)\b/g, "");
+  if (/(?:快捷键|键盘|全屏)/.test(literalText)) literalText = literalText.replace(/\bF(?:[1-9]|1\d|2[0-4])\b/g, "");
+  const engineeringText = literalText;
+  if (kind === "裸 JSON" || text === "JSON.stringify") rules.push("客户端不得直接渲染裸 JSON");
+  if (ENGINEERING_CODE.test(engineeringText)) rules.push("客户端不得展示 P/F/E/L 工程代号");
+  if (RAW_CLIENT_TERM.test(literalText) || RAW_FIELD_SHAPE.test(literalText)) {
+    rules.push("客户端不得展示英文底层字段或工程术语");
+  }
+  const unknownLatin = [...literalText.matchAll(LATIN_TOKEN)]
+    .map(([token]) => token)
+    .filter((token) => !SAFE_VISIBLE_LATIN_TERM.test(token) && !/^v\d+(?:\.\d+)*$/i.test(token));
+  if (unknownLatin.length > 0) rules.push(`客户端可见英文未登记中文边界：${[...new Set(unknownLatin)].slice(0, 3).join("、")}`);
+  return [...new Set(rules)];
+}
+
+/** 门禁文件发现本身也做成可测试规则，避免新增扩展名或共享组件后静默漏扫。 */
+export function isClientSurfaceSource(fileName) {
+  const normalized = fileName.replaceAll("\\", "/").replace(/^\.\//, "");
+  return CLIENT_SOURCE_ROOT.test(normalized)
+    && CLIENT_SOURCE_FILE.test(normalized)
+    && !CLIENT_SOURCE_EXCLUSION.test(normalized);
+}
+
+export function isBundleUiConfig(fileName) {
+  const normalized = fileName.replaceAll("\\", "/").replace(/^\.\//, "");
+  return BUNDLE_UI_CONFIG_FILE.test(normalized);
+}
+
+/**
+ * Bundle 投影和场景配置会绕过 JSX 静态字面量检查，因此只扫描明确会成为界面内容的键。
+ * 代码型 id/kind/role/category 等仍由各自契约校验，不误当作客户端展示文案。
+ */
+export function findBundleDisplayLanguageRisks(source, fileName = "bundle-ui.json") {
+  let parsed;
+  try {
+    parsed = JSON.parse(source);
+  } catch (error) {
+    return [{
+      line: 1,
+      text: String(error instanceof Error ? error.message : error).slice(0, 96),
+      path: "$",
+      rule: "Bundle 客户端配置必须是有效 JSON",
+    }];
+  }
+  const risks = [];
+  const cursors = new Map();
+  const lineOf = (value) => {
+    const literal = JSON.stringify(value);
+    const cursor = cursors.get(literal) ?? 0;
+    const found = source.indexOf(literal, cursor);
+    if (found < 0) return 1;
+    cursors.set(literal, found + literal.length);
+    return sourceLineAt(source, found);
+  };
+  const visit = (value, path, key = "") => {
+    if (typeof value === "string" && BUNDLE_DISPLAY_KEY.has(key)) {
+      for (const rule of literalLanguageRules(value, `Bundle 展示字段 ${key}`)) {
+        risks.push({ line: lineOf(value), text: value, path, rule });
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => visit(item, `${path}[${index}]`, key));
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    for (const [childKey, child] of Object.entries(value)) visit(child, `${path}.${childKey}`, childKey);
+  };
+  visit(parsed, "$", "");
+  return risks;
+}
+
 /**
  * Extract only strings that can reach a client-facing text position. Comments, types,
  * imports, enum values and CSS class names are deliberately ignored so implementation
  * vocabulary can remain precise without leaking into the product surface.
  */
 export function collectVisibleStrings(source, fileName = "client.tsx") {
-  const clean = stripComments(source);
+  const sourceFile = parseClientSource(source, fileName);
   const rows = [];
   const seen = new Set();
 
-  const add = (text, offset, kind) => {
+  const add = (text, node, kind) => {
     const normalized = String(text).replace(/\s+/g, " ").trim();
     if (!normalized) return;
-    const line = clean.slice(0, offset).split("\n").length;
+    const offset = node.getStart(sourceFile);
+    const line = sourceFile.getLineAndCharacterOfPosition(offset).line + 1;
     const key = `${line}:${kind}:${normalized}`;
     if (seen.has(key)) return;
     seen.add(key);
-    rows.push({ text: normalized, line, kind });
+    rows.push({ text: normalized, line, kind, offset });
   };
 
-  const valueOf = (match, startAt = 1) => {
-    for (let i = startAt; i < match.length; i += 1) {
-      if (match[i] !== undefined) return match[i];
+  const addLiteralPieces = (expression, kind) => {
+    for (const piece of literalPieces(expression)) add(piece, expression, kind);
+  };
+  const visit = (node) => {
+    if (ts.isJsxText(node)) add(node.text, node, "页面文本");
+    if (ts.isJsxAttribute(node)) {
+      const name = node.name.getText(sourceFile);
+      if (VISIBLE_ATTRIBUTES.has(name) || VISIBLE_PROPERTY_NAMES.has(name)) {
+        if (node.initializer && ts.isStringLiteral(node.initializer)) add(node.initializer.text, node.initializer, `属性 ${name}`);
+        if (node.initializer && ts.isJsxExpression(node.initializer) && node.initializer.expression) {
+          addLiteralPieces(node.initializer.expression, `属性 ${name}`);
+        }
+      }
     }
-    return "";
+    if (ts.isJsxExpression(node) && node.expression && !ts.isJsxAttribute(node.parent)) {
+      const parentTag = ts.isJsxElement(node.parent) ? jsxTagName(node.parent.openingElement) : "";
+      if (!/^(?:script|style)$/i.test(parentTag)) addLiteralPieces(node.expression, "页面文本兜底");
+      if (ts.isCallExpression(node.expression) && calledName(node.expression.expression) === "stringify"
+        && rootIdentifierOf(node.expression.expression) === "JSON") add("JSON.stringify", node.expression, "裸 JSON");
+    }
+    if (ts.isPropertyAssignment(node)) {
+      const name = node.name && (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name)) ? node.name.text : "";
+      if (VISIBLE_PROPERTY_NAMES.has(name)) addLiteralPieces(node.initializer, `展示字段 ${name}`);
+    }
+    if (ts.isCallExpression(node)) {
+      const name = calledName(node.expression);
+      const fullName = node.expression.getText(sourceFile);
+      if (VISIBLE_SETTER.test(name) || name === "toast" || /(?:^|\.)toast\.(?:error|info|success|warn|warning)$/.test(fullName)
+        || name === "speak") {
+        for (const argument of node.arguments) for (const value of objectTextValues(argument)) addLiteralPieces(value, `反馈 ${name}`);
+      }
+    }
+    ts.forEachChild(node, visit);
   };
-
-  for (const match of clean.matchAll(/>([^<>{}]+)</g)) {
-    const candidate = match[1] ?? "";
-    // TS 泛型同样使用尖括号；排除明显的代码片段，避免把 useState<T> 当作 JSX 文本。
-    if (/^\s*[):]|^\s*[A-Za-z_$][\w$?.]*\s*\?\s*$|\b(?:const|let|Promise|useState|useEffect|setState|new|as)\b|=>|===?|&&|\|\||\?\s*\(|;\s*[A-Za-z_$]|\w+\s*\(/.test(candidate)) continue;
-    add(candidate, match.index, "页面文本");
-  }
-
-  const attributes = [...VISIBLE_ATTRIBUTES].map((value) => value.replace("-", "\\-")).join("|");
-  const attributePattern = new RegExp("\\b(" + attributes + ")\\s*=\\s*(?:\"([^\"\\n]*)\"|'([^'\\n]*)'|\\{\\s*`([^`]*)`\\s*\\})", "g");
-  for (const match of clean.matchAll(attributePattern)) add(valueOf(match, 2), match.index, `属性 ${match[1]}`);
-
-  const properties = [...VISIBLE_PROPERTY_NAMES].join("|");
-  const propertyPattern = new RegExp("\\b(" + properties + ")\\s*:\\s*(?:\"([^\"\\n]*)\"|'([^'\\n]*)'|`([^`]*)`)", "g");
-  for (const match of clean.matchAll(propertyPattern)) add(valueOf(match, 2), match.index, `展示字段 ${match[1]}`);
-  const propertyFallbackPattern = new RegExp("\\b(" + properties + ")\\s*:\\s*[^,\\n}]{0,200}?\\?\\?\\s*(?:\"([^\"\\n]*)\"|'([^'\\n]*)'|`([^`]*)`)", "g");
-  for (const match of clean.matchAll(propertyFallbackPattern)) add(valueOf(match, 2), match.index, `展示字段兜底 ${match[1]}`);
-
-  const setterNames = VISIBLE_SETTER.source.replace(/^\^|\$$/g, "");
-  const setterPattern = new RegExp("\\b(" + setterNames + ")\\s*\\(\\s*(?:\"([^\"\\n]*)\"|'([^'\\n]*)'|`([^`]*)`)", "g");
-  for (const match of clean.matchAll(setterPattern)) add(valueOf(match, 2), match.index, `反馈 ${match[1]}`);
-
-  const attributeFallbackPattern = new RegExp("\\b(" + attributes + ")\\s*=\\s*\\{[^}\\n]{0,200}?\\?\\?\\s*(?:\"([^\"\\n]*)\"|'([^'\\n]*)'|`([^`]*)`)\\s*\\}", "g");
-  for (const match of clean.matchAll(attributeFallbackPattern)) add(valueOf(match, 2), match.index, `属性兜底 ${match[1]}`);
-
-  for (const match of clean.matchAll(/>\s*\{[^}\n]{0,200}?\?\?\s*(?:"([^"\n]*)"|'([^'\n]*)'|`([^`]*)`)\s*\}\s*</g)) {
-    add(valueOf(match), match.index, "页面文本兜底");
-  }
-
-  for (const match of clean.matchAll(/\{\s*JSON\.stringify\s*\(/g)) add("JSON.stringify", match.index, "裸 JSON");
+  visit(sourceFile);
 
   return rows;
 }
 
 export function findVisibleLanguageRisks(source, fileName = "client.tsx") {
   const risks = [];
-  const authorizedDiagnostic = AUTHORIZED_DIAGNOSTIC_FILE.test(fileName)
-    && source.includes('data-wl-authorized-diagnostics="ai-pm.development"');
+  const authorizedRanges = authorizedTechnicalRanges(source, fileName);
   for (const item of collectVisibleStrings(source, fileName)) {
-    const literalText = stripTemplateInterpolations(item.text);
-    if (item.kind === "裸 JSON" || item.text === "JSON.stringify") {
-      risks.push({ ...item, rule: "客户端不得直接渲染裸 JSON" });
-      continue;
-    }
-    if (ENGINEERING_CODE.test(literalText)) {
-      risks.push({ ...item, rule: "客户端不得展示 P/F/E/L 工程代号" });
-    }
-    if ((RAW_CLIENT_TERM.test(literalText) || RAW_FIELD_SHAPE.test(literalText)) && !authorizedDiagnostic) {
-      risks.push({ ...item, rule: "客户端不得展示英文底层字段或工程术语" });
-    }
+    if (offsetInRanges(item.offset, authorizedRanges)) continue;
+    for (const rule of literalLanguageRules(item.text, item.kind)) risks.push({ ...item, rule });
   }
   return risks;
 }
@@ -187,73 +451,376 @@ function stripTemplateInterpolations(text) {
   return result;
 }
 
-/**
- * 只分析真正位于 JSX 文本节点或可见属性中的简单表达式。通过标签上下文过滤
- * key/className/事件处理器，再跳过比较条件和已登记格式化器，避免表达式误报。
- */
-export function findRawDynamicValueRisks(source, fileName = "client.tsx") {
-  if (AUTHORIZED_DIAGNOSTIC_FILE.test(fileName)
-    && source.includes('data-wl-authorized-diagnostics="ai-pm.development"')) return [];
-  const clean = stripComments(source);
-  const risks = [];
-  const seen = new Set();
-  const add = (expression, offset, name) => {
-    const line = sourceLineAt(clean, offset);
-    const key = `${line}:${name}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    risks.push({ line, text: expression.trim().slice(0, 96), rule: `客户端动态值 ${name} 必须先经过中文映射或编号脱敏` });
-  };
-  const check = (expression, offset) => {
-    if (!expression || /=>|;/.test(expression)) return;
-    const leadingCall = expression.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)\s*\(/)?.[1];
-    if (leadingCall && (SAFE_DISPLAY_FORMATTERS.has(leadingCall) || /(?:Text|Label|Chip|Name)$/.test(leadingCall))) return;
-    if (/^\s*[A-Z][A-Z0-9_]*\s*\[/.test(expression)) return;
-    let inspectable = expression;
-    for (const formatter of SAFE_DISPLAY_FORMATTERS) {
-      inspectable = inspectable.replace(new RegExp(`\\b${formatter}\\s*\\([^()]*\\)`, "g"), "");
+function unwrapExpression(node) {
+  let current = node;
+  while (current && (
+    ts.isParenthesizedExpression(current)
+    || ts.isAsExpression(current)
+    || ts.isTypeAssertionExpression(current)
+    || ts.isNonNullExpression(current)
+    || ts.isSatisfiesExpression(current)
+  )) current = current.expression;
+  return current;
+}
+
+function calledName(expression) {
+  const target = unwrapExpression(expression);
+  if (ts.isIdentifier(target)) return target.text;
+  if (ts.isPropertyAccessExpression(target)) return target.name.text;
+  if (ts.isElementAccessExpression(target) && target.argumentExpression
+    && (ts.isStringLiteral(target.argumentExpression) || ts.isNoSubstitutionTemplateLiteral(target.argumentExpression))) {
+    return target.argumentExpression.text;
+  }
+  return "";
+}
+
+function propertyNameOf(expression) {
+  const target = unwrapExpression(expression);
+  if (ts.isPropertyAccessExpression(target)) return target.name.text;
+  if (ts.isElementAccessExpression(target) && target.argumentExpression
+    && (ts.isStringLiteral(target.argumentExpression) || ts.isNoSubstitutionTemplateLiteral(target.argumentExpression))) {
+    return target.argumentExpression.text;
+  }
+  return "";
+}
+
+function rootIdentifierOf(expression) {
+  let current = unwrapExpression(expression);
+  while (current) {
+    if (ts.isIdentifier(current)) return current.text;
+    if (ts.isPropertyAccessExpression(current) || ts.isElementAccessExpression(current)) {
+      current = unwrapExpression(current.expression);
+      continue;
     }
-    // 比较值只控制渲染，不等于把值显示出来。
-    if (/^(?:[\w?.]+)\s*(?:===?|!==?|>=?|<=?)\s*/.test(inspectable.trim())) return;
-    const trimmed = inspectable.trim();
-    // 裸变量（例如 {workspaceId}）没有属性链，必须在属性链的快速返回前判定；
-    // 否则最直接的底层标识泄露反而会绕过后续检查。
-    const bare = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)$/)?.[1];
-    if (bare && RAW_DYNAMIC_FIELD.has(bare)) {
-      add(expression, offset, bare);
+    if (ts.isCallExpression(current)) {
+      current = unwrapExpression(current.expression);
+      continue;
+    }
+    return "";
+  }
+  return "";
+}
+
+function propertyPathOf(expression) {
+  const parts = [];
+  let current = unwrapExpression(expression);
+  while (current) {
+    if (ts.isIdentifier(current)) {
+      parts.unshift(current.text);
+      break;
+    }
+    if (ts.isPropertyAccessExpression(current) || ts.isElementAccessExpression(current)) {
+      const property = propertyNameOf(current);
+      if (property) parts.unshift(property);
+      current = unwrapExpression(current.expression);
+      continue;
+    }
+    break;
+  }
+  return parts;
+}
+
+function isSafeDisplayFormatterCall(node) {
+  const target = unwrapExpression(node.expression);
+  if (ts.isIdentifier(target)) return SAFE_DISPLAY_FORMATTERS.has(target.text);
+  return ts.isPropertyAccessExpression(target)
+    && target.name.text === "get"
+    && ts.isIdentifier(target.expression)
+    && SAFE_DISPLAY_MAPS.has(target.expression.text);
+}
+
+function unsafeDynamicNames(expression, taintedIdentifiers = new Set()) {
+  const names = [];
+  const seen = new Set();
+  const add = (name) => {
+    if (!name || seen.has(name)) return;
+    seen.add(name);
+    names.push(name);
+  };
+  const visit = (rawNode) => {
+    const node = unwrapExpression(rawNode);
+    if (!node) return;
+    if (ts.isCallExpression(node)) {
+      const name = calledName(node.expression);
+      if (isSafeDisplayFormatterCall(node)) return;
+      if (name === "stringify" && rootIdentifierOf(node.expression) === "JSON") add("JSON.stringify");
+      if (name === "map" || name === "flatMap") {
+        for (const argument of node.arguments) visit(argument);
+        return;
+      }
+      visit(node.expression);
+      for (const argument of node.arguments) visit(argument);
       return;
     }
-    const directChain = /^[A-Za-z_$][\w$]*(?:(?:\?\.|\.)[A-Za-z_$][\w$]*)+(?:\s*\?\?\s*[^;]+)?$/.test(trimmed);
-    const directMethod = /^[A-Za-z_$][\w$]*(?:(?:\?\.|\.)[A-Za-z_$][\w$]*)+\.(?:slice|replace)\([^;]*\)$/.test(trimmed);
-    if (!directChain && !directMethod) return;
-    for (const match of inspectable.matchAll(/(?:\?\.|\.)\s*([A-Za-z_][A-Za-z0-9_]*)\b/g)) {
-      const name = match[1];
-      if (name && RAW_DYNAMIC_FIELD.has(name)) add(expression, offset + (match.index ?? 0), name);
+    if (ts.isConditionalExpression(node)) {
+      visit(node.whenTrue);
+      visit(node.whenFalse);
+      return;
+    }
+    if (ts.isBinaryExpression(node)) {
+      const operator = node.operatorToken.kind;
+      if ([ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.EqualsEqualsEqualsToken,
+        ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken,
+        ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken,
+        ts.SyntaxKind.LessThanToken, ts.SyntaxKind.LessThanEqualsToken].includes(operator)) return;
+      if (operator === ts.SyntaxKind.AmpersandAmpersandToken) visit(node.right);
+      else { visit(node.left); visit(node.right); }
+      return;
+    }
+    if (ts.isTemplateExpression(node)) {
+      for (const span of node.templateSpans) visit(span.expression);
+      return;
+    }
+    if (ts.isElementAccessExpression(node) && ts.isIdentifier(node.expression)
+      && SAFE_DISPLAY_MAPS.has(node.expression.text)) return;
+    if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
+      const property = propertyNameOf(node);
+      const root = rootIdentifierOf(node);
+      const path = propertyPathOf(node);
+      if (RAW_DYNAMIC_FIELD.has(property)) add(property);
+      if (UNTRUSTED_RESPONSE_FIELD.has(property)
+        && (UNTRUSTED_RESPONSE_ROOT.test(root) || path.slice(0, -1).some((part) => /^(?:error|failure|response)$/i.test(part)))) {
+        add(path.join("."));
+      }
+      visit(node.expression);
+      if (ts.isElementAccessExpression(node) && node.argumentExpression) visit(node.argumentExpression);
+      return;
+    }
+    if (ts.isIdentifier(node)) {
+      if (RAW_DYNAMIC_FIELD.has(node.text)) add(node.text);
+      if (taintedIdentifiers.has(node.text)) add(node.text);
+      return;
+    }
+    if (ts.isArrowFunction(node)) {
+      if (ts.isBlock(node.body)) {
+        const visitReturns = (child) => {
+          if (ts.isReturnStatement(child) && child.expression
+            && !ts.isJsxElement(child.expression) && !ts.isJsxSelfClosingElement(child.expression) && !ts.isJsxFragment(child.expression)) {
+            visit(child.expression);
+            return;
+          }
+          ts.forEachChild(child, visitReturns);
+        };
+        visitReturns(node.body);
+      } else if (!ts.isJsxElement(node.body) && !ts.isJsxSelfClosingElement(node.body) && !ts.isJsxFragment(node.body)) visit(node.body);
+      return;
+    }
+    if (ts.isFunctionExpression(node)) {
+      const visitReturns = (child) => {
+        if (ts.isReturnStatement(child) && child.expression
+          && !ts.isJsxElement(child.expression) && !ts.isJsxSelfClosingElement(child.expression) && !ts.isJsxFragment(child.expression)) {
+          visit(child.expression);
+          return;
+        }
+        ts.forEachChild(child, visitReturns);
+      };
+      visitReturns(node.body);
+      return;
+    }
+    if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxFragment(node)) return;
+    ts.forEachChild(node, visit);
+  };
+  visit(expression);
+  return names;
+}
+
+function collectTaintedIdentifiers(sourceFile) {
+  const tainted = new Set();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const add = (name) => {
+      if (!name || tainted.has(name)) return;
+      tainted.add(name);
+      changed = true;
+    };
+    const visit = (node) => {
+      if (ts.isVariableDeclaration(node) && node.initializer) {
+        const root = rootIdentifierOf(node.initializer);
+        const path = propertyPathOf(node.initializer);
+        const initializer = unwrapExpression(node.initializer);
+        const directAccess = ts.isPropertyAccessExpression(initializer)
+          || ts.isElementAccessExpression(initializer)
+          || (ts.isIdentifier(initializer) && tainted.has(initializer.text));
+        const directField = propertyNameOf(initializer);
+        const untrustedSource = directAccess && (
+          (UNTRUSTED_RESPONSE_FIELD.has(directField)
+            && (UNTRUSTED_RESPONSE_ROOT.test(root) || path.some((part) => /^(?:error|failure|response)$/i.test(part))))
+          || RAW_DYNAMIC_FIELD.has(directField)
+          || (ts.isIdentifier(initializer) && tainted.has(initializer.text))
+        );
+        if (ts.isIdentifier(node.name) && untrustedSource) add(node.name.text);
+        if (ts.isObjectBindingPattern(node.name)
+          && (untrustedSource || UNTRUSTED_RESPONSE_ROOT.test(root))) {
+          for (const element of node.name.elements) {
+            if (!ts.isIdentifier(element.name)) continue;
+            const property = element.propertyName?.getText(sourceFile) ?? element.name.text;
+            if (UNTRUSTED_RESPONSE_FIELD.has(property) || untrustedSource) add(element.name.text);
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sourceFile);
+  }
+  return tainted;
+}
+
+/** 使用 TypeScript AST 检查 JSX 文本与动态可见属性，覆盖可选链、计算属性和嵌套模板。 */
+export function findRawDynamicValueRisks(source, fileName = "client.tsx") {
+  const sourceFile = parseClientSource(source, fileName);
+  const authorizedRanges = authorizedTechnicalRanges(source, fileName);
+  const taintedIdentifiers = collectTaintedIdentifiers(sourceFile);
+  const risks = [];
+  const seen = new Set();
+  const add = (node, name) => {
+    const offset = node.getStart(sourceFile);
+    if (offsetInRanges(offset, authorizedRanges)) return;
+    const line = sourceFile.getLineAndCharacterOfPosition(offset).line + 1;
+    const text = node.getText(sourceFile).trim().slice(0, 96);
+    const key = `${line}:${name}:${text}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    risks.push({ line, text, rule: `客户端动态值 ${name} 必须先经过中文映射或编号脱敏` });
+  };
+  const check = (expression) => {
+    if (!expression) return;
+    for (const name of unsafeDynamicNames(expression, taintedIdentifiers)) add(expression, name);
+  };
+  const visit = (node) => {
+    if (ts.isJsxExpression(node) && node.expression) {
+      if (ts.isJsxAttribute(node.parent)) {
+        const attribute = node.parent.name.getText(sourceFile);
+        if (VISIBLE_ATTRIBUTES.has(attribute) || VISIBLE_PROPERTY_NAMES.has(attribute)) check(node.expression);
+      } else if (ts.isJsxElement(node.parent) || ts.isJsxFragment(node.parent)) check(node.expression);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return risks;
+}
+
+const TEXT_SINK_CALL = /^(?:appendAi|enqueueSnackbar|notify|setBanner|setBindingError|setCaption|setDone|setErr|setError|setFeedback|setLoadMessage|setMessage|setMsg|setNotice|setRateError|setSiteResult|setSubtitle|setToast|showToast)$/;
+const SINK_OBJECT_TEXT_KEY = new Set(["body", "channelName", "content", "description", "detail", "emptyLabel", "emptyText", "errorText", "failureText", "fallbackReason", "helperText", "label", "message", "noDataText", "summary", "text", "ticketTitle", "title", "tooltip"]);
+
+function objectTextValues(node) {
+  const target = unwrapExpression(node);
+  if (!target) return [];
+  if (!ts.isObjectLiteralExpression(target)) return [target];
+  const values = [];
+  for (const property of target.properties) {
+    if (!ts.isPropertyAssignment(property)) continue;
+    const name = property.name && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) ? property.name.text : "";
+    if (SINK_OBJECT_TEXT_KEY.has(name)) values.push(property.initializer);
+  }
+  return values;
+}
+
+function literalPieces(node) {
+  const target = unwrapExpression(node);
+  if (!target) return [];
+  if (ts.isStringLiteral(target) || ts.isNoSubstitutionTemplateLiteral(target)) return [target.text];
+  if (ts.isTemplateExpression(target)) return [target.head.text, ...target.templateSpans.map((span) => span.literal.text)];
+  if (ts.isConditionalExpression(target)) return [...literalPieces(target.whenTrue), ...literalPieces(target.whenFalse)];
+  if (ts.isBinaryExpression(target) && [ts.SyntaxKind.PlusToken, ts.SyntaxKind.BarBarToken, ts.SyntaxKind.QuestionQuestionToken].includes(target.operatorToken.kind)) {
+    return [...literalPieces(target.left), ...literalPieces(target.right)];
+  }
+  return [];
+}
+
+/** 检查 JSX 之外的高风险客户端文字出口：标题、Toast、通知、语音/字幕与 DOM/canvas。 */
+export function findClientTextSinkRisks(source, fileName = "client.tsx") {
+  const sourceFile = parseClientSource(source, fileName);
+  const authorizedRanges = authorizedTechnicalRanges(source, fileName);
+  const taintedIdentifiers = collectTaintedIdentifiers(sourceFile);
+  const risks = [];
+  const seen = new Set();
+  const add = (node, rule, text = node.getText(sourceFile)) => {
+    const offset = node.getStart(sourceFile);
+    if (offsetInRanges(offset, authorizedRanges)) return;
+    const line = sourceFile.getLineAndCharacterOfPosition(offset).line + 1;
+    const clipped = String(text).trim().slice(0, 96);
+    const key = `${line}:${rule}:${clipped}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    risks.push({ line, text: clipped, rule });
+  };
+  const checkValue = (node) => {
+    for (const name of unsafeDynamicNames(node, taintedIdentifiers)) add(node, `客户端文字出口中的 ${name} 必须先经过中文映射或编号脱敏`);
+    for (const piece of literalPieces(node)) {
+      for (const rule of literalLanguageRules(piece, "文字出口")) add(node, rule, piece);
     }
   };
-
-  for (const match of clean.matchAll(/>[^<\n]*\{([^{}\n]+)\}[^<\n]*</g)) {
-    check(match[1] ?? "", match.index ?? 0);
-  }
-  const attributes = [...VISIBLE_ATTRIBUTES].map((value) => value.replace("-", "\\-")).join("|");
-  const attributeExpression = new RegExp(`\\b(?:${attributes})\\s*=\\s*\\{([^{}\\n]+)\\}`, "g");
-  for (const match of clean.matchAll(attributeExpression)) check(match[1] ?? "", match.index ?? 0);
-  for (const item of collectVisibleStrings(source, fileName)) {
-    for (const interpolation of item.text.matchAll(/\$\{([^{}]+)\}/g)) check(interpolation[1] ?? "", 0);
-  }
+  const visit = (node) => {
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+      const left = node.left.getText(sourceFile);
+      if (left === "document.title" || /\.(?:ariaLabel|innerText|textContent|title)$/.test(left)) checkValue(node.right);
+    }
+    if (ts.isNewExpression(node) && calledName(node.expression) === "Notification") {
+      for (const argument of node.arguments ?? []) for (const value of objectTextValues(argument)) checkValue(value);
+    }
+    if (ts.isCallExpression(node)) {
+      const name = calledName(node.expression);
+      const fullName = node.expression.getText(sourceFile);
+      if (TEXT_SINK_CALL.test(name) || name === "toast" || /(?:^|\.)toast\.(?:error|info|success|warn|warning)$/.test(fullName)
+        || name === "speak" || name === "fillText") {
+        const args = name === "fillText" ? node.arguments.slice(0, 1) : node.arguments;
+        for (const argument of args) for (const value of objectTextValues(argument)) checkValue(value);
+      }
+      if (name === "setAttribute" && node.arguments.length >= 2) {
+        const attribute = node.arguments[0];
+        if ((ts.isStringLiteral(attribute) || ts.isNoSubstitutionTemplateLiteral(attribute))
+          && VISIBLE_ATTRIBUTES.has(attribute.text)) checkValue(node.arguments[1]);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
   return risks;
 }
 
 /** P25 可保留必要技术契约，但必须同时具备权限路由、醒目标识和审计说明。 */
 export function findDiagnosticIsolationRisks(pageSource, appSource, playwrightSource = "") {
   const risks = [];
-  if (!pageSource.includes('data-wl-authorized-diagnostics="ai-pm.development"')) risks.push("开发场域缺少授权诊断隔离标识");
-  if (!pageSource.includes("授权开发诊断") || !pageSource.includes("仅限已获开发权限的管理员")) risks.push("开发场域缺少面向用户的授权提示");
-  if (!pageSource.includes("开发事件、围栏审计与版本台账")) risks.push("开发场域缺少可审计性说明");
-  if (!appSource.includes('<NavigationCapabilityBoundary capabilityId="ai-pm.development"><P25 /></NavigationCapabilityBoundary>')) risks.push("开发场域直达路由未受行业能力权限约束");
-  if (!appSource.includes('import.meta.env.DEV && import.meta.env.VITE_ENABLE_UI_DIAGNOSTICS === "true"')) risks.push("组件矩阵必须同时受开发环境与显式开关约束");
-  if (!appSource.includes('<Route path="/dev" element={<UiDiagnosticsRoute />} />')) risks.push("组件矩阵路由不得直接渲染诊断页面");
-  if (playwrightSource && !playwrightSource.includes("VITE_ENABLE_UI_DIAGNOSTICS=true")) risks.push("视觉测试未显式开启组件矩阵");
+  const pageFile = parseClientSource(pageSource, "apps/web/src/pages/p25/P25.tsx");
+  const marked = markedDiagnosticNodes(pageFile);
+  const markedSource = marked.map((node) => pageSource.slice(node.getStart(pageFile), node.getEnd())).join("\n");
+  const cleanApp = stripComments(appSource);
+  const cleanPlaywright = stripComments(playwrightSource);
+  if (marked.length === 0) risks.push("开发场域缺少真实 DOM 授权诊断隔离标识");
+  if (!markedSource.includes("授权开发诊断") || !markedSource.includes("仅限已获开发权限的管理员")) risks.push("开发场域授权子树缺少面向用户的授权提示");
+  if (!markedSource.includes("开发事件、围栏审计与版本台账")) risks.push("开发场域授权子树缺少可审计性说明");
+  if (!/<NavigationCapabilityBoundary\b[^>]*capabilityId\s*=\s*["']ai-pm\.development["'][^>]*>\s*<P25\s*\/>\s*<\/NavigationCapabilityBoundary>/.test(cleanApp)) risks.push("开发场域直达路由未受行业能力权限约束");
+  if (!/import\.meta\.env\.DEV\s*&&\s*import\.meta\.env\.VITE_ENABLE_UI_DIAGNOSTICS\s*===\s*["']true["']/.test(cleanApp)) risks.push("组件矩阵必须同时受开发环境与显式开关约束");
+  if (!/<Route\b[^>]*path\s*=\s*["']\/dev["'][^>]*element\s*=\s*\{<UiDiagnosticsRoute\s*\/>\}/.test(cleanApp)) risks.push("组件矩阵路由不得直接渲染诊断页面");
+  if (playwrightSource && !cleanPlaywright.includes("VITE_ENABLE_UI_DIAGNOSTICS=true")) risks.push("视觉测试未显式开启组件矩阵");
+  return risks;
+}
+
+/** /dev 组件矩阵可保留验收术语，但必须同时具备真实 DOM 标识和双重 DEV 路由门。 */
+export function findComponentMatrixIsolationRisks(matrixSource, appSource, playwrightSource = "") {
+  const risks = [];
+  const matrixFile = parseClientSource(matrixSource, "apps/web/src/pages/dev/DevMatrix.tsx");
+  if (markedDiagnosticNodes(matrixFile, "ui-component-matrix").length === 0) {
+    risks.push("组件矩阵缺少真实 DOM 授权诊断隔离标识");
+  }
+  if (!matrixSource.includes("仅限本地开发环境") || !matrixSource.includes("显式开启诊断开关")) {
+    risks.push("组件矩阵缺少面向开发者的隔离提示");
+  }
+  const cleanApp = stripComments(appSource);
+  const cleanPlaywright = stripComments(playwrightSource);
+  if (!/import\.meta\.env\.DEV\s*&&\s*import\.meta\.env\.VITE_ENABLE_UI_DIAGNOSTICS\s*===\s*["']true["']/.test(cleanApp)) {
+    risks.push("组件矩阵必须同时受开发环境与显式开关约束");
+  }
+  if (!/return\s+enabled\s*\?\s*<Bridge>\s*<DevMatrix\s*\/>\s*<\/Bridge>\s*:\s*<NotFound\s*\/>/.test(cleanApp)) {
+    risks.push("组件矩阵守卫必须实际消费双重开关并在关闭时返回未找到页");
+  }
+  if (!/<Route\b[^>]*path\s*=\s*["']\/dev["'][^>]*element\s*=\s*\{<UiDiagnosticsRoute\s*\/>\}/.test(cleanApp)) {
+    risks.push("组件矩阵路由不得直接渲染诊断页面");
+  }
+  if (playwrightSource && !cleanPlaywright.includes("VITE_ENABLE_UI_DIAGNOSTICS=true")) {
+    risks.push("视觉测试未显式开启组件矩阵");
+  }
   return risks;
 }
 

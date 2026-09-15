@@ -46,7 +46,7 @@ export default function Login() {
     try {
       const r = await svc().requestCode.mutate({ channel: "phone", target: phone, purpose: "login" });
       setCodeSent(true);
-      if (r.devCode) setDevCode(r.devCode);
+      setDevCode(import.meta.env.DEV && r.devCode ? r.devCode : "");
     } catch (e) { setErr(safeLoginError(e, "验证码发送失败，请稍后重试。")); }
     finally { setBusy(false); }
   }
@@ -91,7 +91,7 @@ export default function Login() {
               {codeSent ? "重发" : "发送验证码"}
             </Button>
           </div>
-          {devCode && <p className="break-words text-body text-amber-300">本地开发验证码：{devCode}（生产环境不显示）</p>}
+          {import.meta.env.DEV && devCode && <p className="break-words text-body text-amber-300">本地开发验证码：{devCode}（生产环境不显示）</p>}
         </div>
       ) : (
         <div className="space-y-3">

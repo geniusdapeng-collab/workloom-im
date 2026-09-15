@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Badge, Card } from "./components";
-import { clientIdentifierText } from "./language";
+import { clientChineseText, clientIdentifierText } from "./language";
 
 export type RiskLevel = "none" | "low" | "medium" | "high" | "critical";
 
@@ -219,7 +219,7 @@ export function MemorySource({ source, scope, confidence, sensitive }: { source:
 }
 
 export function NightShiftStatus({ status, owner, nextRun, needsHuman = 0 }: { status: string; owner?: string; nextRun?: string; needsHuman?: number }) {
-  return <Card className="wl-trust-state"><div className="wl-pattern-header"><h3>夜班状态</h3><Badge tone={status.includes("失败") ? "danger" : needsHuman > 0 ? "warning" : "info"}>{status || "状态待确认"}</Badge></div><div className="wl-pattern-meta">{owner && <span>值班责任人：{owner}</span>}{nextRun && <span>下次运行：{nextRun}</span>}<span>需要人工处理：{needsHuman} 项</span></div></Card>;
+  return <Card className="wl-trust-state"><div className="wl-pattern-header"><h3>夜班状态</h3><Badge tone={status.includes("失败") ? "danger" : needsHuman > 0 ? "warning" : "info"}>{clientChineseText(status, "状态待确认")}</Badge></div><div className="wl-pattern-meta">{owner && <span>值班责任人：{owner}</span>}{nextRun && <span>下次运行：{nextRun}</span>}<span>需要人工处理：{needsHuman} 项</span></div></Card>;
 }
 
 export function MetricCard({ label, value, period, source, updatedAt, delta }: { label: string; value: ReactNode; period: string; source: string; updatedAt: string; delta?: string }) {

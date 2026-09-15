@@ -6,12 +6,16 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
+import { parse as parseYaml } from "yaml";
 import {
   assertIndependentUpgradeBranch,
+  buildUpgradePullRequestBody,
   canCreateUpgradePr,
   inspectMigratedConsumer,
   preflightChildren,
+  renderConsumerWorkflow,
   resolvePreflightTarget,
+  rolloutHasFailure,
   selectRolloutBatch,
   validateChildInventory,
   validateRelease,
@@ -300,10 +304,50 @@ describe("UI 稳定发布门禁", () => {
     assert.equal(canCreateUpgradePr({ accessStatus: "accessible", stageOneReady: true, targetVersionApplied: true }), false);
   });
 
+  it("选中仓阶段一阻断与升级失败都让 rollout 失败，单纯延后波次不误报", () => {
+    assert.equal(rolloutHasFailure([{ status: "blocked-phase-1" }]), true);
+    assert.equal(rolloutHasFailure([{ status: "failed" }]), true);
+    assert.equal(rolloutHasFailure([{ status: "blocked-by-earlier-wave" }]), true);
+    assert.equal(rolloutHasFailure([{ status: "deferred-wave" }, { status: "pr-opened" }]), false);
+  });
+
   it("rollout 分支只能是版本化独立分支，main 永远非法", () => {
     assert.equal(assertIndependentUpgradeBranch("chore/workloom-ui-v1.2.3"), true);
     assert.throws(() => assertIndependentUpgradeBranch("main"), /非法升级分支/);
     assert.throws(() => assertIndependentUpgradeBranch("release/ui"), /非法升级分支/);
+  });
+
+  it("升级 PR 只列出消费工作流实际执行的门禁", () => {
+    const body = buildUpgradePullRequestBody("1.2.3");
+    assert.match(body, /三端逐一 typecheck 与生产 build/u);
+    assert.match(body, /仓库现有 pnpm 测试/u);
+    assert.match(body, /存在 Python 测试时同时运行 pytest/u);
+    assert.match(body, /Playwright.*基础主入口、首帧及稳定帧横向溢出冒烟/u);
+    assert.doesNotMatch(body, /租户负向|视觉回归/u);
+  });
+
+  it("消费工作流在普通仓和 Tiger governance 前缀下都指向真实客户端与证据路径", () => {
+    const regular = renderConsumerWorkflow("");
+    assert.match(regular, /WORKLOOM_DIR: \./u);
+    assert.match(regular, /\.\/apps\/web\/playwright-report\/consumer/u);
+
+    const tiger = renderConsumerWorkflow("governance/");
+    assert.match(tiger, /WORKLOOM_DIR: governance/u);
+    assert.match(tiger, /governance\/apps\/web\/playwright-report\/consumer/u);
+    assert.doesNotMatch(tiger, /__REPO_DIR__/u);
+    assert.doesNotMatch(tiger, /--if-present/u);
+    const parsed = parseYaml(tiger);
+    assert.equal(parsed.jobs["ui-contract"].env.WORKLOOM_DIR, "governance");
+    const commands = parsed.jobs["ui-contract"].steps.map((step) => step.run ?? "").join("\n");
+    for (const command of [
+      "verify-ui-consumer.mjs",
+      "verify-client-foundation-consumer.mjs",
+      'pnpm -C "$WORKLOOM_DIR" test',
+      "python -m pytest -q",
+      "for CLIENT in web webb webc",
+      "test:consumer",
+    ]) assert.match(commands, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "u"));
+    assert.throws(() => renderConsumerWorkflow("../governance"), /非法消费仓 pathPrefix/u);
   });
 
   it("工作流严格先预检、再 publish、最后 rollout", () => {
@@ -327,8 +371,22 @@ describe("UI 稳定发布门禁", () => {
     assert.match(implementation, /base: "main"/u);
     assert.match(implementation, /applyClientFoundation/u);
     assert.match(implementation, /verify-client-foundation-consumer\.mjs/u);
+    assert.match(implementation, /verify-production-client-boundary\.mjs/u);
     assert.doesNotMatch(implementation, /HEAD:main/u);
     const consumerWorkflow = readFileSync(join(repoRoot, "sync/ui-consumer-template.yml"), "utf8");
     assert.match(consumerWorkflow, /verify-client-foundation-consumer\.mjs/u);
+    assert.match(consumerWorkflow, /pnpm -C "\$WORKLOOM_DIR" test/u);
+    assert.match(consumerWorkflow, /python -m pytest -q/u);
+    assert.match(consumerWorkflow, /for CLIENT in web webb webc/u);
+    assert.match(consumerWorkflow, /playwright install --with-deps chromium/u);
+    assert.match(consumerWorkflow, /test:consumer/u);
+    assert.doesNotMatch(consumerWorkflow, /租户负向|视觉回归/u);
+    const webPackage = JSON.parse(readFileSync(join(repoRoot, "apps/web/package.json"), "utf8"));
+    assert.equal(webPackage.scripts["test:consumer"], "playwright test --config playwright.consumer.config.ts");
+    assert.equal(webPackage.devDependencies["@playwright/test"], "1.63.0");
+    assert.match(readFileSync(join(repoRoot, "apps/web/playwright.consumer.config.ts"), "utf8"), /consumer-e2e/u);
+    assert.match(readFileSync(join(repoRoot, "apps/web/consumer-e2e/clients.playwright.ts"), "utf8"), /__workloomFirstClientFrame/u);
+    const buildScriptDependencies = [...webPackage.scripts.build.matchAll(/\.\.\/\.\.\/(scripts\/[-A-Za-z0-9_.]+\.mjs)/gu)].map((match) => match[1]);
+    for (const dependency of buildScriptDependencies) assert.match(implementation, new RegExp(dependency.replaceAll(".", "\\."), "u"));
   });
 });

@@ -13,7 +13,7 @@ import { APPROVAL_TEMPLATES } from "./policies.js";
 import { createSmsSender, DevEchoSms, UnavailableSms } from "./providers.js";
 import { verifyToken } from "../tenancy/auth.js";
 import { issueGrant, revokeGrant } from "./partner.js";
-import { suggestedWorkspaceSlug, type AccountsDeps } from "./service.js";
+import { developmentVerificationCode, suggestedWorkspaceSlug, type AccountsDeps } from "./service.js";
 
 /* ================= ① 纯函数 ================= */
 
@@ -43,6 +43,13 @@ describe("工作区地址建议", () => {
     const value = suggestedWorkspaceSlug("A very very very very very long workspace name", "13800001234");
     expect(value).toMatch(/^[a-z0-9][a-z0-9-]{2,31}$/);
     expect(value.length).toBeLessThanOrEqual(32);
+  });
+});
+
+describe("验证码生产边界", () => {
+  it("生产环境永不把本地验证码放入接口响应", () => {
+    expect(developmentVerificationCode("123456", "production")).toBeUndefined();
+    expect(developmentVerificationCode("123456", "development")).toBe("123456");
   });
 });
 

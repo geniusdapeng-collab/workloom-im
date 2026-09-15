@@ -91,6 +91,15 @@ describe("行业包契约", () => {
     }];
     expect(() => parseBundleManifest(invalid)).toThrow(/必须包含中文/);
   });
+
+  it.each(["订单 workspace_id", "订单 workspaceId"])("含中文也不能夹带底层字段：%s", (title) => {
+    const invalid = structuredClone(manifest) as Record<string, any>;
+    invalid.workloom.ui.navigation.slots = [{
+      capabilityId: "example.orders", title, route: "/orders",
+      group: "经营", icon: "report", clients: ["pc"], permissions: [],
+    }];
+    expect(() => parseBundleManifest(invalid)).toThrow(/不得混入底层/);
+  });
 });
 
 const workforcePreset = {

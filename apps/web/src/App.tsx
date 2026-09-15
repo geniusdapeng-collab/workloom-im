@@ -40,6 +40,11 @@ import {
   NavigationAccessProvider,
   NavigationCapabilityBoundary,
 } from "./shell/NavigationAccess";
+import {
+  INDUSTRY_ROUTE_REGISTRY,
+  IndustryRouteBoundary,
+  IndustryRouteLoadFailure,
+} from "./shell/IndustryRoutes";
 
 function NotFound() {
   return (
@@ -153,7 +158,18 @@ function Shell() {
         isGuest() ? <Navigate to="/login?next=/onboarding" replace /> : <Onboarding />
       } />
       <Route path="/dev" element={<UiDiagnosticsRoute />} />
-            <Route path="*" element={<NotFound />} />
+            {INDUSTRY_ROUTE_REGISTRY.routes.map((definition) => (
+              <Route
+                key={definition.path}
+                path={definition.path}
+                element={
+                  <IndustryRouteBoundary definition={definition}>
+                    {definition.element}
+                  </IndustryRouteBoundary>
+                }
+              />
+            ))}
+            <Route path="*" element={INDUSTRY_ROUTE_REGISTRY.error ? <IndustryRouteLoadFailure /> : <NotFound />} />
           </Routes>
         </NavigationAccessBoundary>
       </div>

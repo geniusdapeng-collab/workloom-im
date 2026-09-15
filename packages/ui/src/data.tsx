@@ -10,7 +10,12 @@ import {
 } from "react";
 import { Badge, Button } from "./components";
 import { Radio } from "./forms";
+import { clientChineseText } from "./language";
 import { Dialog } from "./overlays";
+
+function clientNodeText(value: ReactNode, fallback: string): ReactNode {
+  return typeof value === "string" ? clientChineseText(value, fallback) : value;
+}
 
 function clampPercent(value: number): number {
   return Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : 0;
@@ -220,7 +225,7 @@ export function Timeline({
           <li className={`wl-timeline__item wl-timeline__item--${item.tone ?? "neutral"}`} key={item.id}>
             <span className="wl-timeline__marker" aria-hidden />
             <div className="wl-timeline__content">
-              <div className="wl-timeline__heading"><strong>{item.title}</strong>{item.status}</div>
+              <div className="wl-timeline__heading"><strong>{item.title}</strong>{clientNodeText(item.status, "状态待确认")}</div>
               {item.description && <div className="wl-timeline__description">{item.description}</div>}
               {item.time && <time dateTime={item.dateTime}>{item.time}</time>}
               {item.action && <div className="wl-timeline__action">{item.action}</div>}

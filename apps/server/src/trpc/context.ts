@@ -18,6 +18,7 @@ import {
   AccessAuthorityError,
   currentMemberAuthority,
   memberAccessGrants,
+  resolveAuthoritativeClientAccess,
   type BaseActionPermission,
 } from "../service/access-authority.js";
 
@@ -109,6 +110,35 @@ export const actionProcedure = (permission: BaseActionPermission) =>
 
 /** 通用写操作仍需显式 workspace.write；不再仅按角色粗粒度放行。 */
 export const writeProcedure = actionProcedure("workspace.write");
+
+/**
+ * 行业能力读权限守卫：权限必须来自当前工作区已通过签名、兼容性与投影校验的
+ * 活动 Bundle。客户端隐藏入口不是授权边界，直调 API 同样失败关闭。
+ */
+export const navigationPermissionProcedure = (permission: string) =>
+  protectedProcedure.use(async ({ ctx, next }) => {
+    const access = await resolveAuthoritativeClientAccess(ctx.identity);
+    if (!access.navigationPermissions.includes(permission)) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "当前成员没有访问这项能力的权限。",
+      });
+    }
+    return next();
+  });
+
+/** 行业能力权限 + 通用写权限双守卫。 */
+export const navigationPermissionWriteProcedure = (permission: string) =>
+  writeProcedure.use(async ({ ctx, next }) => {
+    const access = await resolveAuthoritativeClientAccess(ctx.identity);
+    if (!access.navigationPermissions.includes(permission)) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "当前成员没有访问这项能力的权限。",
+      });
+    }
+    return next();
+  });
 
 /** 越版（plan 能力）+ 写操作（role）双守卫 */
 export const capabilityWriteProcedure = (cap: CapabilityKey) =>

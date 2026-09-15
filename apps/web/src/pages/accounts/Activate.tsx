@@ -81,7 +81,7 @@ export default function Activate() {
     setErr(""); setBusy(true);
     try {
       const result = await svc().requestCode.mutate({ channel: "phone", target: form.phone, purpose: "activate" });
-      setDevCode(result.devCode ?? "");
+      setDevCode(import.meta.env.DEV && result.devCode ? result.devCode : "");
     } catch (error) { setErr(safeActivationError(error, "验证码发送失败，请稍后重试。")); }
     finally { setBusy(false); }
   }
@@ -115,7 +115,7 @@ export default function Activate() {
           <input className={inp} inputMode="tel" placeholder="手机号" value={form.phone} onChange={set("phone")} />
           <Button variant="primary" busy={busy} disabled={form.phone.length < 6} onClick={() => void sendCode()}>发送验证码</Button>
         </div>
-        {devCode && <p className="break-words text-sm text-amber-400">本地开发验证码：{devCode}</p>}
+        {import.meta.env.DEV && devCode && <p className="break-words text-sm text-amber-400">本地开发验证码：{devCode}</p>}
         <input className={inp} inputMode="numeric" maxLength={6} placeholder="6 位验证码" value={form.code} onChange={set("code")} />
         <input className={inp} placeholder="企业名称（如：远航科技）" value={form.tenantName} onChange={set("tenantName")} />
         <input className={inp} placeholder="工作区名称（如：产品研发中心）" value={form.workspaceName} onChange={set("workspaceName")} />

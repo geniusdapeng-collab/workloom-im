@@ -98,7 +98,7 @@ export default function P4() {
       if (requestId !== loadSequence.current) return;
       console.warn("读取审批队列失败", error);
       const failure = toUiFailure(error);
-      setLoadMessage(failure.message);
+      setLoadMessage(operationFailure(error, "读取审批队列"));
       setLoadState(failure.kind === "forbidden" ? "forbidden" : "error");
     }
   }, []);

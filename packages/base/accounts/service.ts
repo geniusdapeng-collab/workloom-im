@@ -31,6 +31,11 @@ const LOCK_MS = 15 * 60_000;
 
 const now = (d: AccountsDeps) => (d.now ? d.now() : Date.now());
 
+/** 生产响应永不携带本地验证码；客户端仍会再做一次开发构建守卫。 */
+export function developmentVerificationCode(code: string, nodeEnv = process.env.NODE_ENV): string | undefined {
+  return nodeEnv === "production" ? undefined : code;
+}
+
 /* ================= 验证码 ================= */
 
 export async function requestCode(
@@ -64,7 +69,7 @@ export async function requestCode(
     await q(`DELETE FROM verification_codes WHERE id=$1`, [verificationId]).catch(() => undefined);
     throw error;
   }
-  return { sent: true, devCode: process.env.NODE_ENV === "production" ? undefined : code };
+  return { sent: true, devCode: developmentVerificationCode(code) };
 }
 
 export async function consumeCode(

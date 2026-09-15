@@ -138,7 +138,7 @@ export default function P24() {
     } catch (error) {
       console.warn("读取考试院数据失败", error);
       const failure = toUiFailure(error);
-      setLoadMessage(failure.message);
+      setLoadMessage(operationFailure(error, "读取考试院数据"));
       setLoadState(failure.kind === "forbidden" ? "forbidden" : "error");
     }
   }, []);

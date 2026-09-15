@@ -95,7 +95,7 @@ export default function P9() {
       if (requestId !== loadSequence.current) return;
       console.warn("读取夜班状态失败", error);
       const failure = toUiFailure(error);
-      setLoadMessage(failure.message);
+      setLoadMessage(operationFailure(error, "读取夜班状态"));
       setLoadState(failure.kind === "forbidden" ? "forbidden" : "error");
     }
   }, []);

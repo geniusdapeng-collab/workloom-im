@@ -90,7 +90,7 @@ export default function P30() {
     } catch (error) {
       console.warn("读取成员管理数据失败", error);
       const failure = toUiFailure(error);
-      setLoadMessage(failure.message);
+      setLoadMessage(operationFailure(error, "读取成员管理数据"));
       setLoadState(failure.kind === "forbidden" ? "forbidden" : "error");
     }
   }, []);
@@ -114,8 +114,9 @@ export default function P30() {
     setNotice(null);
     try {
       const result = await my().requestDangerCode.mutate({ action: dangerActionOf(action) });
-      setDangerChallenge({ maskedTarget: result.maskedTarget, devCode: result.devCode });
-      if (result.devCode) setDangerCode(result.devCode);
+      const developmentCode = import.meta.env.DEV ? result.devCode : undefined;
+      setDangerChallenge({ maskedTarget: result.maskedTarget, devCode: developmentCode });
+      if (developmentCode) setDangerCode(developmentCode);
       setNotice({ tone: "success", text: `身份验证码已发送至 ${result.maskedTarget}，5 分钟内有效且只能使用一次。` });
     } catch (error) {
       console.warn("发送身份验证码失败", error);
@@ -289,7 +290,7 @@ export default function P30() {
               <div><p className="text-sm font-semibold">身份再确认</p><p className="text-body text-neutral-400">验证码只绑定当前账号，5 分钟有效且使用一次即失效。</p></div>
               <Button variant="quiet" busy={challengeBusy} disabled={Boolean(busy)} onClick={() => void requestDangerChallenge()}>{dangerChallenge ? "重新发送" : "发送身份验证码"}</Button>
             </div>
-            {dangerChallenge && <Input label="6 位身份验证码" required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={dangerCode} disabled={Boolean(busy)} onChange={(event) => setDangerCode(event.target.value.replace(/\D/g, "").slice(0, 6))} description={`已发送至 ${dangerChallenge.maskedTarget}${dangerChallenge.devCode ? "；当前为开发验证通道" : ""}`} wrapperClassName="mt-3" />}
+            {dangerChallenge && <Input label="6 位身份验证码" required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={dangerCode} disabled={Boolean(busy)} onChange={(event) => setDangerCode(event.target.value.replace(/\D/g, "").slice(0, 6))} description={`已发送至 ${dangerChallenge.maskedTarget}${import.meta.env.DEV && dangerChallenge.devCode ? "；当前为开发验证通道" : ""}`} wrapperClassName="mt-3" />}
           </div>
         </div>}
       </Overlay>

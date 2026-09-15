@@ -53,7 +53,10 @@ function Section({ name, spec, children }: { name: string; spec: string; childre
 
 export default function DevMatrix() {
   return (
-    <div className="space-y-2">
+    <div data-wl-authorized-diagnostics="ui-component-matrix" className="space-y-2">
+      <p className="rounded border border-line bg-bg800 px-3 py-2 text-body text-ink2">
+        仅限本地开发环境并显式开启诊断开关后使用；本页术语仅用于组件验收。
+      </p>
       <div className="mb-4 flex items-baseline gap-3">
         <h2 className="text-h1 font-black tracking-wider">HUD 组件状态矩阵</h2>
         <span className="text-caption tracking-[.2em] text-ink3">/dev · DEV MATRIX · F2</span>

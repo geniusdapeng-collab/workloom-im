@@ -12,8 +12,10 @@ const BundleAssetPath = z.string().min(1).max(300)
     && value.split("/").every((part) => part.length > 0 && part !== "." && part !== ".."),
   "资产路径必须是行业包内的规范相对路径");
 const Sha256Digest = z.string().regex(/^[a-f0-9]{64}$/);
+const RawClientField = /\b(?:[a-z][a-z0-9]*_[a-z0-9_]+|[a-z][a-z0-9]*[A-Z][A-Za-z0-9]*)\b/;
 const ChineseDisplayText = (max: number) => z.string().min(1).max(max)
-  .refine((value) => /\p{Script=Han}/u.test(value), "面向用户的文案必须包含中文，不得直接释放代码字段");
+  .refine((value) => /\p{Script=Han}/u.test(value), "面向用户的文案必须包含中文，不得直接释放代码字段")
+  .refine((value) => !RawClientField.test(value), "面向用户的文案不得混入底层 snake_case 或 camelCase 字段");
 
 const WorkforceCode = z.string().trim().regex(
   /^[a-z][a-z0-9_-]*(?:\.[a-z0-9_-]+)*$/,

@@ -3,13 +3,25 @@ import { signPartnerToken } from "@workloom/base/accounts";
 import type { Identity } from "@workloom/base/tenancy";
 
 const currentMemberAuthorityMock = vi.hoisted(() => vi.fn());
+const resolveAuthoritativeClientAccessMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../service/access-authority.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../service/access-authority.js")>();
-  return { ...actual, currentMemberAuthority: currentMemberAuthorityMock };
+  return {
+    ...actual,
+    currentMemberAuthority: currentMemberAuthorityMock,
+    resolveAuthoritativeClientAccess: resolveAuthoritativeClientAccessMock,
+  };
 });
 
-import { actionProcedure, createContext, protectedProcedure, router } from "./context.js";
+import {
+  actionProcedure,
+  createContext,
+  navigationPermissionProcedure,
+  navigationPermissionWriteProcedure,
+  protectedProcedure,
+  router,
+} from "./context.js";
 
 describe("会话域隔离", () => {
   it("伙伴 JWT 不能调用普通成员 protectedProcedure", async () => {
@@ -85,5 +97,54 @@ describe("会话域隔离", () => {
       mutate: actionProcedure(action).mutation(() => "不应到达"),
     });
     await expect(testRouter.createCaller(context).mutate()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("已隐藏的行业开发能力也不能通过 API 直调", async () => {
+    const identity: Identity = {
+      kind: "member",
+      memberId: "mem-owner",
+      memberNo: "MEM-001",
+      name: "负责人",
+      role: "owner",
+      tenantId: "tenant-1",
+      workspaceId: "ws-1",
+      plan: "pro",
+    };
+    currentMemberAuthorityMock.mockResolvedValue({ identity, permissions: {} });
+    resolveAuthoritativeClientAccessMock.mockResolvedValue({
+      navigationPermissions: ["today.read"],
+      actionPermissions: ["workspace.write"],
+    });
+    const context = { session: identity, identity, partnerIdentity: null, headers: new Headers() };
+    const testRouter = router({
+      readDevelopment: navigationPermissionProcedure("ai-pm.development.read").query(() => "不应到达"),
+      writeDevelopment: navigationPermissionWriteProcedure("ai-pm.development.read").mutation(() => "不应到达"),
+    });
+    const caller = testRouter.createCaller(context);
+    await expect(caller.readDevelopment()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.writeDevelopment()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("只有服务端权威载荷明确授予后才开放行业开发能力", async () => {
+    const identity: Identity = {
+      kind: "member",
+      memberId: "mem-owner",
+      memberNo: "MEM-001",
+      name: "负责人",
+      role: "owner",
+      tenantId: "tenant-1",
+      workspaceId: "ws-1",
+      plan: "pro",
+    };
+    currentMemberAuthorityMock.mockResolvedValue({ identity, permissions: {} });
+    resolveAuthoritativeClientAccessMock.mockResolvedValue({
+      navigationPermissions: ["ai-pm.development.read"],
+      actionPermissions: ["workspace.write"],
+    });
+    const context = { session: identity, identity, partnerIdentity: null, headers: new Headers() };
+    const testRouter = router({
+      readDevelopment: navigationPermissionProcedure("ai-pm.development.read").query(() => "已授权"),
+    });
+    await expect(testRouter.createCaller(context).readDevelopment()).resolves.toBe("已授权");
   });
 });

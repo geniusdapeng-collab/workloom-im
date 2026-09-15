@@ -25,6 +25,8 @@ const forbidden = [
   "pnpm preview:all",
   "pnpm setup",
   "pnpm dev",
+  "本地开发验证码",
+  "当前为开发验证通道",
 ];
 const inspected = files(target).filter((path) => [".html", ".js", ".mjs"].includes(extname(path)));
 const findings = [];

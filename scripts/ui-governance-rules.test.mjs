@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   collectVisibleStrings,
+  findBundleDisplayLanguageRisks,
+  findClientTextSinkRisks,
+  findComponentMatrixIsolationRisks,
   findContentSafetyRisks,
   findDiagnosticIsolationRisks,
   findEntryStyleRisks,
@@ -12,6 +15,8 @@ import {
   findViewportRisks,
   findRawDynamicValueRisks,
   findVisibleLanguageRisks,
+  isBundleUiConfig,
+  isClientSurfaceSource,
 } from "./ui-governance-rules.mjs";
 
 test("viewport 门禁允许正常缩放并拒绝锁定缩放", () => {
@@ -64,12 +69,91 @@ test("动态值门禁拦截 JSX 文本与可见属性中的裸底层字段", () 
   assert.equal(risks.some((item) => item.text === "eventId"), true);
 });
 
+test("AST 文字出口覆盖错误对象、通知、Toast、语音、字幕与动态可访问属性", () => {
+  const source = `
+    export function Page({ job, error, response, query }) {
+      document.title = \`工单 · \${job.workspace_id}\`;
+      setToast(\`保存失败：\${error.message}\`);
+      toast(response.detail);
+      new Notification("同步失败", { body: response.detail });
+      VoiceEngine.speak({ text: error.message });
+      setSubtitle(query.error.message);
+      return <><p>{\`保存失败：\${job.workspace_id}\`}</p><Alert description={error.message} />
+        <img aria-label={response.detail} title={error.message} alt={query.error.message} /></>;
+    }
+  `;
+  const risks = [...findRawDynamicValueRisks(source), ...findClientTextSinkRisks(source)];
+  assert.ok(risks.some((item) => item.text.includes("workspace_id")));
+  assert.ok(risks.some((item) => item.text.includes("error.message")));
+  assert.ok(risks.some((item) => item.text.includes("response.detail")));
+  assert.ok(risks.some((item) => item.text.includes("query.error.message")));
+
+  const safe = `
+    document.title = clientChineseText(response.detail, "工单");
+    setToast(operationFailure(error, "保存"));
+    new Notification("同步失败", { body: clientChineseText(response.detail, "请稍后重试") });
+    VoiceEngine.speak({ text: clientChineseText(error.message, "服务暂时不可用") });
+    const page = <Alert description={clientChineseText(response.detail, "详情待确认")} />;
+  `;
+  assert.deepEqual(findRawDynamicValueRisks(safe), []);
+  assert.deepEqual(findClientTextSinkRisks(safe), []);
+});
+
+test("显式安全映射白名单不能被大写字典、限定名或回调包装绕过", () => {
+  const source = `<><p>{ANY[response.detail]}</p><p>{evil.clientChineseText(error.message)}</p>
+    <p>{items.map((item) => item.error.message).join("、")}</p><Toast message={query.error.message} /></>`;
+  const risks = findRawDynamicValueRisks(source);
+  assert.ok(risks.some((item) => item.text.includes("ANY[response.detail]")));
+  assert.ok(risks.some((item) => item.text.includes("evil.clientChineseText")));
+  assert.ok(risks.some((item) => item.text.includes("items.map")));
+  assert.ok(risks.some((item) => item.text.includes("query.error.message")));
+});
+
+test("文件发现覆盖四类脚本、三端、共享 UI 与 dev，并排除测试和构建产物", () => {
+  for (const file of [
+    "apps/web/src/Page.ts", "apps/webb/src/Page.tsx", "apps/webc/src/Page.js",
+    "packages/ui/src/Page.jsx", "apps/web/src/pages/dev/DevMatrix.tsx",
+  ]) assert.equal(isClientSurfaceSource(file), true, file);
+  for (const file of [
+    "apps/web/src/Page.test.tsx", "apps/web/src/Page.spec.js", "apps/web/src/__tests__/Page.tsx",
+    "packages/ui/dist/index.js", "packages/ui/src/index.d.ts", "apps/server/src/router.ts",
+  ]) assert.equal(isClientSurfaceSource(file), false, file);
+});
+
+test("Bundle 客户端配置只检查可见字段并拒绝混合机器字段", () => {
+  assert.equal(isBundleUiConfig("bundles/demo/service-front/client.json"), true);
+  assert.equal(isBundleUiConfig("bundles/demo/floor-scene.json"), true);
+  assert.equal(isBundleUiConfig("bundles/demo/bundle.json"), false);
+  const risky = JSON.stringify({ serviceKind: "feedback", id: "raw_id", label: "保存失败 workspace_id" });
+  const risks = findBundleDisplayLanguageRisks(risky, "bundles/demo/service-front/client.json");
+  assert.equal(risks.some((item) => item.path === "$.label"), true);
+  assert.deepEqual(findBundleDisplayLanguageRisks(JSON.stringify({ serviceKind: "feedback", id: "raw_id", label: "提交反馈" })), []);
+  assert.equal(findBundleDisplayLanguageRisks("{", "bundle.json")[0]?.rule, "Bundle 客户端配置必须是有效 JSON");
+});
+
+test("P25 与组件矩阵豁免仅限真实标记子树及只在其中引用的组件", () => {
+  const p25 = `
+    function OnlyHere(){ return <p>YAML CLI args</p> }
+    function Shared(){ return <p>workspace_id</p> }
+    export function P25(){ return <><div data-wl-authorized-diagnostics="ai-pm.development"><OnlyHere/><Shared/></div><Shared/><p>{error.message}</p></> }
+  `;
+  const p25Risks = [...findVisibleLanguageRisks(p25, "apps/web/src/pages/p25/P25.tsx"), ...findRawDynamicValueRisks(p25, "apps/web/src/pages/p25/P25.tsx")];
+  assert.ok(p25Risks.some((item) => item.text.includes("workspace_id")));
+  assert.ok(p25Risks.some((item) => item.text.includes("error.message")));
+  const matrix = `<div data-wl-authorized-diagnostics="ui-component-matrix"><p>仅限本地开发环境并显式开启诊断开关后使用</p><p>DEV MATRIX</p></div>`;
+  const app = `const enabled = import.meta.env.DEV && import.meta.env.VITE_ENABLE_UI_DIAGNOSTICS === "true";
+    function UiDiagnosticsRoute(){ return enabled ? <Bridge><DevMatrix /></Bridge> : <NotFound /> }
+    <Route path="/dev" element={<UiDiagnosticsRoute />} />`;
+  assert.deepEqual(findComponentMatrixIsolationRisks(matrix, app, "VITE_ENABLE_UI_DIAGNOSTICS=true"), []);
+  assert.ok(findComponentMatrixIsolationRisks(`/* data-wl-authorized-diagnostics="ui-component-matrix" */<div />`, app).length >= 2);
+});
+
 test("开发诊断页面必须具备权限、显式开发开关、醒目标识和审计说明", () => {
   const page = `<div data-wl-authorized-diagnostics="ai-pm.development"><strong>授权开发诊断</strong><span>仅限已获开发权限的管理员；操作写入开发事件、围栏审计与版本台账</span><p>YAML CLI args</p></div>`;
   const app = `const enabled = import.meta.env.DEV && import.meta.env.VITE_ENABLE_UI_DIAGNOSTICS === "true"; <NavigationCapabilityBoundary capabilityId="ai-pm.development"><P25 /></NavigationCapabilityBoundary>; <Route path="/dev" element={<UiDiagnosticsRoute />} />`;
   assert.deepEqual(findDiagnosticIsolationRisks(page, app, "VITE_ENABLE_UI_DIAGNOSTICS=true"), []);
   assert.deepEqual(findVisibleLanguageRisks(page, "apps/web/src/pages/p25/P25.tsx"), []);
-  assert.equal(findVisibleLanguageRisks("<p>YAML CLI args</p>", "apps/web/src/pages/Home.tsx").length, 1);
+  assert.ok(findVisibleLanguageRisks("<p>YAML CLI args</p>", "apps/web/src/pages/Home.tsx").length >= 1);
   assert.ok(findDiagnosticIsolationRisks("<div>YAML</div>", '<Route path="/dev" element={<DevMatrix />} />').length >= 5);
 });
 

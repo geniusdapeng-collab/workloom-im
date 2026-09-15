@@ -2,6 +2,9 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
+  findBundleDisplayLanguageRisks,
+  findClientTextSinkRisks,
+  findComponentMatrixIsolationRisks,
   findContentSafetyRisks,
   findDiagnosticIsolationRisks,
   findEntryStyleRisks,
@@ -12,6 +15,8 @@ import {
   findViewportRisks,
   findRawDynamicValueRisks,
   findVisibleLanguageRisks,
+  isBundleUiConfig,
+  isClientSurfaceSource,
 } from "./ui-governance-rules.mjs";
 
 const root = resolve(import.meta.dirname, "..");
@@ -93,9 +98,13 @@ if (!pcIndex.includes('data-wl-theme="dark"')) errors.push("PC 客户端未声�
 
 const pcAppSource = readFileSync(join(root, "apps/web/src/App.tsx"), "utf8");
 const developerPageSource = readFileSync(join(root, "apps/web/src/pages/p25/P25.tsx"), "utf8");
+const componentMatrixSource = readFileSync(join(root, "apps/web/src/pages/dev/DevMatrix.tsx"), "utf8");
 const playwrightSource = readFileSync(join(root, "playwright.config.ts"), "utf8");
 for (const risk of findDiagnosticIsolationRisks(developerPageSource, pcAppSource, playwrightSource)) {
   errors.push(`授权开发诊断：${risk}`);
+}
+for (const risk of findComponentMatrixIsolationRisks(componentMatrixSource, pcAppSource, playwrightSource)) {
+  errors.push(`组件矩阵诊断：${risk}`);
 }
 
 for (const required of [
@@ -130,17 +139,13 @@ for (const forbidden of ["云栖酒店", "总导演", "hotel-baseline", "panda-c
   if (uiSource.includes(forbidden.toLowerCase())) errors.push(`共享 UI 基座混入行业语义：${forbidden}`);
 }
 
-function clientFiles(directory) {
+function projectFiles(directory) {
   const absolute = join(root, directory);
   const rows = [];
   for (const entry of readdirSync(absolute, { withFileTypes: true })) {
     const relative = join(directory, entry.name);
-    if (entry.isDirectory()) {
-      if (entry.name === "dev" || entry.name === "__tests__") continue;
-      rows.push(...clientFiles(relative));
-    } else if (entry.name.endsWith(".tsx") && !entry.name.endsWith(".test.tsx")) {
-      rows.push(relative);
-    }
+    if (entry.isDirectory()) rows.push(...projectFiles(relative));
+    else rows.push(relative);
   }
   return rows;
 }
@@ -156,27 +161,14 @@ function clientStyleFiles(directory) {
   return rows;
 }
 
-function allClientComponentFiles(directory) {
-  const absolute = join(root, directory);
-  const rows = [];
-  for (const entry of readdirSync(absolute, { withFileTypes: true })) {
-    const relative = join(directory, entry.name);
-    if (entry.isDirectory()) {
-      if (entry.name === "__tests__") continue;
-      rows.push(...allClientComponentFiles(relative));
-    } else if (entry.name.endsWith(".tsx") && !entry.name.endsWith(".test.tsx")) {
-      rows.push(relative);
-    }
-  }
-  return rows;
-}
-
 const languageRisks = [];
-for (const filePath of [
-  ...clientFiles("apps/web/src"),
-  ...clientFiles("apps/webb/src"),
-  ...clientFiles("apps/webc/src"),
-]) {
+const clientSurfaceFiles = [
+  ...projectFiles("apps/web/src"),
+  ...projectFiles("apps/webb/src"),
+  ...projectFiles("apps/webc/src"),
+  ...projectFiles("packages/ui/src"),
+].filter(isClientSurfaceSource);
+for (const filePath of clientSurfaceFiles) {
   const source = readFileSync(join(root, filePath), "utf8");
   for (const risk of findVisibleLanguageRisks(source, filePath)) {
     languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.text.slice(0, 72)}）`);
@@ -184,33 +176,31 @@ for (const filePath of [
   for (const risk of findRawDynamicValueRisks(source, filePath)) {
     languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.text.slice(0, 72)}）`);
   }
-  for (const risk of findTypographyRisks(source)) {
+  for (const risk of findClientTextSinkRisks(source, filePath)) {
     languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.text.slice(0, 72)}）`);
   }
-  for (const risk of findIconAccessibilityRisks(source)) {
-    languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.text.slice(0, 72)}）`);
-  }
-  for (const risk of findSharedIconRisks(source, filePath)) {
-    languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.text.slice(0, 72)}）`);
+  if (/\.(?:tsx|jsx)$/i.test(filePath) && filePath !== "apps/web/src/pages/dev/DevMatrix.tsx") {
+    for (const risk of findTypographyRisks(source)) {
+      languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.text.slice(0, 72)}）`);
+    }
+    // packages/ui 本身是 Icon 注册表和可访问组件的定义处；业务端继续禁止另造图标。
+    if (filePath.startsWith("apps/")) {
+      for (const risk of findIconAccessibilityRisks(source)) {
+        languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.text.slice(0, 72)}）`);
+      }
+      for (const risk of findSharedIconRisks(source, filePath)) {
+        languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.text.slice(0, 72)}）`);
+      }
+    }
   }
 }
-const regularClientFiles = new Set([
-  ...clientFiles("apps/web/src"),
-  ...clientFiles("apps/webb/src"),
-  ...clientFiles("apps/webc/src"),
-]);
 for (const filePath of [
-  ...allClientComponentFiles("apps/web/src"),
-  ...allClientComponentFiles("apps/webb/src"),
-  ...allClientComponentFiles("apps/webc/src"),
-]) {
-  if (regularClientFiles.has(filePath)) continue;
+  ...projectFiles("apps/webc/public"),
+  ...projectFiles("bundles"),
+].filter(isBundleUiConfig)) {
   const source = readFileSync(join(root, filePath), "utf8");
-  for (const risk of findSharedIconRisks(source, filePath)) {
-    languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.text.slice(0, 72)}）`);
-  }
-  for (const risk of findIconAccessibilityRisks(source)) {
-    languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.text.slice(0, 72)}）`);
+  for (const risk of findBundleDisplayLanguageRisks(source, filePath)) {
+    languageRisks.push(`${filePath}:${risk.line} ${risk.rule}（${risk.path}=${risk.text.slice(0, 60)}）`);
   }
 }
 for (const filePath of [

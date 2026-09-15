@@ -62,7 +62,7 @@ export default function P5() {
     } catch (error) {
       console.warn("读取围栏规则失败", error);
       const failure = toUiFailure(error);
-      setLoadMessage(failure.message);
+      setLoadMessage(operationFailure(error, "读取围栏规则"));
       setLoadState(failure.kind === "forbidden" ? "forbidden" : "error");
     }
   }, []);

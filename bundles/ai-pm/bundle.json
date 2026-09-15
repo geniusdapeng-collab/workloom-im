@@ -5,7 +5,7 @@
   "workloom": {
     "industry": "ai-pm",
     "displayName": "WorkLoom · AI 产品经理版（产品经理负责制示例 Bundle）",
-    "description": "AI 产品经理行业示例包 V3：产品总监领队的 14 个数字员工（产品经理负责制研发机制）+ 14 条基线围栏（含 default_level 兜底）+ 20 个技能（eval即PRD/模型选型/微调跟踪/学习飞轮/红队）+ 评测实验室与红队角楼层场景 + 运行态种子数据 + 36 道行业考题（含 16 道 AI 领域专项）",
+    "description": "AI 产品经理行业示例包 V3：产品总监领队的 14 个数字员工（产品经理负责制研发机制）+ 14 条基线围栏（含默认围栏级别兜底）+ 20 个技能（评测即需求文档/模型选型/微调跟踪/学习飞轮/红队）+ 评测实验室与红队角楼层场景 + 运行态种子数据 + 36 道行业考题（含 16 道 AI 领域专项）",
     "status": "candidate",
     "owner": "WorkLoom 基座产品组",
     "example": true,
@@ -183,7 +183,7 @@
   },
   "integrity": {
     "algorithm": "sha256",
-    "digest": "a672cf5b3a41f9dd98881e0b8e50e3a224e705b4a7c0da4d79c55e03f6c110fd",
+    "digest": "1e816fc23cf3bed887ff94a499b118b4bdbcb5880ae26184174e791339c69ff5",
     "assets": {
       "eval/questions.json": "a204675c579639a33cece2b0a4a5ffa9e94686abcef26c86c1abe7d6c0bd08fb",
       "feedback-enums.yml": "fbba50157cda065db504eb48fbc95a2db8a7fdfb9719f910b82dd7945b5fe4f4",

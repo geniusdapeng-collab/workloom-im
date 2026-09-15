@@ -527,11 +527,49 @@ export function canCreateUpgradePr(repositoryState) {
     && repositoryState.targetVersionApplied !== true;
 }
 
+const ROLLOUT_FAILURE_STATUSES = new Set(["failed", "blocked-phase-1", "blocked-by-earlier-wave"]);
+
+export function rolloutHasFailure(results) {
+  return results.some((result) => ROLLOUT_FAILURE_STATUSES.has(result.status));
+}
+
 export function assertIndependentUpgradeBranch(branch) {
   if (!/^chore\/workloom-ui-v\d+\.\d+\.\d+$/.test(branch) || branch === "main") {
     throw new Error(`非法升级分支 ${branch}；rollout 只能写入独立 chore/workloom-ui-v* 分支`);
   }
   return true;
+}
+
+export function buildUpgradePullRequestBody(version) {
+  return [
+    "此 PR 由 WorkLoom IM 基座稳定版本发布流程创建。",
+    "",
+    `- 共享 UI：\`@workloom/ui@${version}\`（精确稳定版本）`,
+    `- 客户端基座：\`ui-v${version}\`（同一不可变稳定标签）`,
+    "- 更新范围：B 端 PC、B 端移动、C 端移动的应用壳、导航、布局、状态与 API 接线（缺一不可）",
+    "- 冲突保护：逐文件比对上一稳定版 SHA-256，行业改动不静默覆盖",
+    "- 行业差异：仅保留 Bundle、主题白名单、投影、配置和 extension 路径",
+    "",
+    "合并前必须由 `workloom-ui-contract` 工作流实际通过：",
+    "- 共享 UI 消费契约与三端客户端基座指纹门禁",
+    "- 三端逐一 typecheck 与生产 build",
+    "- 仓库现有 pnpm 测试；仓根存在 Python 测试时同时运行 pytest",
+    "- Playwright 对三端生产预览的基础主入口、首帧及稳定帧横向溢出冒烟",
+    "",
+    "本流程从不直推 main，也禁止复制公共组件或在受管客户端文件中硬编码行业差异。",
+  ].join("\n");
+}
+
+export function renderConsumerWorkflow(pathPrefix = "") {
+  if (typeof pathPrefix !== "string" || pathPrefix.includes("\\") || pathPrefix.startsWith("/")) {
+    throw new Error(`非法消费仓 pathPrefix：${String(pathPrefix)}`);
+  }
+  const parts = pathPrefix.split("/").filter(Boolean);
+  if (parts.some((part) => part === "." || part === ".." || !/^[-A-Za-z0-9_.]+$/.test(part))) {
+    throw new Error(`非法消费仓 pathPrefix：${pathPrefix}`);
+  }
+  const repoDir = parts.join("/") || ".";
+  return readFileSync(join(syncDir, "ui-consumer-template.yml"), "utf8").replaceAll("__REPO_DIR__", repoDir);
 }
 
 async function createPullRequest({ repo, token, branch, version }) {
@@ -548,18 +586,7 @@ async function createPullRequest({ repo, token, branch, version }) {
       title: `chore(base): 升级 WorkLoom 三端客户端基座至 ${version}`,
       head: branch,
       base: "main",
-      body: [
-        "此 PR 由 WorkLoom IM 基座稳定版本发布流程创建。",
-        "",
-        `- 共享 UI：\`@workloom/ui@${version}\`（精确稳定版本）`,
-        `- 客户端基座：\`ui-v${version}\`（同一不可变稳定标签）`,
-        "- 更新范围：B 端 PC、B 端移动、C 端移动的应用壳、导航、布局、状态与 API 接线（缺一不可）",
-        "- 冲突保护：逐文件比对上一稳定版 SHA-256，行业改动不静默覆盖",
-        "- 行业差异：仅保留 Bundle、主题白名单、投影、配置和 extension 路径",
-        "- 合并条件：本仓三端构建、共享契约、租户负向测试和视觉回归全部通过",
-        "",
-        "本流程从不直推 main，也禁止复制公共组件或在受管客户端文件中硬编码行业差异。",
-      ].join("\n"),
+      body: buildUpgradePullRequestBody(version),
     }),
   });
   if (response.ok) return response.json();
@@ -601,8 +628,7 @@ async function upgradeChild(child, manifest, version, token, dryRun, foundationS
     });
     mkdirSync(join(temp, ".github/workflows"), { recursive: true });
     mkdirSync(join(workdir, "scripts"), { recursive: true });
-    const repoDir = child.pathPrefix ? child.pathPrefix.replace(/\/$/, "") : ".";
-    const workflow = readFileSync(join(syncDir, "ui-consumer-template.yml"), "utf8").replaceAll("__REPO_DIR__", repoDir);
+    const workflow = renderConsumerWorkflow(child.pathPrefix);
     writeFileSync(join(temp, ".github/workflows/workloom-ui-contract.yml"), workflow);
     // 门禁脚本属于消费契约，不是可分叉的 UI 源码；随升级 PR 一并落到行业仓。
     copyFileSync(join(baseDir, "scripts/verify-ui-consumer.mjs"), join(workdir, "scripts/verify-ui-consumer.mjs"));
@@ -610,9 +636,15 @@ async function upgradeChild(child, manifest, version, token, dryRun, foundationS
       join(baseDir, "scripts/verify-client-foundation-consumer.mjs"),
       join(workdir, "scripts/verify-client-foundation-consumer.mjs"),
     );
+    // apps/web 的生产 build 会执行这道文案边界；升级 PR 必须自带与稳定
+    // 客户端壳同源的验证器，不能假设某次独立 base-sync 已经先落地。
+    copyFileSync(
+      join(baseDir, "scripts/verify-production-client-boundary.mjs"),
+      join(workdir, "scripts/verify-production-client-boundary.mjs"),
+    );
     run("pnpm", ["install", "--lockfile-only", "--ignore-scripts"], workdir);
-    run("node", [join(baseDir, "scripts/verify-ui-consumer.mjs"), "--repo", workdir], baseDir);
-    run("node", [join(baseDir, "scripts/verify-client-foundation-consumer.mjs"), "--repo", workdir], baseDir);
+    run("node", [join(workdir, "scripts/verify-ui-consumer.mjs"), "--repo", workdir], workdir);
+    run("node", [join(workdir, "scripts/verify-client-foundation-consumer.mjs"), "--repo", workdir], workdir);
     const status = run("git", ["status", "--porcelain"], temp);
     const foundationTouched = foundation.filesTouched ?? [];
     if (!status) return { repo: child.repo, status: "already-current", touched, foundationTouched };
@@ -761,7 +793,7 @@ async function main() {
     results,
   };
   emitReport(report, options.reportPath);
-  if (results.some((result) => ["failed", "blocked-by-earlier-wave"].includes(result.status))) process.exitCode = 1;
+  if (rolloutHasFailure(results)) process.exitCode = 1;
 }
 
 if (resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) await main();

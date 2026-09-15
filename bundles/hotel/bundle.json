@@ -5,7 +5,7 @@
   "workloom": {
     "industry": "hotel",
     "displayName": "WorkLoom for Hotels · 未来前台（演示 Bundle）",
-    "description": "酒店版行业差异资产包：7 个 Agent preset + 基线围栏包 + 对象/阶段枚举 + 一店一档 Schema + 官方技能（PRD V2.5 §2.2/§2.3）",
+    "description": "酒店版行业差异资产包：7 个数字员工预设 + 基线围栏包 + 对象/阶段枚举 + 一店一档数据结构 + 官方技能（需求文档 V2.5 §2.2/§2.3）",
     "status": "candidate",
     "owner": "WorkLoom 酒店产品组",
     "example": true,
@@ -147,7 +147,7 @@
   },
   "integrity": {
     "algorithm": "sha256",
-    "digest": "400aa0b8497bca2251517fcd2124a4f41072e4b66d8d062720300ceb6de6ce82",
+    "digest": "0bf70821434a4fb1c5696603d5238125969eaceb95bba6a23e88ae1678300802",
     "assets": {
       "eval/questions.json": "23044b47e17985da056220cef131e27b6262dab53b036e3750c166d6d337a842",
       "feedback-enums.yml": "0b64759da7c6a529084b6f56fa4bbeb1527c03f665f3e1d460e0d06045d5b263",

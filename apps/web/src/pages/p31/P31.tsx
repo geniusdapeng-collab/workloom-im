@@ -66,7 +66,7 @@ export default function P31() {
     } catch (error) {
       console.warn("读取伙伴授权数据失败", error);
       const failure = toUiFailure(error);
-      setLoadMessage(failure.message);
+      setLoadMessage(operationFailure(error, "读取伙伴授权数据"));
       setLoadState(failure.kind === "forbidden" ? "forbidden" : "error");
     }
   }, [scope?.tenantId]);
@@ -91,8 +91,9 @@ export default function P31() {
     setNotice(null);
     try {
       const result = await my().requestDangerCode.mutate({ action: pendingAction.kind === "grant" ? "partner.grant.issue" : "partner.grant.revoke" });
-      setDangerChallenge({ maskedTarget: result.maskedTarget, devCode: result.devCode });
-      if (result.devCode) setDangerCode(result.devCode);
+      const developmentCode = import.meta.env.DEV ? result.devCode : undefined;
+      setDangerChallenge({ maskedTarget: result.maskedTarget, devCode: developmentCode });
+      if (developmentCode) setDangerCode(developmentCode);
       setNotice({ tone: "success", text: `身份验证码已发送至 ${result.maskedTarget}，5 分钟内有效且只能使用一次。` });
     } catch (error) {
       console.warn("发送身份验证码失败", error);
@@ -184,7 +185,7 @@ export default function P31() {
         {pendingAction?.kind === "revoke" && <div className="space-y-3"><p>将立即撤销“{pendingAction.grant.partner_name}”对 {pendingAction.grant.workspaces.length} 个工作区的访问能力。历史记录不会删除。</p><label className="block text-sm">吊销原因（必填）<textarea rows={3} maxLength={200} value={revokeReason} disabled={busy} onChange={(event) => setRevokeReason(event.target.value)} className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2" /></label></div>}
         {pendingAction && pendingAction.kind !== "register" && <div className="mt-4 rounded-lg border border-neutral-700 bg-neutral-950/50 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-semibold">身份再确认</p><p className="text-body text-neutral-400">验证码只发送到当前账号绑定手机号，并且只能使用一次。</p></div><Button variant="quiet" busy={challengeBusy} disabled={busy} onClick={() => void requestDangerChallenge()}>{dangerChallenge ? "重新发送" : "发送身份验证码"}</Button></div>
-          {dangerChallenge && <Input label="6 位身份验证码" required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={dangerCode} disabled={busy} onChange={(event) => setDangerCode(event.target.value.replace(/\D/g, "").slice(0, 6))} description={`已发送至 ${dangerChallenge.maskedTarget}${dangerChallenge.devCode ? "；当前为开发验证通道" : ""}`} wrapperClassName="mt-3" />}
+          {dangerChallenge && <Input label="6 位身份验证码" required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={dangerCode} disabled={busy} onChange={(event) => setDangerCode(event.target.value.replace(/\D/g, "").slice(0, 6))} description={`已发送至 ${dangerChallenge.maskedTarget}${import.meta.env.DEV && dangerChallenge.devCode ? "；当前为开发验证通道" : ""}`} wrapperClassName="mt-3" />}
         </div>}
       </Overlay>
     </div>
