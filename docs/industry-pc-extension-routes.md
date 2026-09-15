@@ -9,7 +9,12 @@ import type { IndustryRouteDefinition } from "../shell/IndustryRoutes";
 import Orders from "./orders/Orders";
 
 export const industryRoutes = [
-  { path: "/orders", capabilityId: "hotel.orders", element: <Orders /> },
+  {
+    path: "/orders",
+    legacyPaths: ["/p10"],
+    capabilityId: "hotel.orders",
+    element: <Orders />,
+  },
 ] satisfies readonly IndustryRouteDefinition[];
 ```
 
@@ -25,3 +30,5 @@ export const industryRoutes = [
 - Bundle 导航槽位没有显式服务端权限。
 
 行业详情页可使用 `/orders/:orderId` 形式，并与 `/orders` 导航槽位共用同一能力。接口读写仍必须使用服务端权限过程和围栏；页面可见不等于动作获权。
+
+`legacyPaths` 只用于把历史非基座地址通过 `Navigate replace` 重定向到语义主路由。别名进入与主路由相同的服务端能力权限边界，不能单独配置页面或权限；查询参数与锚点会被保留。动态别名必须与主路由使用完全相同的参数名，例如 `/p10/:orderId` 可映射到 `/orders/:orderId`。任何别名都不得占用 `/p1`、`/p4`、`/p6`、`/p8` 等基座地址，也不得占用登录、接入或开发诊断地址。

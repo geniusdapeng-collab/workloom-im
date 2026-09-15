@@ -6,7 +6,7 @@ import {
   type NavigationEntry,
 } from "@workloom/ui";
 import { isValidElement, type ReactElement, type ReactNode } from "react";
-import { Link } from "react-router";
+import { generatePath, Link, Navigate, useLocation, useParams } from "react-router";
 import { useNavigationAccess } from "./NavigationAccess";
 
 /**
@@ -19,6 +19,8 @@ export interface IndustryRouteDefinition {
   path: string;
   capabilityId: string;
   element: ReactElement;
+  /** 历史行业地址只做 replace 重定向；不得承载另一份页面或权限定义。 */
+  legacyPaths?: readonly string[];
 }
 
 interface IndustryRouteModule {
@@ -43,6 +45,18 @@ const PROTECTED_ROUTE_ROOTS = new Set(
 
 function routeShape(path: string): string {
   return path.split("/").map((segment) => segment.startsWith(":") ? ":" : segment).join("/");
+}
+
+function routeParameters(path: string): string[] {
+  return path.split("/").filter((segment) => segment.startsWith(":")).map((segment) => segment.slice(1)).sort();
+}
+
+function assertSameRouteParameters(path: string, legacyPath: string): void {
+  const primary = routeParameters(path);
+  const legacy = routeParameters(legacyPath);
+  if (primary.length !== legacy.length || primary.some((parameter, index) => parameter !== legacy[index])) {
+    throw new Error(`行业历史地址参数必须与语义主路由一致：${legacyPath}`);
+  }
 }
 
 /** 校验具体路由模式；不接受查询、通配或首段参数，避免吞掉其他产品页面。 */
@@ -90,15 +104,23 @@ export function buildIndustryRouteRegistry(modules: Readonly<Record<string, unkn
         const definition = candidate as Partial<IndustryRouteDefinition>;
         validateIndustryRoutePath(definition.path);
         validateIndustryCapabilityId(definition.capabilityId);
+        if (definition.legacyPaths !== undefined && !Array.isArray(definition.legacyPaths)) {
+          throw new Error(`行业扩展 legacyPaths 必须是地址数组：${definition.path}`);
+        }
         if (!isValidElement(definition.element)) {
           throw new Error(`行业扩展路由缺少有效页面元素：${definition.path}`);
         }
-        const shape = routeShape(definition.path);
-        const existing = seenShapes.get(shape);
-        if (existing) {
-          throw new Error(`行业扩展路由重复：${existing} 与 ${definition.path}`);
+        const allPaths = [definition.path, ...(definition.legacyPaths ?? [])];
+        for (const routePath of allPaths) {
+          validateIndustryRoutePath(routePath);
+          if (routePath !== definition.path) assertSameRouteParameters(definition.path, routePath);
+          const shape = routeShape(routePath);
+          const existing = seenShapes.get(shape);
+          if (existing) {
+            throw new Error(`行业扩展路由或历史地址重复：${existing} 与 ${routePath}`);
+          }
+          seenShapes.set(shape, routePath);
         }
-        seenShapes.set(shape, definition.path);
         routes.push(definition as IndustryRouteDefinition);
       }
     }
@@ -186,6 +208,14 @@ export function IndustryRouteBoundary({ definition, children }: {
     return <AsyncState status="forbidden" title="当前身份不能访问此页面" description="该行业能力受工作区角色限制，请联系管理员调整权限。" action={<Link to={fallbackRoute} className="wl-button wl-button--secondary">前往可用页面</Link>} />;
   }
   return <>{children}</>;
+}
+
+/** 仅在 IndustryRouteBoundary 放行后渲染；保留查询与锚点并替换历史记录。 */
+export function IndustryLegacyRedirect({ definition }: { definition: IndustryRouteDefinition }) {
+  const params = useParams();
+  const { search, hash } = useLocation();
+  const target = `${generatePath(definition.path, params)}${search}${hash}`;
+  return <Navigate to={target} replace />;
 }
 
 export function IndustryRouteLoadFailure() {

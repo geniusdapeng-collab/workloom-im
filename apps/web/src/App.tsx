@@ -42,6 +42,7 @@ import {
 } from "./shell/NavigationAccess";
 import {
   INDUSTRY_ROUTE_REGISTRY,
+  IndustryLegacyRedirect,
   IndustryRouteBoundary,
   IndustryRouteLoadFailure,
 } from "./shell/IndustryRoutes";
@@ -168,6 +169,19 @@ function Shell() {
                   </IndustryRouteBoundary>
                 }
               />
+            ))}
+            {INDUSTRY_ROUTE_REGISTRY.routes.flatMap((definition) => (
+              (definition.legacyPaths ?? []).map((legacyPath) => (
+                <Route
+                  key={legacyPath}
+                  path={legacyPath}
+                  element={
+                    <IndustryRouteBoundary definition={definition}>
+                      <IndustryLegacyRedirect definition={definition} />
+                    </IndustryRouteBoundary>
+                  }
+                />
+              ))
             ))}
             <Route path="*" element={INDUSTRY_ROUTE_REGISTRY.error ? <IndustryRouteLoadFailure /> : <NotFound />} />
           </Routes>
