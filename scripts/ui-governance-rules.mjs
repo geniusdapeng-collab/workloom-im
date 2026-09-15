@@ -11,6 +11,13 @@ const VISIBLE_ATTRIBUTES = new Set([
   "title",
 ]);
 
+/** 仅在大写 React 组件上视为可见文案，避免把领域对象的同名机器字段误报。 */
+const VISIBLE_CUSTOM_COMPONENT_PROPS = new Set([
+  "badge", "caption", "eyebrow", "failureText", "footnote", "kicker", "metaText", "noDataText",
+  "note", "optionalLabel", "period", "source", "statusLabel", "subtitle", "tag", "ticketTitle",
+  "tooltip", "unit", "updatedAt", "welcomeText",
+]);
+
 const VISIBLE_PROPERTY_NAMES = new Set([
   "actionLabel",
   "desc",
@@ -31,6 +38,14 @@ const VISIBLE_PROPERTY_NAMES = new Set([
   "text",
   "title",
   "tooltip",
+]);
+
+// `value` 对原生表单与表单组件通常是机器值，不能一刀切当成展示文案；但在
+// MetricCard、KpiGauge、CommandCard 等非表单组件上会直接渲染给用户。这里按
+// 组件语义收口，既覆盖下游自定义展示组件，也避免把 input/select 的受控值误报。
+const NON_DISPLAY_VALUE_COMPONENTS = new Set([
+  "Checkbox", "Combobox", "DateInput", "Input", "PasswordInput", "Progress", "Radio",
+  "Range", "SearchInput", "Select", "Slider", "Switch", "TextArea", "Textarea", "UrlQrCode",
 ]);
 
 const VISIBLE_SETTER = /^(?:appendAi|enqueueSnackbar|notify|setBanner|setBindingError|setCaption|setDone|setErr|setError|setFeedback|setLoadMessage|setMessage|setMsg|setNotice|setRateError|setSiteResult|setSubtitle|setToast|showToast)$/;
@@ -63,7 +78,7 @@ const SAFE_DISPLAY_MAPS = new Set([
   "THREAD_MODE_TEXT", "TIER_TEXT", "TOAST_TITLES", "TOOL_TEXT", "TYPE_LABEL", "TYPE_TEXT",
   "VERDICT", "VERDICT_META", "STRUCTURE_TEXT", "chunkCounts", "workspaceNames",
 ]);
-const AUTHORIZED_DIAGNOSTIC_FILE = /apps\/web\/src\/pages\/p25\/P25\.tsx$/;
+const AUTHORIZED_DIAGNOSTIC_FILE = /apps\/web\/src\/extensions\/ai-pm\/P25\.tsx$/;
 const AUTHORIZED_LOCAL_GUIDE_FILE = /apps\/web\/src\/components\/BackendGate\.tsx$/;
 const AUTHORIZED_COMPONENT_MATRIX_FILE = /apps\/web\/src\/pages\/dev\/DevMatrix\.tsx$/;
 const SAFE_VISIBLE_LATIN_TERM = /^(?:AI|API|B|C|CSV|DeepSeek|DOCX|DSL|Esc|Excel|FAE|FAQ|GEO|GLM|GPS|H5|IM|Kimi|KPI|Lightning|LLM|MB|MD|MVP|Moonshot|OAuth|OpenAI|PC|PDF|PRD|RLS|ROI|SLA|SOP|SPA|TSV|TXT|Type-C|URL|USB|WiFi|WorkLoom|XLSX|XP|XX|Yunqi-Hotel|deepseek-chat|retail|sk)$/i;
@@ -152,6 +167,21 @@ function jsxAttributeText(attribute) {
 function jsxTagName(node) {
   const tag = node.tagName;
   return ts.isIdentifier(tag) ? tag.text : "";
+}
+
+function jsxAttributeOwnerName(attribute) {
+  const attributes = attribute.parent;
+  const opening = attributes?.parent;
+  if (!opening || (!ts.isJsxOpeningElement(opening) && !ts.isJsxSelfClosingElement(opening))) return "";
+  return jsxTagName(opening);
+}
+
+function isVisibleJsxAttribute(attribute, name) {
+  if (VISIBLE_ATTRIBUTES.has(name) || VISIBLE_PROPERTY_NAMES.has(name)) return true;
+  const owner = jsxAttributeOwnerName(attribute);
+  if (/^[A-Z]/.test(owner) && VISIBLE_CUSTOM_COMPONENT_PROPS.has(name)) return true;
+  if (name !== "value") return false;
+  return /^[A-Z]/.test(owner) && !NON_DISPLAY_VALUE_COMPONENTS.has(owner);
 }
 
 function componentDeclarations(sourceFile) {
@@ -390,7 +420,7 @@ export function collectVisibleStrings(source, fileName = "client.tsx") {
     if (ts.isJsxText(node)) add(node.text, node, "页面文本");
     if (ts.isJsxAttribute(node)) {
       const name = node.name.getText(sourceFile);
-      if (VISIBLE_ATTRIBUTES.has(name) || VISIBLE_PROPERTY_NAMES.has(name)) {
+      if (isVisibleJsxAttribute(node, name)) {
         if (node.initializer && ts.isStringLiteral(node.initializer)) add(node.initializer.text, node.initializer, `属性 ${name}`);
         if (node.initializer && ts.isJsxExpression(node.initializer) && node.initializer.expression) {
           addLiteralPieces(node.initializer.expression, `属性 ${name}`);
@@ -691,7 +721,7 @@ export function findRawDynamicValueRisks(source, fileName = "client.tsx") {
     if (ts.isJsxExpression(node) && node.expression) {
       if (ts.isJsxAttribute(node.parent)) {
         const attribute = node.parent.name.getText(sourceFile);
-        if (VISIBLE_ATTRIBUTES.has(attribute) || VISIBLE_PROPERTY_NAMES.has(attribute)) check(node.expression);
+        if (isVisibleJsxAttribute(node.parent, attribute)) check(node.expression);
       } else if (ts.isJsxElement(node.parent) || ts.isJsxFragment(node.parent)) check(node.expression);
     }
     ts.forEachChild(node, visit);
@@ -780,17 +810,22 @@ export function findClientTextSinkRisks(source, fileName = "client.tsx") {
 }
 
 /** P25 可保留必要技术契约，但必须同时具备权限路由、醒目标识和审计说明。 */
-export function findDiagnosticIsolationRisks(pageSource, appSource, playwrightSource = "") {
+export function findDiagnosticIsolationRisks(pageSource, appSource, playwrightSource = "", industryRouteSource = "") {
   const risks = [];
-  const pageFile = parseClientSource(pageSource, "apps/web/src/pages/p25/P25.tsx");
+  const pageFile = parseClientSource(pageSource, "apps/web/src/extensions/ai-pm/P25.tsx");
   const marked = markedDiagnosticNodes(pageFile);
   const markedSource = marked.map((node) => pageSource.slice(node.getStart(pageFile), node.getEnd())).join("\n");
   const cleanApp = stripComments(appSource);
   const cleanPlaywright = stripComments(playwrightSource);
+  const cleanIndustryRoute = stripComments(industryRouteSource);
   if (marked.length === 0) risks.push("开发场域缺少真实 DOM 授权诊断隔离标识");
   if (!markedSource.includes("授权开发诊断") || !markedSource.includes("仅限已获开发权限的管理员")) risks.push("开发场域授权子树缺少面向用户的授权提示");
   if (!markedSource.includes("开发事件、围栏审计与版本台账")) risks.push("开发场域授权子树缺少可审计性说明");
-  if (!/<NavigationCapabilityBoundary\b[^>]*capabilityId\s*=\s*["']ai-pm\.development["'][^>]*>\s*<P25\s*\/>\s*<\/NavigationCapabilityBoundary>/.test(cleanApp)) risks.push("开发场域直达路由未受行业能力权限约束");
+  if (!/capabilityId\s*:\s*["']ai-pm\.development["']/.test(cleanIndustryRoute)
+    || !/path\s*:\s*["']\/development["']/.test(cleanIndustryRoute)
+    || !/legacyPaths\s*:\s*\[[^\]]*["']\/p25["'][^\]]*\]/.test(cleanIndustryRoute)) {
+    risks.push("开发场域未通过行业扩展契约声明语义路由、能力权限与受控历史地址");
+  }
   if (!/import\.meta\.env\.DEV\s*&&\s*import\.meta\.env\.VITE_ENABLE_UI_DIAGNOSTICS\s*===\s*["']true["']/.test(cleanApp)) risks.push("组件矩阵必须同时受开发环境与显式开关约束");
   if (!/<Route\b[^>]*path\s*=\s*["']\/dev["'][^>]*element\s*=\s*\{<UiDiagnosticsRoute\s*\/>\}/.test(cleanApp)) risks.push("组件矩阵路由不得直接渲染诊断页面");
   if (playwrightSource && !cleanPlaywright.includes("VITE_ENABLE_UI_DIAGNOSTICS=true")) risks.push("视觉测试未显式开启组件矩阵");

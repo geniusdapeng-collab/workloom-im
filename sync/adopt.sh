@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # WorkLoom IM · 新子仓安全接入
 #
-# 存量模式只安装根级必备资产；--new-industry 额外从最新版稳定标签一次安装
-# 三端客户端基座。两种模式都不触碰 Bundle/行业扩展，且不暂存、不提交、不推送。
+# 存量模式只安装根级必备资产；--new-industry 先完整同步公共运行时，再从最新
+# 稳定标签一次安装三端客户端基座。两种模式都不触碰 Bundle/行业扩展，且不暂存、
+# 不提交、不推送。
 #
 # 存量仓只接入治理：bash sync/adopt.sh <子仓本地路径> [--path-prefix governance/]
 # 新行业完整脚手架：bash sync/adopt.sh <子仓本地路径> --new-industry [--path-prefix governance/] [--dry-run]
@@ -76,14 +77,30 @@ case "${WORKDIR}/" in
 esac
 command -v node >/dev/null 2>&1 || { echo "❌ 未找到 Node.js（需要 Node >= 20）"; exit 1; }
 
-# adopt 本身也必须来自当前基座 HEAD；不允许用工作树里尚未提交的接入逻辑
-# 给子仓登记一个并不存在于来源提交中的版本。
-ADOPT_WORKTREE_HASH="$(git -C "$BASE_DIR" hash-object -- sync/adopt.sh)"
-ADOPT_HEAD_HASH="$(git -C "$BASE_DIR" rev-parse HEAD:sync/adopt.sh 2>/dev/null || true)"
-[ -n "$ADOPT_HEAD_HASH" ] && [ "$ADOPT_WORKTREE_HASH" = "$ADOPT_HEAD_HASH" ] || {
-  echo "❌ 基座 sync/adopt.sh 与 HEAD 不一致；请先评审并提交基座变更"
-  exit 1
+# 所有在写入前承担决策的控制器都必须来自当前基座 HEAD；不允许用尚未提交的
+# 本地脚本给子仓登记一个来源提交中不存在的“完成状态”。
+verify_head_file() {
+  local REL="$1"
+  local WORKTREE_HASH HEAD_HASH
+  WORKTREE_HASH="$(git -C "$BASE_DIR" hash-object -- "$REL" 2>/dev/null || true)"
+  HEAD_HASH="$(git -C "$BASE_DIR" rev-parse "HEAD:$REL" 2>/dev/null || true)"
+  [ -n "$HEAD_HASH" ] && [ "$WORKTREE_HASH" = "$HEAD_HASH" ] || {
+    echo "❌ 基座 $REL 与 HEAD 不一致；请先评审并提交基座变更"
+    exit 1
+  }
 }
+verify_head_file "sync/adopt.sh"
+if [ "$NEW_INDUSTRY" = true ]; then
+  for CONTROL_FILE in \
+    sync/adoption-contract.mjs \
+    sync/client-foundation.mjs \
+    sync/set-ui-version.mjs \
+    sync/base-capabilities.json \
+    sync/ui-consumer-template.yml
+  do
+    verify_head_file "$CONTROL_FILE"
+  done
+fi
 
 echo "== WorkLoom IM 根级上下文接入 =="
 echo "   子仓：${REPO_NAME}（行业基座目录：${PREFIX:-（根）}）"
@@ -92,22 +109,28 @@ FOUNDATION_ARGS=(--repo "$CHILD" --base-dir "$BASE_DIR")
 [ -n "$PREFIX" ] && FOUNDATION_ARGS+=(--path-prefix "${PREFIX%/}")
 [ -n "$FOUNDATION_VERSION" ] && FOUNDATION_ARGS+=(--version "$FOUNDATION_VERSION")
 
-# 新行业先对稳定标签、独立产品身份、三端受管路径与全部潜在冲突做零写入
-# 预检。首个稳定版未发布、身份仍是基座默认值或既有文件无可信指纹时，必须
-# 在写根级接入资产之前终止。
+# 新行业先对行业自有工程契约、完整公共基座计划、稳定标签、独立产品身份、
+# 三端受管路径与全部潜在冲突做零写入预检。任一失败都必须在写根资产前终止。
 if [ "$NEW_INDUSTRY" = true ]; then
+  node "$SYNC_DIR/adoption-contract.mjs" preflight --repo "$CHILD" --workdir "$WORKDIR"
+  node "$SYNC_DIR/base-sync.mjs" pull \
+    --repo "$WORKDIR" \
+    --base-dir "$BASE_DIR" \
+    --no-commit \
+    --adopt \
+    --dry-run
   node "$SYNC_DIR/client-foundation.mjs" scaffold "${FOUNDATION_ARGS[@]}" --dry-run
-  echo "  ✅ 新行业三端脚手架预检通过（默认采用 latest stable）"
+  echo "  ✅ 新行业完整基座、工程契约与三端脚手架预检通过（默认采用 latest stable）"
 fi
 
-# ① 只安装根级 required assets。引擎先写内容、逐项复验，再写根级 state。
-# --no-commit 使既有工作树也能安全接入，且不会偷偷暂存或提交任何用户文件。
+# ① 存量接入只安装根级 required assets；新行业必须安装完整公共基座。引擎先
+# 写内容、逐项复验，再写根级 state。--no-commit 不会偷偷暂存或提交用户文件。
 BASE_SYNC_ARGS=(pull \
   --repo "$WORKDIR" \
   --base-dir "$BASE_DIR" \
-  --required-only \
   --no-commit \
   --adopt)
+[ "$NEW_INDUSTRY" = false ] && BASE_SYNC_ARGS+=(--required-only)
 [ "$DRY_RUN" = true ] && BASE_SYNC_ARGS+=(--dry-run)
 node "$SYNC_DIR/base-sync.mjs" "${BASE_SYNC_ARGS[@]}"
 
@@ -116,17 +139,23 @@ if [ "$DRY_RUN" = true ]; then
   exit 0
 fi
 
-# ② 独立复验；即使 state 的 SHA 看似相同，也会重新读取文件并比较受控区块/哈希。
-node "$SYNC_DIR/base-sync.mjs" detect \
+# ② 独立复验；新行业必须由 full detect 证明公共文件零漂移，不能用 required-only
+# state 冒充完整基座。存量治理接入仍只复验根级资产。
+DETECT_ARGS=(detect \
   --repo "$WORKDIR" \
-  --base-dir "$BASE_DIR" \
-  --required-only
+  --base-dir "$BASE_DIR")
+[ "$NEW_INDUSTRY" = false ] && DETECT_ARGS+=(--required-only)
+node "$SYNC_DIR/base-sync.mjs" "${DETECT_ARGS[@]}"
 (cd "$CHILD" && node "$BASE_DIR/scripts/secret-scan.mjs" --files \
   AGENTS.md \
   WORKLOOM_PRODUCT_CONTEXT.md \
   .workloom-base-sync.json \
   .github/workflows/base-sync-heartbeat.yml)
-echo "  ✅ 根级产品上下文、AGENTS 受控块与 state 已安装并验真"
+if [ "$NEW_INDUSTRY" = true ]; then
+  echo "  ✅ 公共运行时、根级治理资产与 full state 已安装并验真"
+else
+  echo "  ✅ 根级产品上下文、AGENTS 受控块与 required-only state 已安装并验真"
+fi
 
 # ③ heartbeat 是 required copied asset，已由引擎从受控模板逐字节安装；
 # 运行时从根级 state.pathPrefix 读取行业基座目录，因此无需仓别模板渲染。
@@ -145,12 +174,14 @@ if [ "$NEW_INDUSTRY" = true ]; then
   mkdir -p "$WORKDIR/scripts" "$CHILD/.github/workflows"
   cp "$BASE_DIR/scripts/verify-ui-consumer.mjs" "$WORKDIR/scripts/verify-ui-consumer.mjs"
   cp "$BASE_DIR/scripts/verify-client-foundation-consumer.mjs" "$WORKDIR/scripts/verify-client-foundation-consumer.mjs"
+  cp "$BASE_DIR/scripts/verify-production-client-boundary.mjs" "$WORKDIR/scripts/verify-production-client-boundary.mjs"
   REPO_DIR="${PREFIX%/}"
   [ -n "$REPO_DIR" ] || REPO_DIR="."
   sed "s|__REPO_DIR__|$REPO_DIR|g" "$SYNC_DIR/ui-consumer-template.yml" > "$CHILD/.github/workflows/workloom-ui-contract.yml"
   node "$WORKDIR/scripts/verify-ui-consumer.mjs" --repo "$WORKDIR"
   node "$WORKDIR/scripts/verify-client-foundation-consumer.mjs" --repo "$WORKDIR"
-  echo "  ✅ 最新稳定三端客户端基座与共享 UI 已一次接入"
+  node "$SYNC_DIR/adoption-contract.mjs" post --repo "$CHILD" --workdir "$WORKDIR"
+  echo "  ✅ 完整公共基座、最新稳定三端客户端基座与共享 UI 已一次接入"
 fi
 
 # ④ 报告三端/身份迁移阶段。存量模式不复制客户端；新行业模式已在上一步
@@ -160,7 +191,7 @@ for CLIENT_PACKAGE in apps/web/package.json apps/webb/package.json apps/webc/pac
   [ -f "$WORKDIR/$CLIENT_PACKAGE" ] || MISSING_CLIENTS+=("$CLIENT_PACKAGE")
 done
 if [ "$NEW_INDUSTRY" = true ]; then
-  echo "  ✅ 新行业三端结构、客户端基座指纹与 UI 消费契约已通过"
+  echo "  ✅ 新行业 full 基座状态、三端结构、客户端基座指纹与 UI 消费契约已通过"
 elif [ "${#MISSING_CLIENTS[@]}" -gt 0 ]; then
   echo "  ⚠️ 第一阶段迁移未完成：缺少 ${MISSING_CLIENTS[*]}"
   echo "     请先从最新版基座模板补齐真实生产客户端；当前不得登记为三端合规。"
@@ -177,8 +208,8 @@ cat <<EOF
   📋 接入文件已写入但未暂存、未提交、未推送。请先审查：
        git -C "$CHILD" diff -- WORKLOOM_PRODUCT_CONTEXT.md AGENTS.md AGENTS.repo.md .workloom-base-sync.json .github/workflows/base-sync-heartbeat.yml .github/workflows/base-sync-push.yml
 
-  --new-industry 还须审查：$WORKDIR/.workloom-ui.json、
-  $WORKDIR/.workloom-client-foundation.json、三个 apps 客户端、两个消费门禁脚本，
+  --new-industry 还须审查：完整公共基座文件、$WORKDIR/.workloom-ui.json、
+  $WORKDIR/.workloom-client-foundation.json、三个 apps 客户端、三个消费/生产门禁脚本，
   以及 .github/workflows/workloom-ui-contract.yml。
 
   若目标由 workloom-im fork/template 派生，adopt 仅在逐字节 fingerprint

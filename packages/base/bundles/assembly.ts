@@ -31,6 +31,8 @@ import {
   assertBundleCompatibility,
   canonicalBundleArtifactPayload,
   formatContractError,
+  INDUSTRY_CONTRACT_VERSION,
+  isWorkLoomReservedRoute,
   parseBundleManifest,
   parseWorkforcePresets,
   type BundleManifest,
@@ -413,6 +415,8 @@ export function loadVerifiedBundleWorkforcePresets(
  * 禁止客户端自行读取 bundle.json、猜测当前行业，或在失败时回退到某个示例行业。
  */
 export interface BundleUiProjection {
+  /** 工作区唯一 active 装配所指向的主 Bundle；依赖包不产生第二条 active 安装。 */
+  primaryBundleId?: string;
   bundleId: string;
   bundleName: string;
   bundleVersion: string;
@@ -421,7 +425,35 @@ export interface BundleUiProjection {
   integrityDigest: string | null;
   /** 稳定包已由 verifyBundleManifestDocument 无条件验签。 */
   signatureKeyId: string | null;
-  ui: BundleManifest["workloom"]["ui"];
+  /** 每个组成包的独立验签/兼容结果来源，供审计与事件写入保留 bundleId。 */
+  sources?: Array<{
+    bundleId: string;
+    bundleName: string;
+    bundleVersion: string;
+    bundleStatus: BundleManifest["workloom"]["status"];
+    integrityDigest: string | null;
+    signatureKeyId: string | null;
+    role: "primary" | "dependency";
+    parentBundleId: string | null;
+  }>;
+  /** 仅由各导航槽位声明的权限并集；access.me 不把无槽位权限误当成导航授权。 */
+  navigationPermissionUniverse?: string[];
+  ui: Omit<BundleManifest["workloom"]["ui"], "navigation" | "home"> & {
+    navigation: {
+      slots: Array<BundleManifest["workloom"]["ui"]["navigation"]["slots"][number] & {
+        sourceBundleId?: string;
+      }>;
+    };
+    home: {
+      widgets: Array<BundleManifest["workloom"]["ui"]["home"]["widgets"][number] & {
+        sourceBundleId?: string;
+      }>;
+    };
+    /** 字符串数组保留旧三端契约；带来源的条目用于账本、诊断和后续投影。 */
+    objectEntries?: Array<{ label: string; sourceBundleIds: string[] }>;
+    workflowEntries?: Array<{ label: string; sourceBundleIds: string[] }>;
+    terminologySources?: Record<string, string[]>;
+  };
 }
 
 function presetActorTerminology(manifest: BundleManifest, slug: string, root: string): Record<string, string> {
@@ -435,23 +467,220 @@ function presetActorTerminology(manifest: BundleManifest, slug: string, root: st
   return labels;
 }
 
-export function loadBundleUiProjection(slug: string, root = bundlesRoot()): BundleUiProjection {
-  const manifest = loadVerifiedBundleManifest(slug, root);
-  const actorTerminology = presetActorTerminology(manifest, slug, root);
+interface VerifiedProjectionSource {
+  manifest: BundleManifest;
+  parentBundleId: string | null;
+  role: "primary" | "dependency";
+}
+
+function assertOwnedProjectionDeclarations(manifest: BundleManifest): void {
+  const bundleId = manifest.workloom.industry;
+  if (bundleId === "workloom") {
+    throw new BundleError("INVALID_INPUT", "行业包不能占用 WorkLoom 公共能力命名空间");
+  }
+  const declaredPermissions = new Set(manifest.workloom.ui.permissions);
+  for (const permission of declaredPermissions) {
+    if (!permission.startsWith(`${bundleId}.`)) {
+      throw new BundleError("INVALID_INPUT", `行业包「${bundleId}」声明了不属于自身命名空间的权限 ${permission}`);
+    }
+  }
+  for (const slot of manifest.workloom.ui.navigation.slots) {
+    if (!slot.capabilityId.startsWith(`${bundleId}.`)) {
+      throw new BundleError("INVALID_INPUT", `行业包「${bundleId}」导航能力 ${slot.capabilityId} 越过自身命名空间`);
+    }
+    if (isWorkLoomReservedRoute(slot.route) || /^\/p\d+(?:\/|$)/.test(slot.route)) {
+      throw new BundleError("INVALID_INPUT", `行业包「${bundleId}」导航路由 ${slot.route} 与公共能力冲突`);
+    }
+    for (const permission of slot.permissions) {
+      if (!permission.startsWith(`${bundleId}.`) || !declaredPermissions.has(permission)) {
+        throw new BundleError(
+          "INVALID_INPUT",
+          `行业包「${bundleId}」导航权限 ${permission} 未在自身权限清单中声明`,
+        );
+      }
+    }
+  }
+}
+
+function loadProjectionSources(primarySlug: string, root: string): VerifiedProjectionSource[] {
+  const sources: VerifiedProjectionSource[] = [];
+  const visiting: string[] = [];
+  const seen = new Set<string>();
+
+  const visit = (
+    bundleId: string,
+    expectedVersion: string | undefined,
+    parentBundleId: string | null,
+    role: "primary" | "dependency",
+  ) => {
+    if (visiting.includes(bundleId)) {
+      throw new BundleError("INVALID_INPUT", `行业包组合依赖形成循环：${[...visiting, bundleId].join(" → ")}`);
+    }
+    if (seen.has(bundleId)) {
+      throw new BundleError("INVALID_INPUT", `行业包组合重复引用「${bundleId}」，已拒绝装载`);
+    }
+    const manifest = loadVerifiedBundleManifest(bundleId, root);
+    if (expectedVersion && manifest.version !== expectedVersion) {
+      throw new BundleError(
+        "INCOMPATIBLE",
+        `行业包「${parentBundleId}」要求 ${bundleId}@${expectedVersion}，实际为 ${manifest.version}`,
+      );
+    }
+    if (role === "dependency" && (manifest.workloom.status === "draft" || manifest.workloom.status === "retired")) {
+      throw new BundleError("INCOMPATIBLE", `依赖行业包「${bundleId}」未处于可组合发布状态`);
+    }
+    assertOwnedProjectionDeclarations(manifest);
+    visiting.push(bundleId);
+    seen.add(bundleId);
+    for (const dependency of manifest.workloom.dependencies ?? []) {
+      visit(dependency.bundleId, dependency.version, bundleId, "dependency");
+    }
+    visiting.pop();
+    sources.push({ manifest, parentBundleId, role });
+  };
+
+  visit(primarySlug, undefined, null, "primary");
+  const primary = sources.at(-1)!.manifest;
+  if (primary.workloom.status === "stable") {
+    const untrusted = sources.find(({ manifest }) => manifest.workloom.status !== "stable");
+    if (untrusted) {
+      throw new BundleError(
+        "INTEGRITY_FAILED",
+        `稳定主行业包不能组合未稳定依赖「${untrusted.manifest.workloom.industry}」`,
+      );
+    }
+  }
+  return sources;
+}
+
+function mergeSourcedLabels(
+  sources: readonly VerifiedProjectionSource[],
+  field: "objects" | "workflows",
+): { labels: string[]; entries: Array<{ label: string; sourceBundleIds: string[] }> } {
+  const byLabel = new Map<string, string[]>();
+  for (const { manifest } of sources) {
+    const bundleId = manifest.workloom.industry;
+    for (const label of manifest.workloom.ui[field]) {
+      const sourceIds = byLabel.get(label) ?? [];
+      sourceIds.push(bundleId);
+      byLabel.set(label, sourceIds);
+    }
+  }
   return {
-    bundleId: manifest.workloom.industry,
-    bundleName: manifest.workloom.displayName,
-    bundleVersion: manifest.version,
-    bundleStatus: manifest.workloom.status,
-    contractVersion: manifest.workloom.compatibility.contract,
-    integrityDigest: manifest.integrity?.digest ?? null,
-    signatureKeyId: manifest.integrity?.signature?.keyId ?? null,
+    labels: [...byLabel.keys()],
+    entries: [...byLabel].map(([label, sourceBundleIds]) => ({ label, sourceBundleIds })),
+  };
+}
+
+/**
+ * 装配主 Bundle 及其签名清单内的精确版本依赖。合并规则：
+ * - 导航 capabilityId/route 全局唯一且必须属于来源包命名空间；
+ * - 术语同键同值可共用，异值拒绝；对象/流程按声明顺序去重并保留全部来源；
+ * - 依赖之间不能争用同一首页槽位；主包可显式占用该槽位，成为唯一展示来源；
+ * - welcome、serviceFront、inspection、theme、experiments 始终由主包裁决，依赖不能覆盖。
+ */
+export function loadBundleUiProjection(slug: string, root = bundlesRoot()): BundleUiProjection {
+  const sources = loadProjectionSources(slug, root);
+  const primarySource = sources.at(-1)!;
+  const primary = primarySource.manifest;
+  const terminology: Record<string, string> = {};
+  const terminologySources: Record<string, string[]> = {};
+  const navigationSlots: NonNullable<BundleUiProjection["ui"]["navigation"]>["slots"] = [];
+  const seenCapabilities = new Set<string>();
+  const seenRoutes = new Set<string>();
+
+  for (const { manifest } of sources) {
+    const bundleId = manifest.workloom.industry;
+    const sourceTerminology = {
+      ...presetActorTerminology(manifest, bundleId, root),
+      ...manifest.workloom.ui.terminology,
+    };
+    for (const [key, value] of Object.entries(sourceTerminology)) {
+      if (terminology[key] !== undefined && terminology[key] !== value) {
+        throw new BundleError("INVALID_INPUT", `组合行业包术语「${key}」存在冲突，已拒绝装载`);
+      }
+      terminology[key] = value;
+      terminologySources[key] = [...new Set([...(terminologySources[key] ?? []), bundleId])];
+    }
+    for (const slot of manifest.workloom.ui.navigation.slots) {
+      if (seenCapabilities.has(slot.capabilityId)) {
+        throw new BundleError("INVALID_INPUT", `组合行业包导航能力 ${slot.capabilityId} 重复`);
+      }
+      if (seenRoutes.has(slot.route)) {
+        throw new BundleError("INVALID_INPUT", `组合行业包导航路由 ${slot.route} 重复`);
+      }
+      seenCapabilities.add(slot.capabilityId);
+      seenRoutes.add(slot.route);
+      navigationSlots.push({ ...slot, sourceBundleId: bundleId });
+    }
+  }
+
+  const dependencyWidgets: BundleUiProjection["ui"]["home"]["widgets"] = [];
+  const occupiedDependencySlots = new Set<string>();
+  for (const { manifest, role } of sources) {
+    if (role === "primary") continue;
+    for (const widget of manifest.workloom.ui.home.widgets) {
+      for (const client of widget.clients) {
+        const key = `${widget.slot}:${client}`;
+        if (occupiedDependencySlots.has(key)) {
+          throw new BundleError("INVALID_INPUT", `组合依赖争用首页槽位 ${widget.slot}（${client}）`);
+        }
+        occupiedDependencySlots.add(key);
+      }
+      dependencyWidgets.push({ ...widget, sourceBundleId: manifest.workloom.industry });
+    }
+  }
+  const primarySlotClients = new Set(primary.workloom.ui.home.widgets.flatMap((widget) =>
+    widget.clients.map((client) => `${widget.slot}:${client}`)));
+  const homeWidgets = dependencyWidgets.flatMap((widget) => {
+    const remainingClients = widget.clients.filter((client) => !primarySlotClients.has(`${widget.slot}:${client}`));
+    return remainingClients.length > 0 ? [{ ...widget, clients: remainingClients }] : [];
+  });
+  homeWidgets.push(...primary.workloom.ui.home.widgets.map((widget) => ({
+    ...widget,
+    sourceBundleId: primary.workloom.industry,
+  })));
+
+  const objects = mergeSourcedLabels(sources, "objects");
+  const workflows = mergeSourcedLabels(sources, "workflows");
+  const navigationPermissionUniverse = [...new Set(navigationSlots.flatMap((slot) => slot.permissions))].sort();
+  return {
+    primaryBundleId: primary.workloom.industry,
+    bundleId: primary.workloom.industry,
+    bundleName: primary.workloom.displayName,
+    bundleVersion: primary.version,
+    bundleStatus: primary.workloom.status,
+    contractVersion: primary.workloom.compatibility.contract,
+    integrityDigest: primary.integrity?.digest ?? null,
+    signatureKeyId: primary.integrity?.signature?.keyId ?? null,
+    sources: sources.map(({ manifest, role, parentBundleId }) => ({
+      bundleId: manifest.workloom.industry,
+      bundleName: manifest.workloom.displayName,
+      bundleVersion: manifest.version,
+      bundleStatus: manifest.workloom.status,
+      integrityDigest: manifest.integrity?.digest ?? null,
+      signatureKeyId: manifest.integrity?.signature?.keyId ?? null,
+      role,
+      parentBundleId,
+    })),
+    navigationPermissionUniverse,
     ui: {
-      ...manifest.workloom.ui,
-      terminology: {
-        ...actorTerminology,
-        ...manifest.workloom.ui.terminology,
-      },
+      ...primary.workloom.ui,
+      terminology,
+      terminologySources,
+      navigation: { slots: navigationSlots },
+      home: { widgets: homeWidgets },
+      objects: objects.labels,
+      objectEntries: objects.entries,
+      workflows: workflows.labels,
+      workflowEntries: workflows.entries,
+      // 以下高影响投影由主包唯一裁决，低信任依赖不得覆盖。
+      welcome: primary.workloom.ui.welcome,
+      serviceFront: primary.workloom.ui.serviceFront,
+      inspection: primary.workloom.ui.inspection,
+      theme: primary.workloom.ui.theme,
+      permissions: [...new Set(sources.flatMap(({ manifest }) => manifest.workloom.ui.permissions))].sort(),
+      experiments: primary.workloom.ui.experiments,
     },
   };
 }
@@ -1022,7 +1251,7 @@ export function scaffoldDraft(input: DraftInput, root = bundlesRoot()): void {
       compatibility: {
         base: `>=${RUNTIME_BASE_VERSION} <1.0.0`,
         ui: `>=${RUNTIME_UI_VERSION} <1.0.0`,
-        contract: "1.0.0",
+        contract: INDUSTRY_CONTRACT_VERSION,
       },
       provides: {
         presets: [], fences: [], skills: [], schemas: [], ui: [], serviceFront: [], seeds: [],

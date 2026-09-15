@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   assertBundleCompatibility,
+  INDUSTRY_CONTRACT_VERSION,
+  isWorkLoomReservedRoute,
   parseBundleManifest,
   parseWorkforcePreset,
   parseWorkforcePresets,
@@ -17,7 +19,7 @@ const manifest = {
     description: "用于验证契约",
     status: "stable",
     owner: "WorkLoom",
-    compatibility: { base: ">=0.1.0 <1.0.0", ui: ">=0.1.0 <1.0.0", contract: "1.0.0" },
+    compatibility: { base: ">=0.1.0 <1.0.0", ui: ">=0.1.0 <1.0.0", contract: "2.0.0" },
     provides: { presets: [], fences: [], skills: [], schemas: [], ui: [], serviceFront: [], seeds: [] },
     ui: {
       schemaVersion: "workloom.bundle.ui/v1",
@@ -29,12 +31,27 @@ const manifest = {
 };
 
 describe("行业包契约", () => {
+  it("破坏性约束收紧发布为 2.x，并拒绝伪装兼容旧契约的清单", () => {
+    expect(INDUSTRY_CONTRACT_VERSION).toBe("2.0.0");
+    const legacy = structuredClone(manifest) as Record<string, any>;
+    legacy.workloom.compatibility.contract = "1.0.0";
+    expect(() => parseBundleManifest(legacy)).toThrow();
+  });
+
+  it("公共页面、身份入口与历史 P 编号共用受保护路由事实源", () => {
+    for (const route of ["/approvals", "/approvals/export", "/login", "/dev/tools", "/p24", "/p8/agent/1"]) {
+      expect(isWorkLoomReservedRoute(route)).toBe(true);
+    }
+    expect(isWorkLoomReservedRoute("/p10")).toBe(false);
+    expect(isWorkLoomReservedRoute("/hotel-operations")).toBe(false);
+  });
+
   it("解析完整三端投影并拒绝重复语义路由", () => {
     expect(parseBundleManifest(manifest).workloom.industry).toBe("example");
     const invalid: Record<string, any> = structuredClone(manifest);
     invalid.workloom.ui.navigation.slots = [
-      { capabilityId: "industry.one", title: "入口一", route: "/industry/one", group: "经营", icon: "report", clients: ["pc"], permissions: [] },
-      { capabilityId: "industry.two", title: "入口二", route: "/industry/one", group: "经营", icon: "report", clients: ["pc"], permissions: [] },
+      { capabilityId: "example.one", title: "入口一", route: "/industry/one", group: "operations", icon: "report", clients: ["pc"], permissions: [] },
+      { capabilityId: "example.two", title: "入口二", route: "/industry/one", group: "operations", icon: "report", clients: ["pc"], permissions: [] },
     ];
     expect(() => parseBundleManifest(invalid)).toThrow();
   });
@@ -43,6 +60,70 @@ describe("行业包契约", () => {
     expect(satisfiesCompatibility("0.3.0", ">=0.1.0 <1.0.0")).toBe(true);
     expect(satisfiesCompatibility("1.0.0", ">=0.1.0 <1.0.0")).toBe(false);
     expect(() => assertBundleCompatibility(parseBundleManifest(manifest), { base: "1.0.0", ui: "0.1.0" })).toThrow("兼容性校验失败");
+  });
+
+  it("组合主包只接受不重复、非自身的精确版本依赖", () => {
+    const valid = structuredClone(manifest) as Record<string, any>;
+    valid.workloom.dependencies = [
+      { bundleId: "hotel", version: "1.0.0" },
+      { bundleId: "ai-video", version: "2.1.0" },
+    ];
+    expect(parseBundleManifest(valid).workloom.dependencies).toEqual(valid.workloom.dependencies);
+
+    const duplicate = structuredClone(valid) as Record<string, any>;
+    duplicate.workloom.dependencies.push({ bundleId: "hotel", version: "2.0.0" });
+    expect(() => parseBundleManifest(duplicate)).toThrow(/组合依赖重复/);
+
+    const self = structuredClone(manifest) as Record<string, any>;
+    self.workloom.dependencies = [{ bundleId: "example", version: "1.2.3" }];
+    expect(() => parseBundleManifest(self)).toThrow(/不能依赖自身/);
+
+    const range = structuredClone(manifest) as Record<string, any>;
+    range.workloom.dependencies = [{ bundleId: "hotel", version: ">=1.0.0" }];
+    expect(() => parseBundleManifest(range)).toThrow(/精确语义版本/);
+  });
+
+  it("通用资产槽显式覆盖管线、资料库、分群默认值与连接器，并拒绝目录或越界路径", () => {
+    const valid = structuredClone(manifest) as Record<string, any>;
+    Object.assign(valid.workloom.provides, {
+      pipelines: ["pipelines/经营闭环.yml"],
+      library: ["library/行业方法.md"],
+      segmentDefaults: ["segment-defaults.yml"],
+      connectors: ["connectors/connectors.json"],
+    });
+    expect(parseBundleManifest(valid).workloom.provides).toMatchObject(valid.workloom.provides);
+
+    const directory = structuredClone(valid) as Record<string, any>;
+    directory.workloom.provides.library = ["library/"];
+    expect(() => parseBundleManifest(directory)).toThrow();
+
+    const traversal = structuredClone(valid) as Record<string, any>;
+    traversal.workloom.provides.connectors = ["../connectors.json"];
+    expect(() => parseBundleManifest(traversal)).toThrow();
+  });
+
+  it("行业导航不能占用公共路由或借用其他包的能力与权限", () => {
+    const invalid = structuredClone(manifest) as Record<string, any>;
+    invalid.workloom.ui.permissions = ["hotel.orders.read"];
+    invalid.workloom.ui.navigation.slots = [{
+      capabilityId: "hotel.orders",
+      title: "订单经营",
+      route: "/approvals/export",
+      group: "operations",
+      icon: "document",
+      clients: ["pc"],
+      permissions: ["hotel.orders.read"],
+    }];
+    expect(() => parseBundleManifest(invalid)).toThrow(/自身命名空间|不得覆盖基座路由/);
+  });
+
+  it("行业导航只能引用共享分组与图标注册表", () => {
+    const invalid = structuredClone(manifest) as Record<string, any>;
+    invalid.workloom.ui.navigation.slots = [{
+      capabilityId: "example.orders", title: "订单经营", route: "/orders",
+      group: "横向顶栏", icon: "custom-svg", clients: ["pc"], permissions: [],
+    }];
+    expect(() => parseBundleManifest(invalid)).toThrow();
   });
 
   it("行业只能覆盖品牌白名单字段", () => {
@@ -96,7 +177,7 @@ describe("行业包契约", () => {
     const invalid = structuredClone(manifest) as Record<string, any>;
     invalid.workloom.ui.navigation.slots = [{
       capabilityId: "example.orders", title, route: "/orders",
-      group: "经营", icon: "report", clients: ["pc"], permissions: [],
+      group: "operations", icon: "report", clients: ["pc"], permissions: [],
     }];
     expect(() => parseBundleManifest(invalid)).toThrow(/不得混入底层/);
   });

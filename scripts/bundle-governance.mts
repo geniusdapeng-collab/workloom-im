@@ -11,28 +11,37 @@ import {
   canonicalBundleArtifactPayload,
   formatContractError,
   parseBundleManifest,
+  WORKLOOM_BUNDLE_HOME_COMPONENTS,
+  WORKLOOM_BUNDLE_NAVIGATION_ICONS,
+  WORKLOOM_NAVIGATION_GROUPS,
   WorkforcePresetCollectionSchema,
   type BundleManifest,
 } from "../packages/industry-contract/src/index.ts";
-import { BASE_NAVIGATION, NAVIGATION_GROUP_ORDER, type IconName } from "../packages/ui/src/navigation.ts";
 
 const root = resolve(import.meta.dirname, "..");
 const bundlesRoot = resolve(process.env.BUNDLES_ROOT ?? join(root, "bundles"));
 const args = new Set(process.argv.slice(2));
 const refreshDigests = args.has("--refresh-digests");
 const releaseMode = args.has("--release");
-const baseVersion = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version as string;
-const uiVersion = JSON.parse(readFileSync(join(root, "packages/ui/package.json"), "utf8")).version as string;
-const iconNames = new Set<IconName>([
-  "home", "tasks", "report", "service", "approval", "ledger", "rules", "exam", "memory", "night",
-  "model", "skills", "team", "workspace", "inbox", "account", "partner", "more", "executive", "customize",
-  "configuration", "assembly", "agents", "developer", "menu", "close", "reset", "search", "notice", "chevron",
-  "chat", "ticket", "star", "history",
-]);
-const baseCapabilityIds = new Set(BASE_NAVIGATION.map((entry) => entry.capabilityId));
-const baseRoutes = new Set(BASE_NAVIGATION.flatMap((entry) => [entry.route, ...(entry.legacyRoutes ?? [])]));
-const baseWidgetComponents = new Set(["QuickTaskList"]);
+const readVersion = (path: string): string | null => {
+  if (!existsSync(path)) return null;
+  try {
+    const value = JSON.parse(readFileSync(path, "utf8")) as { version?: unknown };
+    return typeof value.version === "string" ? value.version : null;
+  } catch { return null; }
+};
+const baseVersion = process.env.WORKLOOM_BASE_VERSION
+  ?? readVersion(join(root, "packages/base/package.json"))
+  ?? (() => { throw new Error("无法确定基座版本"); })();
+const uiVersion = process.env.WORKLOOM_UI_VERSION
+  ?? readVersion(join(root, "packages/ui/package.json"))
+  ?? readVersion(join(root, ".workloom-ui.json"))
+  ?? (() => { throw new Error("无法确定共享 UI 版本；行业仓必须先完成稳定基座接入"); })();
+const iconNames = new Set<string>(WORKLOOM_BUNDLE_NAVIGATION_ICONS);
+const navigationGroups = new Set<string>(WORKLOOM_NAVIGATION_GROUPS);
+const baseWidgetComponents = new Set<string>(WORKLOOM_BUNDLE_HOME_COMPONENTS);
 const errors: string[] = [];
+const manifestsByBundleId = new Map<string, { directoryName: string; manifest: BundleManifest; actorTerminology: Record<string, string> }>();
 // 公钥环是独立信任根，严禁与可替换的 bundles/ 制品同目录。
 // 桌面构建把此文件作为独立、受应用签名保护的 extraResource 分发；托管部署也可直接注入公钥环。
 const trustFile = resolve(process.env.BUNDLE_TRUST_OUTPUT ?? join(root, "build", "bundle-trust.json"));
@@ -139,7 +148,7 @@ function assetDigestsFor(directory: string, manifest: BundleManifest): Record<st
   }));
 }
 
-function verifyPresetAssets(directory: string, label: string, manifest: BundleManifest): void {
+function verifyPresetAssets(directory: string, label: string, manifest: BundleManifest): Record<string, string> {
   const declared = manifest.workloom.provides.presets;
   const declaredSet = new Set(declared);
   if (declaredSet.size !== declared.length) errors.push(`${label}：岗位资产清单存在重复路径`);
@@ -173,7 +182,9 @@ function verifyPresetAssets(directory: string, label: string, manifest: BundleMa
       const field = fieldPath.length > 0 ? `（${fieldPath.join(".")}）` : "";
       errors.push(`${label}：${source ?? "岗位资产"}${field}：${issue.message}`);
     }
+    return {};
   }
+  return Object.fromEntries(workforce.data.map((preset) => [`actor.${preset.preset_key}`, preset.name]));
 }
 
 function verifyOne(directory: string): void {
@@ -261,7 +272,19 @@ function verifyOne(directory: string): void {
       errors.push(`${label}：声明的资产不存在或越出行业包目录：${path}`);
     }
   }
-  verifyPresetAssets(directory, label, manifest);
+  const actorTerminology = verifyPresetAssets(directory, label, manifest);
+
+  const bundleId = manifest.workloom.industry;
+  const directoryName = relative(bundlesRoot, directory);
+  if (directoryName !== bundleId) {
+    errors.push(`${label}：目录名必须与行业包标识一致（${bundleId}）`);
+  }
+  const existingBundle = manifestsByBundleId.get(bundleId);
+  if (existingBundle) {
+    errors.push(`${label}：行业包标识 ${bundleId} 与目录 ${existingBundle.directoryName} 重复`);
+  } else {
+    manifestsByBundleId.set(bundleId, { directoryName, manifest, actorTerminology });
+  }
 
   const actualDigest = digestFor(manifest);
   if (!manifest.integrity) {
@@ -321,12 +344,8 @@ function verifyOne(directory: string): void {
   }
 
   for (const entry of manifest.workloom.ui.navigation.slots) {
-    if (entry.capabilityId.startsWith("workloom.") || baseCapabilityIds.has(entry.capabilityId)) {
-      errors.push(`${label}：行业导航不得覆盖公共能力 ${entry.capabilityId}`);
-    }
-    if (baseRoutes.has(entry.route)) errors.push(`${label}：行业导航不得覆盖公共路由 ${entry.route}`);
-    if (!NAVIGATION_GROUP_ORDER.includes(entry.group as never)) errors.push(`${label}：未知导航分组 ${entry.group}`);
-    if (!iconNames.has(entry.icon as IconName)) errors.push(`${label}：未知共享图标 ${entry.icon}`);
+    if (!navigationGroups.has(entry.group)) errors.push(`${label}：未知导航分组 ${entry.group}`);
+    if (!iconNames.has(entry.icon)) errors.push(`${label}：未知共享图标 ${entry.icon}`);
   }
 
   for (const widget of manifest.workloom.ui.home.widgets) {
@@ -355,6 +374,86 @@ function verifyOne(directory: string): void {
   // identityPolicy=disabled 表示禁用会员/订单等业务身份绑定，不代表允许客户端自报身份。
 }
 
+/**
+ * 发布前验证完整组合闭包。运行时会再次验真并 fail-close；这里把缺包、版本漂移、
+ * 循环和 UI 合并冲突提前到制品门禁，避免“发布成功、首次装载才失败”。
+ */
+function verifyComposition(primaryId: string): void {
+  const primaryRecord = manifestsByBundleId.get(primaryId);
+  if (!primaryRecord) return;
+  const ordered: Array<{ parentId: string | null; manifest: BundleManifest; actorTerminology: Record<string, string> }> = [];
+  const visiting: string[] = [];
+  const seen = new Set<string>();
+
+  const visit = (bundleId: string, expectedVersion: string | undefined, parentId: string | null): void => {
+    if (visiting.includes(bundleId)) {
+      errors.push(`${primaryId}：组合依赖形成循环：${[...visiting, bundleId].join(" → ")}`);
+      return;
+    }
+    if (seen.has(bundleId)) {
+      errors.push(`${primaryId}：组合依赖重复引用 ${bundleId}`);
+      return;
+    }
+    const record = manifestsByBundleId.get(bundleId);
+    if (!record) {
+      errors.push(`${primaryId}：依赖行业包 ${bundleId}@${expectedVersion ?? "未知版本"} 不存在`);
+      return;
+    }
+    if (expectedVersion && record.manifest.version !== expectedVersion) {
+      errors.push(`${primaryId}：依赖 ${bundleId} 要求 ${expectedVersion}，实际为 ${record.manifest.version}`);
+    }
+    if (parentId && ["draft", "retired"].includes(record.manifest.workloom.status)) {
+      errors.push(`${primaryId}：依赖行业包 ${bundleId} 未处于可组合发布状态`);
+    }
+    visiting.push(bundleId);
+    seen.add(bundleId);
+    for (const dependency of record.manifest.workloom.dependencies ?? []) {
+      visit(dependency.bundleId, dependency.version, bundleId);
+    }
+    visiting.pop();
+    ordered.push({ parentId, manifest: record.manifest, actorTerminology: record.actorTerminology });
+  };
+
+  visit(primaryId, undefined, null);
+  if (primaryRecord.manifest.workloom.status === "stable") {
+    const unstable = ordered.find(({ manifest }) => manifest.workloom.status !== "stable");
+    if (unstable) errors.push(`${primaryId}：稳定主行业包不能组合未稳定依赖 ${unstable.manifest.workloom.industry}`);
+  }
+
+  const capabilityOwners = new Map<string, string>();
+  const routeOwners = new Map<string, string>();
+  const terminology = new Map<string, { value: string; owner: string }>();
+  const dependencyWidgetSlots = new Map<string, string>();
+  for (const { parentId, manifest, actorTerminology } of ordered) {
+    const bundleId = manifest.workloom.industry;
+    for (const slot of manifest.workloom.ui.navigation.slots) {
+      const capabilityOwner = capabilityOwners.get(slot.capabilityId);
+      if (capabilityOwner) errors.push(`${primaryId}：导航能力 ${slot.capabilityId} 由 ${capabilityOwner} 与 ${bundleId} 重复声明`);
+      else capabilityOwners.set(slot.capabilityId, bundleId);
+      const routeOwner = routeOwners.get(slot.route);
+      if (routeOwner) errors.push(`${primaryId}：导航路由 ${slot.route} 由 ${routeOwner} 与 ${bundleId} 重复声明`);
+      else routeOwners.set(slot.route, bundleId);
+    }
+    for (const [key, value] of Object.entries({ ...actorTerminology, ...manifest.workloom.ui.terminology })) {
+      const existing = terminology.get(key);
+      if (existing && existing.value !== value) {
+        errors.push(`${primaryId}：组合术语 ${key} 在 ${existing.owner} 与 ${bundleId} 中冲突`);
+      } else if (!existing) terminology.set(key, { value, owner: bundleId });
+    }
+    // 主包可显式覆盖依赖首页槽；两个依赖之间争用同一客户端槽位必须拒绝。
+    if (parentId !== null) {
+      for (const widget of manifest.workloom.ui.home.widgets) {
+        for (const client of widget.clients) {
+          const key = `${widget.slot}:${client}`;
+          const owner = dependencyWidgetSlots.get(key);
+          if (owner) errors.push(`${primaryId}：依赖首页槽位 ${key} 由 ${owner} 与 ${bundleId} 争用`);
+          else dependencyWidgetSlots.set(key, bundleId);
+        }
+      }
+    }
+  }
+}
+
 if (!existsSync(bundlesRoot) || !statSync(bundlesRoot).isDirectory()) {
   console.error(`❌ 行业包目录不存在：${bundlesRoot}`);
   process.exit(1);
@@ -362,6 +461,7 @@ if (!existsSync(bundlesRoot) || !statSync(bundlesRoot).isDirectory()) {
 for (const entry of readdirSync(bundlesRoot, { withFileTypes: true })) {
   if (entry.isDirectory() && existsSync(join(bundlesRoot, entry.name, "bundle.json"))) verifyOne(join(bundlesRoot, entry.name));
 }
+for (const bundleId of manifestsByBundleId.keys()) verifyComposition(bundleId);
 
 if (errors.length) {
   console.error(`❌ 行业包治理门禁失败（${errors.length} 项）`);

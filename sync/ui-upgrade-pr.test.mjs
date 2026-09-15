@@ -28,7 +28,7 @@ const manifest = {
   releasePolicy: "base-first-stable-only",
   ui: {
     package: "@workloom/ui",
-    contractVersion: "1.0.0",
+    contractVersion: "2.0.0",
     candidateVersion: "1.2.4",
     latestStableVersion: "1.2.3",
     allowedIndustryOverrides: ["--wl-brand-primary", "--wl-brand-on-primary", "--wl-brand-accent"],
@@ -69,6 +69,23 @@ function writeJson(path, value) {
 }
 
 function createReadyConsumer(repo, repository = "geniusdapeng-collab/example") {
+  writeJson(join(repo, "package.json"), {
+    name: "workloom-example",
+    private: true,
+    packageManager: "pnpm@10.14.0",
+    scripts: {
+      "product:verify": "node scripts/verify-product-content.mjs",
+      "bundle:governance": "tsx scripts/bundle-governance.mts",
+    },
+    devDependencies: { tsx: "^4.23.12" },
+  });
+  writeFileSync(join(repo, "pnpm-workspace.yaml"), [
+    "packages:",
+    '  - "apps/*"',
+    "onlyBuiltDependencies:",
+    "  - node-pty",
+    "",
+  ].join("\n"));
   const clients = [
     {
       root: "apps/web",
@@ -117,7 +134,7 @@ function createReadyConsumer(repo, repository = "geniusdapeng-collab/example") {
   writeJson(join(repo, ".workloom-ui.json"), {
     package: "@workloom/ui",
     version: "1.2.3",
-    contractVersion: "1.0.0",
+    contractVersion: "2.0.0",
     source: "geniusdapeng-collab/workloom-im",
     updatePolicy: "upgrade-pr-only",
     releaseChannel: "stable",
@@ -206,6 +223,9 @@ describe("UI 稳定发布门禁", () => {
     assert.ok(blockers.some((item) => item.code === "MISSING_CLIENT_PACKAGE" && item.path === "apps/webb/package.json"));
     assert.ok(blockers.some((item) => item.code === "MISSING_CLIENT_ENTRY" && item.path === "apps/web/src/main.tsx"));
     assert.ok(blockers.some((item) => item.code === "MISSING_PRODUCT_MANIFEST" && item.path === "product.manifest.json"));
+    assert.ok(blockers.some((item) => item.code === "UNPINNED_PACKAGE_MANAGER" && item.path === "package.json"));
+    assert.ok(blockers.some((item) => item.code === "MISSING_GOVERNANCE_COMMAND" && item.path === "package.json"));
+    assert.ok(blockers.some((item) => item.code === "MISSING_BUILD_POLICY" && item.path === "pnpm-workspace.yaml"));
     assert.ok(blockers.some((item) => item.code === "MISSING_UI_STATE" && item.path === ".workloom-ui.json"));
     assert.ok(blockers.some((item) => item.code === "MISSING_CLIENT_FOUNDATION_STATE" && item.path === ".workloom-client-foundation.json"));
     assert.ok(blockers.every((item) => item.message && item.remediation));
@@ -320,6 +340,7 @@ describe("UI 稳定发布门禁", () => {
     const body = buildUpgradePullRequestBody("1.2.3");
     assert.match(body, /三端逐一 typecheck 与生产 build/u);
     assert.match(body, /仓库现有 pnpm 测试/u);
+    assert.match(body, /产品身份一致性与全量行业 Bundle/u);
     assert.match(body, /存在 Python 测试时同时运行 pytest/u);
     assert.match(body, /Playwright.*基础主入口、首帧及稳定帧横向溢出冒烟/u);
     assert.doesNotMatch(body, /租户负向|视觉回归/u);
@@ -339,6 +360,8 @@ describe("UI 稳定发布门禁", () => {
     for (const command of [
       "verify-ui-consumer.mjs",
       "verify-client-foundation-consumer.mjs",
+      "verify-product-content.mjs",
+      "bundle-governance.mts",
       'pnpm -C "$WORKLOOM_DIR" test',
       "python -m pytest -q",
       "for CLIENT in web webb webc",
@@ -349,6 +372,10 @@ describe("UI 稳定发布门禁", () => {
 
   it("工作流严格先预检、再 publish、最后 rollout", () => {
     const workflow = readFileSync(join(repoRoot, ".github/workflows/ui-release.yml"), "utf8");
+    assert.match(workflow, /^# ui-v\* 只封存共享 UI 与三端客户端基座/mu);
+    assert.match(workflow, /^name: shared-ui-client-foundation-release$/mu);
+    assert.match(workflow, /候选 Bundle 契约、摘要与投影一致性门禁/u);
+    assert.doesNotMatch(workflow, /BUNDLE_SIGNING_PRIVATE_KEY|BUNDLE_SIGNING_KEY_ID|pnpm bundle:release|build\/bundle-trust\.json/u);
     const preflight = workflow.indexOf("node sync/ui-upgrade-pr.mjs --preflight");
     const publish = workflow.indexOf('npm publish "${TARBALLS[0]}"');
     const rollout = workflow.indexOf("node sync/ui-upgrade-pr.mjs --rollout");
@@ -364,6 +391,10 @@ describe("UI 稳定发布门禁", () => {
     const continueRollout = workflow.slice(workflow.indexOf("  continue-rollout:"));
     assert.match(continueRollout, /uses: actions\/checkout@v4\n\s+with:\n\s+fetch-depth: 0/u);
     assert.match(continueRollout, /git checkout --detach "ui-v\$STABLE_VERSION"/u);
+    const desktopWorkflow = readFileSync(join(repoRoot, ".github/workflows/build-desktop.yml"), "utf8");
+    assert.match(desktopWorkflow, /BUNDLE_SIGNING_PRIVATE_KEY/u);
+    assert.match(desktopWorkflow, /pnpm bundle:release/u);
+    assert.match(desktopWorkflow, /build\/bundle-trust\.json/u);
     const implementation = readFileSync(join(repoRoot, "sync/ui-upgrade-pr.mjs"), "utf8");
     assert.match(implementation, /base: "main"/u);
     assert.match(implementation, /applyClientFoundation/u);

@@ -15,7 +15,6 @@ import P7 from "./pages/p7/P7";
 import P8 from "./pages/p8/P8";
 import P23 from "./pages/p23/P23";
 import P24 from "./pages/p24/P24";
-import P25 from "./pages/p25/P25";
 import P26 from "./pages/p26/P26";
 import P27 from "./pages/p27/P27";
 import P28 from "./pages/p28/P28";
@@ -38,7 +37,6 @@ import Workspaces from "./pages/accounts/Workspaces";
 import {
   NavigationAccessBoundary,
   NavigationAccessProvider,
-  NavigationCapabilityBoundary,
 } from "./shell/NavigationAccess";
 import {
   INDUSTRY_ROUTE_REGISTRY,
@@ -116,7 +114,6 @@ function Shell() {
       <Route path="/p8/agent/:agentId" element={<LegacyAgentRedirect />} />
       <Route path="/p23" element={<Navigate to="/memory" replace />} />
       <Route path="/p24" element={<Navigate to="/exams" replace />} />
-      <Route path="/p25" element={<Navigate to="/development" replace />} />
       <Route path="/p26" element={<Navigate to="/customize" replace />} />
       <Route path="/p27" element={<Navigate to="/configuration" replace />} />
       <Route path="/p28" element={<Navigate to="/inbox" replace />} />
@@ -146,7 +143,6 @@ function Shell() {
       <Route path="/assembly" element={<P7 />} />
       <Route path="/agents" element={<P8 />} />
       <Route path="/agents/:agentId" element={<P8 />} />
-      <Route path="/development" element={<NavigationCapabilityBoundary capabilityId="ai-pm.development"><P25 /></NavigationCapabilityBoundary>} />
       <Route path="/events" element={<Observability view="events" />} />
       <Route path="/event-ledger" element={<Navigate to="/events" replace />} />
       <Route path="/models" element={<Observability view="models" />} />

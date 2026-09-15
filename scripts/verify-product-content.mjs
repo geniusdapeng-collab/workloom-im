@@ -2,14 +2,21 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 
 const root = process.cwd();
+let repositoryRoot = root;
+try {
+  repositoryRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: root, encoding: "utf8" }).trim();
+} catch {
+  // 非 Git 制品校验继续以当前目录为根；缺失清单会给出明确错误。
+}
 const bundlesRoot = path.join(root, "bundles");
 const errors = [];
 const envExample = path.join(root, ".env.example");
 const envText = fs.existsSync(envExample) ? fs.readFileSync(envExample, "utf8") : "";
 const activeSeedScripts = envText.match(/^DESKTOP_SEED_SCRIPT=(.+)$/m)?.[1] ?? "";
-const productManifestPath = path.join(root, "product.manifest.json");
+const productManifestPath = path.join(repositoryRoot, "product.manifest.json");
 
 function requiredJson(file, label) {
   if (!fs.existsSync(file)) {

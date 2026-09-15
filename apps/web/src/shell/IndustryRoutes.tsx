@@ -1,10 +1,10 @@
 import {
   AsyncState,
-  BASE_NAVIGATION,
   isNavigationActive,
   requiredNavigationPermissions,
   type NavigationEntry,
 } from "@workloom/ui";
+import { isWorkLoomReservedRoute } from "@workloom/industry-contract";
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import { generatePath, Link, Navigate, useLocation, useParams } from "react-router";
 import { useNavigationAccess } from "./NavigationAccess";
@@ -35,13 +35,6 @@ export interface IndustryRouteRegistry {
 const CAPABILITY_ID = /^[a-z0-9][a-z0-9-]{1,31}\.[a-z0-9][a-z0-9.-]{1,95}$/;
 const FIXED_SEGMENT = /^[a-z0-9][a-z0-9-]*$/;
 const PARAM_SEGMENT = /^:[a-z][A-Za-z0-9]*$/;
-const NON_INDUSTRY_ROUTE_ROOTS = ["/login", "/activate", "/invite", "/onboarding", "/dev"] as const;
-
-const PROTECTED_ROUTE_ROOTS = new Set(
-  [...BASE_NAVIGATION.flatMap((entry) => [entry.route, ...(entry.legacyRoutes ?? [])]), ...NON_INDUSTRY_ROUTE_ROOTS]
-    .map((route) => route.split("/")[1])
-    .filter((segment): segment is string => Boolean(segment)),
-);
 
 function routeShape(path: string): string {
   return path.split("/").map((segment) => segment.startsWith(":") ? ":" : segment).join("/");
@@ -60,7 +53,10 @@ function assertSameRouteParameters(path: string, legacyPath: string): void {
 }
 
 /** 校验具体路由模式；不接受查询、通配或首段参数，避免吞掉其他产品页面。 */
-export function validateIndustryRoutePath(path: unknown): asserts path is string {
+export function validateIndustryRoutePath(
+  path: unknown,
+  options: { allowIndustryLegacyNumbered?: boolean } = {},
+): asserts path is string {
   if (typeof path !== "string" || !path.startsWith("/") || path === "/" || path.endsWith("/")) {
     throw new Error("行业扩展路由必须是无尾斜杠的绝对路径");
   }
@@ -74,7 +70,10 @@ export function validateIndustryRoutePath(path: unknown): asserts path is string
   if (!segments.every((segment) => FIXED_SEGMENT.test(segment) || PARAM_SEGMENT.test(segment))) {
     throw new Error(`行业扩展路由片段不符合契约：${path}`);
   }
-  if (PROTECTED_ROUTE_ROOTS.has(segments[0])) {
+  if (/^\/p\d+(?:\/|$)/.test(path) && !options.allowIndustryLegacyNumbered) {
+    throw new Error(`行业扩展主路由必须使用语义名称：${path}`);
+  }
+  if (isWorkLoomReservedRoute(path)) {
     throw new Error(`行业扩展路由不得覆盖基座地址：${path}`);
   }
 }
@@ -112,7 +111,7 @@ export function buildIndustryRouteRegistry(modules: Readonly<Record<string, unkn
         }
         const allPaths = [definition.path, ...(definition.legacyPaths ?? [])];
         for (const routePath of allPaths) {
-          validateIndustryRoutePath(routePath);
+          validateIndustryRoutePath(routePath, { allowIndustryLegacyNumbered: routePath !== definition.path });
           if (routePath !== definition.path) assertSameRouteParameters(definition.path, routePath);
           const shape = routeShape(routePath);
           const existing = seenShapes.get(shape);

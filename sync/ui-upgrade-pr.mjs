@@ -102,6 +102,10 @@ const PHASE_ONE_CODES = new Set([
   "PRODUCT_REPOSITORY_MISMATCH",
   "INCOMPLETE_PRODUCT_IDENTITY",
   "PRODUCT_CLIENT_NOT_ENABLED",
+  "INVALID_ROOT_PACKAGE",
+  "UNPINNED_PACKAGE_MANAGER",
+  "MISSING_GOVERNANCE_COMMAND",
+  "MISSING_BUILD_POLICY",
   "DEFAULT_BRANCH_NOT_MAIN",
 ]);
 
@@ -274,6 +278,44 @@ export function inspectMigratedConsumer(repoRoot, child, manifest) {
         ));
       }
     }
+  }
+
+  const rootPackagePath = join(workdir, "package.json");
+  const rootPackage = existsSync(rootPackagePath)
+    ? readJson(rootPackagePath, "根 package.json", blockers, context, "INVALID_ROOT_PACKAGE")
+    : undefined;
+  if (!rootPackage || rootPackage.packageManager !== "pnpm@10.14.0") {
+    blockers.push(blocker(
+      "UNPINNED_PACKAGE_MANAGER",
+      prefixedPath(child, "package.json"),
+      `行业基座必须固定 packageManager=pnpm@10.14.0，当前为 ${rootPackage?.packageManager ?? "未登记"}`,
+      "固定与基座一致的 pnpm 版本，避免安装策略和锁文件被不同主版本改写。",
+      "phase-1",
+    ));
+  }
+  if (
+    !rootPackage?.scripts?.["product:verify"]
+    || !rootPackage?.scripts?.["bundle:governance"]
+    || !(rootPackage?.devDependencies?.tsx || rootPackage?.dependencies?.tsx)
+  ) {
+    blockers.push(blocker(
+      "MISSING_GOVERNANCE_COMMAND",
+      prefixedPath(child, "package.json"),
+      "行业仓缺少可执行的产品身份或 Bundle 治理命令",
+      "接入 product:verify、bundle:governance 与固定 tsx 执行器；消费工作流会直接运行这些门禁。",
+      "phase-1",
+    ));
+  }
+  const workspacePolicyPath = join(workdir, "pnpm-workspace.yaml");
+  const workspacePolicy = existsSync(workspacePolicyPath) ? readFileSync(workspacePolicyPath, "utf8") : "";
+  if (!/onlyBuiltDependencies\s*:/u.test(workspacePolicy) || !/^\s*-\s+node-pty\s*$/mu.test(workspacePolicy)) {
+    blockers.push(blocker(
+      "MISSING_BUILD_POLICY",
+      prefixedPath(child, "pnpm-workspace.yaml"),
+      "行业仓未在工作区配置中显式允许桌面原生依赖构建",
+      "把 onlyBuiltDependencies 放入 pnpm-workspace.yaml，并至少登记 node-pty。",
+      "phase-1",
+    ));
   }
 
   const statePath = join(workdir, ".workloom-ui.json");
@@ -552,6 +594,7 @@ export function buildUpgradePullRequestBody(version) {
     "",
     "合并前必须由 `workloom-ui-contract` 工作流实际通过：",
     "- 共享 UI 消费契约与三端客户端基座指纹门禁",
+    "- 产品身份一致性与全量行业 Bundle 契约、资产和完整性门禁",
     "- 三端逐一 typecheck 与生产 build",
     "- 仓库现有 pnpm 测试；仓根存在 Python 测试时同时运行 pytest",
     "- Playwright 对三端生产预览的基础主入口、首帧及稳定帧横向溢出冒烟",

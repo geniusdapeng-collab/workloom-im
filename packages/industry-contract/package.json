@@ -1,6 +1,6 @@
 {
   "name": "@workloom/industry-contract",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "WorkLoom 行业 Bundle、三端投影与基座兼容契约",
   "type": "module",
   "files": [

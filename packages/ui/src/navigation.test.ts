@@ -1,7 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { composeNavigation, isNavigationActive, navigationEntriesFromBundle } from "./navigation";
+import {
+  WORKLOOM_BUNDLE_NAVIGATION_ICONS,
+  WORKLOOM_NAVIGATION_GROUPS,
+} from "../../industry-contract/src/index.js";
+import {
+  NAVIGATION_GROUP_ORDER,
+  composeNavigation,
+  isNavigationActive,
+  navigationEntriesFromBundle,
+} from "./navigation";
 
 describe("共享导航契约", () => {
+  it("Bundle 契约中的分组与图标全部由共享导航实现支持", () => {
+    expect(NAVIGATION_GROUP_ORDER).toEqual(WORKLOOM_NAVIGATION_GROUPS);
+    for (const [index, icon] of WORKLOOM_BUNDLE_NAVIGATION_ICONS.entries()) {
+      expect(() => navigationEntriesFromBundle("sample", [{
+        capabilityId: `sample.icon-${index}`,
+        route: `/icon-${index}`,
+        title: "共享图标",
+        group: "operations",
+        icon,
+        clients: ["pc"],
+        permissions: [],
+      }])).not.toThrow();
+    }
+  });
+
   it("按客户端与权限过滤，并保持固定分组顺序", () => {
     const entries = composeNavigation({ client: "b-mobile", permissions: new Set(["today.read", "approvals.read"]) });
     expect(entries.some((entry) => entry.capabilityId === "workloom.approvals")).toBe(true);
@@ -55,6 +79,30 @@ describe("共享导航契约", () => {
       permissions: new Set(["ai-pm.development.read", "ai-pm.workspace.ready"]),
       bundleEntries,
     }).some((entry) => entry.capabilityId === "ai-pm.development")).toBe(true);
+  });
+
+  it("组合投影按每个槽位的真实来源校验命名空间", () => {
+    const entries = navigationEntriesFromBundle("geo-growth", [{
+      sourceBundleId: "ai-video",
+      capabilityId: "ai-video.production",
+      route: "/video-production",
+      title: "视频生产",
+      group: "operations",
+      icon: "report",
+      clients: ["pc"],
+      permissions: ["ai-video.production.read"],
+    }]);
+    expect(entries[0]?.source).toBe("bundle:ai-video");
+    expect(() => navigationEntriesFromBundle("geo-growth", [{
+      sourceBundleId: "ai-video",
+      capabilityId: "hotel.production",
+      route: "/video-production",
+      title: "视频生产",
+      group: "operations",
+      icon: "report",
+      clients: ["pc"],
+      permissions: [],
+    }])).toThrow(/ai-video/);
   });
 
   it("拒绝行业包越权使用别的命名空间或未知视觉资产", () => {

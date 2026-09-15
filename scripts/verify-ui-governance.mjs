@@ -97,11 +97,21 @@ const pcIndex = readFileSync(join(root, "apps/web/index.html"), "utf8");
 if (!pcIndex.includes('data-wl-theme="dark"')) errors.push("PC 客户端未声明共享 dark 主题，兼容别名可能解析到错误主题");
 
 const pcAppSource = readFileSync(join(root, "apps/web/src/App.tsx"), "utf8");
-const developerPageSource = readFileSync(join(root, "apps/web/src/pages/p25/P25.tsx"), "utf8");
 const componentMatrixSource = readFileSync(join(root, "apps/web/src/pages/dev/DevMatrix.tsx"), "utf8");
 const playwrightSource = readFileSync(join(root, "playwright.config.ts"), "utf8");
-for (const risk of findDiagnosticIsolationRisks(developerPageSource, pcAppSource, playwrightSource)) {
-  errors.push(`授权开发诊断：${risk}`);
+const productManifest = existsSync(join(root, "product.manifest.json")) ? readJson("product.manifest.json") : null;
+const developerPagePath = "apps/web/src/extensions/ai-pm/P25.tsx";
+const developerRoutePath = "apps/web/src/extensions/ai-pm/routes.tsx";
+const hasDeveloperPage = existsSync(join(root, developerPagePath));
+const hasDeveloperRoute = existsSync(join(root, developerRoutePath));
+if (hasDeveloperPage !== hasDeveloperRoute || (productManifest?.defaultBundle === "ai-pm" && !hasDeveloperPage)) {
+  errors.push("AI 产品经理开发场域必须由页面与行业路由成对提供");
+} else if (hasDeveloperPage && hasDeveloperRoute) {
+  const developerPageSource = readFileSync(join(root, developerPagePath), "utf8");
+  const developerRouteSource = readFileSync(join(root, developerRoutePath), "utf8");
+  for (const risk of findDiagnosticIsolationRisks(developerPageSource, pcAppSource, playwrightSource, developerRouteSource)) {
+    errors.push(`授权开发诊断：${risk}`);
+  }
 }
 for (const risk of findComponentMatrixIsolationRisks(componentMatrixSource, pcAppSource, playwrightSource)) {
   errors.push(`组件矩阵诊断：${risk}`);

@@ -69,6 +69,26 @@ test("动态值门禁拦截 JSX 文本与可见属性中的裸底层字段", () 
   assert.equal(risks.some((item) => item.text === "eventId"), true);
 });
 
+test("自定义展示组件覆盖眉标、指标元数据与可见 value，表单 value 保持机器值语义", () => {
+  const risky = `
+    export function Page({ row }) {
+      return <><PageHead tag="P19 · REVENUE" subtitle="经营分析" />
+        <MetricCard period="CURRENT PERIOD" source="revenue_api" updatedAt="batchId" value={row.workspaceId} />
+        <Input value={row.workspaceId} /><input value={row.workspaceId} /></>;
+    }
+  `;
+  const visible = findVisibleLanguageRisks(risky);
+  assert.ok(visible.some((item) => item.text.includes("P19")));
+  assert.ok(visible.some((item) => item.text.includes("CURRENT PERIOD")));
+  assert.ok(visible.some((item) => item.text.includes("revenue_api")));
+  const dynamic = findRawDynamicValueRisks(risky);
+  assert.equal(dynamic.filter((item) => item.text === "row.workspaceId").length, 1);
+
+  const objectFields = `const projection = { source: "base", period: "rolling_30d", updatedAt: "batch_id" };`;
+  assert.deepEqual(findVisibleLanguageRisks(objectFields), []);
+  assert.deepEqual(findRawDynamicValueRisks(objectFields), []);
+});
+
 test("AST 文字出口覆盖错误对象、通知、Toast、语音、字幕与动态可访问属性", () => {
   const source = `
     export function Page({ job, error, response, query }) {
@@ -137,7 +157,7 @@ test("P25 与组件矩阵豁免仅限真实标记子树及只在其中引用的�
     function Shared(){ return <p>workspace_id</p> }
     export function P25(){ return <><div data-wl-authorized-diagnostics="ai-pm.development"><OnlyHere/><Shared/></div><Shared/><p>{error.message}</p></> }
   `;
-  const p25Risks = [...findVisibleLanguageRisks(p25, "apps/web/src/pages/p25/P25.tsx"), ...findRawDynamicValueRisks(p25, "apps/web/src/pages/p25/P25.tsx")];
+  const p25Risks = [...findVisibleLanguageRisks(p25, "apps/web/src/extensions/ai-pm/P25.tsx"), ...findRawDynamicValueRisks(p25, "apps/web/src/extensions/ai-pm/P25.tsx")];
   assert.ok(p25Risks.some((item) => item.text.includes("workspace_id")));
   assert.ok(p25Risks.some((item) => item.text.includes("error.message")));
   const matrix = `<div data-wl-authorized-diagnostics="ui-component-matrix"><p>仅限本地开发环境并显式开启诊断开关后使用</p><p>DEV MATRIX</p></div>`;
@@ -150,9 +170,10 @@ test("P25 与组件矩阵豁免仅限真实标记子树及只在其中引用的�
 
 test("开发诊断页面必须具备权限、显式开发开关、醒目标识和审计说明", () => {
   const page = `<div data-wl-authorized-diagnostics="ai-pm.development"><strong>授权开发诊断</strong><span>仅限已获开发权限的管理员；操作写入开发事件、围栏审计与版本台账</span><p>YAML CLI args</p></div>`;
-  const app = `const enabled = import.meta.env.DEV && import.meta.env.VITE_ENABLE_UI_DIAGNOSTICS === "true"; <NavigationCapabilityBoundary capabilityId="ai-pm.development"><P25 /></NavigationCapabilityBoundary>; <Route path="/dev" element={<UiDiagnosticsRoute />} />`;
-  assert.deepEqual(findDiagnosticIsolationRisks(page, app, "VITE_ENABLE_UI_DIAGNOSTICS=true"), []);
-  assert.deepEqual(findVisibleLanguageRisks(page, "apps/web/src/pages/p25/P25.tsx"), []);
+  const app = `const enabled = import.meta.env.DEV && import.meta.env.VITE_ENABLE_UI_DIAGNOSTICS === "true"; <Route path="/dev" element={<UiDiagnosticsRoute />} />`;
+  const route = `export const industryRoutes = [{ path: "/development", legacyPaths: ["/p25"], capabilityId: "ai-pm.development", element: <P25 /> }];`;
+  assert.deepEqual(findDiagnosticIsolationRisks(page, app, "VITE_ENABLE_UI_DIAGNOSTICS=true", route), []);
+  assert.deepEqual(findVisibleLanguageRisks(page, "apps/web/src/extensions/ai-pm/P25.tsx"), []);
   assert.ok(findVisibleLanguageRisks("<p>YAML CLI args</p>", "apps/web/src/pages/Home.tsx").length >= 1);
   assert.ok(findDiagnosticIsolationRisks("<div>YAML</div>", '<Route path="/dev" element={<DevMatrix />} />').length >= 5);
 });

@@ -33,6 +33,7 @@ const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(SCRIPT_PATH);
 const DEFAULT_BASE_REPO = "geniusdapeng-collab/workloom-im";
 const STATE_FILE = ".workloom-base-sync.json";
+const MODULE_SOURCE_EXTENSIONS = Object.freeze([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".json"]);
 
 function parseArgs(argv) {
   const mode = argv[0];
@@ -267,6 +268,13 @@ function validateScope(scope, baseDir) {
       throw new Error(`anchor merge ${path} 的 ignoreDependencyKeys 必须是数组`);
     }
   }
+  if (!Number.isInteger(scope.pollutionGuard?.maxFilesPerSync) || scope.pollutionGuard.maxFilesPerSync < 1) {
+    throw new Error("pollutionGuard.maxFilesPerSync 必须是正整数");
+  }
+  if (!Number.isInteger(scope.pollutionGuard?.maxFilesPerAdopt)
+    || scope.pollutionGuard.maxFilesPerAdopt < scope.pollutionGuard.maxFilesPerSync) {
+    throw new Error("pollutionGuard.maxFilesPerAdopt 必须是不小于 maxFilesPerSync 的正整数");
+  }
   for (const capability of scope.registryCapabilities ?? []) {
     if (typeof capability.package !== "string" || !capability.package) throw new Error("registry capability 缺少 package");
     if (!Array.isArray(capability.consumers) || capability.consumers.length === 0) {
@@ -307,6 +315,38 @@ function validateScope(scope, baseDir) {
     if (!excluded) throw new Error(`受保护的子仓资产必须显式排除整文件同步：${safePath}`);
     if (scope.anchorMerge?.[safePath]) throw new Error(`受保护的子仓资产不得作为锚点合并目标：${safePath}`);
   }
+  const closure = scope.dependencyClosure;
+  if (!closure || closure.relativeImports !== "fail-closed" || !Array.isArray(closure.allowedExcludedTargets)) {
+    throw new Error("base-scope.json 必须启用 dependencyClosure.relativeImports=fail-closed 并显式声明 allowedExcludedTargets");
+  }
+  const closurePairs = new Set();
+  const rawIncludes = (scope.include ?? []).map(globToRegExp);
+  const rawExcludes = (scope.exclude ?? []).map(globToRegExp);
+  for (const entry of closure.allowedExcludedTargets) {
+    const importer = assertSafeRelative(entry.importer, "dependency closure importer");
+    const target = assertSafeRelative(entry.target, "dependency closure target");
+    if (typeof entry.reason !== "string" || !entry.reason.trim()) {
+      throw new Error(`dependency closure 例外缺少原因：${importer} -> ${target}`);
+    }
+    if (!existsSync(join(baseDir, importer)) || !existsSync(join(baseDir, target))) {
+      throw new Error(`dependency closure 例外引用不存在文件：${importer} -> ${target}`);
+    }
+    const pair = `${importer}\0${target}`;
+    if (closurePairs.has(pair)) throw new Error(`dependency closure 例外重复：${importer} -> ${target}`);
+    closurePairs.add(pair);
+    if (hitAny(rawExcludes, importer) || !hitAny(rawIncludes, importer)) {
+      throw new Error(`dependency closure 例外来源并未下发：${importer}`);
+    }
+    if (!hitAny(rawExcludes, target)) {
+      throw new Error(`dependency closure 例外目标未被显式排除，无需例外：${target}`);
+    }
+    const importedTargets = moduleSpecifiers(readFileSync(join(baseDir, importer), "utf8"))
+      .map((specifier) => resolveRelativeModule(baseDir, importer, specifier))
+      .filter(Boolean);
+    if (!importedTargets.includes(target)) {
+      throw new Error(`dependency closure 例外没有对应的相对依赖：${importer} -> ${target}`);
+    }
+  }
 }
 
 function loadScope(baseDir) {
@@ -326,6 +366,94 @@ function withExtraExclude(scope, extraExclude = []) {
 
 const hitAny = (patterns, path) => patterns.some((pattern) => pattern.test(path));
 const inScope = (scope, path) => !hitAny(scope.excludes, path) && hitAny(scope.includes, path);
+
+function moduleSpecifiers(source) {
+  const specifiers = [];
+  const patterns = [
+    /\bfrom\s*["']([^"']+)["']/g,
+    /^\s*import\s*(?:type\s*)?["']([^"']+)["']/gm,
+    /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g,
+    /\brequire\s*\(\s*["']([^"']+)["']\s*\)/g,
+  ];
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) specifiers.push(match[1]);
+  }
+  return [...new Set(specifiers)];
+}
+
+function resolveRelativeModule(baseDir, importer, specifier) {
+  if (!specifier.startsWith("./") && !specifier.startsWith("../")) return null;
+  const cleanSpecifier = specifier.split(/[?#]/, 1)[0];
+  const importerPath = join(baseDir, importer);
+  const requested = assertContained(baseDir, resolve(dirname(importerPath), cleanSpecifier), `模块依赖 ${importer} -> ${specifier}`);
+  const candidates = [requested];
+  const extension = MODULE_SOURCE_EXTENSIONS.find((suffix) => requested.endsWith(suffix));
+  if (extension) {
+    const stem = requested.slice(0, -extension.length);
+    for (const suffix of MODULE_SOURCE_EXTENSIONS) candidates.push(`${stem}${suffix}`);
+  } else {
+    for (const suffix of MODULE_SOURCE_EXTENSIONS) candidates.push(`${requested}${suffix}`);
+  }
+  for (const suffix of MODULE_SOURCE_EXTENSIONS) candidates.push(join(requested, `index${suffix}`));
+  for (const candidate of [...new Set(candidates)]) {
+    if (!existsSync(candidate)) continue;
+    const stat = lstatSync(candidate);
+    if (stat.isSymbolicLink()) throw new Error(`模块依赖目标不允许 symlink：${relative(baseDir, candidate)}`);
+    if (stat.isFile()) return relative(baseDir, candidate).split(sep).join("/");
+  }
+  return "";
+}
+
+function dependencyClosureViolations(baseDir, scope) {
+  const allowed = new Set((scope.raw.dependencyClosure?.allowedExcludedTargets ?? [])
+    .map((entry) => `${entry.importer}\0${entry.target}`));
+  const violations = [];
+  const sourcePaths = [...walk(baseDir)]
+    .map((path) => path.split(sep).join("/"))
+    .filter((path) => inScope(scope, path) && /\.(?:[cm]?[jt]sx?|json)$/.test(path));
+  for (const importer of sourcePaths) {
+    if (importer.endsWith(".json")) continue;
+    const source = readFileSync(join(baseDir, importer), "utf8");
+    for (const specifier of moduleSpecifiers(source)) {
+      const target = resolveRelativeModule(baseDir, importer, specifier);
+      if (target === null) continue;
+      if (!target) {
+        violations.push({ importer, specifier, target: null, reason: "relative-target-missing" });
+        continue;
+      }
+      if (!inScope(scope, target) && !allowed.has(`${importer}\0${target}`)) {
+        violations.push({ importer, specifier, target, reason: "relative-target-excluded" });
+      }
+    }
+  }
+  return violations;
+}
+
+function assertDependencyClosure(baseDir, scope) {
+  const violations = dependencyClosureViolations(baseDir, scope);
+  if (!violations.length) return;
+  const detail = violations.slice(0, 8).map((item) => (
+    item.target
+      ? `${item.importer} -> ${item.target}（目标未下发）`
+      : `${item.importer} -> ${item.specifier}（目标不存在）`
+  )).join("；");
+  throw new Error(`基座同步依赖闭包失败（${violations.length} 项）：${detail}`);
+}
+
+function assertChildDependencySeams(childDir, repoRoot, scope) {
+  const targets = [...new Set((scope.raw.dependencyClosure?.allowedExcludedTargets ?? [])
+    .filter((entry) => inScope(scope, entry.importer))
+    .map((entry) => entry.target))];
+  const missing = [];
+  for (const target of targets) {
+    const path = join(childDir, target);
+    assertNoSymlinkPath(repoRoot, path, `子仓依赖缝 ${target}`);
+    if (!existsSync(path) || !lstatSync(path).isFile()) missing.push(target);
+  }
+  if (missing.length) {
+    throw new Error(`子仓缺少 ${missing.length} 个明确保留的依赖实现，拒绝登记完整基座同步：${missing.slice(0, 8).join("、")}`);
+  }
+}
 
 function* walk(dir, base = dir) {
   for (const name of readdirSync(dir)) {
@@ -372,6 +500,8 @@ function verifyBaseSourcesAtHead(baseDir, scope, requiredOnly, additionalPaths =
   for (let index = 0; index < paths.length; index += 1) {
     if (worktreeHashes[index] !== headHashes[index]) throw new Error(`基座受控源文件与 HEAD 字节不一致：${paths[index]}`);
   }
+
+  if (!requiredOnly) assertDependencyClosure(baseDir, scope);
 
   const engineInBase = join(baseDir, "sync/base-sync.mjs");
   if (!readFileSync(SCRIPT_PATH).equals(readFileSync(engineInBase))) {
@@ -578,6 +708,7 @@ function makePlan(baseDir, childDir, repoRoot, scope, options = {}) {
   const skippedAppendOnly = [];
   const warnings = [];
   assertContained(repoRoot, childDir, "目标基座目录");
+  if (!requiredOnly) assertChildDependencySeams(childDir, repoRoot, scope);
   const scopeFiles = requiredOnly ? [] : [...walk(baseDir)].filter((path) => inScope(scope, path));
   const blackHit = (path) => scope.raw.pollutionGuard.pathBlacklist.some((entry) => entry.startsWith("^") ? path.startsWith(entry.slice(1)) : path.includes(entry));
   const blackHits = scopeFiles.filter(blackHit);
@@ -668,8 +799,11 @@ function makePlan(baseDir, childDir, repoRoot, scope, options = {}) {
     }
   }
 
-  if (operations.length > scope.raw.pollutionGuard.maxFilesPerSync) {
-    throw new Error(`防污染护栏触发：单次变更 ${operations.length} 文件超过上限 ${scope.raw.pollutionGuard.maxFilesPerSync}——请人工核对同步范围`);
+  const maxFiles = options.adopt && !requiredOnly
+    ? scope.raw.pollutionGuard.maxFilesPerAdopt
+    : scope.raw.pollutionGuard.maxFilesPerSync;
+  if (operations.length > maxFiles) {
+    throw new Error(`防污染护栏触发：单次变更 ${operations.length} 文件超过${options.adopt && !requiredOnly ? "新行业接入" : "常规同步"}上限 ${maxFiles}——请人工核对同步范围`);
   }
   return { operations, skippedAppendOnly, warnings };
 }
@@ -1138,8 +1272,8 @@ function main(argv = process.argv.slice(2)) {
     console.error("push 模式不支持 --no-commit");
     return 64;
   }
-  if (options.adopt && (options.mode !== "pull" || !options.requiredOnly || !options.noCommit)) {
-    console.error("--adopt 只允许与 pull --required-only --no-commit 组合，由 sync/adopt.sh 使用");
+  if (options.adopt && (options.mode !== "pull" || !options.noCommit)) {
+    console.error("--adopt 只允许与 pull --no-commit 组合，由 sync/adopt.sh 使用");
     return 64;
   }
   if (options.mode === "detect") return modeDetect(options);
@@ -1167,6 +1301,7 @@ if (isDirectExecution()) {
 
 export {
   anchorNeedsSync,
+  dependencyClosureViolations,
   extractManagedSection,
   gitAuthEnv,
   main,

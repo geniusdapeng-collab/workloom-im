@@ -21,6 +21,47 @@ function draftHotelFixture(): string {
   return root;
 }
 
+function emptyFixtureRoot(): string {
+  const root = mkdtempSync(join(tmpdir(), "wl-bundle-composition-"));
+  fixtureRoots.push(root);
+  return root;
+}
+
+function addDraftBundle(
+  root: string,
+  bundleId: string,
+  options: {
+    dependencies?: Array<{ bundleId: string; version: string }>;
+    route?: string;
+    terminology?: Record<string, string>;
+    version?: string;
+  } = {},
+): void {
+  const directory = join(root, bundleId);
+  cpSync(join(REPO_ROOT, "bundles/hotel"), directory, { recursive: true });
+  const manifestPath = join(directory, "bundle.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  manifest.name = `@workloom/${bundleId}`;
+  manifest.version = options.version ?? "1.0.0";
+  manifest.workloom.industry = bundleId;
+  manifest.workloom.displayName = `测试行业包${bundleId}`;
+  manifest.workloom.status = "draft";
+  manifest.workloom.dependencies = options.dependencies ?? [];
+  manifest.workloom.ui.terminology = options.terminology ?? {};
+  manifest.workloom.ui.permissions = options.route ? [`${bundleId}.dashboard.read`] : [];
+  manifest.workloom.ui.navigation.slots = options.route ? [{
+    capabilityId: `${bundleId}.dashboard`,
+    title: "行业看板",
+    route: options.route,
+    group: "operations",
+    icon: "executive",
+    clients: ["pc"],
+    permissions: [`${bundleId}.dashboard.read`],
+  }] : [];
+  delete manifest.integrity;
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
 function editPreset(root: string, name: string, edit: (preset: Record<string, unknown>) => void): void {
   const path = join(root, "hotel/presets", name);
   const preset = YAML.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
@@ -43,6 +84,12 @@ afterEach(() => {
 });
 
 describe("行业包治理岗位契约", () => {
+  it("治理器只依赖可随 base-sync 下发的行业契约，不读取共享 UI 源码", () => {
+    const source = readFileSync(join(REPO_ROOT, "scripts/bundle-governance.mts"), "utf8");
+    expect(source).toContain("packages/industry-contract/src/index.ts");
+    expect(source).not.toContain("packages/ui/src");
+  });
+
   it.each([
     {
       label: "缺少 coverage",
@@ -67,5 +114,37 @@ describe("行业包治理岗位契约", () => {
     const result = runGovernance(root);
     expect(result.status).not.toBe(0);
     expect(result.output).toMatch(expected);
+  });
+
+  it("发布前阻断缺失依赖、精确版本漂移与循环依赖", () => {
+    const missingRoot = emptyFixtureRoot();
+    addDraftBundle(missingRoot, "primary", { dependencies: [{ bundleId: "missing", version: "1.0.0" }] });
+    expect(runGovernance(missingRoot).output).toMatch(/依赖行业包 missing@1\.0\.0 不存在/);
+
+    const driftRoot = emptyFixtureRoot();
+    addDraftBundle(driftRoot, "dependency", { version: "2.0.0" });
+    addDraftBundle(driftRoot, "primary", { dependencies: [{ bundleId: "dependency", version: "1.0.0" }] });
+    expect(runGovernance(driftRoot).output).toMatch(/依赖 dependency 要求 1\.0\.0，实际为 2\.0\.0/);
+
+    const cycleRoot = emptyFixtureRoot();
+    addDraftBundle(cycleRoot, "alpha", { dependencies: [{ bundleId: "beta", version: "1.0.0" }] });
+    addDraftBundle(cycleRoot, "beta", { dependencies: [{ bundleId: "alpha", version: "1.0.0" }] });
+    expect(runGovernance(cycleRoot).output).toMatch(/组合依赖形成循环/);
+  });
+
+  it("发布前阻断组合导航、术语与依赖首页槽位冲突", () => {
+    const root = emptyFixtureRoot();
+    addDraftBundle(root, "hotel-core", { route: "/industry-dashboard", terminology: { customer: "住客" } });
+    addDraftBundle(root, "video-core", { route: "/industry-dashboard", terminology: { customer: "观众" } });
+    addDraftBundle(root, "primary", {
+      dependencies: [
+        { bundleId: "hotel-core", version: "1.0.0" },
+        { bundleId: "video-core", version: "1.0.0" },
+      ],
+    });
+    const output = runGovernance(root).output;
+    expect(output).toMatch(/导航路由 \/industry-dashboard/);
+    expect(output).toMatch(/组合术语 customer/);
+    expect(output).toMatch(/依赖首页槽位 home\.quick-tasks:pc/);
   });
 });

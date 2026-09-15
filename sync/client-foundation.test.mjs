@@ -23,7 +23,7 @@ function manifest(stable = VERSION) {
     releasePolicy: "base-first-stable-only",
     ui: {
       package: "@workloom/ui",
-      contractVersion: "1.0.0",
+      contractVersion: "2.0.0",
       candidateVersion: "1.2.4",
       latestStableVersion: stable,
       requiredClientPackages: ["apps/web/package.json", "apps/webb/package.json", "apps/webc/package.json"],

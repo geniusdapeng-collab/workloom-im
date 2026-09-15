@@ -1,5 +1,5 @@
 /**
- * P25 · 开发场域（DevFabric）
+ * AI 产品经理行业扩展 · 开发场域（历史内部编号 P25）
  * AI Coding 工具接入与开发闭环：设备台账（织造车间）/ 仓库白名单 /
  * 任务单（S2→S5 操作流 + 会话直播 + 三道关审计视图）/ 版本时间线
  * 数据：trpc.service.devtools.*；机床=本机安装的 Codex/Claude Code/Aider（客户本地工具）

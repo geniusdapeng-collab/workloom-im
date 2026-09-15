@@ -48,7 +48,14 @@ describe("服务前台行业适配器契约", () => {
     const base = loadBundleUiProjection("ai-pm");
     const unknownProjection: BundleUiProjection = {
       ...base,
+      primaryBundleId: "unknown",
       bundleId: "unknown",
+      sources: base.sources?.map((source) => ({
+        ...source,
+        bundleId: "unknown",
+        role: "primary",
+        parentBundleId: null,
+      })),
       ui: {
         ...base.ui,
         serviceFront: { ...base.ui.serviceFront, adapterId: "unknown.service-front-v1" },
@@ -72,7 +79,14 @@ describe("服务前台行业适配器契约", () => {
       activeInstalls: [{ id: "bi-aipm", bundleId: "ai-pm" }],
     }, () => ({
       ...hotel,
+      primaryBundleId: "ai-pm",
       bundleId: "ai-pm",
+      sources: hotel.sources?.map((source) => ({
+        ...source,
+        bundleId: "ai-pm",
+        role: "primary",
+        parentBundleId: null,
+      })),
       ui: { ...hotel.ui, serviceFront: { ...hotel.ui.serviceFront, adapterId: "hotel.service-front-v1" } },
     }));
     expect(result).toMatchObject({ state: "adapter-untrusted", adapter: null, bundleId: "ai-pm" });

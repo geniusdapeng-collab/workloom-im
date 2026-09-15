@@ -79,6 +79,8 @@ export interface ComposeNavigationOptions {
 }
 
 export interface BundleNavigationSlot {
+  /** 组合产品中由服务端验真后写入；单 Bundle 响应可省略并回退到顶层 bundleId。 */
+  sourceBundleId?: string;
   capabilityId: string;
   route: string;
   title: string;
@@ -101,7 +103,9 @@ const ICON_NAMES = new Set<IconName>([
 export function navigationEntriesFromBundle(bundleId: string, slots: readonly BundleNavigationSlot[]): NavigationEntry[] {
   if (!/^[a-z0-9][a-z0-9-]{1,31}$/.test(bundleId)) throw new Error("行业包标识不符合导航契约");
   return slots.map((slot, index) => {
-    if (!slot.capabilityId.startsWith(`${bundleId}.`)) throw new Error(`行业导航能力必须使用 ${bundleId}. 命名空间`);
+    const sourceBundleId = slot.sourceBundleId ?? bundleId;
+    if (!/^[a-z0-9][a-z0-9-]{1,31}$/.test(sourceBundleId)) throw new Error("行业导航来源标识不符合契约");
+    if (!slot.capabilityId.startsWith(`${sourceBundleId}.`)) throw new Error(`行业导航能力必须使用 ${sourceBundleId}. 命名空间`);
     if (!NAVIGATION_GROUP_ORDER.includes(slot.group as NavigationGroup)) throw new Error(`行业导航分组不受支持：${slot.group}`);
     if (!ICON_NAMES.has(slot.icon as IconName)) throw new Error(`行业导航图标不受支持：${slot.icon}`);
     const title = clientChineseText(slot.title, "");
@@ -114,7 +118,7 @@ export function navigationEntriesFromBundle(bundleId: string, slots: readonly Bu
       icon: slot.icon as IconName,
       clients: slot.clients.map((client) => client === "pc" ? "b-pc" : client) as WorkLoomClient[],
       permissions: slot.permissions ?? [],
-      source: `bundle:${bundleId}`,
+      source: `bundle:${sourceBundleId}`,
       order: 100 + index,
     };
   });

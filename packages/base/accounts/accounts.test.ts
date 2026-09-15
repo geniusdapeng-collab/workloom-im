@@ -70,6 +70,24 @@ describe("令牌", () => {
     expect(back).toMatchObject(identity);
   });
 
+  it("账号访问令牌与认证校验共用部署签发方", async () => {
+    const previous = process.env.JWT_ISSUER;
+    try {
+      process.env.JWT_ISSUER = "workloom-account-test";
+      const identity = {
+        memberId: "mem-2", memberNo: "MEM-002", name: "测试成员", role: "staff" as const,
+        tenantId: "tenant-x", workspaceId: "ws-x", plan: "pro" as const,
+      };
+      const token = await signAccessToken(identity);
+      expect(await verifyToken(token)).toMatchObject(identity);
+      process.env.JWT_ISSUER = "workloom-another-product";
+      expect(await verifyToken(token)).toBeNull();
+    } finally {
+      if (previous === undefined) delete process.env.JWT_ISSUER;
+      else process.env.JWT_ISSUER = previous;
+    }
+  });
+
   it("partner JWT：kind=partner + 授权清单快照可验签", async () => {
     const token = await signPartnerToken({
       kind: "partner", partnerId: "ptr-1", contactAccountId: "acc-1", name: "代运营A",

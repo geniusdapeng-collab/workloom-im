@@ -4,7 +4,7 @@
   "releasePolicy": "base-first-stable-only",
   "ui": {
     "package": "@workloom/ui",
-    "contractVersion": "1.0.0",
+    "contractVersion": "2.0.0",
     "candidateVersion": "0.1.0",
     "latestStableVersion": null,
     "requiredClientPackages": [

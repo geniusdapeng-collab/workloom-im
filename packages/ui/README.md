@@ -128,4 +128,4 @@ createRoot(rootElement).render(
 - 200% 缩放进入响应式布局；移动触控目标至少 44px，可调面板手柄扩大到 20px。
 - 动效遵循 `prefers-reduced-motion`；未知底层字段继续由中文显示边界拦截，不得把原始键名作为兜底。
 
-发布由 WorkLoom IM 的 `ui-v*` 稳定标签触发。该标签同时封存 `@workloom/ui` 和 PC/B移动/C移动的应用壳、导航、布局、状态与 API 接线；两者必须同版。现有行业仓通过机器人升级 PR 消费，新行业用 `sync/adopt.sh --new-industry` 默认接入 `sync/base-capabilities.json` 登记的最新版稳定基座。
+发布由 WorkLoom IM 的 `ui-v*` 稳定标签触发。该标签只封存 `@workloom/ui` 和 PC/B移动/C移动的应用壳、导航、布局、状态与 API 接线；两者必须同版，不暗示任何行业 Bundle 已发布为 stable，也不要求 Bundle 签名私钥。现有行业仓通过机器人升级 PR 消费，新行业用 `sync/adopt.sh --new-industry` 默认接入 `sync/base-capabilities.json` 登记的最新版稳定基座。行业 Bundle 的签名与稳定制品使用独立发布生命周期。

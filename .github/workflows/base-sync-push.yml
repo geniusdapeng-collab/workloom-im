@@ -212,7 +212,7 @@ jobs:
           echo "## WorkLoom IM 基座本地验证" >> "$GITHUB_STEP_SUMMARY"
           echo "- 基座提交：$(git rev-parse --short HEAD)" >> "$GITHUB_STEP_SUMMARY"
           echo "- 本次范围：${{ steps.mode.outputs.mode }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- 同步范围：sync/base-scope.json v4；文件能力与稳定 UI 制品双轨分发" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 同步范围：sync/base-scope.json v7；文件能力与稳定 UI 制品双轨分发" >> "$GITHUB_STEP_SUMMARY"
           echo "- 产品身份：electron-builder.yml/product.manifest.json 受保护，不做整文件同步" >> "$GITHUB_STEP_SUMMARY"
           echo "- 三端缺口：先做真实客户端结构迁移，再做 @workloom/ui 稳定版本升级与消费门禁；缺端不计合规" >> "$GITHUB_STEP_SUMMARY"
           echo "- 订阅子仓：$(node -e "console.log(JSON.parse(require('fs').readFileSync('sync/child-repos.json','utf8')).children.length)") 个" >> "$GITHUB_STEP_SUMMARY"

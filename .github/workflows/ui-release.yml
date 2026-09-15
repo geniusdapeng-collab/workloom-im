@@ -1,4 +1,5 @@
-name: ui-base-release
+# ui-v* 只封存共享 UI 与三端客户端基座；行业 Bundle 使用独立发布生命周期。
+name: shared-ui-client-foundation-release
 
 on:
   push:
@@ -69,18 +70,10 @@ jobs:
       - run: corepack enable && corepack prepare pnpm@10.14.0 --activate
       - run: pnpm install --frozen-lockfile
 
-      - name: 稳定行业包发布签名与生产验签
-        if: startsWith(github.ref, 'refs/tags/ui-v')
-        env:
-          BUNDLE_SIGNING_PRIVATE_KEY: ${{ secrets.BUNDLE_SIGNING_PRIVATE_KEY }}
-          BUNDLE_SIGNING_KEY_ID: ${{ vars.BUNDLE_SIGNING_KEY_ID || 'workloom-release-v1' }}
-        run: |
-          test -n "$BUNDLE_SIGNING_PRIVATE_KEY" || { echo "❌ 缺少 BUNDLE_SIGNING_PRIVATE_KEY，拒绝稳定发布"; exit 1; }
-          pnpm bundle:release
-          test -s build/bundle-trust.json || { echo "❌ 独立 Bundle 公钥环未生成"; exit 1; }
-          pnpm projections:generate
-
-      - run: pnpm product:verify && pnpm bundle:governance && pnpm projections:check
+      # UI 标签不得临时改写 Bundle 为 stable。这里仅校验仓内候选清单、摘要与
+      # 已提交行业投影一致；生产 Bundle 的签名、公钥环和制品留存由独立流程负责。
+      - name: 候选 Bundle 契约、摘要与投影一致性门禁
+        run: pnpm product:verify && pnpm bundle:governance && pnpm projections:check
       - run: pnpm ui:governance
       - run: pnpm -C packages/industry-contract test && pnpm -C packages/industry-contract build
       - run: pnpm -C packages/ui test && pnpm -C packages/ui build
@@ -99,6 +92,17 @@ jobs:
           pnpm exec playwright install --with-deps chromium
           pnpm ui:e2e
 
+      - name: 留存稳定发布三端视觉与无障碍证据
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workloom-ui-release-evidence-${{ github.run_id }}
+          path: |
+            playwright-report
+            test-results/ui
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: 发布前核心链路门禁
         run: |
           pnpm -C apps/server start > "$RUNNER_TEMP/workloom-server.log" 2>&1 &
@@ -111,7 +115,7 @@ jobs:
           curl -fsS http://127.0.0.1:8787/health >/dev/null
           pnpm release:gate
 
-      - name: 校验 tag、稳定清单与包版本一致
+      - name: 校验 UI 标签、稳定版本登记与包版本一致
         if: startsWith(github.ref, 'refs/tags/ui-v')
         run: |
           VERSION="${GITHUB_REF_NAME#ui-v}"

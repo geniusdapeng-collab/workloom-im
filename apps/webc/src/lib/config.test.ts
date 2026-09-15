@@ -41,7 +41,7 @@ const valid: FrontConfig = {
   projection: {
     bundleId: "test-bundle",
     bundleVersion: "1.0.0",
-    contractVersion: "1.0.0",
+    contractVersion: "2.0.0",
     uiVersion: "1.0.0",
     manifestDigest: "test-digest",
   },

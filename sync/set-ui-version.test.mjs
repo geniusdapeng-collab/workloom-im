@@ -9,7 +9,7 @@ const manifest = {
   baseRepository: "geniusdapeng-collab/workloom-im",
   ui: {
     package: "@workloom/ui",
-    contractVersion: "1.0.0",
+    contractVersion: "2.0.0",
     candidateVersion: "0.1.0",
     latestStableVersion: null,
     allowedIndustryOverrides: ["--wl-brand-primary", "--wl-brand-on-primary", "--wl-brand-accent"],

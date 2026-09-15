@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 8,
   "description": "WorkLoom IM 基座能力同步范围声明——base-sync 引擎的唯一事实源。文件型公共能力按 include/exclude 受控分发；三端组件/视觉语言通过 @workloom/ui 稳定制品下发，三端应用壳/导航/布局/状态/API 接线通过同一 ui-v* 稳定标签和逐文件指纹升级 PR 下发。行业属性与演示能力永不同步。requiredRootAssets 无视行业代码的 pathPrefix，始终安装并校验在 Git 仓库根目录。修改本文件即修改同步边界，需基座 owner 评审。",
 
   "registryCapabilities": [
@@ -83,6 +83,58 @@
     }
   },
 
+  "dependencyClosure": {
+    "relativeImports": "fail-closed",
+    "allowedExcludedTargets": [
+      {
+        "importer": "apps/server/src/index.ts",
+        "target": "apps/server/src/trpc/router.ts",
+        "reason": "服务组合根由行业仓保留路由装配，公共启动器只依赖其稳定导出。"
+      },
+      {
+        "importer": "apps/server/src/index.ts",
+        "target": "apps/server/src/service/gateway.ts",
+        "reason": "C 端网关包含行业业务适配器装配，由行业仓保留实现。"
+      },
+      {
+        "importer": "apps/server/src/service/channels.ts",
+        "target": "apps/server/src/service/store.ts",
+        "reason": "行业服务数据表与迁移链由子仓维护，通道层只依赖稳定存储接口。"
+      },
+      {
+        "importer": "apps/server/src/service/contract.test.ts",
+        "target": "apps/server/src/service/gateway.ts",
+        "reason": "公共 C 端契约测试刻意验证行业仓自己的网关组合根。"
+      },
+      {
+        "importer": "apps/server/src/service/eval.ts",
+        "target": "apps/server/src/service/dialog.ts",
+        "reason": "考试院调用行业仓保留的对话编排实现，不复制任何行业语义。"
+      },
+      {
+        "importer": "apps/server/src/service/eval.ts",
+        "target": "apps/server/src/service/adapters/business-registry.ts",
+        "reason": "考试院通过行业仓保留的业务适配器注册表运行行业题目。"
+      },
+      {
+        "importer": "apps/server/src/service/h5-session-auth.test.ts",
+        "target": "apps/server/src/service/gateway.ts",
+        "reason": "公共 H5 鉴权负向测试刻意验证行业仓自己的网关组合根。"
+      },
+      {
+        "importer": "packages/db/src/client.ts",
+        "target": "packages/db/src/schema.ts",
+        "reason": "数据库客户端消费子仓自有 schema；行业迁移链不得被基座整文件覆盖。"
+      },
+      {
+        "importer": "packages/db/src/index.ts",
+        "target": "packages/db/src/schema.ts",
+        "reason": "公共 DB 导出保留子仓自有 schema 与迁移链。"
+      }
+    ],
+    "comment": "所有随 base-sync 下发的 JS/TS 文件，其相对 import/export/require 目标也必须下发；确需由子仓保留实现的缝必须逐对登记并说明原因。"
+  },
+
   "include": [
     "packages/base/**",
     "packages/industry-contract/**",
@@ -130,19 +182,16 @@
     "apps/server/src/service/store.ts",
     "apps/server/src/service/gateway.ts",
     "apps/server/src/service/ticket.ts",
+    "apps/server/src/service/dialog.test.ts",
+    "apps/server/src/service/inspection-adapter.ts",
+    "apps/server/src/service/inspection-adapter.test.ts",
     "apps/server/src/service/adapters/**",
     "apps/server/src/industry/**",
 
-    "packages/base/captain/charter.ts",
-    "packages/base/captain/decision.ts",
-    "packages/base/captain/loop.ts",
-    "packages/base/captain/board.ts",
-    "packages/base/captain/captain.test.ts",
-    "packages/base/tenancy/auth.ts",
-    "packages/base/bundles/assembly.ts",
     "packages/base/bundles/bundles.test.ts",
-    "packages/base/bundles/segment.ts",
-
+    "packages/base/bundles/eval-questions.test.ts",
+    "packages/base/fence-engine/fence-engine.test.ts",
+    "packages/base/overlay/overlay.test.ts",
     "packages/db/src/schema.ts",
     "packages/db/migrations/**",
 
@@ -159,6 +208,11 @@
     "scripts/twin-genie.ts",
     "scripts/audit-scan.ts",
     "scripts/hardcode-scan.mjs",
+    "scripts/bundle-governance.test.ts",
+    "scripts/generate-client-projections.mts",
+    "scripts/hotel-seed-preflight.ts",
+    "scripts/hotel-seed-preflight.test.ts",
+    "scripts/suite.ts",
     "scripts/pack-macos.sh",
     "scripts/install-im-channels.sh",
     "scripts/skill-forge.mts",
@@ -219,6 +273,7 @@
     ],
     "blacklistNote": "以 ^ 开头=路径前缀匹配；其余=子串匹配。^bundles/ 只锚定仓库根的行业包目录，不误伤 packages/base/bundles（基座 bundle 加载器）",
     "maxFilesPerSync": 200,
-    "comment": "推送前硬校验：待同步文件路径命中黑名单或数量超限即中止——宁可漏报不可污染"
+    "maxFilesPerAdopt": 450,
+    "comment": "推送前硬校验：待同步文件路径命中黑名单或数量超限即中止。常规同步最多 200 项；仅新行业显式 adopt 的首次完整装配可放宽至 450 项，仍须先通过依赖闭包与零写入预检。"
   }
 }

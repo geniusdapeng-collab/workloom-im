@@ -409,7 +409,11 @@ export async function resolveAuthoritativeClientAccess(
   const current = await currentMemberAuthority(session, deps);
   const bundle = await deps.resolveBundle(current.identity.workspaceId);
   const verifiedBundlePermissions = bundle.state === "ready" && bundle.projection
-    ? bundle.projection.ui.permissions
+    ? bundle.projection.primaryBundleId !== undefined || bundle.projection.sources !== undefined
+      // 组合投影缺少导航权限全集时失败关闭；不能回退到包含内部权限的旧 permissions。
+      ? bundle.projection.navigationPermissionUniverse ?? []
+      // 仅兼容尚未携带组合来源元数据的旧单 Bundle 投影。
+      : bundle.projection.ui.permissions
     : [];
   const grants = memberAccessGrants({
     role: current.identity.role,

@@ -12,7 +12,7 @@
     "compatibility": {
       "base": ">=0.1.0 <1.0.0",
       "ui": ">=0.1.0 <1.0.0",
-      "contract": "1.0.0"
+      "contract": "2.0.0"
     },
     "provides": {
       "presets": [
@@ -131,7 +131,7 @@
   },
   "integrity": {
     "algorithm": "sha256",
-    "digest": "ff8c0b046d768421b292c282b863a7ac9d37f24b3a84852fd9195b312722cad7",
+    "digest": "ad37e9d0744d3f5ff5c75b16e734e9cd8956bc28dfc94eacdb031ba1cd8b40b5",
     "assets": {
       "eval/questions.json": "7ec77d60f206882208b3ed1dfbdb013544d66656e9d0de1283cc3ec23b7e3e32",
       "feedback-enums.yml": "8f74c92981d840bfa897cc2a6530c10768e72bc20aaddb46a3cbbf2c546b0e7b",

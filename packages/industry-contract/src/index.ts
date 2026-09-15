@@ -2,11 +2,50 @@ import { z } from "zod";
 
 export const BUNDLE_SCHEMA_VERSION = "workloom.bundle/v1" as const;
 export const BUNDLE_UI_SCHEMA_VERSION = "workloom.bundle.ui/v1" as const;
-export const INDUSTRY_CONTRACT_VERSION = "1.0.0" as const;
+export const INDUSTRY_CONTRACT_VERSION = "2.0.0" as const;
 
 const Semver = z.string().regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, "必须是精确语义版本");
 const CapabilityId = z.string().regex(/^[a-z][a-z0-9.-]{1,79}$/, "能力标识格式不正确");
 const Route = z.string().regex(/^\/[a-z0-9][a-z0-9/-]*$/, "路由必须是语义化绝对路径");
+
+/**
+ * 基座页面、身份流程与诊断入口的受保护首段。行业 Bundle 与本地扩展共用这一份
+ * 事实源，避免服务端接受了客户端必然拒绝（或反过来）的路由漂移。
+ */
+export const WORKLOOM_RESERVED_ROUTE_ROOTS = [
+  "inbox", "tasks", "approvals", "reports", "service", "executive",
+  "guardrails", "events", "event-ledger", "exams", "memory", "night",
+  "models", "model-routing", "skills", "workspaces", "customize",
+  "configuration", "assembly", "agents", "members", "partners", "account",
+  "login", "activate", "invite", "onboarding", "dev",
+  "p0", "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9",
+  "p21", "p22", "p23", "p24", "p26", "p27", "p28", "p29", "p30", "p31",
+] as const;
+
+/** Bundle 可引用的共享导航视觉契约；新增值必须先进入基座组件库。 */
+export const WORKLOOM_NAVIGATION_GROUPS = [
+  "today", "collaboration", "operations", "trust", "automation", "organization", "mine",
+] as const;
+
+export const WORKLOOM_BUNDLE_NAVIGATION_ICONS = [
+  "home", "tasks", "report", "service", "approval", "ledger", "rules", "exam", "memory", "night",
+  "model", "skills", "team", "workspace", "inbox", "account", "partner", "more", "executive", "customize",
+  "configuration", "assembly", "agents", "developer", "menu", "close", "reset", "search", "notice", "chevron",
+  "chat", "ticket", "star", "history", "warning", "check", "error", "edit", "lock", "pin", "book", "phone",
+  "play", "copy", "like", "dislike", "gift", "cart", "radar", "send", "package", "experiment", "lightning",
+  "medal", "rocket", "puzzle", "folder", "palette", "celebrate", "question", "brake", "circle", "document",
+] as const;
+
+export const WORKLOOM_BUNDLE_HOME_COMPONENTS = ["QuickTaskList"] as const;
+
+const WORKLOOM_RESERVED_ROUTE_ROOT_SET = new Set<string>(WORKLOOM_RESERVED_ROUTE_ROOTS);
+
+export function isWorkLoomReservedRoute(route: string): boolean {
+  if (route === "/") return true;
+  const root = route.split("/")[1];
+  return Boolean(root && WORKLOOM_RESERVED_ROUTE_ROOT_SET.has(root));
+}
+
 const BundleAssetPath = z.string().min(1).max(300)
   .refine((value) => !value.startsWith("/") && !value.includes("\\")
     && value.split("/").every((part) => part.length > 0 && part !== "." && part !== ".."),
@@ -150,8 +189,8 @@ export const BundleUiSchema = z.object({
       capabilityId: CapabilityId,
       title: ChineseDisplayText(30),
       route: Route,
-      group: z.string().min(1).max(40),
-      icon: z.string().min(1).max(40),
+      group: z.enum(WORKLOOM_NAVIGATION_GROUPS),
+      icon: z.enum(WORKLOOM_BUNDLE_NAVIGATION_ICONS),
       clients: z.array(z.enum(["pc", "b-mobile", "c-mobile"])).min(1),
       permissions: z.array(CapabilityId).default([]),
     }).strict()).max(80).default([]),
@@ -204,17 +243,30 @@ export const BundleUiSchema = z.object({
 }).strict();
 
 const ProvidesSchema = z.object({
-  presets: z.array(z.string()).default([]),
-  fences: z.array(z.string()).default([]),
-  skills: z.array(z.string()).default([]),
-  schemas: z.array(z.string()).default([]),
-  ui: z.array(z.string()).default([]),
-  floorScene: z.string().optional(),
-  modelPolicy: z.string().optional(),
-  feedbackEnums: z.string().optional(),
-  serviceFront: z.array(z.string()).default([]),
-  evalQuestions: z.string().optional(),
-  seeds: z.array(z.string()).default([]),
+  presets: z.array(BundleAssetPath).default([]),
+  fences: z.array(BundleAssetPath).default([]),
+  skills: z.array(BundleAssetPath).default([]),
+  schemas: z.array(BundleAssetPath).default([]),
+  ui: z.array(BundleAssetPath).default([]),
+  pipelines: z.array(BundleAssetPath).default([]),
+  library: z.array(BundleAssetPath).default([]),
+  segmentDefaults: z.array(BundleAssetPath).default([]),
+  connectors: z.array(BundleAssetPath).default([]),
+  floorScene: BundleAssetPath.optional(),
+  modelPolicy: BundleAssetPath.optional(),
+  feedbackEnums: BundleAssetPath.optional(),
+  serviceFront: z.array(BundleAssetPath).default([]),
+  evalQuestions: BundleAssetPath.optional(),
+  seeds: z.array(BundleAssetPath).default([]),
+}).strict();
+
+/**
+ * 组合产品只在“主 Bundle”清单中声明精确版本依赖。主 Bundle 仍由工作区唯一的
+ * active 装配确定；依赖不是第二个活动安装，也不能用范围版本在运行时漂移。
+ */
+export const BundleDependencySchema = z.object({
+  bundleId: z.string().regex(/^[a-z0-9][a-z0-9-]{1,31}$/),
+  version: Semver,
 }).strict();
 
 export const BundleManifestSchema = z.object({
@@ -234,6 +286,7 @@ export const BundleManifestSchema = z.object({
       ui: z.string().min(1).max(80),
       contract: z.literal(INDUSTRY_CONTRACT_VERSION),
     }).strict(),
+    dependencies: z.array(BundleDependencySchema).max(16).optional(),
     provides: ProvidesSchema,
     ui: BundleUiSchema,
   }).strict(),
@@ -257,7 +310,39 @@ export const BundleManifestSchema = z.object({
   }
   const seenCapabilities = new Set<string>();
   const seenRoutes = new Set<string>();
+  const seenDependencies = new Set<string>();
+  const permissionNamespace = `${value.workloom.industry}.`;
+  const declaredPermissions = new Set(value.workloom.ui.permissions);
+  for (const [index, permission] of value.workloom.ui.permissions.entries()) {
+    if (!permission.startsWith(permissionNamespace)) {
+      context.addIssue({ code: "custom", path: ["workloom", "ui", "permissions", index], message: "行业权限必须属于自身命名空间" });
+    }
+  }
+  for (const [index, dependency] of (value.workloom.dependencies ?? []).entries()) {
+    if (dependency.bundleId === value.workloom.industry) {
+      context.addIssue({ code: "custom", path: ["workloom", "dependencies", index, "bundleId"], message: "行业包不能依赖自身" });
+    }
+    if (seenDependencies.has(dependency.bundleId)) {
+      context.addIssue({ code: "custom", path: ["workloom", "dependencies", index, "bundleId"], message: "组合依赖重复" });
+    }
+    seenDependencies.add(dependency.bundleId);
+  }
   for (const [index, item] of value.workloom.ui.navigation.slots.entries()) {
+    if (!item.capabilityId.startsWith(permissionNamespace)) {
+      context.addIssue({ code: "custom", path: ["workloom", "ui", "navigation", "slots", index, "capabilityId"], message: "行业导航能力必须属于自身命名空间" });
+    }
+    if (isWorkLoomReservedRoute(item.route) || /^\/p\d+(?:\/|$)/.test(item.route)) {
+      context.addIssue({ code: "custom", path: ["workloom", "ui", "navigation", "slots", index, "route"], message: "行业导航不得覆盖基座路由" });
+    }
+    for (const [permissionIndex, permission] of item.permissions.entries()) {
+      if (!permission.startsWith(permissionNamespace) || !declaredPermissions.has(permission)) {
+        context.addIssue({
+          code: "custom",
+          path: ["workloom", "ui", "navigation", "slots", index, "permissions", permissionIndex],
+          message: "行业导航权限必须属于自身命名空间并在权限清单中声明",
+        });
+      }
+    }
     if (seenCapabilities.has(item.capabilityId)) {
       context.addIssue({ code: "custom", path: ["workloom", "ui", "navigation", "slots", index, "capabilityId"], message: "能力标识重复" });
     }

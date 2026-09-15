@@ -115,6 +115,9 @@ importers:
       '@trpc/client':
         specifier: 11.18.0
         version: 11.18.0(@trpc/server@11.18.0(typescript@7.0.2))(typescript@7.0.2)
+      '@workloom/industry-contract':
+        specifier: workspace:*
+        version: link:../../packages/industry-contract
       '@workloom/server':
         specifier: workspace:*
         version: link:../server

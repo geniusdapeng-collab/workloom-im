@@ -23,6 +23,10 @@ const ENGINE = join(HERE, "base-sync.mjs");
 const ADOPT = join(HERE, "adopt.sh");
 const REAL_BASE = resolve(HERE, "..");
 const SCANNER = join(REAL_BASE, "scripts/secret-scan.mjs");
+const ADOPTION_CONTRACT = join(HERE, "adoption-contract.mjs");
+const CLIENT_FOUNDATION = join(HERE, "client-foundation.mjs");
+const SET_UI_VERSION = join(HERE, "set-ui-version.mjs");
+const UI_CONSUMER_TEMPLATE = join(HERE, "ui-consumer-template.yml");
 const NODE = process.execPath;
 const BEGIN = "<!-- WORKLOOM-CONTEXT:BEGIN -->";
 const END = "<!-- WORKLOOM-CONTEXT:END -->";
@@ -88,11 +92,15 @@ function fixture() {
         strategy: "remove-if-identical-to-base",
       },
     },
+    dependencyClosure: {
+      relativeImports: "fail-closed",
+      allowedExcludedTargets: [],
+    },
     include: ["shared/**"],
     exclude: [],
     anchorMerge: {},
     appendOnlyDirs: [],
-    pollutionGuard: { pathBlacklist: [], maxFilesPerSync: 20 },
+    pollutionGuard: { pathBlacklist: [], maxFilesPerSync: 20, maxFilesPerAdopt: 40 },
   }, null, 2));
   const baseSha = commitAll(base, "base");
 
@@ -108,6 +116,126 @@ function fixture() {
   write(join(child, "notes.txt"), "clean\n");
   commitAll(child, "child");
   return { root, base, child, baseSha };
+}
+
+function clientSource(client) {
+  const commonStyles = ["tokens.css", "content-safety.css", "components.css"]
+    .map((style) => `import "@workloom/ui/${style}";`).join("\n");
+  if (client === "web") return `${commonStyles}
+import { OverlayManager, SideNavigation, TopContextBar, Overlay, Button, Input } from "@workloom/ui";
+export function App() { return <div data-workloom-client="b-pc"><OverlayManager /><SideNavigation /><TopContextBar /><Overlay /><Button /><Input /></div>; }
+`;
+  const marker = client === "webb" ? "b-mobile" : "c-mobile";
+  return `${commonStyles}
+import { OverlayManager, AppShell, BottomTabs, TopContextBar, Drawer, Button, Input } from "@workloom/ui";
+export function App() { return <div data-workloom-client="${marker}"><OverlayManager /><AppShell /><BottomTabs /><TopContextBar /><Drawer /><Button /><Input /></div>; }
+`;
+}
+
+function newIndustryFixture() {
+  const fx = fixture();
+  const stable = "1.2.3";
+  for (const [source, target] of [
+    [ADOPTION_CONTRACT, "sync/adoption-contract.mjs"],
+    [CLIENT_FOUNDATION, "sync/client-foundation.mjs"],
+    [SET_UI_VERSION, "sync/set-ui-version.mjs"],
+    [UI_CONSUMER_TEMPLATE, "sync/ui-consumer-template.yml"],
+    [join(REAL_BASE, "scripts/verify-ui-consumer.mjs"), "scripts/verify-ui-consumer.mjs"],
+    [join(REAL_BASE, "scripts/verify-client-foundation-consumer.mjs"), "scripts/verify-client-foundation-consumer.mjs"],
+    [join(REAL_BASE, "scripts/verify-production-client-boundary.mjs"), "scripts/verify-production-client-boundary.mjs"],
+  ]) copyFileSync(source, join(fx.base, target));
+  write(join(fx.base, "scripts/verify-product-content.mjs"), "console.log('product ok');\n");
+  write(join(fx.base, "scripts/bundle-governance.mts"), "console.log('bundle ok');\n");
+  write(join(fx.base, "packages/ui/package.json"), `${JSON.stringify({ name: "@workloom/ui", version: stable }, null, 2)}\n`);
+  const baseCapabilities = {
+    schemaVersion: 1,
+    baseRepository: "example/base",
+    releasePolicy: "base-first-stable-only",
+    ui: {
+      package: "@workloom/ui",
+      contractVersion: "1.0.0",
+      candidateVersion: stable,
+      latestStableVersion: stable,
+      requiredClientPackages: ["apps/web/package.json", "apps/webb/package.json", "apps/webc/package.json"],
+      allowedIndustryOverrides: ["--wl-brand-primary", "--wl-brand-on-primary", "--wl-brand-accent"],
+    },
+    clientFoundation: {
+      schemaVersion: "workloom.client-foundation/v1",
+      stateFile: ".workloom-client-foundation.json",
+      candidateVersion: stable,
+      latestStableVersion: stable,
+      stableSourceRefPattern: "refs/tags/ui-v{version}",
+      distribution: "stable-tag-upgrade-pr",
+      maxManagedFiles: 100,
+      managedRoots: ["apps/web", "apps/webb", "apps/webc"],
+      requiredEntries: [
+        "apps/web/src/main.tsx",
+        "apps/webb/src/main.tsx",
+        "apps/webc/src/main.tsx",
+        "apps/webc/public/service-front.config.json",
+      ],
+      allowedIndustryExtensionPaths: [
+        "apps/*/src/extensions/**",
+        "apps/*/src/projections/**",
+        "apps/*/src/config/industry/**",
+        "apps/*/src/theme/industry/**",
+        "apps/*/public/industry/**",
+      ],
+      ignoredRuntimePaths: ["apps/*/dist/**", "apps/*/node_modules/**", "apps/*/.vite/**", "apps/*/.DS_Store"],
+      protectedRootFiles: ["product.manifest.json", "electron-builder.yml"],
+    },
+  };
+  write(join(fx.base, "sync/base-capabilities.json"), `${JSON.stringify(baseCapabilities, null, 2)}\n`);
+  for (const client of ["web", "webb", "webc"]) {
+    const scripts = { typecheck: "tsc --noEmit", build: "vite build", test: "vitest run" };
+    if (client === "web") scripts["test:consumer"] = "playwright test --config playwright.consumer.config.ts";
+    write(join(fx.base, `apps/${client}/package.json`), `${JSON.stringify({
+      name: `@example/${client}`,
+      private: true,
+      type: "module",
+      scripts,
+      dependencies: { "@workloom/ui": "workspace:*" },
+    }, null, 2)}\n`);
+    write(join(fx.base, `apps/${client}/src/main.tsx`), clientSource(client));
+  }
+  write(join(fx.base, "apps/webc/public/service-front.config.json"), "{}\n");
+  const scope = readScope(fx.base);
+  scope.include.push("scripts/**");
+  scope.pollutionGuard.maxFilesPerSync = 2;
+  scope.pollutionGuard.maxFilesPerAdopt = 40;
+  writeScope(fx.base, scope);
+  const stableSha = commitAll(fx.base, "stable adoption fixture");
+  git(fx.base, "tag", `ui-v${stable}`);
+
+  write(join(fx.child, "product.manifest.json"), `${JSON.stringify({
+    productId: "example-industry",
+    role: "industry",
+    repository: "example/example-industry",
+    defaultBundle: "example",
+    release: { appId: "com.example.industry" },
+    desktop: { portOffset: 101 },
+    clients: {
+      bPc: { enabled: true, entry: "apps/web" },
+      bMobile: { enabled: true, entry: "apps/webb" },
+      cMobile: { enabled: true, entry: "apps/webc" },
+    },
+  }, null, 2)}\n`);
+  write(join(fx.child, "package.json"), `${JSON.stringify({
+    name: "example-industry",
+    private: true,
+    packageManager: "pnpm@10.14.0",
+    scripts: {
+      test: "node --test",
+      "product:verify": "node scripts/verify-product-content.mjs",
+      "bundle:governance": "tsx scripts/bundle-governance.mts",
+    },
+    devDependencies: { tsx: "4.23.12" },
+  }, null, 2)}\n`);
+  write(join(fx.child, "pnpm-workspace.yaml"), 'packages:\n  - "apps/*"\n  - "packages/*"\nonlyBuiltDependencies:\n  - node-pty\n');
+  write(join(fx.child, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+  write(join(fx.child, "bundles/example/bundle.json"), "{}\n");
+  commitAll(fx.child, "minimal industry contract");
+  return { ...fx, stable, stableSha };
 }
 
 function cli(args, cwd, env = process.env) {
@@ -272,14 +400,42 @@ test("缺少 B 端移动客户端时只报告第一阶段迁移，绝不伪装�
   }
 });
 
-test("v5 scope 明确保护产品身份，并将三端应用壳交给稳定标签指纹分发", () => {
+test("v8 scope 明确保护产品身份、同步认证、依赖闭包与 Bundle 装配契约，并将三端应用壳交给稳定标签指纹分发", () => {
   const scope = JSON.parse(readFileSync(join(REAL_BASE, "sync/base-scope.json"), "utf8"));
-  assert.equal(scope.version, 5);
+  assert.equal(scope.version, 8);
   assert.ok(scope.protectedChildAssets.files.includes("electron-builder.yml"));
   assert.ok(scope.protectedChildAssets.files.includes("product.manifest.json"));
   assert.ok(scope.exclude.includes("electron-builder.yml"));
   assert.ok(!scope.include.includes("electron-builder.yml"));
   assert.ok(scope.include.includes("packages/industry-contract/**"));
+  assert.ok(scope.include.includes("packages/base/**"));
+  assert.ok(!scope.exclude.includes("packages/base/tenancy/auth.ts"));
+  assert.ok(!scope.exclude.includes("packages/base/bundles/assembly.ts"));
+  assert.ok(!scope.exclude.includes("packages/base/bundles/segment.ts"));
+  assert.ok(!scope.exclude.includes("packages/base/bundles/projection-composition.test.ts"));
+  assert.ok(scope.exclude.includes("packages/base/bundles/bundles.test.ts"));
+  for (const industryCoupled of [
+    "packages/base/bundles/eval-questions.test.ts",
+    "packages/base/fence-engine/fence-engine.test.ts",
+    "packages/base/overlay/overlay.test.ts",
+    "apps/server/src/service/dialog.test.ts",
+    "apps/server/src/service/inspection-adapter.ts",
+    "apps/server/src/service/inspection-adapter.test.ts",
+    "scripts/bundle-governance.test.ts",
+    "scripts/generate-client-projections.mts",
+    "scripts/hotel-seed-preflight.ts",
+    "scripts/hotel-seed-preflight.test.ts",
+    "scripts/suite.ts",
+  ]) assert.ok(scope.exclude.includes(industryCoupled), `${industryCoupled} 必须保留在基座仓`);
+  for (const publicCaptain of [
+    "packages/base/captain/charter.ts",
+    "packages/base/captain/decision.ts",
+    "packages/base/captain/loop.ts",
+    "packages/base/captain/board.ts",
+    "packages/base/captain/captain.test.ts",
+  ]) assert.ok(!scope.exclude.includes(publicCaptain), `${publicCaptain} 不得形成断链`);
+  assert.equal(scope.dependencyClosure.relativeImports, "fail-closed");
+  assert.ok(scope.dependencyClosure.allowedExcludedTargets.length > 0);
   assert.ok(scope.exclude.includes("apps/server/src/industry/**"));
   assert.ok(scope.exclude.includes("apps/server/src/service/adapters/**"));
   assert.equal(scope.registryCapabilities[0].distribution, "stable-registry-upgrade-pr");
@@ -289,6 +445,43 @@ test("v5 scope 明确保护产品身份，并将三端应用壳交给稳定标�
   assert.ok(scope.exclude.includes("apps/webb/**"));
   assert.ok(scope.exclude.includes("apps/webc/**"));
   assert.ok(!scope.include.includes("apps/web/src/lib/**"));
+});
+
+test("完整同步对相对依赖断链和缺失的子仓保留实现均 fail closed", () => {
+  const fx = fixture();
+  try {
+    const scope = readScope(fx.base);
+    scope.include.push("public/**");
+    scope.exclude.push("public/industry-adapter.ts");
+    writeScope(fx.base, scope);
+    write(join(fx.base, "public/runtime.ts"), 'export { industryValue } from "./industry-adapter.js";\n');
+    write(join(fx.base, "public/industry-adapter.ts"), "export const industryValue = 'child-owned';\n");
+    commitAll(fx.base, "add undeclared dependency seam");
+
+    const undeclared = cli(["detect", "--repo", "governance", "--base-dir", fx.base], fx.child);
+    assert.equal(undeclared.status, 1);
+    assert.match(undeclared.stderr, /基座同步依赖闭包失败.*public\/runtime\.ts.*public\/industry-adapter\.ts/s);
+
+    const declared = readScope(fx.base);
+    declared.dependencyClosure.allowedExcludedTargets.push({
+      importer: "public/runtime.ts",
+      target: "public/industry-adapter.ts",
+      reason: "测试子仓显式保留行业适配器",
+    });
+    writeScope(fx.base, declared);
+    commitAll(fx.base, "declare dependency seam");
+    const missingChildSeam = cli(["detect", "--repo", "governance", "--base-dir", fx.base], fx.child);
+    assert.equal(missingChildSeam.status, 1);
+    assert.match(missingChildSeam.stderr, /子仓缺少 1 个明确保留的依赖实现.*public\/industry-adapter\.ts/s);
+
+    write(join(fx.child, "governance/public/industry-adapter.ts"), "export const industryValue = 'tiger';\n");
+    commitAll(fx.child, "provide child dependency seam");
+    const ready = cli(["detect", "--repo", "governance", "--base-dir", fx.base], fx.child);
+    assert.equal(ready.status, 2, ready.stderr || ready.stdout);
+    assert.doesNotMatch(ready.stderr, /依赖闭包失败|明确保留的依赖实现/);
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
 });
 
 test("相同 base SHA 仍逐项验真；Tiger required assets 写根目录且 state 同提交迁移", () => {
@@ -651,6 +844,68 @@ test("adopt 对已定制的 AGENTS.repo 与同名 workflow 均保留不覆盖", 
     assert.equal(report.warnings.filter((line) => /fingerprint 不同/.test(line)).length, 2);
     assert.equal(readFileSync(join(fx.child, "AGENTS.repo.md"), "utf8"), "# child-custom\n");
     assert.equal(readFileSync(join(fx.child, ".github/workflows/base-sync-push.yml"), "utf8"), "name: child-custom-workflow\n");
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("新行业缺少消费 CI 工程契约时零写入 fail closed", () => {
+  const fx = newIndustryFixture();
+  try {
+    rmSync(join(fx.child, "pnpm-workspace.yaml"));
+    commitAll(fx.child, "remove workspace contract");
+    const result = spawnSync("bash", [join(fx.base, "sync/adopt.sh"), fx.child, "--new-industry"], {
+      cwd: fx.base,
+      encoding: "utf8",
+      env: { ...process.env, PATH: `${dirname(NODE)}:${process.env.PATH}` },
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /新行业接入前置契约失败.*pnpm-workspace\.yaml/s);
+    assert.equal(existsSync(join(fx.child, ".workloom-base-sync.json")), false);
+    assert.equal(existsSync(join(fx.child, ".workloom-ui.json")), false);
+    assert.equal(existsSync(join(fx.child, "apps/web/package.json")), false);
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("最小新行业仓一次完成 full 基座、三端稳定壳与消费门禁资产", () => {
+  const fx = newIndustryFixture();
+  try {
+    const beforeHead = git(fx.child, "rev-parse", "HEAD");
+    const result = spawnSync("bash", [join(fx.base, "sync/adopt.sh"), fx.child, "--new-industry"], {
+      cwd: fx.base,
+      encoding: "utf8",
+      timeout: 30_000,
+      env: { ...process.env, PATH: `${dirname(NODE)}:${process.env.PATH}` },
+    });
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    assert.match(result.stdout, /完整公共基座.*共享 UI 已一次接入/s);
+    assert.equal(git(fx.child, "rev-parse", "HEAD"), beforeHead);
+    assert.equal(git(fx.child, "diff", "--cached", "--name-only"), "");
+    assert.equal(readFileSync(join(fx.child, "shared/core.txt"), "utf8"), "core-v2\n");
+    const baseState = JSON.parse(readFileSync(join(fx.child, ".workloom-base-sync.json"), "utf8"));
+    assert.equal(baseState.lastSyncMode, "full");
+    assert.equal(baseState.lastSyncedBaseSha, fx.stableSha);
+    const uiState = JSON.parse(readFileSync(join(fx.child, ".workloom-ui.json"), "utf8"));
+    assert.equal(uiState.version, fx.stable);
+    assert.deepEqual(uiState.connectedClientPackages, [
+      "apps/web/package.json",
+      "apps/webb/package.json",
+      "apps/webc/package.json",
+    ]);
+    const foundation = JSON.parse(readFileSync(join(fx.child, ".workloom-client-foundation.json"), "utf8"));
+    assert.equal(foundation.version, fx.stable);
+    assert.equal(foundation.sourceRef, `refs/tags/ui-v${fx.stable}`);
+    for (const path of [
+      "apps/web/src/main.tsx",
+      "apps/webb/src/main.tsx",
+      "apps/webc/src/main.tsx",
+      "scripts/verify-ui-consumer.mjs",
+      "scripts/verify-client-foundation-consumer.mjs",
+      "scripts/verify-production-client-boundary.mjs",
+      ".github/workflows/workloom-ui-contract.yml",
+    ]) assert.equal(existsSync(join(fx.child, path)), true, `${path} 应已安装`);
   } finally {
     rmSync(fx.root, { recursive: true, force: true });
   }

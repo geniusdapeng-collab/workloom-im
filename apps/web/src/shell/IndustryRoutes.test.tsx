@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { navigationEntriesFromBundle } from "@workloom/ui";
+import { BASE_NAVIGATION, navigationEntriesFromBundle } from "@workloom/ui";
 import {
   buildIndustryRouteRegistry,
   industryRouteMatchesBundle,
@@ -51,6 +51,14 @@ describe("B 端 PC 行业扩展路由契约", () => {
     expect(registry.error?.message).toContain("不得覆盖基座地址");
   });
 
+  it("共享导航新增公共地址时必须同步进入行业路由保护契约", () => {
+    for (const entry of BASE_NAVIGATION) {
+      for (const route of [entry.route, ...(entry.legacyRoutes ?? [])]) {
+        expect(() => validateIndustryRoutePath(route)).toThrow();
+      }
+    }
+  });
+
   it("拒绝重复匹配模式、基座能力和危险地址语法", () => {
     const duplicate = buildIndustryRouteRegistry({
       "../extensions/orders/routes.tsx": {
@@ -80,6 +88,19 @@ describe("B 端 PC 行业扩展路由契约", () => {
     });
     expect(registry.error).toBeNull();
     expect(registry.routes[0]?.legacyPaths).toEqual(["/p10"]);
+
+    const aiPmRegistry = buildIndustryRouteRegistry({
+      "../extensions/ai-pm/routes.tsx": {
+        industryRoutes: [{
+          path: "/development",
+          legacyPaths: ["/p25"],
+          capabilityId: "ai-pm.development",
+          element: page,
+        }],
+      },
+    });
+    expect(aiPmRegistry.error).toBeNull();
+    expect(aiPmRegistry.routes[0]?.legacyPaths).toEqual(["/p25"]);
 
     for (const protectedPath of ["/p1", "/p4", "/p6", "/p8", "/login", "/dev"]) {
       const protectedRegistry = buildIndustryRouteRegistry({

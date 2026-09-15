@@ -110,5 +110,16 @@ jobs:
       - name: 三端响应式、视觉与无障碍门禁
         run: pnpm ui:e2e
 
+      - name: 留存三端视觉与无障碍证据
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workloom-ui-evidence-${{ github.run_id }}
+          path: |
+            playwright-report
+            test-results/ui
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: dsh-gate E6（围栏瀑布 + 事件桥 + H-5 崩溃重放）
         run: bash scripts/dsh-gate.sh
