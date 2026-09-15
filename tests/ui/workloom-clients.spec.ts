@@ -278,6 +278,55 @@ test("PC 窄屏主导航圈定焦点，Esc 关闭后恢复触发点", async ({ p
   await expect(trigger).toBeFocused();
 });
 
+test("PC 工作区首帧按真实容器宽度采用安全布局", async ({ page }) => {
+  await page.setViewportSize({ width: 640, height: 720 });
+  await enterOwnerDemo(page);
+
+  // 故意延迟 ResizeObserver，证明首帧安全布局依赖同步 clientWidth 测量，
+  // 而不是碰巧等到了异步 observer 回调或测试重试。
+  await page.addInitScript(() => {
+    const NativeResizeObserver = window.ResizeObserver;
+    class DelayedResizeObserver {
+      private readonly native: ResizeObserver;
+      constructor(callback: ResizeObserverCallback) {
+        this.native = new NativeResizeObserver((entries, observer) => {
+          window.setTimeout(() => callback(entries, observer), 1_000);
+        });
+      }
+      observe(target: Element, options?: ResizeObserverOptions) { this.native.observe(target, options); }
+      unobserve(target: Element) { this.native.unobserve(target); }
+      disconnect() { this.native.disconnect(); }
+    }
+    Object.defineProperty(window, "ResizeObserver", { configurable: true, writable: true, value: DelayedResizeObserver });
+  });
+
+  await page.goto("http://127.0.0.1:3100/night");
+  const grid = page.locator(".wl-bridge-grid--managed");
+  await grid.waitFor({ state: "visible" });
+
+  const readLayout = () => grid.evaluate((element) => {
+    const shell = element.closest<HTMLElement>(".wl-bridge-shell");
+    const sides = Array.from(element.querySelectorAll<HTMLElement>(".wl-bridge-left, .wl-bridge-right"));
+    return {
+      shellWidth: shell?.clientWidth ?? 0,
+      clientWidth: (element as HTMLElement).clientWidth,
+      scrollWidth: (element as HTMLElement).scrollWidth,
+      sidesHidden: sides.every((side) => side.hidden || getComputedStyle(side).display === "none"),
+    };
+  });
+  const firstFrame = await readLayout();
+  expect(firstFrame.shellWidth).toBeLessThanOrEqual(650);
+  expect(firstFrame.scrollWidth, JSON.stringify(firstFrame)).toBeLessThanOrEqual(firstFrame.clientWidth + 2);
+  expect(firstFrame.sidesHidden, JSON.stringify(firstFrame)).toBe(true);
+
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+  const stableFrame = await readLayout();
+  expect(stableFrame.scrollWidth, JSON.stringify(stableFrame)).toBeLessThanOrEqual(stableFrame.clientWidth + 2);
+  expect(stableFrame.sidesHidden, JSON.stringify(stableFrame)).toBe(true);
+});
+
 test("PC 关键公共能力在窄视口与 200% 文字下不溢出", async ({ page }) => {
   // 该门禁会串行覆盖 9 个真实路由 × 2 个视口，并分别检查正常与 200% 字号。
   // 明确标记为慢测试，避免把矩阵运行时长误判为单页面卡死。
