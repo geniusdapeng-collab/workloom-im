@@ -2,6 +2,18 @@ import { defineConfig } from "@playwright/test";
 
 const reuseExistingServer = !process.env.CI;
 
+// Playwright 的 webServer 探活遵循 HTTP(S)_PROXY。部分 CI runner 会注入代理却
+// 没有完整的 NO_PROXY，导致已在回环地址启动的服务被误判为 120 秒超时。
+// 合并而非覆盖 runner 既有白名单，并同时写入大小写键以兼容不同代理实现。
+const noProxy = Array.from(new Set(
+  [process.env.NO_PROXY, process.env.no_proxy, "127.0.0.1", "localhost"]
+    .flatMap((value) => value?.split(",") ?? [])
+    .map((value) => value.trim())
+    .filter(Boolean),
+)).join(",");
+process.env.NO_PROXY = noProxy;
+process.env.no_proxy = noProxy;
+
 export default defineConfig({
   testDir: "./tests/ui",
   outputDir: "test-results/ui",
