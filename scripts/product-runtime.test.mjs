@@ -9,7 +9,11 @@ import { loadProductRuntime } from "./product-runtime.mjs";
 function fixture(manifest) {
   const root = mkdtempSync(join(tmpdir(), "workloom-product-runtime-"));
   execFileSync("git", ["init", "-q"], { cwd: root });
-  writeFileSync(join(root, "product.manifest.json"), `${JSON.stringify(manifest)}\n`);
+  writeFileSync(join(root, "product.manifest.json"), `${JSON.stringify({
+    schemaVersion: "workloom.product/v1",
+    role: "industry",
+    ...manifest,
+  })}\n`);
   return realpathSync(root);
 }
 
@@ -26,7 +30,9 @@ test("产品清单派生仓库、品牌与隔离端口", () => {
     assert.deepEqual(loadProductRuntime(root), {
       repositoryRoot: root,
       manifestPath: join(root, "product.manifest.json"),
+      schemaVersion: "workloom.product/v1",
       productId: "example-industry",
+      role: "industry",
       displayName: "示例行业经营系统",
       repository: "example/example-industry",
       demoWorkspaceSlug: "example-demo",
@@ -53,6 +59,30 @@ test("非法仓库、产品名与端口偏移失败关闭", () => {
     const root = fixture(manifest);
     try {
       assert.throws(() => loadProductRuntime(root), /产品名称|GitHub 仓库|演示工作区|演示成员|端口偏移/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("缺失或伪造 schema/role 时失败关闭", () => {
+  for (const patch of [
+    { schemaVersion: "workloom.product/v0" },
+    { schemaVersion: null },
+    { role: "" },
+    { role: "platform/operator" },
+  ]) {
+    const root = fixture({
+      productId: "example-industry",
+      displayName: "示例行业经营系统",
+      repository: "example/example-industry",
+      demoWorkspaceSlug: "example-demo",
+      demoMemberNo: "MEM-X01",
+      desktop: { portOffset: 321 },
+      ...patch,
+    });
+    try {
+      assert.throws(() => loadProductRuntime(root), /schemaVersion|产品角色/u);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

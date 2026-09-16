@@ -63,6 +63,14 @@ echo "== 装配 Electron 自包含载荷（${VERSION} · ${PLATFORM}-${ARCH}）=
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
+# 产品边界只能来自受保护 product.manifest.json。platform-ops 属于仙女座，不能因
+# 基座仓里物理残留该目录就进入 WorkLoom IM 或行业安装包。
+PLATFORM_OPS_MODE="$(node scripts/payload-policy.mjs platform-ops-mode)"
+case "$PLATFORM_OPS_MODE" in
+  include|exclude) ;;
+  *) echo "❌ 无效的载荷边界策略：$PLATFORM_OPS_MODE"; exit 1 ;;
+esac
+
 # ---------- 1. 产品载荷 runtime/（与 pack-macos/pack-windows 同白名单口径） ----------
 echo "→ 装配产品载荷…"
 R="$OUT/runtime"
@@ -71,7 +79,12 @@ for f in package.json pnpm-workspace.yaml tsconfig.base.json .env.example; do
   [ -f "$f" ] && cp "$f" "$R/"
 done
 [ -f "$R/.env.defaults" ] || cp .env.example "$R/.env.defaults"
-for d in apps/server apps/web/src apps/web/index.html apps/web/public apps/web/package.json apps/web/vite.config.ts apps/web/tsconfig.json packages bundles platform-ops; do
+RUNTIME_SOURCE_DIRS=(
+  apps/server apps/web/src apps/web/index.html apps/web/public apps/web/package.json
+  apps/web/vite.config.ts apps/web/tsconfig.json packages bundles
+)
+[ "$PLATFORM_OPS_MODE" = "include" ] && RUNTIME_SOURCE_DIRS+=(platform-ops)
+for d in "${RUNTIME_SOURCE_DIRS[@]}"; do
   [ -e "$d" ] || continue
   mkdir -p "$R/$(dirname "$d")"
   copy "$d" "$R/$(dirname "$d")/"
@@ -96,9 +109,10 @@ NPM_REG="${NPM_REGISTRY:-https://registry.npmjs.org}"
 copy "$NM_STAGE/node_modules" "$R/node_modules"
 # 内部工作区包以实体目录入 node_modules（v2.0.14 @workloom 缺失实证）——
 # 按各包 package.json 的 name 动态注册（行业仓有自定义包，如 @hyperreality/video-studio；
-# 仓根级一方包如 andromeda 的 platform-ops/（@workloom/platform-ops）同口径注册，
-# v1.1.0 andromeda 冒烟 ERR_MODULE_NOT_FOUND 实证）
-for pkgjson in packages/*/package.json platform-ops/package.json; do
+# 仓根级一方包 platform-ops 仅在仙女座精确身份下注册；目录存在本身不构成授权。
+INTERNAL_PACKAGE_MANIFESTS=(packages/*/package.json)
+[ "$PLATFORM_OPS_MODE" = "include" ] && INTERNAL_PACKAGE_MANIFESTS+=(platform-ops/package.json)
+for pkgjson in "${INTERNAL_PACKAGE_MANIFESTS[@]}"; do
   [ -f "$pkgjson" ] || continue
   pname="$(node -p "try{require('./$pkgjson').name||''}catch(e){''}" 2>/dev/null)"
   [ -n "$pname" ] || continue
@@ -195,6 +209,7 @@ else
   [ -f "$OUT/node/bin/node" ] || { echo "❌ 载荷自检失败：node/bin/node 缺失"; exit 1; }
   [ -f "$OUT/pg/bin/initdb" ] || { echo "❌ 载荷自检失败：pg/bin/initdb 缺失"; exit 1; }
 fi
+node scripts/payload-policy.mjs assert-runtime "$R"
 echo "✓ 载荷自检通过"
 
 # ---------- 10. 载荷压缩包（electron-builder extraResources 对 **/node_modules/** 有硬排除，
@@ -204,6 +219,7 @@ echo "$VERSION" > "$OUT/PAYLOAD_VERSION"
 rm -f dist-payload.tar.gz
 tar -czf dist-payload.tar.gz -C "$OUT" .
 [ -s dist-payload.tar.gz ] || { echo "❌ 载荷归档失败"; exit 1; }
+tar -tzf dist-payload.tar.gz | node scripts/payload-policy.mjs assert-archive-list
 
 SIZE=$(du -sh "$OUT" | cut -f1)
 ASIZE=$(du -sh dist-payload.tar.gz | cut -f1)

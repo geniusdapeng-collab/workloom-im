@@ -74,6 +74,7 @@ jobs:
       - name: 三端 UI 同源与新行业接入门禁
         run: |
           pnpm product:verify
+          pnpm test:payload-boundary
           pnpm bundle:governance:test
           pnpm bundle:governance
           pnpm projections:check

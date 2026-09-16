@@ -34,14 +34,22 @@ export function loadProductRuntime(start = resolve(HERE, "..")) {
   } catch {
     throw new Error("product.manifest.json 无法解析");
   }
+  const schemaVersion = manifest?.schemaVersion;
   const productId = manifest?.productId;
+  const role = manifest?.role;
   const displayName = manifest?.displayName;
   const repository = manifest?.repository;
   const demoWorkspaceSlug = manifest?.demoWorkspaceSlug;
   const demoMemberNo = manifest?.demoMemberNo;
   const portOffset = manifest?.desktop?.portOffset;
+  if (schemaVersion !== "workloom.product/v1") {
+    throw new Error("product.manifest.json 缺少受支持的 schemaVersion");
+  }
   if (typeof productId !== "string" || !/^[a-z0-9][a-z0-9-]{1,63}$/.test(productId)) {
     throw new Error("product.manifest.json 缺少有效产品标识");
+  }
+  if (typeof role !== "string" || !/^[a-z][a-z0-9-]{1,31}$/.test(role)) {
+    throw new Error("product.manifest.json 缺少有效产品角色");
   }
   if (
     typeof displayName !== "string"
@@ -67,7 +75,9 @@ export function loadProductRuntime(start = resolve(HERE, "..")) {
   return Object.freeze({
     repositoryRoot,
     manifestPath,
+    schemaVersion,
     productId,
+    role,
     displayName,
     repository,
     demoWorkspaceSlug,
@@ -85,7 +95,7 @@ function main() {
   const field = fieldIndex >= 0 ? process.argv[fieldIndex + 1] : null;
   const product = loadProductRuntime();
   if (!field || !Object.hasOwn(product, field) || field === "repositoryRoot" || field === "manifestPath") {
-    throw new Error("用法：node scripts/product-runtime.mjs --field productId|displayName|repository|demoWorkspaceSlug|demoMemberNo|portOffset|serverPort|webPort|pgPort|natsPort");
+    throw new Error("用法：node scripts/product-runtime.mjs --field schemaVersion|productId|role|displayName|repository|demoWorkspaceSlug|demoMemberNo|portOffset|serverPort|webPort|pgPort|natsPort");
   }
   process.stdout.write(`${product[field]}\n`);
 }
