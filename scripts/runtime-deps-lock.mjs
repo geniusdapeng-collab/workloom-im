@@ -79,6 +79,13 @@ function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+export function runtimeInputSha256(value) {
+  const text = Buffer.isBuffer(value) ? value.toString("utf8") : String(value);
+  // Git 的文本对象以 LF 为规范内容，但 Windows 工作树可能按 checkout 策略呈现 CRLF。
+  // 依赖锁绑定受审内容而非宿主换行形式；孤立 CR 不规范化，仍会形成不同摘要。
+  return sha256(text.replaceAll("\r\n", "\n"));
+}
+
 function readJson(path, label) {
   try {
     return JSON.parse(readFileSync(path, "utf8"));
@@ -134,7 +141,7 @@ function inputFiles(root, product, policy) {
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([path, absolute]) => {
       if (!existsSync(absolute) || !statSync(absolute).isFile()) throw new Error(`运行依赖锁输入缺失：${path}`);
-      return { path, sha256: sha256(readFileSync(absolute)) };
+      return { path, sha256: runtimeInputSha256(readFileSync(absolute)) };
     });
 }
 
