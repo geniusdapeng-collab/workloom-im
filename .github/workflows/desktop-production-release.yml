@@ -293,7 +293,7 @@ jobs:
   windows:
     needs: preflight
     # windows-latest/Windows 2025 预装 PG17，来源不在发行锁内；脚本会 fail-closed。
-    # 固定到不预装 PG17 的镜像，随后只从 release-assets.json 锁定源安装 17.2.0。
+    # 固定到不预装 PG17 的镜像，随后只从 release-assets.json 锁定源安装 17.11.0。
     runs-on: windows-2022
     timeout-minutes: 90
     environment: desktop-production
@@ -414,7 +414,11 @@ jobs:
           name: desktop-windows-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/wl-smoke/logs/*.log
+            ${{ runner.temp }}/wl-smoke/install-state.json
+            ${{ runner.temp }}/wl-app-smoke/logs/*
+            ${{ runner.temp }}/wl-app-smoke/install-state.json
             ${{ runner.temp }}/wl-render-default/logs/*
+            ${{ runner.temp }}/wl-render-default/install-state.json
           if-no-files-found: warn
           retention-days: 7
 
