@@ -256,26 +256,66 @@ jobs:
           PACK_INTEGRITY="$(node -e 'const fs=require("fs"); const m=JSON.parse(fs.readFileSync(process.argv[1])); if(!Array.isArray(m)||m.length!==1||!m[0].integrity) throw new Error("pack 元数据无效"); process.stdout.write(m[0].integrity)' "$RUNNER_TEMP/ui-package/pack-metadata.json")"
           test "$LOCAL_INTEGRITY" = "$PACK_INTEGRITY" || { echo "❌ tarball 与 pack metadata 的 sha512 不一致"; exit 1; }
 
+          resolve_remote_tag() {
+            local ref_json object_type object_sha tag_json depth=0
+            ref_json="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}")"
+            object_type="$(node -e 'const r=JSON.parse(process.argv[1]); process.stdout.write(String(r.object?.type??""))' "$ref_json")"
+            object_sha="$(node -e 'const r=JSON.parse(process.argv[1]); process.stdout.write(String(r.object?.sha??""))' "$ref_json")"
+            while [ "$object_type" = "tag" ]; do
+              depth=$((depth + 1))
+              [ "$depth" -le 8 ] || { echo "❌ 标签注解链超过 8 层" >&2; return 1; }
+              tag_json="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${object_sha}")"
+              object_type="$(node -e 'const r=JSON.parse(process.argv[1]); process.stdout.write(String(r.object?.type??""))' "$tag_json")"
+              object_sha="$(node -e 'const r=JSON.parse(process.argv[1]); process.stdout.write(String(r.object?.sha??""))' "$tag_json")"
+            done
+            [ "$object_type" = "commit" ] && [[ "$object_sha" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "❌ 远端标签未解析到精确 commit" >&2
+              return 1
+            }
+            printf '%s\n' "$object_sha"
+          }
+
+          TAG_SHA_BEFORE="$(resolve_remote_tag)"
+          test "$TAG_SHA_BEFORE" = "$RELEASE_SHA" || {
+            echo "❌ 远端标签已偏离 verify-and-preflight 固定提交，拒绝创建或修改 Release"
+            exit 1
+          }
+
           RELEASE_JSON="$RUNNER_TEMP/release.json"
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json databaseId,tagName,isDraft,isPrerelease,targetCommitish,assets > "$RELEASE_JSON" 2>/dev/null; then
-            echo "已找到稳定 Release，进入幂等核验"
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json databaseId,tagName,isDraft,isImmutable,isPrerelease,targetCommitish,assets > "$RELEASE_JSON" 2>/dev/null; then
+            echo "已找到 Release，进入幂等核验"
           else
             gh release create "$RELEASE_TAG" \
               --repo "$GITHUB_REPOSITORY" \
               --verify-tag \
               --target "$RELEASE_SHA" \
+              --draft --latest=false \
               --title "WorkLoom 三端基座 v${VERSION}" \
               --notes "由受保护 production 环境发布；制品经基座全门禁、标签/main 祖先证明与 sha512 完整性校验。"
-            gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json databaseId,tagName,isDraft,isPrerelease,targetCommitish,assets > "$RELEASE_JSON"
+            gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json databaseId,tagName,isDraft,isImmutable,isPrerelease,targetCommitish,assets > "$RELEASE_JSON"
           fi
 
-          node -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync(process.argv[1])); const tag=process.argv[2]; if(r.tagName!==tag||r.isDraft||r.isPrerelease) throw new Error("Release 必须绑定精确稳定标签且不得为草稿/预发布"); const tgz=(r.assets??[]).filter((a)=>a.name?.endsWith(".tgz")); if(tgz.length>1) throw new Error("Release 不得包含多个 tgz 制品")' "$RELEASE_JSON" "$RELEASE_TAG"
+          IS_IMMUTABLE="$(node -e 'const fs=require("fs"); process.stdout.write(String(JSON.parse(fs.readFileSync(process.argv[1])).isImmutable===true))' "$RELEASE_JSON")"
+          IS_DRAFT="$(node -e 'const fs=require("fs"); process.stdout.write(String(JSON.parse(fs.readFileSync(process.argv[1])).isDraft===true))' "$RELEASE_JSON")"
+          if [ "$IS_IMMUTABLE" = "true" ]; then
+            test "$IS_DRAFT" = "false" || { echo "❌ 不可变 Release 不得处于草稿状态"; exit 1; }
+            echo "已发布 Release 不可变；只读核验，不重复 edit"
+          else
+            # 任何可变 Release（包括历史上已公开者）先收回草稿，再检查或上传资产。
+            # 因此错误同名资产不会在失败窗口继续公开。
+            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=true --latest=false
+            gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json databaseId,tagName,isDraft,isImmutable,isPrerelease,targetCommitish,assets > "$RELEASE_JSON"
+            node -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync(process.argv[1])); if(r.isImmutable||!r.isDraft) throw new Error("可变 Release 必须先进入草稿状态")' "$RELEASE_JSON"
+          fi
+
+          node -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync(process.argv[1])); const tag=process.argv[2]; if(r.tagName!==tag||r.isPrerelease) throw new Error("Release 必须绑定精确稳定标签且不得为预发布"); const tgz=(r.assets??[]).filter((a)=>a.name?.endsWith(".tgz")); if(tgz.length>1) throw new Error("Release 不得包含多个 tgz 制品")' "$RELEASE_JSON" "$RELEASE_TAG"
           ASSET_COUNT="$(node -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync(process.argv[1])); const n=process.argv[2]; process.stdout.write(String((r.assets??[]).filter((a)=>a.name===n).length))' "$RELEASE_JSON" "$EXPECTED_ASSET")"
           TGZ_COUNT="$(node -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync(process.argv[1])); process.stdout.write(String((r.assets??[]).filter((a)=>a.name?.endsWith(".tgz")).length))' "$RELEASE_JSON")"
           if [ "$TGZ_COUNT" -eq 1 ]; then
             test "$ASSET_COUNT" -eq 1 || { echo "❌ Release 已存在错误命名的 tgz 制品"; exit 1; }
           else
             test "$TGZ_COUNT" -eq 0
+            test "$IS_IMMUTABLE" = "false" || { echo "❌ 不可变 Release 缺少预期制品，无法原地恢复"; exit 1; }
             gh release upload "$RELEASE_TAG" "$TARBALL" --repo "$GITHUB_REPOSITORY"
           fi
 
@@ -285,6 +325,51 @@ jobs:
           REMOTE_INTEGRITY="$(node -e 'const fs=require("fs"),c=require("crypto"); process.stdout.write(`sha512-${c.createHash("sha512").update(fs.readFileSync(process.argv[1])).digest("base64")}`)' "$REMOTE_DIR/$EXPECTED_ASSET")"
           test "$REMOTE_INTEGRITY" = "$LOCAL_INTEGRITY" || { echo "❌ Release 已存在同版本异内容制品，拒绝 rollout"; exit 1; }
           cmp -s "$TARBALL" "$REMOTE_DIR/$EXPECTED_ASSET" || { echo "❌ Release 制品未通过逐字节核验"; exit 1; }
+
+          TAG_SHA_PREPUBLISH="$(resolve_remote_tag)"
+          test "$TAG_SHA_PREPUBLISH" = "$RELEASE_SHA" || {
+            echo "❌ 资产装配期间远端标签发生漂移；Release 保持草稿并拒绝公开"
+            exit 1
+          }
+          if [ "$IS_IMMUTABLE" = "false" ]; then
+            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
+          fi
+
+          RELEASE_LIST_JSON="$RUNNER_TEMP/release-list.json"
+          FINAL_IS_IMMUTABLE="$IS_IMMUTABLE"
+          verify_public_release() {
+            gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isImmutable,isPrerelease,assets > "$RELEASE_JSON" || return 1
+            FINAL_IS_IMMUTABLE="$(node -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync(process.argv[1])); if(typeof r.isImmutable!=="boolean") throw new Error("Release 缺少 isImmutable 状态"); process.stdout.write(String(r.isImmutable))' "$RELEASE_JSON")" || return 1
+            node -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync(process.argv[1])); const tag=process.argv[2],asset=process.argv[3]; if(r.tagName!==tag||r.isDraft||r.isPrerelease) throw new Error("Release 最终状态必须公开且非预发布"); const tgz=(r.assets??[]).filter((a)=>a.name?.endsWith(".tgz")); const exact=tgz.filter((a)=>a.name===asset); if(tgz.length!==1||exact.length!==1) throw new Error("Release 最终 tgz 资产必须唯一且精确命名")' "$RELEASE_JSON" "$RELEASE_TAG" "$EXPECTED_ASSET" || return 1
+            FINAL_REMOTE_DIR="$(mktemp -d)" || return 1
+            gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$EXPECTED_ASSET" --dir "$FINAL_REMOTE_DIR" || return 1
+            test -f "$FINAL_REMOTE_DIR/$EXPECTED_ASSET" || return 1
+            FINAL_REMOTE_INTEGRITY="$(node -e 'const fs=require("fs"),c=require("crypto"); process.stdout.write(`sha512-${c.createHash("sha512").update(fs.readFileSync(process.argv[1])).digest("base64")}`)' "$FINAL_REMOTE_DIR/$EXPECTED_ASSET")" || return 1
+            [ "$FINAL_REMOTE_INTEGRITY" = "$LOCAL_INTEGRITY" ] || return 1
+            cmp -s "$TARBALL" "$FINAL_REMOTE_DIR/$EXPECTED_ASSET" || return 1
+            gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName,isLatest,isDraft,isImmutable > "$RELEASE_LIST_JSON" || return 1
+            node -e 'const fs=require("fs"); const rs=JSON.parse(fs.readFileSync(process.argv[1])); const tag=process.argv[2]; const match=rs.filter((r)=>r.tagName===tag); if(match.length!==1||match[0].isDraft||match[0].isLatest!==false) throw new Error("UI Release 必须唯一、公开且不得抢占仓库 latest")' "$RELEASE_LIST_JSON" "$RELEASE_TAG" || return 1
+            TAG_SHA_AFTER="$(resolve_remote_tag)" || return 1
+            [ "$TAG_SHA_AFTER" = "$RELEASE_SHA" ] || return 1
+          }
+
+          rollback_public_release() {
+            if [ "$FINAL_IS_IMMUTABLE" = "false" ]; then
+              gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=true --latest=false || return 1
+              gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isImmutable,isPrerelease,assets > "$RELEASE_JSON" || return 1
+              node -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync(process.argv[1])); if(!r.isDraft) throw new Error("最终证明失败后的可变 Release 必须恢复为草稿")' "$RELEASE_JSON" || return 1
+            else
+              echo "❌ 不可变 Release 最终证明失败，无法自动恢复；需要人工阻断处理" >&2
+            fi
+          }
+
+          if ! verify_public_release; then
+            if ! rollback_public_release; then
+              echo "❌ Release 最终证明失败且自动恢复草稿失败，需要人工阻断处理" >&2
+            fi
+            echo "❌ Release 公开后的状态、资产、latest 或标签证明失败，拒绝 rollout"
+            exit 1
+          fi
           echo "✅ GitHub Release 稳定制品已发布并通过 sha512/逐字节核验：$EXPECTED_ASSET"
 
   rollout-after-release:

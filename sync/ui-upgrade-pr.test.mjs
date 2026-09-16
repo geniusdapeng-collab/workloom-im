@@ -1116,6 +1116,113 @@ process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", f
     assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(noByteComparison))
       .some((risk) => risk.includes("cmp -s")),
     "已有 Release 资产未逐字节核验不得继续 rollout");
+    const latestHijack = structuredClone(parsed);
+    latestHijack.jobs["publish-github-release"].steps
+      .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品").run =
+        latestHijack.jobs["publish-github-release"].steps
+          .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品").run
+          .replaceAll("--latest=false", "--latest=true");
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(latestHijack))
+      .some((risk) => risk.includes("--latest=false")),
+    "UI 制品不得抢占仓库级桌面 latest");
+    const publicBeforeUpload = structuredClone(parsed);
+    publicBeforeUpload.jobs["publish-github-release"].steps
+      .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品").run =
+        publicBeforeUpload.jobs["publish-github-release"].steps
+          .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品").run
+          .replace("--draft --latest=false", "--latest=false");
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(publicBeforeUpload))
+      .some((risk) => risk.includes("--draft --latest=false")),
+    "UI Release 必须先以非 latest 草稿装配，不能先公开空壳");
+    const validateBeforeHide = structuredClone(parsed);
+    const validateBeforeHideStep = validateBeforeHide.jobs["publish-github-release"].steps
+      .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品");
+    const prematureValidation = validateBeforeHideStep.run.split("\n")
+      .find((line) => line.includes("if(r.tagName!==tag||r.isPrerelease)"));
+    assert.ok(prematureValidation);
+    validateBeforeHideStep.run = validateBeforeHideStep.run
+      .replace(`${prematureValidation}\n`, "")
+      .replace("IS_IMMUTABLE=", `${prematureValidation}\nIS_IMMUTABLE=`);
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(validateBeforeHide))
+      .some((risk) => risk.includes("先收回草稿")),
+    "可变且已公开的错误 Release 必须先隐藏，再判定预发布或多 tgz 错态");
+    const tagDriftBeforeMutation = structuredClone(parsed);
+    tagDriftBeforeMutation.jobs["publish-github-release"].steps
+      .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品").run =
+        tagDriftBeforeMutation.jobs["publish-github-release"].steps
+          .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品").run
+          .replace('test "$TAG_SHA_BEFORE" = "$RELEASE_SHA"', 'test -n "$TAG_SHA_BEFORE"');
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(tagDriftBeforeMutation))
+      .some((risk) => risk.includes('test "$TAG_SHA_BEFORE" = "$RELEASE_SHA"')),
+    "发布 job 在任何 Release 变更前必须拒绝已漂移标签");
+    const tagDriftPrepublishMutation = structuredClone(parsed);
+    tagDriftPrepublishMutation.jobs["publish-github-release"].steps
+      .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品").run =
+        tagDriftPrepublishMutation.jobs["publish-github-release"].steps
+          .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品").run
+          .replace('test "$TAG_SHA_PREPUBLISH" = "$RELEASE_SHA"', 'test -n "$TAG_SHA_PREPUBLISH"');
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(tagDriftPrepublishMutation))
+      .some((risk) => risk.includes('test "$TAG_SHA_PREPUBLISH" = "$RELEASE_SHA"')),
+    "资产装配后必须再次拒绝已漂移标签，不能公开错误引用");
+    const immutableRerunEdit = structuredClone(parsed);
+    immutableRerunEdit.jobs["publish-github-release"].steps
+      .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品").run =
+        immutableRerunEdit.jobs["publish-github-release"].steps
+          .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品").run
+          .replace('if [ "$IS_IMMUTABLE" = "false" ]; then\n  gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false\nfi',
+            'gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false');
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(immutableRerunEdit))
+      .some((risk) => risk.includes("幂等重跑不得再次 edit")),
+    "已公开 immutable Release 且字节正确时必须只读通过，不能重复 edit 后 422");
+    const noIndependentLatestProof = structuredClone(parsed);
+    noIndependentLatestProof.jobs["publish-github-release"].steps
+      .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品").run =
+        noIndependentLatestProof.jobs["publish-github-release"].steps
+          .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品").run
+          .replace('gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName,isLatest,isDraft,isImmutable',
+            'echo "跳过 isLatest 独立证明"');
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(noIndependentLatestProof))
+      .some((risk) => risk.includes("gh release list")),
+    "--latest=false 参数不能代替发布后对 isLatest=false 的独立证明");
+    const noPostPublishRecovery = structuredClone(parsed);
+    const noPostPublishRecoveryStep = noPostPublishRecovery.jobs["publish-github-release"].steps
+      .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品");
+    const redraft = 'gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=true --latest=false';
+    const redraftIndex = noPostPublishRecoveryStep.run.lastIndexOf(redraft);
+    assert.ok(redraftIndex >= 0);
+    noPostPublishRecoveryStep.run = `${noPostPublishRecoveryStep.run.slice(0, redraftIndex)}echo "跳过标签漂移恢复"${noPostPublishRecoveryStep.run.slice(redraftIndex + redraft.length)}`;
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(noPostPublishRecovery))
+      .some((risk) => risk.includes("立即恢复草稿")),
+    "公开后的标签漂移必须把仍可变的 Release 恢复草稿，不能只报错留在公开态");
+    const uncaughtTagResolutionFailure = structuredClone(parsed);
+    uncaughtTagResolutionFailure.jobs["publish-github-release"].steps
+      .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品").run =
+        uncaughtTagResolutionFailure.jobs["publish-github-release"].steps
+          .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品").run
+          .replace('TAG_SHA_AFTER="$(resolve_remote_tag)" || return 1',
+            'TAG_SHA_AFTER="$(resolve_remote_tag)"');
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(uncaughtTagResolutionFailure))
+      .some((risk) => risk.includes('TAG_SHA_AFTER="$(resolve_remote_tag)" || return 1')),
+    "发布后标签不存在、解析失败或注解链超限也必须进入统一恢复状态机");
+    const noFinalPublicByteCheck = structuredClone(parsed);
+    noFinalPublicByteCheck.jobs["publish-github-release"].steps
+      .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品").run =
+        noFinalPublicByteCheck.jobs["publish-github-release"].steps
+          .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品").run
+          .replace('cmp -s "$TARBALL" "$FINAL_REMOTE_DIR/$EXPECTED_ASSET" || return 1',
+            'echo "跳过公开资产最终逐字节复验"');
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(noFinalPublicByteCheck))
+      .some((risk) => risk.includes('cmp -s "$TARBALL" "$FINAL_REMOTE_DIR/$EXPECTED_ASSET"')),
+    "公开后的资产必须从全新目录重新下载并逐字节复验，防止发布窗口替换");
+    const noFinalTgzCardinality = structuredClone(parsed);
+    noFinalTgzCardinality.jobs["publish-github-release"].steps
+      .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品").run =
+        noFinalTgzCardinality.jobs["publish-github-release"].steps
+          .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品").run
+          .replace('if(tgz.length!==1||exact.length!==1)', 'if(exact.length!==1)');
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(noFinalTgzCardinality))
+      .some((risk) => risk.includes("最终 tgz 资产必须唯一")),
+    "公开后必须再次拒绝额外 tgz，不能只确认预期同名资产仍存在");
     const floatingDistribution = structuredClone(parsed);
     floatingDistribution.jobs["verify-and-preflight"].steps
       .find((step) => step.name === "校验 UI 标签、稳定版本登记与 GitHub Release 分发契约").run =
