@@ -68,7 +68,7 @@
     },
     {
       "path": "scripts/pack-nm-merge.mjs",
-      "sha256": "23609ede98cd64b55f8c530b5193507fc49ad6da5c12fb8876d63748ada9933c"
+      "sha256": "8e7aa9c1e7fe10e13165802f27c6162bbda9d45ae95c97841e9484e2560856ce"
     },
     {
       "path": "scripts/payload-policy.mjs",
@@ -84,5 +84,5 @@
     }
   ],
   "manifestSha256": "bae08a229cce26438b95966696c66e9e7e285b3dcf6885dc475ecb490faebefb",
-  "packageLockSha256": "2e8be7118145e59d9c13e7fbf5397f4bdf3705ed97c49acf671f3138b877507f"
+  "packageLockSha256": "97f96e83cb4a3b8e034e5322fcca40ac753c68195206032024afd97f75197fbc"
 }
