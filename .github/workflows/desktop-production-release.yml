@@ -293,7 +293,7 @@ jobs:
   windows:
     needs: preflight
     # windows-latest/Windows 2025 预装 PG17，来源不在发行锁内；脚本会 fail-closed。
-    # 固定到不预装 PG17 的镜像，随后只从 release-assets.json 锁定源安装 17.2.0。
+    # 固定到不预装 PG17 的镜像，随后只从 release-assets.json 锁定源安装 17.11.0。
     runs-on: windows-2022
     timeout-minutes: 90
     environment: desktop-production
@@ -373,13 +373,23 @@ jobs:
 
       - name: 拆包验收 + 冒烟（对 win-unpacked 载荷归档跑首启全流程——验证用户拿到的内容）
         shell: bash
+        env:
+          # pgvector 编译底座会在 Windows runner 上安装 PostgreSQL 服务并占用 5432。
+          # 候选包验收改用隔离端口，避免构建工具链污染安装包首启结果。
+          WORKLOOM_PG_PORT: "55432"
+          WORKLOOM_SERVER_PORT: "58787"
+          WORKLOOM_WEB_PORT: "55173"
+          WORKLOOM_NATS_PORT: "54222"
         run: |
+          SMOKE_ROOT="$RUNNER_TEMP/wl-smoke"
+          APP_SMOKE_ROOT="$RUNNER_TEMP/wl-app-smoke"
+          RENDER_SMOKE_ROOT="$RUNNER_TEMP/wl-render-default"
           RES="release/win-unpacked/resources"
           test -f "$RES/payload.tar.gz" || { echo "❌ 拆包验收失败：payload.tar.gz 未进包"; exit 1; }
           test -f "$RES/payload/PAYLOAD_VERSION" || { echo "❌ 拆包验收失败：PAYLOAD_VERSION 未进包（缺失将致每次启动重解压）"; exit 1; }
           test -s "$RES/bundle-trust.json" || { echo "❌ 拆包验收失败：独立 Bundle 公钥环未进包"; exit 1; }
           tar -tzf "$RES/payload.tar.gz" > /tmp/wl-pkg-list.txt && grep -q "runtime/node_modules/tsx/package.json" /tmp/wl-pkg-list.txt || { echo "❌ 拆包验收失败：归档内缺 tsx"; exit 1; }
-          node apps/desktop/electron/bootstrap.cjs --smoke --resources "$RES" --support "${TEMP}/wl-smoke"
+          node apps/desktop/electron/bootstrap.cjs --smoke --resources "$RES" --support "$SMOKE_ROOT"
           EXE="$(find release/win-unpacked -maxdepth 1 -type f -name '*.exe' ! -iname '*uninstall*' -print -quit)"
           test -n "$EXE" || { echo "❌ Windows 应用主程序未生成"; exit 1; }
           INSTALLER="$(find release -maxdepth 1 -type f -name '*.exe' -print -quit)"
@@ -390,10 +400,10 @@ jobs:
           else
             powershell -NoProfile -Command '$s = Get-AuthenticodeSignature -FilePath $args[0]; if ($s.Status -eq "Valid") { Write-Error "未签名模式不得混入未知正式证书"; exit 1 }; Write-Host "未签名状态：$($s.Status)"' "$INSTALLER"
           fi
-          node -e 'const {spawnSync}=require("node:child_process"); const r=spawnSync(process.argv[1],[],{stdio:"inherit",env:{...process.env,WORKLOOM_APP_SMOKE:"1",WORKLOOM_SUPPORT_DIR:process.argv[2]}}); process.exit(r.status ?? 1)' "$EXE" "${TEMP}/wl-app-smoke"
-          test -f "${TEMP}/wl-app-smoke/.bootstrapped" || { echo "❌ 真实应用首启未完成"; exit 1; }
-          node -e 'const {spawnSync}=require("node:child_process"); const r=spawnSync(process.argv[1],[],{stdio:"inherit",env:{...process.env,WORKLOOM_RENDER_SMOKE:"1",WORKLOOM_SUPPORT_DIR:process.argv[2]}}); process.exit(r.status ?? 1)' "$EXE" "${TEMP}/wl-render-default"
-          test -f "${TEMP}/wl-render-default/logs/render-default.json" || { echo "❌ Windows 渲染探针缺失"; exit 1; }
+          node -e 'const {spawnSync}=require("node:child_process"); const r=spawnSync(process.argv[1],[],{stdio:"inherit",env:{...process.env,WORKLOOM_APP_SMOKE:"1",WORKLOOM_SUPPORT_DIR:process.argv[2]}}); process.exit(r.status ?? 1)' "$EXE" "$APP_SMOKE_ROOT"
+          test -f "$APP_SMOKE_ROOT/.bootstrapped" || { echo "❌ 真实应用首启未完成"; exit 1; }
+          node -e 'const {spawnSync}=require("node:child_process"); const r=spawnSync(process.argv[1],[],{stdio:"inherit",env:{...process.env,WORKLOOM_RENDER_SMOKE:"1",WORKLOOM_SUPPORT_DIR:process.argv[2]}}); process.exit(r.status ?? 1)' "$EXE" "$RENDER_SMOKE_ROOT"
+          test -f "$RENDER_SMOKE_ROOT/logs/render-default.json" || { echo "❌ Windows 渲染探针缺失"; exit 1; }
           echo "✅ 真实 Windows 应用后端 + 页面渲染冒烟通过"
         timeout-minutes: 20
       - name: 留存失败诊断（私有 Actions Artifact）
@@ -404,7 +414,11 @@ jobs:
           name: desktop-windows-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/wl-smoke/logs/*.log
+            ${{ runner.temp }}/wl-smoke/install-state.json
+            ${{ runner.temp }}/wl-app-smoke/logs/*
+            ${{ runner.temp }}/wl-app-smoke/install-state.json
             ${{ runner.temp }}/wl-render-default/logs/*
+            ${{ runner.temp }}/wl-render-default/install-state.json
           if-no-files-found: warn
           retention-days: 7
 

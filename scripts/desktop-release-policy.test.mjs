@@ -132,6 +132,30 @@ test("unsigned platform builds require an explicit reviewed input and disclose t
   assert.match(publish.run, /SmartScreen/u);
 });
 
+test("Windows package smoke is isolated from the build toolchain and retains all failure evidence", () => {
+  const smoke = stepByName("windows", "拆包验收 + 冒烟（对 win-unpacked 载荷归档跑首启全流程——验证用户拿到的内容）");
+  assert.deepEqual(smoke.env, {
+    WORKLOOM_PG_PORT: "55432",
+    WORKLOOM_SERVER_PORT: "58787",
+    WORKLOOM_WEB_PORT: "55173",
+    WORKLOOM_NATS_PORT: "54222",
+  });
+  const ports = Object.values(smoke.env).map(Number);
+  assert.equal(ports.includes(5432), false);
+  assert.equal(new Set(ports).size, ports.length);
+  assert.match(smoke.run, /SMOKE_ROOT="\$RUNNER_TEMP\/wl-smoke"/u);
+  assert.match(smoke.run, /APP_SMOKE_ROOT="\$RUNNER_TEMP\/wl-app-smoke"/u);
+  assert.match(smoke.run, /RENDER_SMOKE_ROOT="\$RUNNER_TEMP\/wl-render-default"/u);
+  assert.doesNotMatch(smoke.run, /\$\{TEMP\}\/wl-/u);
+
+  const diagnostics = stepByName("windows", "留存失败诊断（私有 Actions Artifact）");
+  const evidencePaths = String(diagnostics.with.path);
+  for (const directory of ["wl-smoke", "wl-app-smoke", "wl-render-default"]) {
+    assert.match(evidencePaths, new RegExp(`runner\\.temp \\}\\}/${directory}/logs`, "u"));
+    assert.match(evidencePaths, new RegExp(`runner\\.temp \\}\\}/${directory}/install-state\\.json`, "u"));
+  }
+});
+
 test("production secrets exist only in the minimum signing steps", () => {
   assert.deepEqual(secretReferences(workflow.env), []);
   for (const [jobName, value] of Object.entries(workflow.jobs)) {
