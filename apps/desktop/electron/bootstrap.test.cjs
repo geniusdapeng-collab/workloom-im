@@ -5,7 +5,15 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { describe, it } = require("node:test");
-const { bootstrap, installPayloadAtomically, writeInstallCheckpoint } = require("./bootstrap.cjs");
+const {
+  bootstrap,
+  installPayloadAtomically,
+  writeInstallCheckpoint,
+  parseDesktopPort,
+  assertPostmasterIdentity,
+  ownedPostgresRunning,
+  buildDesktopEnvironment,
+} = require("./bootstrap.cjs");
 
 function fixture(version, withCurrent = true) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "workloom-bootstrap-"));
@@ -140,5 +148,88 @@ describe("桌面载荷原子装配", () => {
     assert.match(source, /if \(SOURCE_MODE\)[\s\S]*if \(app\.isPackaged\)[\s\S]*正式安装包禁止源码模式/u);
     assert.match(source, /if \(SOURCE_MODE\)[\s\S]*if \(RENDER_SMOKE\)[\s\S]*源码模式禁止执行发布渲染冒烟/u);
     assert.match(source, /else \{[\s\S]*handle = await bootstrap\(\{[\s\S]*resourcesDir/u);
+  });
+});
+
+describe("桌面 PostgreSQL 实例归属与端口契约", () => {
+  it("严格拒绝空白、小数、非数字和越界端口", () => {
+    assert.equal(parseDesktopPort("WORKLOOM_PG_PORT", 5432, {}), 5432);
+    assert.equal(parseDesktopPort("WORKLOOM_PG_PORT", 5432, { WORKLOOM_PG_PORT: "55432" }), 55432);
+    for (const value of ["", " 5432", "5432 ", "5432.5", "port", "0", "65536"]) {
+      assert.throws(
+        () => parseDesktopPort("WORKLOOM_PG_PORT", 5432, { WORKLOOM_PG_PORT: value }),
+        /1 到 65535/u,
+      );
+    }
+  });
+
+  it("只有 pg_ctl 确认运行且 postmaster 数据目录与端口同时匹配才允许复用", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "workloom-pg-owner-"));
+    const pgData = path.join(root, "pgdata");
+    fs.mkdirSync(pgData);
+    fs.writeFileSync(path.join(pgData, "postmaster.pid"), `31415\n${pgData}\n1\n55432\n/tmp\n127.0.0.1\n`);
+    const calls = [];
+    try {
+      assert.equal(ownedPostgresRunning({
+        pgCtl: "/runtime/pg_ctl",
+        pgData,
+        expectedPort: 55432,
+        runCommand(command, args) { calls.push({ command, args }); return { code: 0 }; },
+      }), true);
+      assert.deepEqual(calls, [{ command: "/runtime/pg_ctl", args: ["status", "-D", pgData] }]);
+      assert.throws(() => assertPostmasterIdentity(pgData, 55433), /运行端口 55432/u);
+
+      const foreign = path.join(root, "foreign");
+      fs.mkdirSync(foreign);
+      fs.writeFileSync(path.join(pgData, "postmaster.pid"), `31415\n${foreign}\n1\n55432\n/tmp\n127.0.0.1\n`);
+      assert.throws(() => assertPostmasterIdentity(pgData, 55432), /数据目录不属于当前产品/u);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("pg_ctl 未确认运行时不读取残留 PID，也不把端口监听者当作自有实例", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "workloom-pg-stopped-"));
+    try {
+      assert.equal(ownedPostgresRunning({
+        pgCtl: "/runtime/pg_ctl",
+        pgData: path.join(root, "missing-pgdata"),
+        expectedPort: 55432,
+        runCommand() { return { code: 3 }; },
+      }), false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("托管环境只重写数据库与服务端口，保留其他用户配置", () => {
+    const scheme = "postgres://";
+    const original = [
+      `DATABASE_URL=${scheme}postgres:test-only@localhost:5432/workloom`,
+      "APP_DB_PASSWORD=test-only",
+      "GATEWAY_DB_PASSWORD=test-only",
+      `DATABASE_APP_URL=${scheme}workloom_app:test-only@localhost:5432/workloom`,
+      `DATABASE_GATEWAY_URL=${scheme}workloom_gateway:test-only@localhost:5432/workloom`,
+      "SERVER_PORT=8787",
+      "WEB_PORT=5173",
+      "LLM_MODEL=keep-user-choice",
+      "",
+    ].join("\n");
+    const result = buildDesktopEnvironment(original, {
+      pgPort: 55432,
+      serverPort: 18787,
+      webPort: 15173,
+      adminPassword: "test-only",
+      appPassword: "test-only",
+      gatewayPassword: "test-only",
+    });
+    assert.match(result.text, /^LLM_MODEL=keep-user-choice$/mu);
+    assert.match(result.text, /^SERVER_PORT=18787$/mu);
+    assert.match(result.text, /^WEB_PORT=15173$/mu);
+    for (const key of ["DATABASE_URL", "DATABASE_APP_URL", "DATABASE_GATEWAY_URL"]) {
+      const value = result.text.match(new RegExp(`^${key}=(.*)$`, "mu"))?.[1];
+      assert.equal(new URL(value).hostname, "127.0.0.1");
+      assert.equal(new URL(value).port, "55432");
+    }
   });
 });

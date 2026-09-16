@@ -27,10 +27,21 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 
 const IS_WIN = process.platform === "win32";
-const SERVER_PORT = Number(process.env.WORKLOOM_SERVER_PORT || 8787);
-const WEB_PORT = Number(process.env.WORKLOOM_WEB_PORT || 5173);
-const PG_PORT = Number(process.env.WORKLOOM_PG_PORT || 5432);
-const NATS_PORT = Number(process.env.WORKLOOM_NATS_PORT || 4222);
+
+function parseDesktopPort(name, fallback, env = process.env) {
+  const raw = env[name] === undefined ? String(fallback) : String(env[name]);
+  if (!/^\d{1,5}$/u.test(raw)) throw new Error(`${name} 必须是 1 到 65535 的十进制整数`);
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1 || value > 65535) {
+    throw new Error(`${name} 必须是 1 到 65535 的十进制整数`);
+  }
+  return value;
+}
+
+const SERVER_PORT = parseDesktopPort("WORKLOOM_SERVER_PORT", 8787);
+const WEB_PORT = parseDesktopPort("WORKLOOM_WEB_PORT", 5173);
+const PG_PORT = parseDesktopPort("WORKLOOM_PG_PORT", 5432);
+const NATS_PORT = parseDesktopPort("WORKLOOM_NATS_PORT", 4222);
 
 /* ---------------- 日志 ---------------- */
 function makeLogger(logDir) {
@@ -87,6 +98,111 @@ function atomicWrite(file, content, mode) {
   const temporary = `${file}.tmp-${process.pid}-${crypto.randomBytes(4).toString("hex")}`;
   fs.writeFileSync(temporary, content, mode ? { mode } : undefined);
   fs.renameSync(temporary, file);
+}
+
+function normalizeDataDirectory(directory) {
+  let normalized;
+  try { normalized = fs.realpathSync.native(directory); } catch { normalized = path.resolve(directory); }
+  normalized = normalized.normalize("NFC").replace(/[\\/]+$/u, "");
+  return IS_WIN ? normalized.replaceAll("\\", "/").toLowerCase() : normalized;
+}
+
+function readPostmasterIdentity(pgData) {
+  const pidFile = path.join(pgData, "postmaster.pid");
+  let lines;
+  try { lines = fs.readFileSync(pidFile, "utf8").split(/\r?\n/u); } catch {
+    throw new Error("PostgreSQL 状态异常：pg_ctl 报告运行中但 postmaster.pid 缺失");
+  }
+  const pid = Number(lines[0]?.trim());
+  const dataDirectory = lines[1]?.trim() ?? "";
+  const portRaw = lines[3]?.trim() ?? "";
+  if (!Number.isSafeInteger(pid) || pid <= 0 || !dataDirectory || !/^\d{1,5}$/u.test(portRaw)) {
+    throw new Error("PostgreSQL 状态异常：postmaster.pid 格式无效");
+  }
+  const port = Number(portRaw);
+  if (port < 1 || port > 65535) throw new Error("PostgreSQL 状态异常：postmaster.pid 端口无效");
+  return { pid, dataDirectory, port };
+}
+
+function assertPostmasterIdentity(pgData, expectedPort) {
+  const identity = readPostmasterIdentity(pgData);
+  if (normalizeDataDirectory(identity.dataDirectory) !== normalizeDataDirectory(pgData)) {
+    throw new Error("PostgreSQL 实例归属校验失败：运行实例的数据目录不属于当前产品");
+  }
+  if (identity.port !== expectedPort) {
+    throw new Error(`PostgreSQL 实例归属校验失败：运行端口 ${identity.port} 与期望端口 ${expectedPort} 不一致`);
+  }
+  return identity;
+}
+
+function ownedPostgresRunning({ pgCtl, pgData, expectedPort, runCommand = run }) {
+  const status = runCommand(pgCtl, ["status", "-D", pgData]);
+  if (status.code !== 0) return false;
+  assertPostmasterIdentity(pgData, expectedPort);
+  return true;
+}
+
+function readEnvValue(text, key) {
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return text.match(new RegExp(`^${escaped}=(.*)$`, "mu"))?.[1] ?? null;
+}
+
+function upsertEnvValue(text, key, value) {
+  if (/[\r\n]/u.test(value)) throw new Error(`${key} 不能包含换行`);
+  const lines = String(text).replace(/\r\n/gu, "\n").split("\n");
+  let written = false;
+  const next = [];
+  for (const line of lines) {
+    if (line.startsWith(`${key}=`)) {
+      if (!written) next.push(`${key}=${value}`);
+      written = true;
+    } else {
+      next.push(line);
+    }
+  }
+  if (!written) {
+    if (next.length > 0 && next[next.length - 1] !== "") next.push("");
+    next.push(`${key}=${value}`);
+  }
+  while (next.length > 1 && next[next.length - 1] === "" && next[next.length - 2] === "") next.pop();
+  return `${next.join("\n").replace(/\n*$/u, "")}\n`;
+}
+
+function databaseUrl(user, password, port) {
+  const url = new URL("postgres://127.0.0.1/workloom");
+  url.username = user;
+  url.password = password;
+  url.port = String(port);
+  return url.toString();
+}
+
+function existingUrlPassword(text, key) {
+  try {
+    const value = readEnvValue(text, key);
+    return value ? decodeURIComponent(new URL(value).password) : null;
+  } catch { return null; }
+}
+
+function buildDesktopEnvironment(text, {
+  pgPort,
+  serverPort,
+  webPort,
+  adminPassword,
+  appPassword,
+  gatewayPassword,
+}) {
+  const values = {
+    DATABASE_URL: databaseUrl("postgres", adminPassword, pgPort),
+    APP_DB_PASSWORD: appPassword,
+    GATEWAY_DB_PASSWORD: gatewayPassword,
+    DATABASE_APP_URL: databaseUrl("workloom_app", appPassword, pgPort),
+    DATABASE_GATEWAY_URL: databaseUrl("workloom_gateway", gatewayPassword, pgPort),
+    SERVER_PORT: String(serverPort),
+    WEB_PORT: String(webPort),
+  };
+  let next = text;
+  for (const [key, value] of Object.entries(values)) next = upsertEnvValue(next, key, value);
+  return { text: next, values };
 }
 
 function writeInstallCheckpoint(supportDir, state) {
@@ -311,14 +427,56 @@ async function bootstrap(opts) {
   if (!fs.existsSync(NODE_BIN)) throw new Error(`载荷不完整：Node 运行时缺失（${NODE_BIN}）`);
   if (!fs.existsSync(TSX_CLI)) throw new Error("载荷不完整：tsx 缺失");
 
+  /* ---------- 0.5 桌面托管配置 ---------- */
+  const envFile = path.join(RUNTIME, ".env");
+  const defaultsFile = path.join(RUNTIME, ".env.defaults");
+  if (!fs.existsSync(defaultsFile)) throw new Error("载荷不完整：.env.defaults 缺失");
+  const defaultsText = fs.readFileSync(defaultsFile, "utf8");
+  const envExisted = fs.existsSync(envFile);
+  let envText = envExisted ? fs.readFileSync(envFile, "utf8") : defaultsText;
+  if (!envExisted) {
+    const jwtValue = `wl-${crypto.randomBytes(24).toString("hex")}`;
+    const piiValue = `pii-${crypto.randomBytes(24).toString("hex")}`;
+    envText = upsertEnvValue(envText, "JWT_SECRET", jwtValue);
+    envText = upsertEnvValue(envText, "PII_SALT", piiValue);
+  }
+  const adminPassword = existingUrlPassword(envText, "DATABASE_URL")
+    || existingUrlPassword(defaultsText, "DATABASE_URL");
+  const appPassword = readEnvValue(envText, "APP_DB_PASSWORD")
+    || readEnvValue(defaultsText, "APP_DB_PASSWORD");
+  const gatewayPassword = readEnvValue(envText, "GATEWAY_DB_PASSWORD")
+    || readEnvValue(defaultsText, "GATEWAY_DB_PASSWORD");
+  if (!adminPassword || !appPassword || !gatewayPassword) {
+    throw new Error("桌面数据库凭据配置不完整，拒绝猜测托管数据库连接");
+  }
+  const desktopConfig = buildDesktopEnvironment(envText, {
+    pgPort: PG_PORT,
+    serverPort: SERVER_PORT,
+    webPort: WEB_PORT,
+    adminPassword,
+    appPassword,
+    gatewayPassword,
+  });
+  if (!envExisted || desktopConfig.text !== envText) atomicWrite(envFile, desktopConfig.text, 0o600);
+  else {
+    try { fs.chmodSync(envFile, 0o600); } catch { /* Windows 不保证 POSIX mode */ }
+  }
+  if (!envExisted) say("→ 生成默认配置 .env（JWT 密钥与 PII 盐已随机化）");
+  const desktopEnv = {
+    ...process.env,
+    ...desktopConfig.values,
+    WORKLOOM_PG_PORT: String(PG_PORT),
+    WORKLOOM_SERVER_PORT: String(SERVER_PORT),
+    WORKLOOM_WEB_PORT: String(WEB_PORT),
+    WORKLOOM_NATS_PORT: String(NATS_PORT),
+  };
+  const serverEnv = { ...desktopEnv, NODE_ENV: "production" };
+
   /* ---------- 1. PostgreSQL ---------- */
   const pgCtlArgs = (a) => ["-D", PGDATA, ...a];
-  const pgUp = () => {
-    if (fs.existsSync(pgBin("pg_isready"))) {
-      return run(pgBin("pg_isready"), ["-h", "127.0.0.1", "-p", String(PG_PORT), "-d", "workloom"]).code === 0;
-    }
-    return run(pgBin("pg_ctl"), ["status", "-D", PGDATA]).code === 0; // zonky 三件套无 pg_isready（v2.0.12 实证）
-  };
+  const pgUp = () => ownedPostgresRunning({
+    pgCtl: pgBin("pg_ctl"), pgData: PGDATA, expectedPort: PG_PORT,
+  });
 
   if (pgUp()) {
     say("✓ PostgreSQL 已在运行（复用）");
@@ -346,7 +504,12 @@ async function bootstrap(opts) {
   {
     status("→ 准备数据库角色、业务库和检索能力…", { phase: "database-bootstrap", percent: 57, etaSeconds: 52 });
     const r = run(NODE_BIN, [path.join(RUNTIME, "scripts", "desktop-bootstrap-db.mjs")], {
-      env: { ...process.env, WORKLOOM_RUNTIME: RUNTIME },
+      env: {
+        ...desktopEnv,
+        WORKLOOM_RUNTIME: RUNTIME,
+        WORKLOOM_EXPECTED_PGDATA: PGDATA,
+        WORKLOOM_PG_ADMIN_PASSWORD: adminPassword,
+      },
     });
     if (r.code !== 0) throw new Error(`数据库引导失败：${r.err.slice(-300)}`);
   }
@@ -354,7 +517,6 @@ async function bootstrap(opts) {
   /* ---------- 1.5 NATS JetStream（内嵌事件总线；缺失降级 memory 不阻断） ---------- */
   // 自包含桌面包按生产信任模型运行：稳定 Bundle 必须使用独立于 Bundle 载荷的公钥环验签。
   // 公钥环是 electron extraResource（可受应用签名保护）；私钥只存在于发布 CI，绝不随客户端分发。
-  const serverEnv = { ...process.env, NODE_ENV: "production" };
   const bundleTrustFile = path.join(resourceRoot, "bundle-trust.json");
   if (fs.existsSync(bundleTrustFile)) {
     const trustText = fs.readFileSync(bundleTrustFile, "utf-8");
@@ -383,26 +545,14 @@ async function bootstrap(opts) {
     say("⚠ 内嵌 nats-server 未随包——事件总线降级 memory");
   }
 
-  /* ---------- 2. 配置 ---------- */
-  const envFile = path.join(RUNTIME, ".env");
-  if (!fs.existsSync(envFile)) {
-    fs.copyFileSync(path.join(RUNTIME, ".env.defaults"), envFile);
-    const secret = `wl-${crypto.randomBytes(24).toString("hex")}`;
-    const piiSalt = `pii-${crypto.randomBytes(24).toString("hex")}`;
-    // D-SEC2 交付审计实证：PII_SALT 此前全客户共用仓内默认值——
-    // PII 占位符为 HMAC(盐)，盐相同则跨客户可关联、且盐值公开在仓库里，必须随首启一机一盐
-    fs.writeFileSync(envFile, fs.readFileSync(envFile, "utf-8")
-      .replace(/^JWT_SECRET=.*/m, `JWT_SECRET=${secret}`)
-      .replace(/^PII_SALT=.*/m, `PII_SALT=${piiSalt}`));
-    say("→ 生成默认配置 .env（JWT 密钥与 PII 盐已随机化）");
-  }
-
   /* ---------- 3. 首启引导：迁移 + 种子（幂等） ---------- */
   const bootFlag = path.join(supportDir, ".bootstrapped");
   if (!fs.existsSync(bootFlag)) {
     checkpoint("database", "正在执行数据库迁移与示例装配", { targetVersion: payloadVer, percent: 70, etaSeconds: 38 });
     status("→ 正在升级数据结构…", { phase: "database-migrate", percent: 70, etaSeconds: 38 });
-    const mig = run(NODE_BIN, [TSX_CLI, "--env-file=.env", "scripts/migrate.ts"], { cwd: RUNTIME });
+    const mig = run(NODE_BIN, [TSX_CLI, "--env-file=.env", "scripts/migrate.ts"], {
+      cwd: RUNTIME, env: serverEnv,
+    });
     if (mig.code !== 0) throw new Error(`数据库迁移失败：${(mig.err || mig.out).slice(-400)}`);
     // 种子脚本按仓配置（.env.defaults DESKTOP_SEED_SCRIPT；不在 base-sync 同步范围）——
     // 基座出厂 AI 产品经理包；行业版子仓配自己行业种子（672cf7b 硬编码 hotel 根因）
@@ -422,7 +572,9 @@ async function bootstrap(opts) {
       if (!fs.existsSync(path.join(RUNTIME, seedScript))) {
         throw new Error(`演示数据种子缺失（${seedScript}）`);
       }
-      const seed = run(NODE_BIN, [TSX_CLI, "--env-file=.env", seedScript], { cwd: RUNTIME });
+      const seed = run(NODE_BIN, [TSX_CLI, "--env-file=.env", seedScript], {
+        cwd: RUNTIME, env: serverEnv,
+      });
       if (seed.code !== 0) throw new Error(`演示数据种子失败（${seedScript}）：${(seed.err || seed.out).slice(-400)}`);
     }
     fs.writeFileSync(bootFlag, "done");
@@ -436,7 +588,7 @@ async function bootstrap(opts) {
     { cwd: path.join(RUNTIME, "apps", "server"), env: serverEnv }, path.join(logDir, "server.log"));
   children.push(serverProc);
   const webProc = spawnLogged(NODE_BIN, [VITE_JS, "preview", "--host", "127.0.0.1", "--port", String(WEB_PORT), "--strictPort"],
-    { cwd: path.join(RUNTIME, "apps", "web") }, path.join(logDir, "web.log"));
+    { cwd: path.join(RUNTIME, "apps", "web"), env: serverEnv }, path.join(logDir, "web.log"));
   children.push(webProc);
 
   status("→ 等待工作台与服务就绪…", { phase: "services-health", percent: 90, etaSeconds: 10 });
@@ -508,4 +660,14 @@ if (require.main === module) {
     });
 }
 
-module.exports = { bootstrap, installPayloadAtomically, writeInstallCheckpoint };
+module.exports = {
+  bootstrap,
+  installPayloadAtomically,
+  writeInstallCheckpoint,
+  parseDesktopPort,
+  normalizeDataDirectory,
+  readPostmasterIdentity,
+  assertPostmasterIdentity,
+  ownedPostgresRunning,
+  buildDesktopEnvironment,
+};
