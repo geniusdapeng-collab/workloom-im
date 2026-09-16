@@ -30,6 +30,11 @@ export function normalizeDataDirectory(directory, platform = process.platform) {
   return platform === "win32" ? normalized.replaceAll("\\", "/").toLowerCase() : normalized;
 }
 
+export function isDirectExecution(entryPath, modulePath = fileURLToPath(import.meta.url)) {
+  if (!entryPath) return false;
+  return normalizeDataDirectory(entryPath) === normalizeDataDirectory(modulePath);
+}
+
 export function readDesktopDatabaseConfig(env = process.env) {
   const mode = requiredEnv(env, "WORKLOOM_PG_BOOTSTRAP_MODE");
   if (!new Set(["inspect", "prepare", "verify"]).has(mode)) {
@@ -265,7 +270,9 @@ async function main() {
   await bootstrapDatabase({ Client });
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// macOS 的 /tmp 实际指向 /private/tmp；安装包冒烟和普通启动都可能经符号链接路径
+// 执行 helper。必须按 realpath 比较，否则模块会被加载后静默退出，启动器拿不到实例身份。
+if (isDirectExecution(process.argv[1])) {
   main().catch((error) => {
     console.error(`bootstrap-db 失败: ${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);

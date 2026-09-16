@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { bootstrapDatabase, readDesktopDatabaseConfig } from "./desktop-bootstrap-db.mjs";
+import {
+  bootstrapDatabase,
+  isDirectExecution,
+  readDesktopDatabaseConfig,
+} from "./desktop-bootstrap-db.mjs";
 
 const SYSTEM_IDENTIFIER = "7654321098765432109";
 
@@ -112,6 +116,20 @@ function writeQueries(clients) {
 }
 
 describe("桌面数据库安全引导", () => {
+  it("经符号链接路径执行 helper 时仍识别为 CLI 入口", () => {
+    const root = mkdtempSync(join(tmpdir(), "workloom-helper-entry-"));
+    try {
+      const real = join(root, "desktop-bootstrap-db.mjs");
+      const linked = join(root, "helper-link.mjs");
+      writeFileSync(real, "// test-only\n");
+      symlinkSync(real, linked);
+      assert.equal(isDirectExecution(linked, real), true);
+      assert.equal(isDirectExecution(join(root, "other.mjs"), real), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("要求三模式、端口、PGDATA、HBA 与三角色凭据全部由启动器显式注入", () => {
     const complete = fixtureEnvironment("/tmp/test-only-pgdata");
     assert.equal(readDesktopDatabaseConfig(complete).port, 55432);
