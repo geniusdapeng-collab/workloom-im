@@ -535,6 +535,26 @@ test("v13 scope 明确保护产品身份、仓级发布器、桌面发布封口�
   assert.equal(scope.version, 13);
   assert.equal(scope.desktopReleaseCapability.finalizer, "scripts/desktop-release-finalizer.mjs");
   assert.equal(scope.desktopReleaseCapability.consumerWorkflow, ".github/workflows/build-desktop.yml");
+  assert.equal(scope.desktopReleaseCapability.publisherTemplate, "sync/downstream-desktop-publisher-job.yml");
+  const releaseAssets = JSON.parse(readFileSync(join(REAL_BASE, "scripts/release-assets.json"), "utf8"));
+  const runtimeMetadata = JSON.parse(readFileSync(join(REAL_BASE, ".workloom-runtime-deps/metadata.json"), "utf8"));
+  const desktopProductionWorkflow = readFileSync(
+    join(REAL_BASE, ".github/workflows/desktop-production-release.yml"),
+    "utf8",
+  );
+  const releaseNodeVersions = [...new Set(Object.keys(releaseAssets.assets)
+    .map((name) => /^node-v([0-9]+\.[0-9]+\.[0-9]+)-(?:darwin|win)/u.exec(name)?.[1])
+    .filter(Boolean))];
+  assert.deepEqual(releaseNodeVersions, [scope.desktopReleaseCapability.buildRuntime.nodeVersion]);
+  assert.equal(runtimeMetadata.npmVersion, scope.desktopReleaseCapability.buildRuntime.npmVersion);
+  assert.equal(scope.desktopReleaseCapability.buildRuntime.setupNodePolicy, "exact-version-only");
+  const setupNodeVersions = [...desktopProductionWorkflow.matchAll(/node-version:\s*([^, }\n]+)/gu)]
+    .map((match) => match[1]);
+  assert.ok(setupNodeVersions.length >= 2);
+  assert.deepEqual(
+    [...new Set(setupNodeVersions)],
+    [scope.desktopReleaseCapability.buildRuntime.nodeVersion],
+  );
   assert.equal(
     scope.desktopReleaseCapability.distribution,
     "base-sync-script-plus-reviewed-workflow-upgrade-pr",
@@ -546,6 +566,7 @@ test("v13 scope 明确保护产品身份、仓级发布器、桌面发布封口�
   assert.ok(scope.include.includes("scripts/**"));
   assert.ok(!scope.exclude.includes("scripts/desktop-release-finalizer.mjs"));
   assert.ok(existsSync(join(REAL_BASE, scope.desktopReleaseCapability.finalizer)));
+  assert.ok(existsSync(join(REAL_BASE, scope.desktopReleaseCapability.publisherTemplate)));
   assert.ok(scope.protectedChildAssets.files.includes("electron-builder.yml"));
   assert.ok(scope.protectedChildAssets.files.includes("product.manifest.json"));
   assert.ok(scope.exclude.includes("electron-builder.yml"));
