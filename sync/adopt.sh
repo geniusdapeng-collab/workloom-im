@@ -233,6 +233,8 @@ if [ "$NEW_INDUSTRY" = true ]; then
     STATUS=$?
     rollback_adoption "$STATUS"
   }
+  node "$WORKDIR/scripts/runtime-deps-lock.mjs" refresh --root "$WORKDIR"
+  node "$WORKDIR/scripts/runtime-deps-lock.mjs" verify --root "$WORKDIR"
   node "$WORKDIR/scripts/verify-ui-consumer.mjs" --repo "$WORKDIR"
   node "$WORKDIR/scripts/verify-client-foundation-consumer.mjs" --repo "$WORKDIR"
   node "$SYNC_DIR/adoption-contract.mjs" post --repo "$CHILD" --workdir "$WORKDIR"

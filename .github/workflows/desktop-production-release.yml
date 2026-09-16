@@ -90,7 +90,7 @@ jobs:
           persist-credentials: false
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with: { node-version: 24, cache: pnpm }
+        with: { node-version: 24.19.0, cache: pnpm }
 
       - name: 安装依赖（无发行密钥）
         run: pnpm install --frozen-lockfile
@@ -269,7 +269,7 @@ jobs:
           persist-credentials: false
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with: { node-version: 24, cache: pnpm }
+        with: { node-version: 24.19.0, cache: pnpm }
 
       - name: 编译 pgvector + 同源 PG 运行时（vendor/pg-win + vendor/pgvector-win）
         shell: pwsh

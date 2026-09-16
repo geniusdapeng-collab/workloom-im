@@ -6,14 +6,15 @@
  * 目录是否碰巧存在不能成为装包依据；只有受保护产品身份精确匹配仙女座时
  * 才允许进入载荷，其他产品（包括基座、行业与试验田）一律排除并在装包后复核。
  */
-import { existsSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadProductRuntime } from "./product-runtime.mjs";
 
 const ANDROMEDA_IDENTITY = Object.freeze({
   productId: "workroom-andromeda",
-  role: "platform",
+  role: "operations-hub",
   repository: "geniusdapeng-collab/workroom-andromeda",
 });
 
@@ -22,8 +23,37 @@ const PLATFORM_OPS_RUNTIME_PATHS = Object.freeze([
   "node_modules/@workloom/platform-ops",
 ]);
 
+export const REQUIRED_RUNTIME_IDENTITY_PATHS = Object.freeze([
+  "product.manifest.json",
+  "scripts/vite-product.mjs",
+  "scripts/product-runtime.mjs",
+  "apps/web/vite.config.ts",
+]);
+
+const PRODUCT_IDENTITY_FIELDS = Object.freeze([
+  "schemaVersion",
+  "productId",
+  "role",
+  "displayName",
+  "repository",
+  "demoWorkspaceSlug",
+  "demoMemberNo",
+  "portOffset",
+]);
+
 function exactIdentity(product, expected) {
   return Object.entries(expected).every(([field, value]) => product[field] === value);
+}
+
+function manifestIdentityFor(product) {
+  return Object.freeze(Object.fromEntries(PRODUCT_IDENTITY_FIELDS.map((field) => [
+    field,
+    field === "portOffset" ? (product.portOffset ?? product.desktop?.portOffset) : product[field],
+  ])));
+}
+
+function fileSha256(path) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
 export function payloadPolicyFor(product) {
@@ -33,6 +63,8 @@ export function payloadPolicyFor(product) {
     productId: product.productId,
     role: product.role,
     repository: product.repository,
+    manifestIdentity: manifestIdentityFor(product),
+    manifestSha256: typeof product.manifestPath === "string" ? fileSha256(product.manifestPath) : null,
     includePlatformOps,
     forbiddenRuntimePaths: Object.freeze(includePlatformOps ? [] : [...PLATFORM_OPS_RUNTIME_PATHS]),
   });
@@ -42,7 +74,7 @@ export function loadPayloadPolicy(start) {
   return payloadPolicyFor(loadProductRuntime(start));
 }
 
-function normalizeArchivePath(value) {
+function normalizeArchiveFilePath(value) {
   const parts = String(value)
     .replaceAll("\\", "/")
     .split("/")
@@ -55,7 +87,11 @@ function normalizeArchivePath(value) {
       normalized.push(part);
     }
   }
-  return normalized.join("/").toLowerCase();
+  return normalized.join("/");
+}
+
+function normalizeArchivePath(value) {
+  return normalizeArchiveFilePath(value).toLowerCase();
 }
 
 function isForbiddenArchiveEntry(entry, forbiddenRuntimePath) {
@@ -72,6 +108,28 @@ export function findForbiddenArchiveEntries(entries, policy) {
 
 export function assertRuntimePayloadBoundary(runtimeRoot, policy) {
   const resolvedRoot = resolve(runtimeRoot);
+  const missingIdentityFiles = REQUIRED_RUNTIME_IDENTITY_PATHS.filter((relativePath) => {
+    const candidate = resolve(resolvedRoot, ...relativePath.split("/"));
+    return !existsSync(candidate) || !statSync(candidate).isFile();
+  });
+  if (missingIdentityFiles.length > 0) {
+    throw new Error(`产品身份载荷不完整：缺少 ${missingIdentityFiles.join("、")}`);
+  }
+
+  const runtimeProduct = loadProductRuntime(resolvedRoot);
+  const identityMismatches = PRODUCT_IDENTITY_FIELDS.filter(
+    (field) => runtimeProduct[field] !== policy.manifestIdentity?.[field],
+  );
+  if (identityMismatches.length > 0) {
+    throw new Error(`载荷产品身份与源策略不一致：${identityMismatches.join("、")}`);
+  }
+  if (!/^[a-f0-9]{64}$/u.test(policy.manifestSha256 ?? "")) {
+    throw new Error("源策略缺少可信的产品清单摘要");
+  }
+  if (fileSha256(runtimeProduct.manifestPath) !== policy.manifestSha256) {
+    throw new Error("载荷产品清单与源策略不一致：SHA-256 不匹配");
+  }
+
   const leaks = policy.forbiddenRuntimePaths.filter((relativePath) => {
     const candidate = resolve(resolvedRoot, ...relativePath.split("/"));
     if (candidate !== resolvedRoot && !candidate.startsWith(`${resolvedRoot}${sep}`)) {
@@ -88,6 +146,15 @@ export function assertArchivePayloadBoundary(entries, policy) {
   const leaks = findForbiddenArchiveEntries(entries, policy);
   if (leaks.length > 0) {
     throw new Error(`平台工程边界违规：归档包含 ${leaks.join("、")}`);
+  }
+  const archivedFiles = new Set(entries
+    .filter((entry) => !/[\\/]$/u.test(String(entry)))
+    .map((entry) => normalizeArchiveFilePath(entry)));
+  const missingIdentityFiles = REQUIRED_RUNTIME_IDENTITY_PATHS.filter(
+    (relativePath) => !archivedFiles.has(normalizeArchiveFilePath(`runtime/${relativePath}`)),
+  );
+  if (missingIdentityFiles.length > 0) {
+    throw new Error(`产品身份归档不完整：缺少 ${missingIdentityFiles.join("、")}`);
   }
 }
 

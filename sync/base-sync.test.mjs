@@ -9,13 +9,16 @@ import { fileURLToPath } from "node:url";
 
 import {
   anchorNeedsSync,
+  dependencyClosureViolations,
   extractManagedSection,
   gitAuthEnv,
+  loadScope,
   mergeKeepChildExtra,
   mergeManagedSection,
   redact,
   registryCapabilityReadiness,
   repoUrl,
+  withExtraExclude,
 } from "./base-sync.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -172,6 +175,25 @@ function newIndustryFixture() {
   ]) copyFileSync(source, join(fx.base, target));
   write(join(fx.base, "scripts/verify-product-content.mjs"), "console.log('product ok');\n");
   write(join(fx.base, "scripts/bundle-governance.mts"), "console.log('bundle ok');\n");
+  write(join(fx.base, "scripts/runtime-deps-lock.mjs"), `#!/usr/bin/env node
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, join, resolve } from "node:path";
+const command = process.argv[2];
+const rootIndex = process.argv.indexOf("--root");
+const root = resolve(rootIndex >= 0 ? process.argv[rootIndex + 1] : ".");
+const directory = join(root, ".workloom-runtime-deps");
+const files = ["package.json", "package-lock.json", "metadata.json"];
+if (command === "refresh") {
+  mkdirSync(directory, { recursive: true });
+  for (const file of files) writeFileSync(join(directory, file), JSON.stringify({ product: basename(root), file }) + "\\n");
+} else if (command === "verify") {
+  for (const file of files) {
+    if (!existsSync(join(directory, file))) throw new Error("missing " + file);
+    const value = JSON.parse(readFileSync(join(directory, file), "utf8"));
+    if (value.product !== basename(root)) throw new Error("foreign product lock");
+  }
+} else throw new Error("bad command");
+`);
   write(join(fx.base, "packages/ui/package.json"), `${JSON.stringify({ name: "@workloom/ui", version: stable }, null, 2)}\n`);
   const baseCapabilities = {
     schemaVersion: 1,
@@ -507,10 +529,10 @@ test("缺少 B 端移动客户端时只报告第一阶段迁移，绝不伪装�
   }
 });
 
-test("v11 scope 明确保护产品身份、仓级发布器、同步认证、依赖闭包与 Bundle 装配契约", () => {
+test("v12 scope 明确保护产品身份、仓级发布器、同步认证、产品派生锁、依赖闭包与 Bundle 装配契约", () => {
   const scope = JSON.parse(readFileSync(join(REAL_BASE, "sync/base-scope.json"), "utf8"));
   const ci = readFileSync(join(REAL_BASE, ".github/workflows/ci.yml"), "utf8");
-  assert.equal(scope.version, 11);
+  assert.equal(scope.version, 12);
   assert.ok(scope.protectedChildAssets.files.includes("electron-builder.yml"));
   assert.ok(scope.protectedChildAssets.files.includes("product.manifest.json"));
   assert.ok(scope.exclude.includes("electron-builder.yml"));
@@ -542,6 +564,9 @@ test("v11 scope 明确保护产品身份、仓级发布器、同步认证、依�
     "scripts/release-publisher-policy.test.mjs",
   ]) assert.ok(scope.exclude.includes(industryCoupled), `${industryCoupled} 必须保留在基座仓`);
   assert.ok(!scope.exclude.includes("scripts/desktop-workflow-path.mjs"), "仓级 workflow 兼容解析器必须随 base-sync 下发");
+  for (const packer of ["scripts/pack-electron-payload.sh", "scripts/pack-windows.sh", "scripts/pack-macos.sh"]) {
+    assert.ok(!scope.exclude.includes(packer), `${packer} 必须作为同一公共装配能力下发`);
+  }
   assert.ok(!scope.exclude.includes("scripts/release-assets.test.mjs"), "共享发行来源门禁必须随 base-sync 下发");
   assert.ok(!scope.exclude.includes("scripts/verify-product-content.mjs"), "共享产品门禁必须随 base-sync 下发");
   assert.ok(!scope.exclude.includes("scripts/generate-client-projections.mts"), "客户端投影生成器必须随 base-sync 下发");
@@ -575,6 +600,10 @@ test("v11 scope 明确保护产品身份、仓级发布器、同步认证、依�
   assert.ok(Object.values(scope.acceptedBaseSecretScanFindings).every((entry) => (
     /^[0-9a-f]{64}$/.test(entry.sha256) && entry.findings.length > 0 && entry.reason.length > 0
   )));
+  assert.deepEqual(scope.acceptedBaseSecretScanFindings["scripts/release-gate.ts"].findings, [
+    { rule: "credential-in-url", line: 21 },
+    { rule: "credential-in-url", line: 22 },
+  ]);
   assert.ok(scope.exclude.includes("apps/server/src/industry/**"));
   assert.ok(scope.exclude.includes("apps/server/src/service/adapters/**"));
   assert.equal(scope.registryCapabilities[0].distribution, "stable-github-release-upgrade-pr");
@@ -585,6 +614,17 @@ test("v11 scope 明确保护产品身份、仓级发布器、同步认证、依�
   assert.equal(scope.uiGovernanceCapability.stateFile, ".workloom-ui-governance.json");
   assert.equal(scope.uiGovernanceCapability.dependency, "npm:typescript@5.9.3");
   assert.equal(scope.uiGovernanceCapability.yamlDependency, "npm:yaml@2.9.0");
+  assert.deepEqual(scope.perProductDerivedAssets, [{
+    directory: ".workloom-runtime-deps",
+    files: ["package.json", "package-lock.json", "metadata.json"],
+    generator: "scripts/runtime-deps-lock.mjs",
+    refreshArgs: ["refresh"],
+    verifyArgs: ["verify"],
+    strategy: "preserve-and-regenerate-after-product-lockfile",
+    comment: scope.perProductDerivedAssets[0].comment,
+  }]);
+  assert.ok(scope.include.includes("scripts/**"), "产品派生锁生成器必须随公共基座下发");
+  assert.ok(!scope.include.includes(".workloom-runtime-deps/**"), "基座派生锁不得复制到产品仓");
   assert.deepEqual(scope.uiGovernanceCapability.managedFiles, [
     "scripts/verify-ui-consumer.mjs",
     "scripts/ui-governance-rules.mjs",
@@ -604,6 +644,20 @@ test("v11 scope 明确保护产品身份、仓级发布器、同步认证、依�
   assert.match(ci, /fetch-depth:\s*0/);
   assert.match(ci, /git merge-base "\$EVENT_BASE_SHA" "\$HEAD_SHA"/);
   assert.match(ci, /secret-scan\.mjs --range "\$BASE_SHA" "\$HEAD_SHA" --acceptance-manifest sync\/base-scope\.json/);
+});
+
+test("权威子仓清单的附加排除不会切断公共基座依赖闭包", () => {
+  const baseScope = loadScope(REAL_BASE);
+  const inventory = JSON.parse(readFileSync(join(REAL_BASE, "sync/child-repos.json"), "utf8"));
+  assert.ok(inventory.children.length > 0);
+  for (const child of inventory.children) {
+    const scope = withExtraExclude(baseScope, child.extraExclude ?? []);
+    assert.deepEqual(
+      dependencyClosureViolations(REAL_BASE, scope),
+      [],
+      `${child.repo} 的 extraExclude 会切断公共基座相对依赖`,
+    );
+  }
 });
 
 test("UI 治理受管文件一旦重新进入普通 base-sync，scope 契约立即 fail closed", () => {
@@ -892,6 +946,112 @@ test("lockfile 刷新故障 fail closed：显式 ignore-scripts，且不写 stat
     assert.equal(existsSync(join(fx.child, "governance/.workloom-base-sync.json")), true);
     assert.equal(git(fx.child, "diff", "--cached", "--name-only"), "");
     assert.equal(readFileSync(join(fx.child, "WORKLOOM_PRODUCT_CONTEXT.md"), "utf8"), "context-v1\n");
+    assert.equal(git(fx.child, "status", "--porcelain"), "");
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("普通 copy 的 package.json 变更也先刷新子仓 lockfile，再允许提交", () => {
+  const fx = fixture();
+  try {
+    const packagePath = "packages/runtime/package.json";
+    const scope = readScope(fx.base);
+    scope.include.push(packagePath);
+    writeScope(fx.base, scope);
+    write(join(fx.base, packagePath), `${JSON.stringify({
+      name: "@workloom/runtime",
+      dependencies: { zod: "^4.4.3" },
+    }, null, 2)}\n`);
+    commitAll(fx.base, "update copied dependency source");
+
+    write(join(fx.child, `governance/${packagePath}`), `${JSON.stringify({
+      name: "@workloom/runtime",
+      dependencies: { zod: "^4.0.0" },
+    }, null, 2)}\n`);
+    write(join(fx.child, "governance/pnpm-lock.yaml"), "old-lock\n");
+    commitAll(fx.child, "old dependency source and lock");
+
+    const bin = join(fx.root, "copy-package-bin");
+    const fakePnpm = join(bin, "pnpm");
+    write(fakePnpm, `#!/usr/bin/env node
+const { writeFileSync } = require("node:fs");
+const { join } = require("node:path");
+if (!process.argv.includes("--lockfile-only") || !process.argv.includes("--ignore-scripts")) process.exit(41);
+writeFileSync(join(process.cwd(), "pnpm-lock.yaml"), "refreshed-for-zod-4.4.3\\n");
+`);
+    chmodSync(fakePnpm, 0o755);
+
+    const result = cli(["pull", "--repo", "governance", "--base-dir", fx.base, "--json"], fx.child, {
+      ...process.env,
+      PATH: `${bin}:${dirname(NODE)}:${process.env.PATH}`,
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.lockfileRefreshed, true);
+    assert.match(readFileSync(join(fx.child, `governance/${packagePath}`), "utf8"), /\^4\.4\.3/u);
+    assert.equal(readFileSync(join(fx.child, "governance/pnpm-lock.yaml"), "utf8"), "refreshed-for-zod-4.4.3\n");
+    const committed = git(fx.child, "show", "--pretty=format:", "--name-only", "HEAD");
+    assert.match(committed, /governance\/packages\/runtime\/package\.json/u);
+    assert.match(committed, /governance\/pnpm-lock\.yaml/u);
+    assert.equal(git(fx.child, "status", "--porcelain"), "");
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("产品派生 runtime lock 不从基座复制，而是在子仓事务内刷新、验真并提交", () => {
+  const fx = fixture();
+  try {
+    const generator = `#!/usr/bin/env node
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, join, resolve } from "node:path";
+const command = process.argv[2];
+const rootIndex = process.argv.indexOf("--root");
+const root = resolve(rootIndex >= 0 ? process.argv[rootIndex + 1] : ".");
+const directory = join(root, ".workloom-runtime-deps");
+const files = ["package.json", "package-lock.json", "metadata.json"];
+if (command === "refresh") {
+  mkdirSync(directory, { recursive: true });
+  for (const file of files) writeFileSync(join(directory, file), JSON.stringify({ product: basename(root), file }) + "\\n");
+} else if (command === "verify") {
+  for (const file of files) {
+    if (!existsSync(join(directory, file))) throw new Error("missing " + file);
+    const value = JSON.parse(readFileSync(join(directory, file), "utf8"));
+    if (value.product !== basename(root)) throw new Error("foreign product lock");
+  }
+} else throw new Error("bad command");
+`;
+    write(join(fx.base, "scripts/runtime-deps-lock.mjs"), generator);
+    write(join(fx.base, ".workloom-runtime-deps/package.json"), '{"product":"base-poison"}\n');
+    const scope = readScope(fx.base);
+    scope.include.push("scripts/runtime-deps-lock.mjs");
+    scope.perProductDerivedAssets = [{
+      directory: ".workloom-runtime-deps",
+      files: ["package.json", "package-lock.json", "metadata.json"],
+      generator: "scripts/runtime-deps-lock.mjs",
+      refreshArgs: ["refresh"],
+      verifyArgs: ["verify"],
+      strategy: "preserve-and-regenerate-after-product-lockfile",
+    }];
+    writeScope(fx.base, scope);
+    commitAll(fx.base, "add per-product derived runtime lock");
+
+    const pull = cli(["pull", "--repo", "governance", "--base-dir", fx.base, "--json"], fx.child);
+    assert.equal(pull.status, 0, pull.stderr || pull.stdout);
+    const report = JSON.parse(pull.stdout);
+    assert.deepEqual(report.perProductDerivedAssets, [{
+      directory: ".workloom-runtime-deps",
+      refreshed: true,
+      verified: true,
+    }]);
+    for (const file of ["package.json", "package-lock.json", "metadata.json"]) {
+      const value = JSON.parse(readFileSync(join(fx.child, "governance/.workloom-runtime-deps", file), "utf8"));
+      assert.equal(value.product, "governance");
+      assert.notEqual(value.product, "base-poison");
+    }
+    const committed = git(fx.child, "show", "--pretty=format:", "--name-only", "HEAD");
+    assert.match(committed, /governance\/\.workloom-runtime-deps\/package-lock\.json/u);
     assert.equal(git(fx.child, "status", "--porcelain"), "");
   } finally {
     rmSync(fx.root, { recursive: true, force: true });
@@ -1288,6 +1448,9 @@ test("最小新行业仓一次完成 full 基座、三端稳定壳与消费门�
       "scripts/verify-client-foundation-consumer.mjs",
       "scripts/verify-production-client-boundary.mjs",
       ".github/workflows/workloom-ui-contract.yml",
+      ".workloom-runtime-deps/package.json",
+      ".workloom-runtime-deps/package-lock.json",
+      ".workloom-runtime-deps/metadata.json",
     ]) assert.equal(existsSync(join(fx.child, path)), true, `${path} 应已安装`);
     const packageJson = JSON.parse(readFileSync(join(fx.child, "package.json"), "utf8"));
     assert.equal(packageJson.devDependencies["typescript-governance"], "npm:typescript@5.9.3");

@@ -53,6 +53,14 @@ mkdir -p "$DIST" "$PKG"
 
 echo "== 装配 WorkLoom Windows 包（$VERSION · win-x64）=="
 
+# 产品边界只能来自受保护身份；应急线与正式 Electron 线必须同口径。
+PLATFORM_OPS_MODE="$(node scripts/payload-policy.mjs platform-ops-mode)"
+PRODUCT_MANIFEST_PATH="$(node scripts/product-runtime.mjs --manifest-path)"
+case "$PLATFORM_OPS_MODE" in
+  include|exclude) ;;
+  *) echo "❌ 无效的载荷边界策略：$PLATFORM_OPS_MODE"; exit 1 ;;
+esac
+
 # ---------- 1. 产品载荷 runtime/（与 pack-macos.sh 同口径） ----------
 R="$PKG/runtime"
 mkdir -p "$R/apps/server" "$R/apps/web" "$R/packages" "$R/scripts"
@@ -62,8 +70,15 @@ copy() { cp -aL "$1" "$2"; }
 for f in package.json pnpm-workspace.yaml tsconfig.base.json .env.example; do
   [ -f "$f" ] && copy "$f" "$R/"
 done
+[ -f "$PRODUCT_MANIFEST_PATH" ] || { echo "❌ 缺受保护产品清单"; exit 1; }
+copy "$PRODUCT_MANIFEST_PATH" "$R/product.manifest.json"
 [ -f "$R/.env.defaults" ] || copy .env.example "$R/.env.defaults"
-for d in apps/server apps/web/src apps/web/index.html apps/web/public apps/web/package.json apps/web/vite.config.ts apps/web/tsconfig.json packages/db packages/base packages/shared packages/runtime bundles; do
+RUNTIME_SOURCE_DIRS=(
+  apps/server apps/web/src apps/web/index.html apps/web/public apps/web/package.json
+  apps/web/vite.config.ts apps/web/tsconfig.json packages bundles
+)
+[ "$PLATFORM_OPS_MODE" = "include" ] && RUNTIME_SOURCE_DIRS+=(platform-ops)
+for d in "${RUNTIME_SOURCE_DIRS[@]}"; do
   [ -e "$d" ] || continue
   mkdir -p "$R/$(dirname "$d")"
   copy "$d" "$R/$(dirname "$d")/"
@@ -71,6 +86,8 @@ done
 mkdir -p "$R/scripts"
 copy scripts/migrate.ts "$R/scripts/"
 copy scripts/desktop-bootstrap-db.mjs "$R/scripts/"
+copy scripts/product-runtime.mjs "$R/scripts/"
+copy scripts/vite-product.mjs "$R/scripts/"
 for sf in scripts/seed*.ts; do copy "$sf" "$R/scripts/"; done  # 全部行业种子随包（按 DESKTOP_SEED_SCRIPT 选用）
 printf '%s\n' "$VERSION" > "$R/VERSION"
 # 源码不携带 node_modules：各包自带 pnpm 链接版会抢占解析且缺嵌套依赖（v2.0.8 esbuild 缺失实证），
@@ -86,29 +103,23 @@ if [ ! -f apps/web/dist/index.html ]; then
 fi
 copy apps/web/dist "$R/apps/web/dist"
 echo "→ 运行期依赖：npm 扁平化安装（pnpm 链接布局无法过 Windows zip 往返，v2.0.8 实证）…"
-# 合成运行期 package.json（root+server+packages 运行依赖 + tsx/vite），在暂存区 npm install：
-# npm 产出扁平真实目录（无 symlink），且按当前宿主平台自动选择 esbuild 等原生二进制
+# 从本产品受控 runtime lock 执行 win32-x64 npm ci；不得继承构建宿主平台。
 NM_STAGE="$STAGE/nm-pkg"
-node scripts/pack-nm-merge.mjs "$NM_STAGE/package.json"
 NPM_REG="${NPM_REGISTRY:-https://registry.npmjs.org}"
-if ( cd "$NM_STAGE" && npm install --no-audit --no-fund --legacy-peer-deps --registry="$NPM_REG" ); then
-  copy "$NM_STAGE/node_modules" "$R/node_modules"
-  # 内部工作区包以实体目录入 node_modules（seed.ts 等导入 @workloom/base/workdata，
-  # v2.0.14 冒烟实证缺失；npm 合成器已过滤 workspace:*，此处按包名补位）
-  mkdir -p "$R/node_modules/@workloom"
-  for pkg in shared db base runtime; do
-    [ -d "packages/$pkg" ] && cp -aL "packages/$pkg" "$R/node_modules/@workloom/$pkg"
-  done
-  find "$R/node_modules/@workloom" -type d -name node_modules -prune -exec rm -rf {} + 2>/dev/null || true
-else
-  echo "⚠️  npm install 失败（离线？）——回退解引用拷贝（仅结构模式可用，禁分发）"
-  [ "$STRUCTURE_ONLY" = "1" ] || { echo "❌ 正式包必须 npm 扁平化安装成功"; exit 1; }
-  mkdir -p "$R/node_modules"
-  copy_nm node_modules "$R/node_modules"
-  for d in apps/server apps/web packages/shared packages/db packages/base packages/runtime; do
-    [ -d "$d/node_modules" ] && copy_nm "$d/node_modules" "$R/node_modules"
-  done
-fi
+node scripts/runtime-deps-lock.mjs stage "$NM_STAGE" --os win32 --cpu x64 --registry "$NPM_REG"
+copy "$NM_STAGE/node_modules" "$R/node_modules"
+# 所有内部工作区包按 package name 动态注册；行业包与仙女座 platform-ops 不得遗漏。
+INTERNAL_PACKAGE_MANIFESTS=(packages/*/package.json)
+[ "$PLATFORM_OPS_MODE" = "include" ] && INTERNAL_PACKAGE_MANIFESTS+=(platform-ops/package.json)
+for pkgjson in "${INTERNAL_PACKAGE_MANIFESTS[@]}"; do
+  [ -f "$pkgjson" ] || continue
+  pname="$(node -p "try{require('./$pkgjson').name||''}catch(e){''}" 2>/dev/null)"
+  [ -n "$pname" ] || continue
+  pdir="$(dirname "$pkgjson")"
+  mkdir -p "$R/node_modules/$(dirname "$pname")"
+  copy "$pdir" "$R/node_modules/$pname"
+done
+find "$R/node_modules" -mindepth 2 -maxdepth 4 -type d -name node_modules -prune -exec rm -rf {} + 2>/dev/null || true
 
 # ---------- 3. Node win-x64 官方二进制 ----------
 echo "→ Node $NODE_VER win-x64…"
@@ -171,6 +182,12 @@ fi
 # ---------- 6. 启动器 ----------
 copy apps/desktop/windows/WorkLoom.bat "$PKG/WorkLoom.bat"
 copy apps/desktop/electron/bootstrap.cjs "$PKG/bootstrap.cjs"
+
+for f in node_modules/tsx/package.json node_modules/hono/package.json scripts/migrate.ts \
+         scripts/product-runtime.mjs scripts/vite-product.mjs product.manifest.json apps/web/vite.config.ts; do
+  [ -f "$R/$f" ] || { echo "❌ 应急载荷自检失败：runtime/$f 缺失"; exit 1; }
+done
+node scripts/payload-policy.mjs assert-runtime "$R"
 
 # ---------- 7. 打包 + 校验和 ----------
 echo "→ 压缩…"
