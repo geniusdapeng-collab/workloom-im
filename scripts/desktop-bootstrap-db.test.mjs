@@ -10,6 +10,7 @@ import {
 } from "./desktop-bootstrap-db.mjs";
 
 const SYSTEM_IDENTIFIER = "7654321098765432109";
+const POSTMASTER_START_TIME = "2026-09-16 16:52:18.418+00";
 
 function fixtureEnvironment(expectedDataDirectory, mode = "prepare", port = "55432") {
   return {
@@ -70,7 +71,23 @@ function fakeClientFactory({
             ...(sql.includes("pg_control_system") ? {
               hba_file: hbaFile,
               system_identifier: systemIdentifier,
+              postmaster_start_time: POSTMASTER_START_TIME,
             } : {}),
+          }],
+          rowCount: 1,
+        };
+      }
+      if (sql.includes("pg_postmaster_start_time()") && sql.includes("current_user")) {
+        if (this.config.user !== "postgres" && sql.includes("data_directory")) {
+          throw Object.assign(new Error("permission denied to examine data_directory"), { code: "42501" });
+        }
+        return {
+          rows: [{
+            current_user: this.config.user,
+            database_name: this.config.database,
+            server_address: "127.0.0.1",
+            server_port: port,
+            postmaster_start_time: POSTMASTER_START_TIME,
           }],
           rowCount: 1,
         };
@@ -163,6 +180,7 @@ describe("桌面数据库安全引导", () => {
     try {
       const identity = await bootstrapDatabase({ Client: fake.Client, env });
       assert.equal(identity.systemIdentifier, SYSTEM_IDENTIFIER);
+      assert.equal(identity.postmasterStartTime, POSTMASTER_START_TIME);
       assert.equal(fake.clients.length, 2);
       assert.equal(fake.clients[0].queries.length, 0);
       assert.match(fake.clients[1].queries[0].sql, /current_setting\('data_directory'\)/u);
@@ -214,6 +232,10 @@ describe("桌面数据库安全引导", () => {
       for (const user of ["postgres", "workloom_app", "workloom_gateway"]) {
         assert.ok(fake.clients.some((client) => client.config.user === user && client.connected));
         assert.ok(fake.clients.some((client) => client.config.user === user && !client.connected));
+      }
+      for (const role of fake.clients.filter((client) => client.connected && client.config.user !== "postgres")) {
+        assert.doesNotMatch(role.queries[0].sql, /data_directory/u);
+        assert.match(role.queries[0].sql, /pg_postmaster_start_time/u);
       }
     } finally {
       rmSync(root, { recursive: true, force: true });
