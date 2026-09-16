@@ -48,6 +48,13 @@ copy() { if command -v ditto >/dev/null 2>&1; then ditto "$1" "$2"; else cp -a "
 
 echo "== 装配 WorkLoom.app（$VERSION · darwin-${ARCH}）=="
 
+PLATFORM_OPS_MODE="$(node scripts/payload-policy.mjs platform-ops-mode)"
+PRODUCT_MANIFEST_PATH="$(node scripts/product-runtime.mjs --manifest-path)"
+case "$PLATFORM_OPS_MODE" in
+  include|exclude) ;;
+  *) echo "❌ 无效的载荷边界策略：$PLATFORM_OPS_MODE"; exit 1 ;;
+esac
+
 # 1. App 骨架（Info.plist + launcher，仓库内版本化）
 [ -f apps/desktop/WorkLoom.app/Contents/Info.plist ] || { echo "❌ 缺 apps/desktop 骨架"; exit 1; }
 copy apps/desktop/WorkLoom.app "$APP"
@@ -61,12 +68,16 @@ R="$APP/Contents/Resources/runtime"
 mkdir -p "$R"
 # 源码与配置（白名单制，dist/供应商/测试夹具不进包）
 for p in package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json; do cp "$p" "$R/"; done
+[ -f "$PRODUCT_MANIFEST_PATH" ] || { echo "❌ 缺受保护产品清单"; exit 1; }
+cp "$PRODUCT_MANIFEST_PATH" "$R/product.manifest.json"
 cp .env.example "$R/.env.defaults"
-for d in apps/server apps/web packages bundles; do
+RUNTIME_SOURCE_DIRS=(apps/server apps/web packages bundles)
+[ "$PLATFORM_OPS_MODE" = "include" ] && RUNTIME_SOURCE_DIRS+=(platform-ops)
+for d in "${RUNTIME_SOURCE_DIRS[@]}"; do
   rsync -aR --exclude node_modules --exclude dist --exclude .dsh-home --exclude 'dsh-gate/out' "$d" "$R/"
 done
 mkdir -p "$R/scripts"
-cp scripts/migrate.ts scripts/desktop-bootstrap-db.mjs "$R/scripts/"
+cp scripts/migrate.ts scripts/desktop-bootstrap-db.mjs scripts/product-runtime.mjs scripts/vite-product.mjs "$R/scripts/"
 cp scripts/seed*.ts "$R/scripts/"  # 全部行业种子随包（按 .env.defaults DESKTOP_SEED_SCRIPT 选用）
 printf '%s\n' "$VERSION" > "$R/VERSION"
 
@@ -78,11 +89,27 @@ if [ ! -f apps/web/dist/index.html ]; then
   echo "→ 构建 web…"; pnpm -C apps/web build
 fi
 copy apps/web/dist "$R/apps/web/dist"
-echo "→ 并入 node_modules（pnpm 软链结构需 zip -y 保软链）…"
-copy node_modules "$R/node_modules"
-for d in apps/server apps/web packages/shared packages/db packages/base packages/runtime; do
-  [ -d "$d/node_modules" ] && { mkdir -p "$R/$d"; copy "$d/node_modules" "$R/$d/node_modules"; }
+echo "→ 运行期依赖：受控 npm ci（darwin-${NODE_ARCH}，扁平实体目录）…"
+NM_STAGE="$STAGE/nm-pkg"
+NPM_REG="${NPM_REGISTRY:-https://registry.npmjs.org}"
+node scripts/runtime-deps-lock.mjs stage "$NM_STAGE" --os darwin --cpu "$NODE_ARCH" --registry "$NPM_REG"
+copy "$NM_STAGE/node_modules" "$R/node_modules"
+INTERNAL_PACKAGE_MANIFESTS=(packages/*/package.json)
+[ "$PLATFORM_OPS_MODE" = "include" ] && INTERNAL_PACKAGE_MANIFESTS+=(platform-ops/package.json)
+for pkgjson in "${INTERNAL_PACKAGE_MANIFESTS[@]}"; do
+  [ -f "$pkgjson" ] || continue
+  pname="$(node -p "try{require('./$pkgjson').name||''}catch(e){''}" 2>/dev/null)"
+  [ -n "$pname" ] || continue
+  pdir="$(dirname "$pkgjson")"
+  mkdir -p "$R/node_modules/$(dirname "$pname")"
+  copy "$pdir" "$R/node_modules/$pname"
 done
+find "$R/node_modules" -mindepth 2 -maxdepth 4 -type d -name node_modules -prune -exec rm -rf {} + 2>/dev/null || true
+for f in node_modules/tsx/package.json node_modules/hono/package.json scripts/migrate.ts \
+         scripts/product-runtime.mjs scripts/vite-product.mjs product.manifest.json apps/web/vite.config.ts; do
+  [ -f "$R/$f" ] || { echo "❌ 应急载荷自检失败：runtime/$f 缺失"; exit 1; }
+done
+node scripts/payload-policy.mjs assert-runtime "$R"
 
 # 4. Node darwin 官方二进制
 echo "→ Node $NODE_VER darwin-${ARCH}…"
@@ -113,7 +140,7 @@ fi
 
 # ---------- 5.5 内嵌 nats-server（P0-3 决策点 4：+20MB 开箱即持久化事件总线） ----------
 NATS_VER="v2.11.4"
-case "$ARCH" in arm64) NATS_ARCH="arm64" ;; x86_64) NATS_ARCH="amd64" ;; *) echo "❌ 未知 arch $ARCH"; exit 1 ;; esac
+case "$ARCH" in arm64) NATS_ARCH="arm64" ;; x86_64|x64) NATS_ARCH="amd64" ;; *) echo "❌ 未知 arch $ARCH"; exit 1 ;; esac
 if [ "$STRUCTURE_ONLY" = "1" ]; then
   mkdir -p "$APP/Contents/Resources/nats"
   printf 'structure-only placeholder

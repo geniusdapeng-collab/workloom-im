@@ -31,6 +31,12 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -n "$PLATFORM" ] && [ -n "$ARCH" ] || { echo "用法：--platform mac|win --arch arm64|x64"; exit 1; }
+case "$PLATFORM-$ARCH" in
+  mac-arm64) TARGET_OS="darwin"; TARGET_CPU="arm64" ;;
+  mac-x64)   TARGET_OS="darwin"; TARGET_CPU="x64" ;;
+  win-x64)   TARGET_OS="win32";  TARGET_CPU="x64" ;;
+  *) echo "❌ 不支持的平台组合 $PLATFORM-$ARCH"; exit 1 ;;
+esac
 
 NODE_VER="24.19.0"
 PGAPP_VER="2.9.6-17"
@@ -52,6 +58,7 @@ mkdir -p "$OUT"
 # 产品边界只能来自受保护 product.manifest.json。platform-ops 属于仙女座，不能因
 # 基座仓里物理残留该目录就进入 WorkLoom IM 或行业安装包。
 PLATFORM_OPS_MODE="$(node scripts/payload-policy.mjs platform-ops-mode)"
+PRODUCT_MANIFEST_PATH="$(node scripts/product-runtime.mjs --manifest-path)"
 case "$PLATFORM_OPS_MODE" in
   include|exclude) ;;
   *) echo "❌ 无效的载荷边界策略：$PLATFORM_OPS_MODE"; exit 1 ;;
@@ -64,6 +71,8 @@ mkdir -p "$R/apps" "$R/scripts"
 for f in package.json pnpm-workspace.yaml tsconfig.base.json .env.example; do
   [ -f "$f" ] && cp "$f" "$R/"
 done
+[ -f "$PRODUCT_MANIFEST_PATH" ] || { echo "❌ 缺受保护产品清单"; exit 1; }
+cp "$PRODUCT_MANIFEST_PATH" "$R/product.manifest.json"
 [ -f "$R/.env.defaults" ] || cp .env.example "$R/.env.defaults"
 RUNTIME_SOURCE_DIRS=(
   apps/server apps/web/src apps/web/index.html apps/web/public apps/web/package.json
@@ -75,7 +84,7 @@ for d in "${RUNTIME_SOURCE_DIRS[@]}"; do
   mkdir -p "$R/$(dirname "$d")"
   copy "$d" "$R/$(dirname "$d")/"
 done
-cp scripts/migrate.ts scripts/desktop-bootstrap-db.mjs "$R/scripts/"
+cp scripts/migrate.ts scripts/desktop-bootstrap-db.mjs scripts/product-runtime.mjs scripts/vite-product.mjs "$R/scripts/"
 cp scripts/seed*.ts "$R/scripts/"  # 全部行业种子随包（seed/seed-aipm/seed-geo/seed-video/seed-consulting/seed-boost/seed-platform…按仓配置选用）
 printf '%s\n' "$VERSION" > "$R/VERSION"
 # 源码不携带 node_modules：运行期统一由下方 npm 扁平化安装的根 node_modules 提供（v2.0.8 实证）
@@ -89,9 +98,8 @@ mkdir -p "$R/apps/web"
 copy apps/web/dist "$R/apps/web/dist"
 echo "→ 运行期依赖：npm 扁平化安装…"
 NM_STAGE="$STAGE/nm-pkg"
-node scripts/pack-nm-merge.mjs "$NM_STAGE/package.json"
 NPM_REG="${NPM_REGISTRY:-https://registry.npmjs.org}"
-( cd "$NM_STAGE" && npm install --no-audit --no-fund --legacy-peer-deps --registry="$NPM_REG" )
+node scripts/runtime-deps-lock.mjs stage "$NM_STAGE" --os "$TARGET_OS" --cpu "$TARGET_CPU" --registry "$NPM_REG"
 copy "$NM_STAGE/node_modules" "$R/node_modules"
 # 内部工作区包以实体目录入 node_modules（v2.0.14 @workloom 缺失实证）——
 # 按各包 package.json 的 name 动态注册（行业仓有自定义包，如 @hyperreality/video-studio；
@@ -185,7 +193,8 @@ fi
 # ---------- 9. 载荷自检（v2.2.1 实证：NATS 段变量粘连致脚本中途异常但步骤未失败，
 #      DMG 带着残缺载荷照出——装配脚本必须自证完整，防"静默半成品"） ----------
 for f in runtime/node_modules/tsx/package.json runtime/node_modules/hono/package.json \
-         runtime/scripts/migrate.ts; do
+         runtime/scripts/migrate.ts runtime/scripts/product-runtime.mjs runtime/scripts/vite-product.mjs \
+         runtime/product.manifest.json runtime/apps/web/vite.config.ts; do
   [ -f "$OUT/$f" ] || { echo "❌ 载荷自检失败：$f 缺失"; exit 1; }
 done
 # 种子脚本按仓各异（seed-aipm/seed-trading/seed-video…），存在其一即可

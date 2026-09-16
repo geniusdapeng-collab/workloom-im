@@ -1,5 +1,5 @@
 {
-  "version": 11,
+  "version": 12,
   "description": "WorkLoom IM 基座能力同步范围声明——base-sync 引擎的唯一事实源。文件型公共能力按 include/exclude 受控分发；三端组件/视觉语言通过与 ui-v* 同版的 GitHub Release @workloom/ui tarball 下发，三端应用壳/导航/布局/状态/API 接线通过同一稳定标签和逐文件指纹升级 PR 下发。行业属性与演示能力永不同步。requiredRootAssets 无视行业代码的 pathPrefix，始终安装并校验在 Git 仓库根目录。修改本文件即修改同步边界，需基座 owner 评审。",
 
   "registryCapabilities": [
@@ -88,6 +88,18 @@
 
   "preCommitSecretScanner": "scripts/secret-scan.mjs",
 
+  "perProductDerivedAssets": [
+    {
+      "directory": ".workloom-runtime-deps",
+      "files": ["package.json", "package-lock.json", "metadata.json"],
+      "generator": "scripts/runtime-deps-lock.mjs",
+      "refreshArgs": ["refresh"],
+      "verifyArgs": ["verify"],
+      "strategy": "preserve-and-regenerate-after-product-lockfile",
+      "comment": "桌面运行时锁由每仓自身产品身份、依赖清单与 pnpm-lock 派生；普通 base-sync 只下发生成器，绝不把 workloom-im 的锁覆盖到仙女座或行业仓。"
+    }
+  ],
+
   "acceptedBaseSecretScanFindings": {
     ".env.example": {
       "sha256": "860df8059d1d37289d4c333e0ad8dc603c927753eae11a8c9c45c88954a91817",
@@ -95,7 +107,7 @@
       "reason": "环境示例仅展示带省略号的 Ed25519 PEM 结构，并明确要求私钥只能进入密钥库；不含可用私钥。"
     },
     ".github/workflows/ui-release.yml": {
-      "sha256": "1dd29ee5132eb96c8d9dbc978e65c580cbca8db225256911eee2ee02a4f5addb",
+      "sha256": "2c10bcbd92d7b1b880f8859bb55d4b7c2d1d9aef28ecb484aeec81c891871f89",
       "findings": [
         { "rule": "credential-in-url", "line": 56 },
         { "rule": "literal-sensitive-assignment", "line": 56 },
@@ -314,7 +326,6 @@
     "scripts/desktop-release-state.test.mjs",
     "scripts/desktop-workflow-path.test.mjs",
     "scripts/release-publisher-policy.test.mjs",
-    "scripts/pack-macos.sh",
     "scripts/install-im-channels.sh",
     "scripts/skill-forge.mts",
     "scripts/skill-dist-demo.mts",

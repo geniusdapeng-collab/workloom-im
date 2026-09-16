@@ -51,12 +51,12 @@ importers:
       typescript-governance:
         specifier: npm:typescript@5.9.3
         version: typescript@5.9.3
-      yaml-governance:
-        specifier: npm:yaml@2.9.0
-        version: yaml@2.9.0
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
+      yaml-governance:
+        specifier: npm:yaml@2.9.0
+        version: yaml@2.9.0
 
   apps/server:
     dependencies:
@@ -294,7 +294,7 @@ importers:
         specifier: ^0.45.2
         version: 0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.21.0)(pg@8.23.0)
       pg:
-        specifier: ^8.13.0
+        specifier: 8.23.0
         version: 8.23.0
     devDependencies:
       '@types/pg':
@@ -335,7 +335,7 @@ importers:
         specifier: 8.23.0
         version: 8.23.0
       zod:
-        specifier: ^4.0.0
+        specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
       '@types/pg':
@@ -351,7 +351,7 @@ importers:
   packages/shared:
     dependencies:
       zod:
-        specifier: ^4.0.0
+        specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
       typescript:

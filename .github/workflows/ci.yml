@@ -51,7 +51,7 @@ jobs:
       - name: Node 24 + pnpm
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 24
+          node-version: 24.19.0
       - run: corepack enable && corepack prepare pnpm@10.14.0 --activate
 
       - name: 基座代码增量秘密扫描
@@ -68,6 +68,16 @@ jobs:
 
       - name: 依赖
         run: pnpm install --frozen-lockfile
+
+      - name: 桌面运行时锁与三目标原生依赖门禁
+        run: |
+          pnpm runtime:deps:verify
+          for target in darwin:arm64 darwin:x64 win32:x64; do
+            platform="${target%%:*}"
+            arch="${target##*:}"
+            stage="$(mktemp -d "/tmp/workloom-runtime-${platform}-${arch}.XXXXXX")"
+            node scripts/runtime-deps-lock.mjs stage "$stage" --os "$platform" --cpu "$arch"
+          done
 
       - name: typecheck 全包
         run: pnpm -r --if-present typecheck

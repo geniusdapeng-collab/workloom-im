@@ -30,7 +30,7 @@ jobs:
           persist-credentials: false
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with: { node-version: 24, cache: pnpm }
+        with: { node-version: 24.19.0, cache: pnpm }
       - name: 校验应急工件版本
         shell: bash
         run: '[[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "❌ 版本必须是 vX.Y.Z"; exit 1; }'
@@ -57,7 +57,7 @@ jobs:
           persist-credentials: false
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with: { node-version: 24, cache: pnpm }
+        with: { node-version: 24.19.0, cache: pnpm }
       - name: 校验应急工件版本
         shell: pwsh
         run: if ($env:VERSION -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') { throw '版本必须是 vX.Y.Z' }

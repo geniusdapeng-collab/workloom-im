@@ -22,7 +22,7 @@ jobs:
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with: { version: 10.14.0 }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with: { node-version: 24, cache: pnpm }
+        with: { node-version: 24.19.0, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       # G1 前置：保护清单闸 + 变更分级（deny 即红）
       - name: 保护清单校验与变更分级
@@ -38,7 +38,7 @@ jobs:
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with: { version: 10.14.0 }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with: { node-version: 24, cache: pnpm }
+        with: { node-version: 24.19.0, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       # G1 静态闸：tsc 严格模式 0 错误（审计红线 A1）
       - name: G1 typecheck
@@ -70,7 +70,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with: { node-version: 24 }
+        with: { node-version: 24.19.0 }
       - name: 镜像备份到 CNB/工蜂
         env:
           CNB_TOKEN: ${{ secrets.CNB_TOKEN }}

@@ -178,6 +178,9 @@ export function planAdoptionProtectedPaths({ repo, workdir = repo, baseDir, vers
   for (const path of [
     "package.json",
     "pnpm-lock.yaml",
+    ".workloom-runtime-deps/package.json",
+    ".workloom-runtime-deps/package-lock.json",
+    ".workloom-runtime-deps/metadata.json",
     ".workloom-ui.json",
     capabilities?.clientFoundation?.stateFile,
     scope?.uiGovernanceCapability?.stateFile,

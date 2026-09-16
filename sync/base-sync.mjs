@@ -395,6 +395,29 @@ function validateScope(scope, baseDir) {
     if (!excluded) throw new Error(`受保护的子仓资产必须显式排除整文件同步：${safePath}`);
     if (scope.anchorMerge?.[safePath]) throw new Error(`受保护的子仓资产不得作为锚点合并目标：${safePath}`);
   }
+  if (scope.perProductDerivedAssets !== undefined && !Array.isArray(scope.perProductDerivedAssets)) {
+    throw new Error("base-scope.json 的 perProductDerivedAssets 必须是数组");
+  }
+  const derivedDirectories = new Set();
+  for (const asset of scope.perProductDerivedAssets ?? []) {
+    const directory = assertSafeRelative(asset?.directory, "产品派生资产目录");
+    if (derivedDirectories.has(directory)) throw new Error(`产品派生资产目录重复：${directory}`);
+    derivedDirectories.add(directory);
+    if (!Array.isArray(asset.files) || asset.files.length === 0) throw new Error(`产品派生资产 ${directory} 缺少 files`);
+    for (const file of asset.files) assertSafeRelative(`${directory}/${file}`, `产品派生资产 ${directory} 文件`);
+    const generator = assertSafeRelative(asset.generator, `产品派生资产 ${directory} generator`);
+    assertNoSymlinkPath(baseDir, join(baseDir, generator), `产品派生资产生成器 ${generator}`, { allowMissing: false });
+    if (asset.strategy !== "preserve-and-regenerate-after-product-lockfile") {
+      throw new Error(`产品派生资产 ${directory} 策略不受支持`);
+    }
+    if (!Array.isArray(asset.refreshArgs) || asset.refreshArgs.length === 0 || !Array.isArray(asset.verifyArgs) || asset.verifyArgs.length === 0) {
+      throw new Error(`产品派生资产 ${directory} 缺少 refreshArgs/verifyArgs`);
+    }
+    const probe = `${directory}/__workloom_derived_probe__`;
+    if ((scope.include ?? []).some((pattern) => globToRegExp(pattern).test(probe))) {
+      throw new Error(`产品派生资产不得进入普通 base-sync include：${directory}`);
+    }
+  }
   const closure = scope.dependencyClosure;
   if (!closure || closure.relativeImports !== "fail-closed" || !Array.isArray(closure.allowedExcludedTargets)) {
     throw new Error("base-scope.json 必须启用 dependencyClosure.relativeImports=fail-closed 并显式声明 allowedExcludedTargets");
@@ -1109,7 +1132,7 @@ function restoreTransaction(repoRoot, transaction) {
   }
 }
 
-function transactionPaths(repoRoot, childDir, plan) {
+function transactionPaths(repoRoot, childDir, plan, scope) {
   const statePath = join(repoRoot, STATE_FILE);
   const legacyStatePath = join(childDir, STATE_FILE);
   const paths = [
@@ -1121,6 +1144,14 @@ function transactionPaths(repoRoot, childDir, plan) {
   ];
   for (const rel of walk(repoRoot)) {
     if (/(^|\/)pnpm-lock\.yaml$/.test(rel)) paths.push({ path: join(repoRoot, rel), label: `lockfile ${rel}` });
+  }
+  for (const asset of scope.raw.perProductDerivedAssets ?? []) {
+    for (const file of asset.files) {
+      paths.push({
+        path: join(childDir, asset.directory, file),
+        label: `产品派生资产 ${asset.directory}/${file}`,
+      });
+    }
   }
   return paths;
 }
@@ -1163,7 +1194,7 @@ function syncToChild(baseDir, childDir, scope, report, extraExclude = [], option
     : null;
   const legacyStatePath = join(childDir, STATE_FILE);
   const migrateLegacyState = legacyStatePath !== statePath && existsSync(legacyStatePath);
-  const transaction = captureTransaction(repoRoot, transactionPaths(repoRoot, childDir, plan));
+  const transaction = captureTransaction(repoRoot, transactionPaths(repoRoot, childDir, plan, scope));
   const stagedPaths = plan.operations.map((item) => item.stagePath);
   let didStage = false;
 
@@ -1174,7 +1205,13 @@ function syncToChild(baseDir, childDir, scope, report, extraExclude = [], option
     const remaining = makePlan(baseDir, childDir, repoRoot, scope, options).operations;
     if (remaining.length) throw new Error(`安装后验证失败，仍有 ${remaining.length} 个文件未对齐：${remaining.slice(0, 5).map((item) => item.rel).join(", ")}`);
 
-    if (plan.operations.some((item) => item.kind === "merge")) {
+    // anchor merge 以及普通 copy 的任一 package.json 都可能改变 importer specifier。
+    // 必须先由子仓自己的 pnpm 10 重算 lock，再派生桌面 runtime lock；否则新包清单
+    // 会与旧 pnpm-lock 组合，导致所有下游在派生锁阶段失败并整仓回滚。
+    const lockfileInputsChanged = plan.operations.some((item) => (
+      item.kind === "merge" || /(^|\/)package\.json$/u.test(item.rel)
+    ));
+    if (lockfileInputsChanged) {
       try {
         sh("pnpm", ["install", "--lockfile-only", "--ignore-scripts"], childDir);
         const dirtyAfter = changedPaths(repoRoot);
@@ -1188,6 +1225,24 @@ function syncToChild(baseDir, childDir, scope, report, extraExclude = [], option
         report.lockfileRefreshed = true;
       } catch (error) {
         throw new Error(`lockfile 刷新失败；未写 state、未提交：${redact(error?.message).slice(0, 300)}`);
+      }
+    }
+
+    // 新行业 adopt 会在三端客户端与最终 pnpm-lock 全部就位后统一生成；此处过早
+    // 生成会把尚未 scaffold 的 apps/web 误判为缺失。存量 full sync 则原子刷新。
+    if (!options.requiredOnly && !options.adopt) {
+      for (const asset of scope.raw.perProductDerivedAssets ?? []) {
+        const generator = join(childDir, asset.generator);
+        try {
+          assertNoSymlinkPath(repoRoot, generator, `产品派生资产生成器 ${asset.generator}`, { allowMissing: false });
+          sh(process.execPath, [generator, ...asset.refreshArgs, "--root", childDir], childDir);
+          sh(process.execPath, [generator, ...asset.verifyArgs, "--root", childDir], childDir);
+          for (const file of asset.files) stagedPaths.push(relative(repoRoot, join(childDir, asset.directory, file)));
+          report.perProductDerivedAssets ??= [];
+          report.perProductDerivedAssets.push({ directory: asset.directory, refreshed: true, verified: true });
+        } catch (error) {
+          throw new Error(`产品派生资产 ${asset.directory} 刷新/验真失败；未写 state、未提交：${redact(error?.message).slice(0, 500)}`);
+        }
       }
     }
 
