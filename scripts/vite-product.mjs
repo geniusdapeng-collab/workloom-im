@@ -24,10 +24,11 @@ export function workloomProductVite(clientLabel) {
     plugin: {
       name: "workloom-product-identity",
       transformIndexHtml(html) {
-        if (!html.includes("__WORKLOOM_PRODUCT_TITLE__")) {
-          throw new Error("客户端 index.html 缺少受控产品标题占位符");
+        const marker = /<title data-workloom-product-title>[^<]*<\/title>/u;
+        if (!marker.test(html)) {
+          throw new Error("客户端 index.html 缺少受控产品标题标记");
         }
-        return html.replaceAll("__WORKLOOM_PRODUCT_TITLE__", escapeHtml(title));
+        return html.replace(marker, `<title data-workloom-product-title>${escapeHtml(title)}</title>`);
       },
     },
   });
