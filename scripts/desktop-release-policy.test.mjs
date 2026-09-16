@@ -100,6 +100,38 @@ test("preflight binds an exact stable tag to the current reviewed main HEAD", ()
   }
 });
 
+test("unsigned platform builds require an explicit reviewed input and disclose their trust level", () => {
+  const input = workflow.on.workflow_dispatch.inputs.platform_signing;
+  assert.equal(input.required, true);
+  assert.equal(input.type, "choice");
+  assert.deepEqual(input.options, ["signed", "unsigned"]);
+  assert.equal(input.default, "signed");
+  assert.equal(job("preflight").outputs["platform-signing"], "${{ steps.target.outputs.platform-signing }}");
+
+  const preflight = stepByName("preflight", "固定稳定标签、提交与当前 main HEAD");
+  assert.equal(preflight.env.REQUESTED_PLATFORM_SIGNING, "${{ inputs.platform_signing }}");
+  assert.match(preflight.run, /\^\(signed\|unsigned\)\$/u);
+  assert.match(preflight.run, /platform-signing=\$PLATFORM_SIGNING/u);
+
+  for (const [jobName, stepName] of [
+    ["macos", "打包未签名 DMG（arm64）"],
+    ["macos", "打包未签名 DMG（x64）"],
+    ["windows", "打包未签名 NSIS 安装包"],
+  ]) {
+    const step = stepByName(jobName, stepName);
+    assert.equal(step.if, "needs.preflight.outputs.platform-signing == 'unsigned'");
+    assert.deepEqual(secretReferences(step), []);
+    assert.equal(step.env.CSC_IDENTITY_AUTO_DISCOVERY, "false");
+  }
+
+  assert.match(stepByName("macos", "打包未签名 DMG（arm64）").run, /mac\.notarize=false/u);
+  const publish = stepByName("publish-desktop-release", "原子组装、发布并回读核验桌面端 Release");
+  assert.equal(publish.env.PLATFORM_SIGNING, "${{ needs.preflight.outputs.platform-signing }}");
+  assert.match(publish.run, /platformSigning/u);
+  assert.match(publish.run, /未签名、未 Apple 公证安装包/u);
+  assert.match(publish.run, /SmartScreen/u);
+});
+
 test("production secrets exist only in the minimum signing steps", () => {
   assert.deepEqual(secretReferences(workflow.env), []);
   for (const [jobName, value] of Object.entries(workflow.jobs)) {
