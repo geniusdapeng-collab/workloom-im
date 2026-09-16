@@ -19,6 +19,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
+import path from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { buildMergedRuntimeManifest, runtimeDependencySources } from "./pack-nm-merge.mjs";
@@ -321,19 +322,33 @@ export function verifyInstalledRuntimeTarget(stage, platform, arch, verified = n
   return Object.freeze({ target, packages: inventory.length, inventorySha256: sha256(`${inventory.join("\n")}\n`) });
 }
 
-function systemNpmVersion() {
-  try {
-    return execFileSync("npm", ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-  } catch {
-    throw new Error(`缺少 npm ${RUNTIME_NPM_VERSION}；正式装配必须使用 Node 24.19.0 自带 npm`);
+export function bundledNpmCliCandidates(nodeExecutable = process.execPath, pathApi = path) {
+  const nodeDirectory = pathApi.dirname(nodeExecutable);
+  return [
+    pathApi.resolve(nodeDirectory, "node_modules/npm/bin/npm-cli.js"),
+    pathApi.resolve(nodeDirectory, "../lib/node_modules/npm/bin/npm-cli.js"),
+  ];
+}
+
+function bundledNpmCli() {
+  const cli = bundledNpmCliCandidates().find((candidate) => existsSync(candidate));
+  if (!cli) {
+    throw new Error(`缺少 npm ${RUNTIME_NPM_VERSION}；正式装配必须使用 Node 24.19.0 自带 npm CLI`);
   }
+  return cli;
 }
 
 export function stageRuntimeDependencies(root, stage, platform, arch, registry = "https://registry.npmjs.org") {
   const resolvedRoot = resolve(root);
   const verified = verifyRuntimeDepsLock(resolvedRoot);
   const target = targetFor(platform, arch);
-  const npmVersion = systemNpmVersion();
+  // Windows 的 npm 入口是 npm.cmd，不能由 execFileSync 无 shell 可靠执行。
+  // 直接用当前受控 Node 执行其随附 npm-cli.js，三平台保持同一无 shell 路径。
+  const npmCli = bundledNpmCli();
+  const npmVersion = execFileSync(process.execPath, [npmCli, "--version"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
   if (npmVersion !== RUNTIME_NPM_VERSION) {
     throw new Error(`npm 版本不受控：期望 ${RUNTIME_NPM_VERSION}，实际 ${npmVersion}`);
   }
@@ -341,7 +356,7 @@ export function stageRuntimeDependencies(root, stage, platform, arch, registry =
   mkdirSync(targetDir, { recursive: true });
   writeFileSync(join(targetDir, "package.json"), json(verified.manifest));
   writeFileSync(join(targetDir, "package-lock.json"), json(verified.packageLock));
-  execFileSync("npm", [
+  execFileSync(process.execPath, [npmCli,
     "ci",
     "--ignore-scripts",
     "--legacy-peer-deps",
