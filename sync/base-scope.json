@@ -1,5 +1,5 @@
 {
-  "version": 12,
+  "version": 13,
   "description": "WorkLoom IM 基座能力同步范围声明——base-sync 引擎的唯一事实源。文件型公共能力按 include/exclude 受控分发；三端组件/视觉语言通过与 ui-v* 同版的 GitHub Release @workloom/ui tarball 下发，三端应用壳/导航/布局/状态/API 接线通过同一稳定标签和逐文件指纹升级 PR 下发。行业属性与演示能力永不同步。requiredRootAssets 无视行业代码的 pathPrefix，始终安装并校验在 Git 仓库根目录。修改本文件即修改同步边界，需基座 owner 评审。",
 
   "registryCapabilities": [
@@ -58,6 +58,17 @@
       "publish"
     ],
     "comment": "桌面应用标识、产品名、端口和发布身份属于部署实例资产；base-sync 不得整文件覆盖。新行业应由 product.manifest.json 显式配置，存量仓先完成身份迁移再接收稳定基座升级。"
+  },
+
+  "desktopReleaseCapability": {
+    "consumerWorkflow": ".github/workflows/build-desktop.yml",
+    "finalizer": "scripts/desktop-release-finalizer.mjs",
+    "platformCandidates": ["macos", "windows"],
+    "installerDiscovery": ["*-mac-arm64.dmg", "*-mac-x64.dmg", "*-win-x64.exe"],
+    "evidenceAssets": ["WorkLoom-SHA512SUMS.txt", "WorkLoom-release-manifest.json"],
+    "distribution": "base-sync-script-plus-reviewed-workflow-upgrade-pr",
+    "publisherInvariant": "platform jobs are read-only; one publisher seals a draft, verifies five assets, then promotes Latest",
+    "comment": "桌面正式发布封口器从各仓 electron-builder.yml 已生成的真实 artifactName 发现三平台安装包，不维护产品名称表。行业身份由 github.repository、稳定 tag、精确提交和签名模式注入；平台 job 只能上传同一 run 的候选，唯一发布 job 才能写 Release。"
   },
 
   "requiredRootAssets": {
