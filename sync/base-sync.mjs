@@ -1535,10 +1535,12 @@ export {
   dependencyClosureViolations,
   extractManagedSection,
   gitAuthEnv,
+  loadScope,
   main,
   mergeKeepChildExtra,
   mergeManagedSection,
   registryCapabilityReadiness,
   redact,
   repoUrl,
+  withExtraExclude,
 };

@@ -9,13 +9,16 @@ import { fileURLToPath } from "node:url";
 
 import {
   anchorNeedsSync,
+  dependencyClosureViolations,
   extractManagedSection,
   gitAuthEnv,
+  loadScope,
   mergeKeepChildExtra,
   mergeManagedSection,
   redact,
   registryCapabilityReadiness,
   repoUrl,
+  withExtraExclude,
 } from "./base-sync.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -637,6 +640,20 @@ test("v12 scope 明确保护产品身份、仓级发布器、同步认证、产�
   assert.match(ci, /fetch-depth:\s*0/);
   assert.match(ci, /git merge-base "\$EVENT_BASE_SHA" "\$HEAD_SHA"/);
   assert.match(ci, /secret-scan\.mjs --range "\$BASE_SHA" "\$HEAD_SHA" --acceptance-manifest sync\/base-scope\.json/);
+});
+
+test("权威子仓清单的附加排除不会切断公共基座依赖闭包", () => {
+  const baseScope = loadScope(REAL_BASE);
+  const inventory = JSON.parse(readFileSync(join(REAL_BASE, "sync/child-repos.json"), "utf8"));
+  assert.ok(inventory.children.length > 0);
+  for (const child of inventory.children) {
+    const scope = withExtraExclude(baseScope, child.extraExclude ?? []);
+    assert.deepEqual(
+      dependencyClosureViolations(REAL_BASE, scope),
+      [],
+      `${child.repo} 的 extraExclude 会切断公共基座相对依赖`,
+    );
+  }
 });
 
 test("UI 治理受管文件一旦重新进入普通 base-sync，scope 契约立即 fail closed", () => {
