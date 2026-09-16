@@ -58,7 +58,7 @@ function contentsWriteScopes(name, workflow) {
   return scopes;
 }
 
-test("only the two reviewed product publishers may write GitHub Releases", () => {
+test("only the two reviewed single-job product publishers may write GitHub Releases", () => {
   const publishers = new Map();
   const writeScopes = [];
   for (const name of readdirSync(workflowsUrl).filter((entry) => entry.endsWith(".yml") || entry.endsWith(".yaml"))) {
@@ -68,14 +68,11 @@ test("only the two reviewed product publishers may write GitHub Releases", () =>
     if (signals.length) publishers.set(name, signals);
     writeScopes.push(...contentsWriteScopes(name, workflow));
   }
-  assert.deepEqual([...publishers.keys()].sort(), ["build-desktop.yml", "ui-release.yml"]);
-  assert.deepEqual(publishers.get("build-desktop.yml"), [
-    "softprops/action-gh-release@v2",
-    "softprops/action-gh-release@v2",
-  ]);
+  assert.deepEqual([...publishers.keys()].sort(), ["desktop-production-release.yml", "ui-release.yml"]);
+  assert.deepEqual(publishers.get("desktop-production-release.yml"), ["gh-release-write"]);
   assert.deepEqual(publishers.get("ui-release.yml"), ["gh-release-write"]);
   assert.deepEqual(writeScopes.sort(), [
-    "build-desktop.yml:<workflow>",
+    "desktop-production-release.yml:publish-desktop-release",
     "ui-release.yml:publish-github-release",
   ]);
 });
@@ -130,13 +127,13 @@ test("legacy packers and platform evidence keep read-only repository permissions
     const workflow = YAML.parse(source);
     assert.deepEqual(workflow.permissions, { contents: "read" });
     assert.deepEqual(releaseWriteSignals(workflow), []);
-    assert.match(source, /actions\/upload-artifact@v4/u);
+    assert.match(source, /actions\/upload-artifact@[0-9a-f]{40}/u);
   }
   const safety = readFileSync(new URL("safety-gate.yml", workflowsUrl), "utf8");
   const safetyWorkflow = YAML.parse(safety);
   assert.deepEqual(safetyWorkflow.permissions, { contents: "read" });
   assert.deepEqual(releaseWriteSignals(safetyWorkflow), []);
-  assert.match(safety, /actions\/upload-artifact@v4/u);
+  assert.match(safety, /actions\/upload-artifact@[0-9a-f]{40}/u);
 });
 
 test("local PAT publisher fails before reading credentials or touching the network", () => {

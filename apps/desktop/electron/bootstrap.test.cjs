@@ -25,6 +25,14 @@ const {
   acquireBootstrapLock,
 } = require("./bootstrap.cjs");
 
+function assertPrivateFile(file) {
+  const stat = fs.statSync(file);
+  assert.equal(stat.isFile(), true);
+  // Windows 的 fs.stat().mode 不表达 POSIX owner/group/other 权限；文件继承当前用户
+  // support 目录 ACL，不能用恒假的 0600 位比较阻断 Windows runner。
+  if (process.platform !== "win32") assert.equal(stat.mode & 0o777, 0o600);
+}
+
 function fixture(version, withCurrent = true) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "workloom-bootstrap-"));
   const sourceRoot = path.join(root, "payload");
@@ -306,7 +314,7 @@ describe("桌面 PostgreSQL 凭据状态与 SCRAM 围栏", () => {
         randomBytes: deterministicRandom(),
       });
       assert.equal(first.created, true);
-      assert.equal(fs.statSync(first.file).mode & 0o777, 0o600);
+      assertPrivateFile(first.file);
       assert.equal(new Set(Object.values(first.state.credentials)).size, 3);
       assert.equal(first.state.legacyOwnerPasswords[0], "test-only-legacy");
       const second = ensureDatabaseState(root, {
@@ -468,7 +476,7 @@ describe("应急浏览器壳与正式 Electron 共用安全引导", () => {
         pid: 41001, randomBytes, isProcessAlive: () => true,
       });
       const ownerFile = path.join(first.lockDir, "owner.json");
-      assert.equal(fs.statSync(ownerFile).mode & 0o777, 0o600);
+      assertPrivateFile(ownerFile);
       assert.throws(
         () => acquireBootstrapLock(root, {
           pid: 41002, randomBytes, isProcessAlive: () => true,

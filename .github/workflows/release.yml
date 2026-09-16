@@ -1,4 +1,4 @@
-# 【已降级为应急回退线，v2.1.0 起】唯一发行形态为 build-desktop.yml 的
+# 【已降级为应急回退线，v2.1.0 起】唯一发行形态为 desktop-production-release.yml 的
 # Electron 完全自包含安装包（DMG/NSIS，客户端窗口即产品）。
 # 本管线（zip 浏览器壳）不再随 tag 触发，仅保留手动 dispatch 应急；产物禁止上传正式 Release。
 # ============================================================
@@ -26,10 +26,12 @@ jobs:
     env:
       VER: ${{ inputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Node 24 + pnpm
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
       - run: corepack enable && corepack prepare pnpm@10.14.0 --activate
@@ -61,7 +63,7 @@ jobs:
           tail -5 "$HOME/Library/Logs/WorkLoom/"launch-*.log | grep -q "首航检查单全绿"
 
       - name: 上传短期应急工件（不创建 GitHub Release）
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: emergency-macos-${{ inputs.version }}
           path: |

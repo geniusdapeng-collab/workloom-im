@@ -507,10 +507,10 @@ test("缺少 B 端移动客户端时只报告第一阶段迁移，绝不伪装�
   }
 });
 
-test("v10 scope 明确保护产品身份、同步认证、依赖闭包与 Bundle 装配契约，并将三端应用壳和 UI 治理交给稳定升级分发", () => {
+test("v11 scope 明确保护产品身份、仓级发布器、同步认证、依赖闭包与 Bundle 装配契约", () => {
   const scope = JSON.parse(readFileSync(join(REAL_BASE, "sync/base-scope.json"), "utf8"));
   const ci = readFileSync(join(REAL_BASE, ".github/workflows/ci.yml"), "utf8");
-  assert.equal(scope.version, 10);
+  assert.equal(scope.version, 11);
   assert.ok(scope.protectedChildAssets.files.includes("electron-builder.yml"));
   assert.ok(scope.protectedChildAssets.files.includes("product.manifest.json"));
   assert.ok(scope.exclude.includes("electron-builder.yml"));
@@ -533,7 +533,17 @@ test("v10 scope 明确保护产品身份、同步认证、依赖闭包与 Bundle
     "scripts/hotel-seed-preflight.ts",
     "scripts/hotel-seed-preflight.test.ts",
     "scripts/suite.ts",
+    "scripts/action-pins.json",
+    "scripts/action-trust-policy.test.mjs",
+    "scripts/desktop-release-policy.test.mjs",
+    "scripts/desktop-release-state.mjs",
+    "scripts/desktop-release-state.test.mjs",
+    "scripts/desktop-workflow-path.test.mjs",
+    "scripts/release-publisher-policy.test.mjs",
   ]) assert.ok(scope.exclude.includes(industryCoupled), `${industryCoupled} 必须保留在基座仓`);
+  assert.ok(!scope.exclude.includes("scripts/desktop-workflow-path.mjs"), "仓级 workflow 兼容解析器必须随 base-sync 下发");
+  assert.ok(!scope.exclude.includes("scripts/release-assets.test.mjs"), "共享发行来源门禁必须随 base-sync 下发");
+  assert.ok(!scope.exclude.includes("scripts/verify-product-content.mjs"), "共享产品门禁必须随 base-sync 下发");
   assert.ok(!scope.exclude.includes("scripts/generate-client-projections.mts"), "客户端投影生成器必须随 base-sync 下发");
   const projectionGenerator = readFileSync(join(REAL_BASE, "scripts/generate-client-projections.mts"), "utf8");
   assert.ok(projectionGenerator.includes(".workloom-ui.json"));

@@ -65,7 +65,7 @@ jobs:
       TOOL_UNVERIFIED_RATE: "0"
       RELEASE_WORKSPACE_ID: ws-aipm-demo
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -119,7 +119,7 @@ jobs:
           echo "sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
           echo "✅ 验证对象已固定：$TARGET_TAG @ ${TARGET_SHA:0:12}（origin/main 祖先）"
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
 
@@ -153,7 +153,7 @@ jobs:
 
       - name: 留存稳定发布三端视觉与无障碍证据
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: workloom-ui-release-evidence-${{ github.run_id }}
           path: |
@@ -194,7 +194,7 @@ jobs:
 
       - name: 留存下游访问与迁移现状
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ui-downstream-preflight
           path: ${{ runner.temp }}/ui-downstream-preflight.json
@@ -215,7 +215,7 @@ jobs:
 
       - name: 留存待发布 UI 制品
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/ui-v')
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: workloom-ui-package
           path: ${{ runner.temp }}/ui-package
@@ -231,7 +231,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: workloom-ui-package
           path: ${{ runner.temp }}/ui-package
@@ -381,14 +381,14 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
           fetch-tags: true
           persist-credentials: false
           ref: ${{ needs.verify-and-preflight.outputs.release-sha }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
 
@@ -419,13 +419,13 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
           fetch-tags: true
           persist-credentials: false
           ref: ${{ needs.verify-and-preflight.outputs.release-sha }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
       - name: 固定复算不可变制品的 npm CLI
@@ -452,7 +452,7 @@ jobs:
           node sync/ui-upgrade-pr.mjs "${ARGS[@]}"
       - name: 留存本波次 rollout 结果
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ui-rollout-${{ inputs.stable_version }}-${{ inputs.wave || 'automatic' }}
           path: ${{ runner.temp }}/ui-rollout.json

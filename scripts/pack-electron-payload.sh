@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# WorkLoom Electron 自包含载荷装配（build-desktop 流水线专用）
+# WorkLoom Electron 自包含载荷装配（desktop-production-release 流水线专用）
 # 产出：dist-payload/{runtime,node,pg,nats}——由 electron-builder extraResources 打入安装包
 #   runtime/  产品载荷（源码+迁移+种子+扁平 node_modules+web dist+VERSION）
 #   node/     Node 24 官方二进制（按平台/架构）

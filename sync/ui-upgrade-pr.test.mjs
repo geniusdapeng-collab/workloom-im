@@ -1246,7 +1246,7 @@ process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", f
     assert.match(workflow, /sync\/client-foundation\.test\.mjs/u);
     assert.match(workflow, /m\.clientFoundation\?\.latestStableVersion!==v/u);
     assert.match(workflow, /client-foundation\.mjs verify-source/u);
-    const desktopWorkflow = readFileSync(join(repoRoot, ".github/workflows/build-desktop.yml"), "utf8");
+    const desktopWorkflow = readFileSync(join(repoRoot, ".github/workflows/desktop-production-release.yml"), "utf8");
     assert.match(desktopWorkflow, /BUNDLE_SIGNING_PRIVATE_KEY/u);
     assert.match(desktopWorkflow, /pnpm bundle:release/u);
     assert.match(desktopWorkflow, /build\/bundle-trust\.json/u);

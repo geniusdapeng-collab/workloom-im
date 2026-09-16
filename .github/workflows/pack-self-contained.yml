@@ -1,4 +1,4 @@
-# 【已降级为应急回退线，v2.1.0 起】唯一发行形态为 build-desktop.yml 的
+# 【已降级为应急回退线，v2.1.0 起】唯一发行形态为 desktop-production-release.yml 的
 # Electron 完全自包含安装包（DMG/NSIS，客户端窗口即产品）。
 # 本流水线（zip+bat 浏览器壳）不再随 tag 触发、不再上传 Release，仅保留手动
 # dispatch 作为应急回退；产物禁止上传 Release（避免与正式安装包混淆）。
@@ -25,9 +25,11 @@ jobs:
   macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: 24, cache: pnpm }
       - name: 校验应急工件版本
         shell: bash
@@ -39,7 +41,7 @@ jobs:
           unzip -q dist/WorkLoom-macOS.zip -d /tmp/wl-smoke
           WORKLOOM_SMOKE=1 bash /tmp/wl-smoke/WorkLoom.app/Contents/MacOS/WorkLoom
       - name: 上传产物
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: emergency-macos-${{ env.VERSION }}
           path: dist/WorkLoom-macOS.zip*
@@ -50,9 +52,11 @@ jobs:
     # 与正式桌面链保持同一干净底座；build-pgvector-win 会拒绝任何预置 PG17。
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: 24, cache: pnpm }
       - name: 校验应急工件版本
         shell: pwsh
@@ -79,14 +83,14 @@ jobs:
           copy /Y "%LOCALAPPDATA%\WorkLoom\Logs\*.log" smoke-logs\ 2>nul || echo no-logs > smoke-logs\no-logs.txt
       - name: 上传冒烟日志
         if: failure() && steps.smoke.outcome == 'failure'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: emergency-windows-smoke-logs-${{ env.VERSION }}
           path: smoke-logs/**
           if-no-files-found: warn
           retention-days: 7
       - name: 上传产物
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: emergency-windows-${{ env.VERSION }}
           path: dist/WorkLoom-Windows.zip*

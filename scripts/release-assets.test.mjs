@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import {
   expectedAssetSha256,
@@ -11,6 +12,7 @@ import {
   verifyAssetFile,
   verifyWindowsPgProvenance,
 } from "./release-assets.mjs";
+import { resolveDesktopWorkflowPath } from "./desktop-workflow-path.mjs";
 
 const root = new URL("../", import.meta.url);
 
@@ -84,13 +86,16 @@ test("Windows PG provenance must match every locked build input", async () => {
 });
 
 test("every packaging download is wired through the verified fetch boundary", async () => {
+  const repositoryRoot = fileURLToPath(root);
+  const product = JSON.parse(await readFile(new URL("../product.manifest.json", import.meta.url), "utf8"));
+  const desktopWorkflowPath = resolveDesktopWorkflowPath(repositoryRoot, product).absolute;
   const files = {
     electron: await readFile(new URL("./pack-electron-payload.sh", import.meta.url), "utf8"),
     mac: await readFile(new URL("./pack-macos.sh", import.meta.url), "utf8"),
     win: await readFile(new URL("./pack-windows.sh", import.meta.url), "utf8"),
     nats: await readFile(new URL("./embedded-nats.mjs", import.meta.url), "utf8"),
     pgvectorWin: await readFile(new URL("./build-pgvector-win.ps1", import.meta.url), "utf8"),
-    desktopWorkflow: await readFile(new URL("../.github/workflows/build-desktop.yml", import.meta.url), "utf8"),
+    desktopWorkflow: await readFile(desktopWorkflowPath, "utf8"),
     legacyWorkflow: await readFile(new URL("../.github/workflows/pack-self-contained.yml", import.meta.url), "utf8"),
   };
   for (const name of ["electron", "mac", "win"]) {

@@ -12,6 +12,7 @@
     "appId": "com.workloom.im",
     "channel": "stable",
     "artifactPrefix": "WorkLoom 织元",
+    "workflow": ".github/workflows/desktop-production-release.yml",
     "website": "apps/site"
   },
   "desktop": {
