@@ -529,10 +529,15 @@ test("缺少 B 端移动客户端时只报告第一阶段迁移，绝不伪装�
   }
 });
 
-test("v12 scope 明确保护产品身份、仓级发布器、同步认证、产品派生锁、依赖闭包与 Bundle 装配契约", () => {
+test("v13 scope 明确保护产品身份、仓级发布器、桌面发布封口器、同步认证、产品派生锁、依赖闭包与 Bundle 装配契约", () => {
   const scope = JSON.parse(readFileSync(join(REAL_BASE, "sync/base-scope.json"), "utf8"));
   const ci = readFileSync(join(REAL_BASE, ".github/workflows/ci.yml"), "utf8");
-  assert.equal(scope.version, 12);
+  assert.equal(scope.version, 13);
+  assert.equal(scope.desktopReleaseCapability.finalizer, "scripts/desktop-release-finalizer.mjs");
+  assert.deepEqual(scope.desktopReleaseCapability.evidenceAssets, [
+    "WorkLoom-SHA512SUMS.txt",
+    "WorkLoom-release-manifest.json",
+  ]);
   assert.ok(scope.protectedChildAssets.files.includes("electron-builder.yml"));
   assert.ok(scope.protectedChildAssets.files.includes("product.manifest.json"));
   assert.ok(scope.exclude.includes("electron-builder.yml"));
