@@ -5,8 +5,8 @@
   "ui": {
     "package": "@workloom/ui",
     "contractVersion": "2.0.0",
-    "candidateVersion": "0.1.0",
-    "latestStableVersion": "0.1.0",
+    "candidateVersion": "0.1.1",
+    "latestStableVersion": "0.1.1",
     "requiredClientPackages": [
       "apps/web/package.json",
       "apps/webb/package.json",
@@ -23,15 +23,16 @@
       "urlTemplate": "https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v{version}/workloom-ui-{version}.tgz",
       "assetNameTemplate": "workloom-ui-{version}.tgz",
       "integrityByVersion": {
-        "0.1.0": "sha512-0O2dJkxvzNoRQcnVH6v8o7qyWW/yYmImrNhaaUWqR/FgovwJI3sHzugAaa4mHeCERWeMihxCRX/jIY93WHW8Vw=="
+        "0.1.0": "sha512-0O2dJkxvzNoRQcnVH6v8o7qyWW/yYmImrNhaaUWqR/FgovwJI3sHzugAaa4mHeCERWeMihxCRX/jIY93WHW8Vw==",
+        "0.1.1": "sha512-cJu1SHORmQy/N0Tv3sJ37Ad7HjCOcOt3nreQFeMN2MaPnb/Q7GzNF6uSYmvrOUdTu2XprGCOfYLFgMUrlxo/pg=="
       }
     }
   },
   "clientFoundation": {
     "schemaVersion": "workloom.client-foundation/v1",
     "stateFile": ".workloom-client-foundation.json",
-    "candidateVersion": "0.1.0",
-    "latestStableVersion": "0.1.0",
+    "candidateVersion": "0.1.1",
+    "latestStableVersion": "0.1.1",
     "stableSourceRefPattern": "refs/tags/ui-v{version}",
     "distribution": "stable-tag-upgrade-pr",
     "maxManagedFiles": 500,

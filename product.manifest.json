@@ -6,6 +6,8 @@
   "packageName": "workloom-im",
   "repository": "geniusdapeng-collab/workloom-im",
   "defaultBundle": "ai-pm",
+  "demoWorkspaceSlug": "ai-pm-demo",
+  "demoMemberNo": "MEM-001",
   "release": {
     "appId": "com.workloom.im",
     "channel": "stable",

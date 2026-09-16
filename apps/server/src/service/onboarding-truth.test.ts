@@ -78,7 +78,7 @@ describe("定制草案真实性契约", () => {
     expect(() => validateStaffing({
       ...validDraft,
       team: [validDraft.team[0], validDraft.team[0]],
-    })).toThrow(/重复 preset_key/);
+    })).toThrow(/岗位标识重复/);
     expect(() => validateStaffing({
       ...validDraft,
       team: [{ ...validDraft.team[0], fence_bindings: ["R_MISSING"] }],
@@ -87,6 +87,23 @@ describe("定制草案真实性契约", () => {
       ...validDraft,
       team: [{ ...validDraft.team[0], fence_bindings: [] }],
     })).toThrow(/未绑定人审或阻断级围栏/);
+  });
+
+  it("编制校验错误不向客户端暴露底层字段名或原始标识", () => {
+    const invalidDrafts = [
+      { ...validDraft, fences: [null] },
+      { ...validDraft, fences: [{ ...validDraft.fences[0], rule_id: "bad" }] },
+      { ...validDraft, team: [{ ...validDraft.team[0], preset_key: "BAD_KEY" }] },
+      { ...validDraft, team: [{ ...validDraft.team[0], readonly: "false" }] },
+    ];
+    for (const draft of invalidDrafts) {
+      try {
+        validateStaffing(draft);
+        expect.unreachable();
+      } catch (error) {
+        expect((error as Error).message).not.toMatch(/fences\[|team\[|rule_id|preset_key|readonly|night_shift|fence_bindings/i);
+      }
+    }
   });
 
   it("装配哈希绑定工作区、草案、版本与精确资产清单", () => {

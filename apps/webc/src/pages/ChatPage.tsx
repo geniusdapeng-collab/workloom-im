@@ -3,6 +3,7 @@ import { ApiError, api, ensureSession } from "../lib/api";
 import { getConfig, getConfigState, tpl } from "../lib/config";
 import { demoChatAnswer } from "../lib/demo";
 import { businessCardsOf } from "../lib/business-display";
+import { storageKey } from "../lib/product";
 import type { BusinessCard, Citation } from "../lib/types";
 import { CitationCard, CatalogCard, MemberCard, OrderCard, TicketNoticeCard } from "../components/cards";
 import { DemoBadge, chineseMessage } from "../components/common";
@@ -51,7 +52,7 @@ function safeCitations(value: unknown): Citation[] | undefined {
 
 function cacheKey(): string {
   const config = getConfig();
-  return `webc.chat.msgs.v4:${config.workspaceKey || "安全模式"}:${config.projection.manifestDigest}`;
+  return storageKey(`chat.v4:${config.workspaceKey || "安全模式"}:${config.projection.manifestDigest}`);
 }
 
 function loadCache(): Msg[] {

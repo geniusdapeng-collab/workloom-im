@@ -1,6 +1,7 @@
 /** API 层：baseURL=/c，Bearer token；写操作失败必须把服务端错误/回执交给 UI，不得伪造成功。 */
 import { getConfig } from "./config";
 import { businessCardsOf, businessRecordOf, memberInfoOf } from "./business-display";
+import { storageKey } from "./product";
 import type {
   ChatResponse,
   BusinessRecord,
@@ -15,11 +16,11 @@ import type {
 
 const BASE = "/c";
 // v2 强制淘汰缺少 authMode/identityMode 的旧会话缓存，避免把历史演示身份显示成真实核验。
-const TOKEN_KEY = "webc.token.v3";
-const USER_KEY = "webc.user.v3";
-const OPENID_KEY = "webc.demo-openid.v2";
-const ENTRY_TOKEN_KEY = "webc.h5-entry.v1";
-const WORKSPACE_KEY = "webc.workspace-key.v2";
+const TOKEN_KEY = storageKey("token.v3");
+const USER_KEY = storageKey("user.v3");
+const OPENID_KEY = storageKey("anonymous-id.v2");
+const ENTRY_TOKEN_KEY = storageKey("entry-token.v1");
+const WORKSPACE_KEY = storageKey("workspace-key.v2");
 
 /** 演示环境的匿名会话标识仅保存在当前浏览器会话；正式环境不会信任该值。 */
 export function getOpenid(): string {

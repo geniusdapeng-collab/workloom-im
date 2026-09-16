@@ -395,16 +395,23 @@ interface InstallRow extends Record<string, unknown> {
   installed_at: string;
 }
 
+class StaffingDraftValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StaffingDraftValidationError";
+  }
+}
+
 function text(value: unknown, label: string, min = 1, max = 300): string {
   if (typeof value !== "string" || value.trim().length < min || value.length > max) {
-    throw new Error(`编制草案契约不符：${label} 长度须为 ${min}-${max}`);
+    throw new StaffingDraftValidationError(`${label}长度应为 ${min}-${max} 个字符。`);
   }
   return value.trim();
 }
 
 function stringList(value: unknown, label: string, max = 30): string[] {
   if (!Array.isArray(value) || value.length > max || value.some((v) => typeof v !== "string" || !v.trim())) {
-    throw new Error(`编制草案契约不符：${label} 必须是最多 ${max} 项的非空字符串数组`);
+    throw new StaffingDraftValidationError(`${label}应为不超过 ${max} 项的有效内容。`);
   }
   return value.map((v) => (v as string).trim());
 }
@@ -419,75 +426,75 @@ function stateLabel(value: string | null | undefined): string {
 
 /** 输出契约校验（L3 产出必须过校验才入预览——非法结构拒收）。 */
 export function validateStaffing(draft: unknown): StaffingDraft {
-  if (!draft || typeof draft !== "object") throw new Error("编制草案契约不符：根节点必须是对象");
+  if (!draft || typeof draft !== "object") throw new StaffingDraftValidationError("团队编制草案格式不正确。");
   const raw = draft as Record<string, unknown>;
   if (!Array.isArray(raw.team) || raw.team.length === 0 || raw.team.length > 20) {
-    throw new Error("编制草案契约不符：team 须为 1-20 人");
+    throw new StaffingDraftValidationError("团队编制应包含 1-20 个岗位。");
   }
   if (!Array.isArray(raw.fences) || raw.fences.length === 0 || raw.fences.length > 40) {
-    throw new Error("编制草案契约不符：fences 须为 1-40 条可执行规则");
+    throw new StaffingDraftValidationError("团队编制应包含 1-40 条可执行围栏。");
   }
 
   const fenceIds = new Set<string>();
   const fences = raw.fences.map((item, index) => {
-    if (!item || typeof item !== "object") throw new Error(`编制草案契约不符：fences[${index}] 非对象`);
+    if (!item || typeof item !== "object") throw new StaffingDraftValidationError(`第 ${index + 1} 条围栏格式不正确。`);
     const f = item as Record<string, unknown>;
-    const ruleId = text(f.rule_id, `fences[${index}].rule_id`, 2, 40);
-    if (!/^[A-Z][A-Z0-9_-]{1,39}$/.test(ruleId)) throw new Error(`非法 rule_id：${ruleId}`);
-    if (fenceIds.has(ruleId)) throw new Error(`重复 rule_id：${ruleId}`);
+    const ruleId = text(f.rule_id, `第 ${index + 1} 条围栏的规则标识`, 2, 40);
+    if (!/^[A-Z][A-Z0-9_-]{1,39}$/.test(ruleId)) throw new StaffingDraftValidationError(`第 ${index + 1} 条围栏的规则标识格式不正确。`);
+    if (fenceIds.has(ruleId)) throw new StaffingDraftValidationError("围栏规则标识重复。");
     fenceIds.add(ruleId);
     if (f.level !== "auto" && f.level !== "review" && f.level !== "block") {
-      throw new Error(`非法围栏级别：${String(f.level)}`);
+      throw new StaffingDraftValidationError(`第 ${index + 1} 条围栏的处理方式不正确。`);
     }
     const level: "auto" | "review" | "block" = f.level;
     const match = f.match as Record<string, unknown> | undefined;
-    const objectTypes = stringList(match?.object_types, `${ruleId}.match.object_types`, 20);
-    const actions = stringList(match?.actions, `${ruleId}.match.actions`, 30);
-    if (objectTypes.length === 0 || actions.length === 0) throw new Error(`围栏 ${ruleId} 缺少对象或动作匹配项`);
+    const objectTypes = stringList(match?.object_types, `第 ${index + 1} 条围栏的业务对象`, 20);
+    const actions = stringList(match?.actions, `第 ${index + 1} 条围栏的业务动作`, 30);
+    if (objectTypes.length === 0 || actions.length === 0) throw new StaffingDraftValidationError(`第 ${index + 1} 条围栏缺少业务对象或动作。`);
     return {
       rule_id: ruleId,
-      name: text(f.name, `${ruleId}.name`, 1, 100),
+      name: text(f.name, `第 ${index + 1} 条围栏的名称`, 1, 100),
       level,
       match: { object_types: objectTypes, actions },
       when: typeof f.when === "string" ? f.when.trim() : "",
-      match_desc: text(f.match_desc, `${ruleId}.match_desc`, 1, 300),
+      match_desc: text(f.match_desc, `第 ${index + 1} 条围栏的触发说明`, 1, 300),
     };
   });
 
   const presetKeys = new Set<string>();
   const team = raw.team.map((item, index) => {
-    if (!item || typeof item !== "object") throw new Error(`编制草案契约不符：team[${index}] 非对象`);
+    if (!item || typeof item !== "object") throw new StaffingDraftValidationError(`第 ${index + 1} 个岗位配置格式不正确。`);
     const m = item as Record<string, unknown>;
-    const presetKey = text(m.preset_key, `team[${index}].preset_key`, 2, 41);
-    if (!/^[a-z][a-z0-9-]{1,40}$/.test(presetKey)) throw new Error(`非法 preset_key：${presetKey}`);
-    if (presetKeys.has(presetKey)) throw new Error(`重复 preset_key：${presetKey}`);
+    const presetKey = text(m.preset_key, `第 ${index + 1} 个岗位的内部标识`, 2, 41);
+    if (!/^[a-z][a-z0-9-]{1,40}$/.test(presetKey)) throw new StaffingDraftValidationError(`第 ${index + 1} 个岗位的标识格式不正确。`);
+    if (presetKeys.has(presetKey)) throw new StaffingDraftValidationError("岗位标识重复。");
     presetKeys.add(presetKey);
     if (typeof m.readonly !== "boolean" || typeof m.night_shift !== "boolean") {
-      throw new Error(`岗位 ${presetKey} 缺少 readonly/night_shift 布尔标记`);
+      throw new StaffingDraftValidationError(`第 ${index + 1} 个岗位缺少必需的只读或夜班设置。`);
     }
-    const bindings = stringList(m.fence_bindings, `${presetKey}.fence_bindings`, 20);
+    const bindings = stringList(m.fence_bindings, `第 ${index + 1} 个岗位的围栏关联`, 20);
     const unknown = bindings.filter((id) => !fenceIds.has(id));
-    if (unknown.length) throw new Error(`岗位 ${presetKey} 引用了不存在的围栏：${unknown.join("、")}`);
+    if (unknown.length) throw new StaffingDraftValidationError(`第 ${index + 1} 个岗位引用了不存在的围栏。`);
     if (!m.readonly) {
       const protectedByReview = fences.some((f) => bindings.includes(f.rule_id) && (f.level === "review" || f.level === "block"));
-      if (!protectedByReview) throw new Error(`写入岗位 ${presetKey} 未绑定人审或阻断级围栏`);
+      if (!protectedByReview) throw new StaffingDraftValidationError(`第 ${index + 1} 个可写岗位未绑定人审或阻断级围栏。`);
     }
     return {
       preset_key: presetKey,
-      role_title: text(m.role_title, `${presetKey}.role_title`, 2, 80),
-      kind: text(m.kind, `${presetKey}.kind`, 2, 40),
-      description: text(m.description, `${presetKey}.description`, 2, 300),
+      role_title: text(m.role_title, `第 ${index + 1} 个岗位的名称`, 2, 80),
+      kind: text(m.kind, `第 ${index + 1} 个岗位的类型`, 2, 40),
+      description: text(m.description, `第 ${index + 1} 个岗位的职责说明`, 2, 300),
       readonly: m.readonly,
       night_shift: m.night_shift,
       fence_bindings: bindings,
-      skills: stringList(m.skills, `${presetKey}.skills`, 20),
+      skills: stringList(m.skills, `第 ${index + 1} 个岗位的技能建议`, 20),
     };
   });
 
   return {
     team,
     fences,
-    skills_suggested: stringList(raw.skills_suggested, "skills_suggested", 50),
+    skills_suggested: stringList(raw.skills_suggested, "团队技能建议", 50),
   };
 }
 
@@ -525,7 +532,12 @@ export async function generateStaffing(
       draft = validateStaffing(JSON.parse(jsonMatch?.[0] ?? "{}"));
     } catch (error) {
       mock = true;
-      draft = fallbackStaffing(industryText, error instanceof Error ? error.message : String(error));
+      const reason = error instanceof StaffingDraftValidationError
+        ? error.message
+        : error instanceof SyntaxError
+          ? "模型返回内容格式不正确"
+          : "模型生成暂时不可用";
+      draft = fallbackStaffing(industryText, reason);
     }
   } else {
     mock = true;

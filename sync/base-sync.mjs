@@ -292,6 +292,34 @@ function validateScope(scope, baseDir) {
       throw new Error(`anchor merge ${path} 的 ignoreDependencyKeys 必须是数组`);
     }
   }
+  if (scope.publicAppendOnlyFiles !== undefined && !Array.isArray(scope.publicAppendOnlyFiles)) {
+    throw new Error("publicAppendOnlyFiles 必须是安全相对路径数组");
+  }
+  const publicAppendOnlyFiles = new Set();
+  const rawIncludesForAppend = (scope.include ?? []).map(globToRegExp);
+  const rawExcludesForAppend = (scope.exclude ?? []).map(globToRegExp);
+  for (const path of scope.publicAppendOnlyFiles ?? []) {
+    const safePath = assertSafeRelative(path, "public append-only file");
+    if (publicAppendOnlyFiles.has(safePath)) throw new Error(`public append-only file 重复：${safePath}`);
+    publicAppendOnlyFiles.add(safePath);
+    assertNoSymlinkPath(baseDir, join(baseDir, safePath), `public append-only source ${safePath}`, { allowMissing: false });
+    if (!hitAny(rawIncludesForAppend, safePath) || !hitAny(rawExcludesForAppend, safePath)) {
+      throw new Error(`public append-only file 必须位于普通 include 内且被普通 exclude 隔离：${safePath}`);
+    }
+  }
+  if (scope.newIndustryBootstrapFiles !== undefined && !Array.isArray(scope.newIndustryBootstrapFiles)) {
+    throw new Error("newIndustryBootstrapFiles 必须是安全相对路径数组");
+  }
+  const newIndustryBootstrapFiles = new Set();
+  for (const path of scope.newIndustryBootstrapFiles ?? []) {
+    const safePath = assertSafeRelative(path, "new industry bootstrap file");
+    if (newIndustryBootstrapFiles.has(safePath)) throw new Error(`new industry bootstrap file 重复：${safePath}`);
+    newIndustryBootstrapFiles.add(safePath);
+    assertNoSymlinkPath(baseDir, join(baseDir, safePath), `new industry bootstrap source ${safePath}`, { allowMissing: false });
+    if (!hitAny(rawIncludesForAppend, safePath) || !hitAny(rawExcludesForAppend, safePath)) {
+      throw new Error(`new industry bootstrap file 必须位于普通 include 内且被普通 exclude 隔离：${safePath}`);
+    }
+  }
   if (!Number.isInteger(scope.pollutionGuard?.maxFilesPerSync) || scope.pollutionGuard.maxFilesPerSync < 1) {
     throw new Error("pollutionGuard.maxFilesPerSync 必须是正整数");
   }
@@ -408,6 +436,8 @@ function loadScope(baseDir) {
     raw,
     includes: raw.include.map(globToRegExp),
     excludes: raw.exclude.map(globToRegExp),
+    publicAppendOnlyFiles: new Set(raw.publicAppendOnlyFiles ?? []),
+    newIndustryBootstrapFiles: new Set(raw.newIndustryBootstrapFiles ?? []),
   };
 }
 
@@ -528,7 +558,10 @@ function controlledSourcePaths(baseDir, scope, requiredOnly, additionalPaths = [
     ...Object.values(scope.raw.requiredRootAssets.copiedFiles ?? {}).map((config) => config.source),
     ...additionalPaths,
   ];
-  if (!requiredOnly) paths.push(...[...walk(baseDir)].filter((path) => inScope(scope, path)));
+  if (!requiredOnly) {
+    paths.push(...[...walk(baseDir)].filter((path) => inScope(scope, path)));
+    paths.push(...(scope.raw.publicAppendOnlyFiles ?? []));
+  }
   return [...new Set(paths.map((path) => assertSafeRelative(path, "受控源文件")))].sort();
 }
 
@@ -761,7 +794,11 @@ function makePlan(baseDir, childDir, repoRoot, scope, options = {}) {
   const warnings = [];
   assertContained(repoRoot, childDir, "目标基座目录");
   if (!requiredOnly) assertChildDependencySeams(childDir, repoRoot, scope);
-  const scopeFiles = requiredOnly ? [] : [...walk(baseDir)].filter((path) => inScope(scope, path));
+  const scopeFiles = requiredOnly ? [] : [...new Set([
+    ...[...walk(baseDir)].filter((path) => inScope(scope, path)),
+    ...(scope.raw.publicAppendOnlyFiles ?? []),
+    ...(options.adopt ? scope.raw.newIndustryBootstrapFiles ?? [] : []),
+  ])];
   const blackHit = (path) => scope.raw.pollutionGuard.pathBlacklist.some((entry) => entry.startsWith("^") ? path.startsWith(entry.slice(1)) : path.includes(entry));
   const blackHits = scopeFiles.filter(blackHit);
   if (blackHits.length) throw new Error(`防污染护栏触发：scope 文件命中黑名单 → ${blackHits.slice(0, 5).join(", ")}`);
@@ -771,6 +808,18 @@ function makePlan(baseDir, childDir, repoRoot, scope, options = {}) {
     const dst = join(childDir, rel);
     assertNoSymlinkPath(baseDir, src, `基座源文件 ${rel}`, { allowMissing: false });
     assertNoSymlinkPath(repoRoot, dst, `目标文件 ${relative(repoRoot, dst)}`);
+    if (scope.publicAppendOnlyFiles.has(rel) && existsSync(dst)) {
+      if (!readFileSync(src).equals(readFileSync(dst))) {
+        throw new Error(`公共追加资产与子仓同路径内容冲突，拒绝覆盖：${rel}`);
+      }
+      continue;
+    }
+    if (options.adopt && scope.newIndustryBootstrapFiles.has(rel) && existsSync(dst)) {
+      if (!readFileSync(src).equals(readFileSync(dst))) {
+        throw new Error(`新行业完整基线与目标同路径内容冲突，拒绝覆盖：${rel}`);
+      }
+      continue;
+    }
     if (!fileNeedsSync(scope.raw, rel, src, dst)) {
       if (existsSync(dst) && scope.raw.appendOnlyDirs.some((dir) => rel.startsWith(`${dir}/`)) && !readFileSync(src).equals(readFileSync(dst))) {
         skippedAppendOnly.push(rel);
@@ -1319,7 +1368,10 @@ function modePull(options) {
       baseDir,
       scope,
       options.requiredOnly,
-      options.adopt ? Object.keys(scope.raw.adoptMigrations ?? {}) : [],
+      options.adopt ? [
+        ...Object.keys(scope.raw.adoptMigrations ?? {}),
+        ...(scope.raw.newIndustryBootstrapFiles ?? []),
+      ] : [],
     );
     const report = { mode: "pull", child: childDir, dryRun: options.dryRun, requiredOnly: options.requiredOnly, noCommit: options.noCommit };
     syncToChild(baseDir, childDir, scope, report, extra, options);

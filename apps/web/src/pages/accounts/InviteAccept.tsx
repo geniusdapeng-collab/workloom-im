@@ -5,8 +5,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Button } from "@workloom/ui";
 import { trpc, setToken, setRefreshToken } from "../../lib/trpc";
-
-const WS = (import.meta.env.VITE_DEMO_WORKSPACE as string | undefined) ?? "ai-pm-demo";
+import { DEMO_WORKSPACE } from "../../lib/product";
 
 function safeInviteError(error: unknown): string {
   const message = error instanceof Error ? error.message : "";
@@ -30,7 +29,7 @@ export default function InviteAccept() {
       const svc = trpc.accounts.auth as unknown as {
         acceptInvite: { mutate: (i: { phone: string; code: string; workspaceSlug: string; displayName?: string }) => Promise<{ accessToken: string; refreshToken: string }> };
       };
-      const r = await svc.acceptInvite.mutate({ phone, code, workspaceSlug: WS, displayName: name || undefined });
+      const r = await svc.acceptInvite.mutate({ phone, code, workspaceSlug: DEMO_WORKSPACE, displayName: name || undefined });
       setToken(r.accessToken); setRefreshToken(r.refreshToken);
       nav("/inbox");
     } catch (e) { setErr(safeInviteError(e)); }

@@ -6,8 +6,7 @@ import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Button } from "@workloom/ui";
 import { trpc, setToken, setRefreshToken, ensureDemoLogin, DEV_DEMO_MEMBER, clearGuestFlag } from "../../lib/trpc";
-
-const WS = (import.meta.env.VITE_DEMO_WORKSPACE as string | undefined) ?? "ai-pm-demo";
+import { DEMO_WORKSPACE, PRODUCT_NAME } from "../../lib/product";
 
 type Tab = "code" | "password";
 
@@ -55,8 +54,8 @@ export default function Login() {
     setErr(""); setBusy(true);
     try {
       const r = tab === "code"
-        ? await svc().loginWithCode.mutate({ phone, code, workspaceSlug: WS })
-        : await svc().loginWithPassword.mutate({ email, password, workspaceSlug: WS });
+        ? await svc().loginWithCode.mutate({ phone, code, workspaceSlug: DEMO_WORKSPACE })
+        : await svc().loginWithPassword.mutate({ email, password, workspaceSlug: DEMO_WORKSPACE });
       clearGuestFlag(); // 正式身份进场，摘掉游客标记
       setToken(r.accessToken);
       setRefreshToken(r.refreshToken);
@@ -73,7 +72,7 @@ export default function Login() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md min-w-0 flex-col justify-center px-4 py-10 sm:px-6">
-      <h1 className="mb-1 break-words text-2xl font-bold">登录 WorkLoom</h1>
+      <h1 className="mb-1 break-words text-2xl font-bold">登录 {PRODUCT_NAME}</h1>
       <p className="mb-6 break-words text-body leading-relaxed text-neutral-300">登录后可查看并切换您有权限访问的工作区。</p>
 
       <div className="mb-4 flex min-w-0 flex-wrap gap-2" role="group" aria-label="登录方式">
