@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import YAML from "yaml";
 import { verifyUiConsumerRepo } from "./verify-ui-consumer.mjs";
+import { bindUiLockfileIntegrity } from "../sync/ui-lockfile-integrity.mjs";
 
 const CLIENTS = [
   { root: "apps/web", marker: "b-pc", shells: "OverlayManager, SideNavigation, TopContextBar, Overlay, Button, Textarea", body: "<OverlayManager><SideNavigation /><TopContextBar /><Overlay /><Button /><Textarea label=\"任务目标\" /></OverlayManager>" },
@@ -16,6 +19,87 @@ const CLIENTS = [
 const SCRIPT_ROOT = dirname(fileURLToPath(import.meta.url));
 const GOVERNANCE_FILES = ["verify-ui-consumer.mjs", "ui-governance-rules.mjs"];
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
+const UI_VERSION = "1.2.3";
+const UI_URL = `https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v${UI_VERSION}/workloom-ui-${UI_VERSION}.tgz`;
+const UI_SHA512 = `sha512-${Buffer.alloc(64, 7).toString("base64")}`;
+const PNPM_10_CLI = process.env.WORKLOOM_PNPM_10_CLI;
+const PNPM_COMMAND = PNPM_10_CLI ? process.execPath : "pnpm";
+const PNPM_PREFIX = PNPM_10_CLI ? [PNPM_10_CLI] : [];
+const PNPM_VERSION = spawnSync(PNPM_COMMAND, [...PNPM_PREFIX, "--version"], { encoding: "utf8" }).stdout?.trim();
+
+function uiState(sha512 = UI_SHA512) {
+  return {
+    schemaVersion: "workloom.ui-consumer-state/v1",
+    package: "@workloom/ui",
+    version: UI_VERSION,
+    contractVersion: "2.0.0",
+    source: "geniusdapeng-collab/workloom-im",
+    updatePolicy: "upgrade-pr-only",
+    releaseChannel: "stable",
+    requiredClientPackages: CLIENTS.map((client) => `${client.root}/package.json`),
+    connectedClientPackages: CLIENTS.map((client) => `${client.root}/package.json`),
+    artifact: {
+      type: "github-release-tarball",
+      assetName: `workloom-ui-${UI_VERSION}.tgz`,
+      url: UI_URL,
+      sha512,
+    },
+  };
+}
+
+function runPnpm(args, cwd) {
+  return new Promise((resolve) => {
+    const child = spawn(PNPM_COMMAND, [...PNPM_PREFIX, ...args], {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.on("close", (status) => resolve({ status, stdout, stderr }));
+  });
+}
+
+function writeUiLockfile(repo, {
+  url = UI_URL,
+  integrity = UI_SHA512,
+  includeIntegrity = true,
+  omitImporter = "",
+  extraPackages = {},
+} = {}) {
+  const lines = [
+    "lockfileVersion: '9.0'",
+    "overrides:",
+    `  '@workloom/ui@${UI_VERSION}': ${url}`,
+    "importers:",
+  ];
+  for (const client of CLIENTS.filter(({ root }) => root !== omitImporter)) {
+    lines.push(
+      `  ${client.root}:`,
+      "    dependencies:",
+      "      '@workloom/ui':",
+      `        specifier: ${url}`,
+      `        version: ${url}`,
+    );
+  }
+  lines.push(
+    "packages:",
+    `  '@workloom/ui@${url}':`,
+    `    resolution: {${includeIntegrity ? `integrity: ${integrity}, ` : ""}tarball: ${url}}`,
+    `    version: ${UI_VERSION}`,
+  );
+  for (const [key, value] of Object.entries(extraPackages)) {
+    const fields = value.resolution ?? {};
+    lines.push(
+      `  '${key}':`,
+      `    resolution: {${fields.integrity ? `integrity: ${fields.integrity}, ` : ""}tarball: ${fields.tarball}}`,
+      `    version: ${value.version}`,
+    );
+  }
+  lines.push("snapshots:", `  '@workloom/ui@${url}': {}`, "");
+  writeFileSync(join(repo, "pnpm-lock.yaml"), lines.join("\n"));
+}
 
 function installGovernanceState(repo) {
   mkdirSync(join(repo, "scripts"), { recursive: true });
@@ -29,6 +113,7 @@ function installGovernanceState(repo) {
   writeFileSync(join(repo, ".workloom-ui-governance.json"), `${JSON.stringify({
     schemaVersion: "workloom.ui-governance-state/v1",
     dependency: "npm:typescript@5.9.3",
+    yamlDependency: "npm:yaml@2.9.0",
     updatePolicy: "stable-upgrade-pr-only",
     files,
   })}\n`);
@@ -36,17 +121,17 @@ function installGovernanceState(repo) {
 
 function fixture() {
   const repo = mkdtempSync(join(tmpdir(), "workloom-ui-consumer-"));
-  writeFileSync(join(repo, "package.json"), '{"devDependencies":{"typescript-governance":"npm:typescript@5.9.3"}}\n');
-  writeFileSync(join(repo, ".workloom-ui.json"), `${JSON.stringify({
-    package: "@workloom/ui",
-    version: "1.2.3",
-    updatePolicy: "upgrade-pr-only",
-    requiredClientPackages: CLIENTS.map((client) => `${client.root}/package.json`),
-    connectedClientPackages: CLIENTS.map((client) => `${client.root}/package.json`),
+  writeFileSync(join(repo, "package.json"), `${JSON.stringify({
+    devDependencies: {
+      "typescript-governance": "npm:typescript@5.9.3",
+      "yaml-governance": "npm:yaml@2.9.0",
+    },
+    pnpm: { overrides: { [`@workloom/ui@${UI_VERSION}`]: UI_URL } },
   })}\n`);
+  writeFileSync(join(repo, ".workloom-ui.json"), `${JSON.stringify(uiState())}\n`);
   for (const client of CLIENTS) {
     mkdirSync(join(repo, client.root, "src"), { recursive: true });
-    writeFileSync(join(repo, client.root, "package.json"), '{"dependencies":{"@workloom/ui":"1.2.3"}}\n');
+    writeFileSync(join(repo, client.root, "package.json"), `${JSON.stringify({ dependencies: { "@workloom/ui": UI_VERSION } })}\n`);
     writeFileSync(join(repo, client.root, "src/main.tsx"), [
       'import "@workloom/ui/tokens.css";',
       'import "@workloom/ui/content-safety.css";',
@@ -55,6 +140,7 @@ function fixture() {
     ].join("\n"));
     writeFileSync(join(repo, client.root, "src/App.tsx"), `import { ${client.shells} } from "@workloom/ui";\nexport function Client(){return <main data-workloom-client="${client.marker}">${client.body}</main>}`);
   }
+  writeUiLockfile(repo);
   return repo;
 }
 
@@ -124,6 +210,222 @@ describe("行业仓共享界面消费门禁", () => {
 
   it("要求三端真实渲染共享壳、弹层和表单", () => {
     assert.deepEqual(verifyUiConsumerRepo(fixture()), []);
+  });
+
+  it("Release URL、SHA-512 与根 pnpm override 任一漂移都 fail closed", () => {
+    const repo = fixture();
+    const statePath = join(repo, ".workloom-ui.json");
+    const state = JSON.parse(readFileSync(statePath, "utf8"));
+    state.artifact.url = "https://github.com/someone/fork/releases/download/ui-v1.2.3/workloom-ui-1.2.3.tgz";
+    state.artifact.sha512 = "sha512-not-a-digest";
+    writeFileSync(statePath, `${JSON.stringify(state)}\n`);
+    const rootPath = join(repo, "package.json");
+    const rootPackage = JSON.parse(readFileSync(rootPath, "utf8"));
+    rootPackage.pnpm.overrides = {
+      "@workloom/ui@1.2.2": "https://example.invalid/stale.tgz",
+    };
+    writeFileSync(rootPath, `${JSON.stringify(rootPackage)}\n`);
+    const errors = verifyUiConsumerRepo(repo);
+    assert.ok(errors.some((error) => error.includes("artifact.url")));
+    assert.ok(errors.some((error) => error.includes("artifact.sha512")));
+    assert.ok(errors.some((error) => error.includes("pnpm.overrides 必须精确设置")));
+    assert.ok(errors.some((error) => error.includes("过期的共享 UI override")));
+  });
+
+  it("把受控 SHA-512 注入唯一 canonical tarball resolution，重复执行保持幂等", () => {
+    const repo = fixture();
+    writeUiLockfile(repo, { includeIntegrity: false });
+    const first = bindUiLockfileIntegrity(repo);
+    assert.equal(first.changed, true);
+    assert.equal(first.integrity, UI_SHA512);
+    assert.deepEqual(verifyUiConsumerRepo(repo), []);
+    const firstBytes = readFileSync(join(repo, "pnpm-lock.yaml"));
+    const second = bindUiLockfileIntegrity(repo);
+    assert.equal(second.changed, false);
+    assert.deepEqual(readFileSync(join(repo, "pnpm-lock.yaml")), firstBytes);
+  });
+
+  it("SRI 绑定器在写锁文件前拒绝伪造或不完整的稳定制品 state", () => {
+    const mutations = [
+      ["schema", (state) => { state.schemaVersion = "workloom.ui-consumer-state/v2"; }],
+      ["contract", (state) => { state.contractVersion = "1.0.0"; }],
+      ["source", (state) => { state.source = "someone/fork"; }],
+      ["channel", (state) => { state.releaseChannel = "candidate"; }],
+      ["policy", (state) => { state.updatePolicy = "manual-copy"; }],
+      ["asset", (state) => { state.artifact.assetName = "forged.tgz"; }],
+      ["url", (state) => { state.artifact.url = "https://example.invalid/forged.tgz"; }],
+      ["clients", (state) => { state.requiredClientPackages = ["apps/web/package.json"]; }],
+    ];
+    for (const [label, mutate] of mutations) {
+      const repo = fixture();
+      try {
+        writeUiLockfile(repo, { includeIntegrity: false });
+        const statePath = join(repo, ".workloom-ui.json");
+        const state = JSON.parse(readFileSync(statePath, "utf8"));
+        mutate(state);
+        writeFileSync(statePath, `${JSON.stringify(state)}\n`);
+        const before = readFileSync(join(repo, "pnpm-lock.yaml"));
+        assert.throws(
+          () => bindUiLockfileIntegrity(repo),
+          /缺少可用于锁文件验真的稳定 UI 制品契约/u,
+          label,
+        );
+        assert.deepEqual(readFileSync(join(repo, "pnpm-lock.yaml")), before, label);
+      } finally {
+        rmSync(repo, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it("真实 pnpm 10.14 frozen install 会拒绝同 URL 下被替换的 tarball 字节", {
+    skip: PNPM_VERSION === "10.14.0" ? false : `需要 pnpm 10.14.0，当前为 ${PNPM_VERSION || "不可用"}`,
+  }, async () => {
+    const root = mkdtempSync(join(tmpdir(), "workloom-ui-pnpm-sri-"));
+    const archiveRoot = join(root, "archive");
+    const packageRoot = join(archiveRoot, "package");
+    const tarballPath = join(root, "workloom-ui-1.2.3.tgz");
+    mkdirSync(packageRoot, { recursive: true });
+    writeFileSync(join(packageRoot, "package.json"), `${JSON.stringify({
+      name: "@workloom/ui",
+      version: UI_VERSION,
+      private: true,
+      main: "index.js",
+    })}\n`);
+    writeFileSync(join(packageRoot, "index.js"), "export const stable = true;\n");
+    execFileSync("tar", ["-czf", tarballPath, "-C", archiveRoot, "package"]);
+    const originalBytes = readFileSync(tarballPath);
+    const originalIntegrity = `sha512-${createHash("sha512").update(originalBytes).digest("base64")}`;
+    let servedBytes = originalBytes;
+    const server = createServer((request, response) => {
+      if (request.url !== "/workloom-ui-1.2.3.tgz") {
+        response.statusCode = 404;
+        response.end();
+        return;
+      }
+      response.setHeader("content-type", "application/octet-stream");
+      response.setHeader("content-length", String(servedBytes.length));
+      response.end(servedBytes);
+    });
+    try {
+      await new Promise((resolveListen, rejectListen) => {
+        server.once("error", rejectListen);
+        server.listen(0, "127.0.0.1", resolveListen);
+      });
+      const address = server.address();
+      assert.ok(address && typeof address === "object");
+      const url = `http://127.0.0.1:${address.port}/workloom-ui-1.2.3.tgz`;
+      const localRootPackage = {
+        name: "ui-sri-integration",
+        private: true,
+        packageManager: "pnpm@10.14.0",
+        pnpm: { overrides: { [`@workloom/ui@${UI_VERSION}`]: url } },
+      };
+      writeFileSync(join(root, "package.json"), `${JSON.stringify(localRootPackage, null, 2)}\n`);
+      writeFileSync(join(root, "pnpm-workspace.yaml"), 'packages:\n  - "apps/*"\n');
+      for (const client of CLIENTS) {
+        mkdirSync(join(root, client.root), { recursive: true });
+        writeFileSync(join(root, client.root, "package.json"), `${JSON.stringify({
+          private: true,
+          dependencies: { "@workloom/ui": UI_VERSION },
+        })}\n`);
+      }
+      const generated = await runPnpm([
+        "install", "--lockfile-only", "--ignore-scripts", "--fetch-retries=0",
+        "--store-dir", join(root, "store-generate"),
+      ], root);
+      assert.equal(generated.status, 0, `${generated.stdout}\n${generated.stderr}`);
+      const lockPath = join(root, "pnpm-lock.yaml");
+      const generatedSource = readFileSync(lockPath, "utf8");
+      const generatedLock = YAML.parse(generatedSource);
+      assert.equal(String(generatedLock.lockfileVersion), "9.0");
+      assert.equal(generatedLock.overrides[`@workloom/ui@${UI_VERSION}`], url);
+      for (const client of CLIENTS) {
+        assert.deepEqual(generatedLock.importers[client.root].dependencies["@workloom/ui"], {
+          specifier: url,
+          version: url,
+        });
+      }
+      const generatedEntries = Object.entries(generatedLock.packages)
+        .filter(([key]) => key.startsWith("@workloom/ui@"));
+      assert.equal(generatedEntries.length, 1);
+      const [generatedKey, generatedPackage] = generatedEntries[0];
+      assert.equal(generatedKey, `@workloom/ui@${url}`);
+      assert.equal(generatedPackage.version, UI_VERSION);
+      assert.deepEqual(generatedPackage.resolution, { tarball: url });
+      assert.doesNotMatch(generatedSource, new RegExp(originalIntegrity.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"));
+
+      // 生产 binder 仍只接受 canonical GitHub Release；这里只把真实 pnpm 生成结构中的 URL
+      // 等值替换为 canonical URL，验证它写入 pnpm 实际使用的同一 packages resolution 字段。
+      writeFileSync(lockPath, generatedSource.replaceAll(url, UI_URL));
+      writeFileSync(join(root, "package.json"), `${JSON.stringify({
+        ...localRootPackage,
+        pnpm: { overrides: { [`@workloom/ui@${UI_VERSION}`]: UI_URL } },
+      }, null, 2)}\n`);
+      writeFileSync(join(root, ".workloom-ui.json"), `${JSON.stringify(uiState(originalIntegrity))}\n`);
+      assert.equal(bindUiLockfileIntegrity(root).changed, true);
+      const canonicalLock = YAML.parse(readFileSync(lockPath, "utf8"));
+      const canonicalEntry = Object.entries(canonicalLock.packages)
+        .find(([key]) => key.startsWith("@workloom/ui@"));
+      assert.equal(canonicalEntry[1].resolution.integrity, originalIntegrity);
+
+      // 独立证明 pnpm 10.14 会执行该 SRI：测试代码直接向本地 URL 的真实生成锁注入摘要，
+      // 不给生产 binder 增加任何允许非 canonical URL 的测试后门。
+      writeFileSync(join(root, "package.json"), `${JSON.stringify(localRootPackage, null, 2)}\n`);
+      const localDocument = YAML.parseDocument(generatedSource);
+      localDocument.setIn(["packages", generatedKey, "resolution", "integrity"], originalIntegrity);
+      writeFileSync(lockPath, String(localDocument));
+
+      servedBytes = Buffer.from("tampered-release-asset");
+      const frozen = await runPnpm([
+        "install", "--frozen-lockfile", "--ignore-scripts", "--fetch-retries=0",
+        "--store-dir", join(root, "store-tampered"),
+      ], root);
+      assert.notEqual(frozen.status, 0, "同 URL 异内容 tarball 不得通过 frozen install");
+      assert.match(`${frozen.stdout}\n${frozen.stderr}`, /ERR_PNPM_TARBALL_INTEGRITY|unexpected checksum/u);
+    } finally {
+      await new Promise((resolveClose) => server.close(resolveClose));
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("锁文件的 SRI、三端 importer、唯一 tarball 与 override 任一漂移都 fail closed", () => {
+    const wrongIntegrity = fixture();
+    writeUiLockfile(wrongIntegrity, { integrity: `sha512-${Buffer.alloc(64, 8).toString("base64")}` });
+    assert.ok(verifyUiConsumerRepo(wrongIntegrity)
+      .some((error) => error.includes("resolution.integrity")));
+
+    const missingImporter = fixture();
+    writeUiLockfile(missingImporter, { omitImporter: "apps/webb" });
+    assert.ok(verifyUiConsumerRepo(missingImporter)
+      .some((error) => error.includes("importer apps/webb 未锁定")));
+
+    const duplicatePackage = fixture();
+    writeUiLockfile(duplicatePackage, {
+      extraPackages: {
+        "@workloom/ui@https://example.invalid/other.tgz": {
+          resolution: { tarball: "https://example.invalid/other.tgz", integrity: UI_SHA512 },
+          version: UI_VERSION,
+        },
+      },
+    });
+    assert.ok(verifyUiConsumerRepo(duplicatePackage)
+      .some((error) => error.includes("必须且只能锁定一个")));
+  });
+
+  it("拒绝伪造 state schema、包名、来源、通道与预发布版本", () => {
+    const repo = fixture();
+    const statePath = join(repo, ".workloom-ui.json");
+    const state = JSON.parse(readFileSync(statePath, "utf8"));
+    state.schemaVersion = "workloom.ui-consumer-state/v2";
+    state.package = "@fork/ui";
+    state.source = "someone/fork";
+    state.releaseChannel = "candidate";
+    state.version = "1.2.3-rc.1";
+    writeFileSync(statePath, `${JSON.stringify(state)}\n`);
+    const errors = verifyUiConsumerRepo(repo);
+    for (const fragment of ["schemaVersion", "package 必须为", "source 必须为", "releaseChannel", "精确稳定 semver"]) {
+      assert.ok(errors.some((error) => error.includes(fragment)), `未阻断 ${fragment}`);
+    }
   });
 
   it("只导入但不渲染共享壳仍然失败", () => {

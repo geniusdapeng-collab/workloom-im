@@ -1,16 +1,16 @@
 {
   "version": 9,
-  "description": "WorkLoom IM 基座能力同步范围声明——base-sync 引擎的唯一事实源。文件型公共能力按 include/exclude 受控分发；三端组件/视觉语言通过 @workloom/ui 稳定制品下发，三端应用壳/导航/布局/状态/API 接线通过同一 ui-v* 稳定标签和逐文件指纹升级 PR 下发。行业属性与演示能力永不同步。requiredRootAssets 无视行业代码的 pathPrefix，始终安装并校验在 Git 仓库根目录。修改本文件即修改同步边界，需基座 owner 评审。",
+  "description": "WorkLoom IM 基座能力同步范围声明——base-sync 引擎的唯一事实源。文件型公共能力按 include/exclude 受控分发；三端组件/视觉语言通过与 ui-v* 同版的 GitHub Release @workloom/ui tarball 下发，三端应用壳/导航/布局/状态/API 接线通过同一稳定标签和逐文件指纹升级 PR 下发。行业属性与演示能力永不同步。requiredRootAssets 无视行业代码的 pathPrefix，始终安装并校验在 Git 仓库根目录。修改本文件即修改同步边界，需基座 owner 评审。",
 
   "registryCapabilities": [
     {
       "package": "@workloom/ui",
       "source": "packages/ui/**",
       "consumers": ["apps/web", "apps/webb", "apps/webc"],
-      "distribution": "stable-registry-upgrade-pr",
+      "distribution": "stable-github-release-upgrade-pr",
       "consumerGate": "scripts/verify-ui-consumer.mjs",
       "migration": "two-phase-required",
-      "comment": "第一阶段先补齐三个真实生产客户端与产品身份配置，第二阶段再锁定稳定制品并运行消费门禁；缺少 apps/webb 等客户端时必须报告迁移未完成，禁止按三端合规处理。"
+      "comment": "第一阶段先补齐三个真实生产客户端与产品身份配置，第二阶段再锁定同标签 GitHub Release tarball 并运行消费门禁；缺少 apps/webb 等客户端时必须报告迁移未完成，禁止按三端合规处理。"
     }
   ],
 
@@ -35,6 +35,7 @@
     "installer": "sync/install-ui-governance.mjs",
     "stateFile": ".workloom-ui-governance.json",
     "dependency": "npm:typescript@5.9.3",
+    "yamlDependency": "npm:yaml@2.9.0",
     "managedFiles": [
       "scripts/verify-ui-consumer.mjs",
       "scripts/ui-governance-rules.mjs"
@@ -92,12 +93,12 @@
       "reason": "环境示例仅展示带省略号的 Ed25519 PEM 结构，并明确要求私钥只能进入密钥库；不含可用私钥。"
     },
     ".github/workflows/ui-release.yml": {
-      "sha256": "383dbe25ec7ad4aa25f7aa47ae76dfb808b946bf46cfed8a754fb9464b8d4576",
+      "sha256": "caca88f89542b2e46515dddb6628807ff7a162a13260a3a58fc932d219125049",
       "findings": [
-        { "rule": "credential-in-url", "line": 52 },
-        { "rule": "literal-sensitive-assignment", "line": 52 },
-        { "rule": "credential-in-url", "line": 53 },
-        { "rule": "credential-in-url", "line": 54 }
+        { "rule": "credential-in-url", "line": 56 },
+        { "rule": "literal-sensitive-assignment", "line": 56 },
+        { "rule": "credential-in-url", "line": 57 },
+        { "rule": "credential-in-url", "line": 58 }
       ],
       "reason": "UI 发布门禁连接串是临时 GitHub Actions PostgreSQL 服务的公开测试值，不用于任何外部或生产数据库。"
     },

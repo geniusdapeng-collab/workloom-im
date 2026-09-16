@@ -9,6 +9,7 @@ import {
   GOVERNANCE_FILES,
   GOVERNANCE_STATE,
   GOVERNANCE_TYPESCRIPT,
+  GOVERNANCE_YAML,
   installUiGovernance,
   sanitizedLocalGitEnvironment,
 } from "./install-ui-governance.mjs";
@@ -118,12 +119,37 @@ test("新行业把 verifier、规则、固定解析器和指纹作为同一治�
     installUiGovernance({ repo: fx.target, sourceRoot: fx.source });
     const packageJson = JSON.parse(readFileSync(join(fx.target, "package.json"), "utf8"));
     assert.equal(packageJson.devDependencies["typescript-governance"], GOVERNANCE_TYPESCRIPT);
+    assert.equal(packageJson.devDependencies["yaml-governance"], GOVERNANCE_YAML);
     const state = JSON.parse(readFileSync(join(fx.target, GOVERNANCE_STATE), "utf8"));
     assert.equal(state.dependency, GOVERNANCE_TYPESCRIPT);
+    assert.equal(state.yamlDependency, GOVERNANCE_YAML);
     for (const path of GOVERNANCE_FILES) {
       assert.equal(readFileSync(join(fx.target, path), "utf8"), `// base ${path}\n`);
       assert.match(state.files[path].sha256, /^[0-9a-f]{64}$/u);
     }
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("既有 v1 治理 state 可在文件指纹不变时补入固定 YAML 解析器", () => {
+  const fx = fixture();
+  try {
+    installUiGovernance({ repo: fx.target, sourceRoot: fx.source });
+    const packagePath = join(fx.target, "package.json");
+    const packageJson = JSON.parse(readFileSync(packagePath, "utf8"));
+    delete packageJson.devDependencies["yaml-governance"];
+    write(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
+    const statePath = join(fx.target, GOVERNANCE_STATE);
+    const state = JSON.parse(readFileSync(statePath, "utf8"));
+    delete state.yamlDependency;
+    write(statePath, `${JSON.stringify(state, null, 2)}\n`);
+
+    installUiGovernance({ repo: fx.target, sourceRoot: fx.source });
+    const migratedPackage = JSON.parse(readFileSync(packagePath, "utf8"));
+    const migratedState = JSON.parse(readFileSync(statePath, "utf8"));
+    assert.equal(migratedPackage.devDependencies["yaml-governance"], GOVERNANCE_YAML);
+    assert.equal(migratedState.yamlDependency, GOVERNANCE_YAML);
   } finally {
     rmSync(fx.root, { recursive: true, force: true });
   }
@@ -303,19 +329,21 @@ test("既有行业只有文件仍匹配旧指纹时才允许稳定 rollout 更�
 });
 
 test("既有行业固定了不同解析器版本时拒绝静默改写", () => {
-  const fx = fixture();
-  try {
-    write(join(fx.target, "package.json"), `${JSON.stringify({
-      name: "industry",
-      devDependencies: { "typescript-governance": "^5.8.0" },
-    }, null, 2)}\n`);
-    assert.throws(
-      () => installUiGovernance({ repo: fx.target, sourceRoot: fx.source }),
-      /拒绝静默覆盖/u,
-    );
-    assert.equal(existsSync(join(fx.target, GOVERNANCE_STATE)), false);
-  } finally {
-    rmSync(fx.root, { recursive: true, force: true });
+  for (const devDependencies of [
+    { "typescript-governance": "^5.8.0" },
+    { "yaml-governance": "^2.8.0" },
+  ]) {
+    const fx = fixture();
+    try {
+      write(join(fx.target, "package.json"), `${JSON.stringify({ name: "industry", devDependencies }, null, 2)}\n`);
+      assert.throws(
+        () => installUiGovernance({ repo: fx.target, sourceRoot: fx.source }),
+        /拒绝静默覆盖/u,
+      );
+      assert.equal(existsSync(join(fx.target, GOVERNANCE_STATE)), false);
+    } finally {
+      rmSync(fx.root, { recursive: true, force: true });
+    }
   }
 });
 

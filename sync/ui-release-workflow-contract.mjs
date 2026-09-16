@@ -37,9 +37,35 @@ function pinsArtifactNpmCli(step) {
   );
 }
 
+function exactContentsPermission(job, value) {
+  const permissions = job?.permissions;
+  return Boolean(
+    permissions
+    && typeof permissions === "object"
+    && !Array.isArray(permissions)
+    && permissions.contents === value
+    && Object.keys(permissions).every((key) => key === "contents"),
+  );
+}
+
+function fixedReleaseCheckout(steps) {
+  return steps.find((step) => typeof step?.uses === "string" && step.uses.startsWith("actions/checkout@"));
+}
+
+function validateRolloutCheckout(checkout, jobName, risks) {
+  if (
+    !checkout
+    || checkout.with?.ref !== "${{ needs.verify-and-preflight.outputs.release-sha }}"
+    || checkout.with?.["fetch-tags"] !== true
+    || checkout.with?.["persist-credentials"] !== false
+  ) {
+    risks.push(`${jobName} 必须取回稳定标签并无持久凭据地 checkout 已固定 release-sha`);
+  }
+}
+
 /**
- * 用 YAML 语义树验证 npm Trusted Publisher 的权限边界。这里刻意不对整份文本
- * 做正则：错误 job、注释或不可达字符串都不能替真正的 publish job“代打勾”。
+ * 用 YAML 语义树验证 GitHub Release 稳定制品发布边界。错误 job、注释、
+ * 浮动权限或仅写在字符串里的命令都不能替真正的 production 发布 job 代打勾。
  */
 export function findUiReleaseWorkflowRisks(source) {
   let workflow;
@@ -54,8 +80,166 @@ export function findUiReleaseWorkflowRisks(source) {
   const risks = [];
   const jobs = workflow?.jobs;
   if (!jobs || typeof jobs !== "object" || Array.isArray(jobs)) return ["UI 发布 workflow 缺少 jobs 映射"];
-  const publish = jobs["publish-ui"];
-  if (!publish || typeof publish !== "object") return ["UI 发布 workflow 缺少独立 publish-ui job"];
+  if (workflow?.concurrency?.group !== "shared-ui-release-${{ github.ref }}"
+    || workflow?.concurrency?.["cancel-in-progress"] !== false) {
+    risks.push("UI 发布 workflow 必须按 ref 串行且不得取消正在进行的稳定发布");
+  }
+
+  const verify = jobs["verify-and-preflight"];
+  if (!verify || typeof verify !== "object") risks.push("UI 发布 workflow 缺少 verify-and-preflight job");
+  const publisher = jobs["publish-github-release"];
+  if (!publisher || typeof publisher !== "object") risks.push("UI 发布 workflow 缺少独立 publish-github-release job");
+  if (jobs["publish-ui"] !== undefined) risks.push("UI 发布 workflow 不得保留 npm publish-ui 旁路 job");
+
+  for (const [jobName, job] of Object.entries(jobs)) {
+    if (job?.permissions?.["id-token"] !== undefined) {
+      risks.push(`${jobName} 不得申请 npm OIDC id-token 权限`);
+    }
+    if (job?.env?.SYNC_TOKEN !== undefined) risks.push(`${jobName} 不得在 job scope 注入 SYNC_TOKEN`);
+    for (const step of Array.isArray(job?.steps) ? job.steps : []) {
+      if (step?.env?.SYNC_TOKEN === undefined) continue;
+      if (!hasExecutableRolloutCommand(step.run)) {
+        risks.push(`${jobName} 只能在实际写 rollout 的 step 注入 SYNC_TOKEN`);
+      }
+    }
+  }
+
+  const semanticText = JSON.stringify(workflow);
+  if (/\b(?:NPM_TOKEN|NODE_AUTH_TOKEN)\b/u.test(semanticText)) {
+    risks.push("GitHub Release 发布不得配置 npm 长期令牌或 NODE_AUTH_TOKEN 通道");
+  }
+  if (/npm\s+(?:publish|view)\b/u.test(semanticText)) {
+    risks.push("GitHub Release 发布闭环不得调用 npm publish/view registry 通道");
+  }
+
+  if (publisher && typeof publisher === "object") {
+    if (!needsJob(publisher, "verify-and-preflight")) {
+      risks.push("publish-github-release 必须等待 verify-and-preflight");
+    }
+    const condition = String(publisher.if ?? "");
+    if (!condition.includes("github.event_name == 'push'") || !condition.includes("refs/tags/ui-v")) {
+      risks.push("publish-github-release 只能由 ui-v* tag push 触发");
+    }
+    if (environmentName(publisher.environment) !== "production") {
+      risks.push("publish-github-release 必须绑定 production environment");
+    }
+    if (!exactContentsPermission(publisher, "write")) {
+      risks.push("publish-github-release 必须且只能拥有 contents: write");
+    }
+
+    const publishText = JSON.stringify(publisher);
+    if (/\bSYNC_TOKEN\b/u.test(publishText)) risks.push("publish-github-release 不得接触跨仓写入 token");
+    if (/\bsecrets\./u.test(publishText)) risks.push("publish-github-release 不得读取长期仓库 secret");
+
+    const steps = Array.isArray(publisher.steps) ? publisher.steps : [];
+    if (steps.some((step) => typeof step?.uses === "string" && step.uses.startsWith("actions/checkout@"))) {
+      risks.push("publish-github-release 只消费已验制品，不得 checkout 仓库代码");
+    }
+    if (steps.some((step) => /\b(?:pnpm|npm)\s+install\b/u.test(String(step?.run ?? "")))) {
+      risks.push("publish-github-release 不得在 contents: write 权限下安装依赖");
+    }
+    const downloads = steps.filter((step) => typeof step?.uses === "string" && step.uses.startsWith("actions/download-artifact@"));
+    if (downloads.length !== 1 || downloads[0]?.with?.name !== "workloom-ui-package") {
+      risks.push("publish-github-release 必须且只能下载 verify job 的 workloom-ui-package 制品");
+    }
+
+    const releaseStep = steps.find((step) => step?.name === "发布或逐字节核验 GitHub Release 稳定制品");
+    if (!releaseStep) {
+      risks.push("publish-github-release 缺少受控 GitHub Release 发布步骤");
+    } else {
+      if (releaseStep.env?.GH_TOKEN !== "${{ github.token }}") {
+        risks.push("publish-github-release 必须只使用当前 run 的短期 github.token");
+      }
+      if (releaseStep.env?.VERSION !== "${{ needs.verify-and-preflight.outputs.release-version }}"
+        || releaseStep.env?.RELEASE_TAG !== "${{ needs.verify-and-preflight.outputs.release-tag }}"
+        || releaseStep.env?.RELEASE_SHA !== "${{ needs.verify-and-preflight.outputs.release-sha }}") {
+        risks.push("publish-github-release 必须消费 verify-and-preflight 固定的版本、标签与提交");
+      }
+      const command = executableLines(releaseStep.run).join("\n");
+      const requiredFragments = [
+        'EXPECTED_ASSET="workloom-ui-${VERSION}.tgz"',
+        'test "${#TARBALLS[@]}" -eq 1',
+        'test "$LOCAL_INTEGRITY" = "$PACK_INTEGRITY"',
+        'gh release view "$RELEASE_TAG"',
+        'gh release create "$RELEASE_TAG"',
+        "--verify-tag",
+        '--target "$RELEASE_SHA"',
+        'gh release upload "$RELEASE_TAG" "$TARBALL"',
+        'gh release download "$RELEASE_TAG"',
+        'test "$REMOTE_INTEGRITY" = "$LOCAL_INTEGRITY"',
+        'cmp -s "$TARBALL" "$REMOTE_DIR/$EXPECTED_ASSET"',
+      ];
+      for (const fragment of requiredFragments) {
+        if (!command.includes(fragment)) risks.push(`GitHub Release 幂等发布缺少受控动作：${fragment}`);
+      }
+      if (!command.includes("createHash(\"sha512\")") || !command.includes("pack-metadata.json")) {
+        risks.push("GitHub Release 发布必须以 tarball 实算 sha512 并核对 pack metadata");
+      }
+      if (!command.includes('if(tgz.length>1) throw new Error("Release 不得包含多个 tgz 制品")')) {
+        risks.push("GitHub Release 必须拒绝同一稳定版出现多个 tgz 制品");
+      }
+    }
+  }
+
+  const verifySteps = Array.isArray(verify?.steps) ? verify.steps : [];
+  const releaseMetadataGate = verifySteps.find((step) => step?.name === "校验 UI 标签、稳定版本登记与 GitHub Release 分发契约");
+  const releaseMetadataCommand = String(releaseMetadataGate?.run ?? "");
+  for (const fragment of [
+    'p.private!==true||p.publishConfig!==undefined',
+    'd?.type!=="github-release-tarball"',
+    "releases/download/ui-v{version}/workloom-ui-{version}.tgz",
+    'd?.assetNameTemplate!=="workloom-ui-{version}.tgz"',
+    "d?.integrityByVersion?.[v]",
+  ]) {
+    if (!releaseMetadataCommand.includes(fragment)) {
+      risks.push("verify-and-preflight 必须关闭 npm publish 并从固定标签校验 GitHub Release 分发模板与 sha512 登记");
+      break;
+    }
+  }
+  const verifyCliIndex = verifySteps.findIndex(pinsArtifactNpmCli);
+  const packIndex = verifySteps.findIndex((step) => step?.name === "生成待发布的不可变 UI 制品");
+  if (verifyCliIndex < 0 || packIndex < 0 || verifyCliIndex >= packIndex) {
+    risks.push("verify-and-preflight 必须先固定 npm 11.6.2，再生成待发布 npm pack");
+  } else {
+    const packCommand = String(verifySteps[packIndex]?.run ?? "");
+    const explicitPrepackIndex = packCommand.indexOf("pnpm -C packages/ui run prepack");
+    const inertPackIndex = packCommand.indexOf("npm pack --ignore-scripts --json");
+    const metadataVerificationIndex = packCommand.indexOf("meta[0]?.integrity!==registered");
+    if (explicitPrepackIndex < 0 || inertPackIndex <= explicitPrepackIndex || metadataVerificationIndex <= inertPackIndex) {
+      risks.push("verify-and-preflight 必须先显式运行 UI prepack，再用 --ignore-scripts 生成纯净 JSON metadata，最后校验 manifest");
+    }
+    if (!packCommand.includes("meta[0]?.integrity!==registered") || !packCommand.includes("integrityByVersion")) {
+      risks.push("verify-and-preflight 必须在上传前核对 pack metadata 与受控 manifest sha512");
+    }
+  }
+
+  const automatic = jobs["rollout-after-release"];
+  if (!automatic || typeof automatic !== "object") {
+    risks.push("UI 发布 workflow 缺少 rollout-after-release job");
+  } else {
+    if (!needsJob(automatic, "verify-and-preflight") || !needsJob(automatic, "publish-github-release")) {
+      risks.push("rollout-after-release 必须等待验证与 GitHub Release 发布完成");
+    }
+    if (environmentName(automatic.environment) !== "production") {
+      risks.push("rollout-after-release 必须绑定 production environment");
+    }
+    if (!exactContentsPermission(automatic, "read")) {
+      risks.push("rollout-after-release 必须保持 contents: read 的 job 级最小权限");
+    }
+    const steps = Array.isArray(automatic.steps) ? automatic.steps : [];
+    validateRolloutCheckout(fixedReleaseCheckout(steps), "rollout-after-release", risks);
+    if (JSON.stringify(automatic).includes("SYNC_TOKEN") || steps.some((step) => hasExecutableRolloutCommand(step?.run))) {
+      risks.push("自动 tag rollout 不得保存跨仓 token 或直接写入八仓");
+    }
+    const integrityIndexes = steps.map((step, index) => hasExactArtifactVerificationCommand(step?.run) ? index : -1).filter((index) => index >= 0);
+    const npmCliIndex = steps.findIndex(pinsArtifactNpmCli);
+    if (integrityIndexes.length !== 1) {
+      risks.push("rollout-after-release 必须且只能执行一次 GitHub Release sha512 预校验");
+    } else if (npmCliIndex < 0 || npmCliIndex >= integrityIndexes[0]) {
+      risks.push("rollout-after-release 必须先固定 npm 11.6.2，再复算稳定制品完整性");
+    }
+  }
+
   const continueRollout = jobs["continue-rollout"];
   if (!continueRollout || typeof continueRollout !== "object") {
     risks.push("UI 发布 workflow 缺少受控 continue-rollout job");
@@ -70,36 +254,19 @@ export function findUiReleaseWorkflowRisks(source) {
     if (environmentName(continueRollout.environment) !== "production") {
       risks.push("continue-rollout 必须绑定 production environment");
     }
-    const rolloutPermissions = continueRollout.permissions;
-    if (
-      !rolloutPermissions
-      || typeof rolloutPermissions !== "object"
-      || Array.isArray(rolloutPermissions)
-      || rolloutPermissions.contents !== "read"
-      || Object.keys(rolloutPermissions).some((key) => key !== "contents")
-    ) {
+    if (!exactContentsPermission(continueRollout, "read")) {
       risks.push("continue-rollout 必须保持 contents: read 的 job 级最小权限");
     }
 
-    const rolloutSteps = Array.isArray(continueRollout.steps) ? continueRollout.steps : [];
-    const checkout = rolloutSteps.find((step) => typeof step?.uses === "string" && step.uses.startsWith("actions/checkout@"));
-    if (
-      !checkout
-      || checkout.with?.ref !== "${{ needs.verify-and-preflight.outputs.release-sha }}"
-      || checkout.with?.["fetch-tags"] !== true
-      || checkout.with?.["persist-credentials"] !== false
-    ) {
-      risks.push("continue-rollout 必须取回稳定标签并无持久凭据地 checkout 已固定 release-sha");
-    }
-    const integrityIndexes = rolloutSteps
-      .map((step, index) => hasExactArtifactVerificationCommand(step?.run) ? index : -1)
-      .filter((index) => index >= 0);
-    const writeIndex = rolloutSteps.findIndex((step) => step?.env?.SYNC_TOKEN !== undefined && hasExecutableRolloutCommand(step?.run));
-    const npmCliIndex = rolloutSteps.findIndex(pinsArtifactNpmCli);
+    const steps = Array.isArray(continueRollout.steps) ? continueRollout.steps : [];
+    validateRolloutCheckout(fixedReleaseCheckout(steps), "continue-rollout", risks);
+    const integrityIndexes = steps.map((step, index) => hasExactArtifactVerificationCommand(step?.run) ? index : -1).filter((index) => index >= 0);
+    const writeIndex = steps.findIndex((step) => step?.env?.SYNC_TOKEN !== undefined && hasExecutableRolloutCommand(step?.run));
+    const npmCliIndex = steps.findIndex(pinsArtifactNpmCli);
     if (integrityIndexes.length !== 1) {
-      risks.push("continue-rollout 必须且只能执行一次固定标签 dist.integrity 预校验");
+      risks.push("continue-rollout 必须且只能执行一次 GitHub Release sha512 预校验");
     } else {
-      const integrityStep = rolloutSteps[integrityIndexes[0]];
+      const integrityStep = steps[integrityIndexes[0]];
       if (integrityStep.env?.STABLE_VERSION !== "${{ needs.verify-and-preflight.outputs.release-version }}") {
         risks.push("continue-rollout 完整性预校验必须消费已固定 release-version");
       }
@@ -107,7 +274,7 @@ export function findUiReleaseWorkflowRisks(source) {
         risks.push("continue-rollout 完整性预校验不得接触跨仓写入 token");
       }
       if (writeIndex < 0 || integrityIndexes[0] >= writeIndex) {
-        risks.push("continue-rollout 必须先通过 dist.integrity 预校验，再允许跨仓写入");
+        risks.push("continue-rollout 必须先通过 GitHub Release sha512 预校验，再允许跨仓写入");
       }
       if (npmCliIndex < 0 || npmCliIndex >= integrityIndexes[0]) {
         risks.push("continue-rollout 必须先固定 npm 11.6.2，再复算稳定制品完整性");
@@ -115,92 +282,5 @@ export function findUiReleaseWorkflowRisks(source) {
     }
   }
 
-  if (!needsJob(publish, "verify-and-preflight")) risks.push("publish-ui 必须等待 verify-and-preflight");
-  const publishCondition = String(publish.if ?? "");
-  if (!publishCondition.includes("github.event_name == 'push'") || !publishCondition.includes("refs/tags/ui-v")) {
-    risks.push("publish-ui 只能由 ui-v* tag push 触发");
-  }
-  if (environmentName(publish.environment) !== "production") risks.push("publish-ui 必须绑定 production environment");
-  const permissions = publish.permissions;
-  if (!permissions || typeof permissions !== "object" || Array.isArray(permissions)) {
-    risks.push("publish-ui 必须声明 job 级最小权限");
-  } else {
-    if (permissions.contents !== "read") risks.push("publish-ui 只能读取仓库内容");
-    if (permissions["id-token"] !== "write") risks.push("publish-ui 缺少 Trusted Publisher 所需 id-token: write");
-    const extras = Object.keys(permissions).filter((key) => !["contents", "id-token"].includes(key));
-    if (extras.length) risks.push(`publish-ui 存在非发布所需权限：${extras.join("、")}`);
-  }
-  for (const [jobName, job] of Object.entries(jobs)) {
-    if (jobName !== "publish-ui" && job?.permissions?.["id-token"] === "write") {
-      risks.push(`id-token: write 只能授予 publish-ui，当前还授予 ${jobName}`);
-    }
-    if (job?.env?.SYNC_TOKEN !== undefined) risks.push(`${jobName} 不得在 job scope 注入 SYNC_TOKEN`);
-    for (const step of Array.isArray(job?.steps) ? job.steps : []) {
-      if (step?.env?.SYNC_TOKEN === undefined) continue;
-      if (!hasExecutableRolloutCommand(step.run)) {
-        risks.push(`${jobName} 只能在实际写 rollout 的 step 注入 SYNC_TOKEN`);
-      }
-    }
-  }
-
-  const semanticText = JSON.stringify(workflow);
-  if (/\b(?:NPM_TOKEN|NODE_AUTH_TOKEN)\b/u.test(semanticText)) risks.push("UI 发布不得配置长期 npm token 或空 NODE_AUTH_TOKEN 通道");
-  const publishText = JSON.stringify(publish);
-  if (/\bSYNC_TOKEN\b/u.test(publishText)) risks.push("publish-ui 不得接触跨仓写入 token");
-
-  const steps = Array.isArray(publish.steps) ? publish.steps : [];
-  const setupNode = steps.filter((step) => typeof step?.uses === "string" && step.uses.startsWith("actions/setup-node@"));
-  if (setupNode.length !== 1) risks.push("publish-ui 必须且只能初始化一次 Node.js");
-  else if (setupNode[0].with?.["registry-url"] !== undefined || setupNode[0].with?.["always-auth"] !== undefined) {
-    risks.push("publish-ui 的 setup-node 不得生成依赖 NODE_AUTH_TOKEN 的 npmrc");
-  }
-  if (steps.some((step) => typeof step?.uses === "string" && step.uses.startsWith("actions/checkout@"))) {
-    risks.push("publish-ui 只消费已验制品，不得 checkout 仓库代码");
-  }
-  if (steps.some((step) => /\bpnpm\s+install\b/u.test(String(step?.run ?? "")))) {
-    risks.push("publish-ui 不得在 OIDC 权限下安装仓库依赖");
-  }
-
-  const cliIndex = steps.findIndex(pinsArtifactNpmCli);
-  const publishIndex = steps.findIndex((step) => step?.name === "发布或核验完全相同的稳定 UI 制品");
-  if (cliIndex < 0) risks.push("publish-ui 必须以 --ignore-scripts 固定 npm 11.6.2");
-  if (publishIndex < 0) risks.push("publish-ui 缺少受控稳定制品发布步骤");
-  else {
-    const command = String(steps[publishIndex]?.run ?? "");
-    if (steps[publishIndex]?.env?.VERSION !== "${{ needs.verify-and-preflight.outputs.release-version }}") {
-      risks.push("publish-ui 必须消费 verify-and-preflight 固定的版本输出");
-    }
-    if (!/npm\s+publish\s+"\$\{TARBALLS\[0\]\}"\s+--access\s+public\s+--provenance\b/u.test(command)) {
-      risks.push("publish-ui 必须对唯一 tarball 执行 public OIDC provenance 发布");
-    }
-    const registryCommands = command.match(/npm\s+(?:view|publish)\b[^\n]*/gu) ?? [];
-    if (registryCommands.length !== 3
-      || registryCommands.some((line) => !line.includes("--registry=https://registry.npmjs.org"))) {
-      risks.push("publish-ui 的查询、发布与确认必须全部显式固定官方 npmjs registry");
-    }
-    if (cliIndex >= publishIndex) risks.push("publish-ui 必须先固定 npm CLI，再执行发布");
-  }
-
-  const verify = jobs["verify-and-preflight"];
-  const verifySteps = Array.isArray(verify?.steps) ? verify.steps : [];
-  const releaseMetadataGate = verifySteps.find((step) => step?.name === "校验 UI 标签、稳定版本登记与包版本一致");
-  const releaseMetadataCommand = String(releaseMetadataGate?.run ?? "");
-  if (!releaseMetadataCommand.includes('p.publishConfig?.registry!=="https://registry.npmjs.org"')
-    || !releaseMetadataCommand.includes('p.publishConfig?.access!=="public"')) {
-    risks.push("verify-and-preflight 必须从标签固定 @workloom/ui 的 npmjs/public publishConfig");
-  }
-  const verifyCliIndex = verifySteps.findIndex(pinsArtifactNpmCli);
-  const packIndex = verifySteps.findIndex((step) => step?.name === "生成待发布的不可变 UI 制品");
-  if (verifyCliIndex < 0 || packIndex < 0 || verifyCliIndex >= packIndex) {
-    risks.push("verify-and-preflight 必须先固定 npm 11.6.2，再生成待发布 npm pack");
-  }
-
-  const automatic = jobs["rollout-after-publish"];
-  const automaticSteps = Array.isArray(automatic?.steps) ? automatic.steps : [];
-  const automaticCliIndex = automaticSteps.findIndex(pinsArtifactNpmCli);
-  const automaticWriteIndex = automaticSteps.findIndex((step) => step?.env?.SYNC_TOKEN !== undefined && hasExecutableRolloutCommand(step?.run));
-  if (automaticCliIndex < 0 || automaticWriteIndex < 0 || automaticCliIndex >= automaticWriteIndex) {
-    risks.push("rollout-after-publish 必须固定 npm 11.6.2 后再执行带完整性门禁的 rollout");
-  }
   return [...new Set(risks)];
 }

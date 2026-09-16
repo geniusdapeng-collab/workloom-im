@@ -26,6 +26,10 @@ on:
         required: false
         type: string
 
+concurrency:
+  group: shared-ui-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   verify-and-preflight:
     runs-on: ubuntu-latest
@@ -170,12 +174,12 @@ jobs:
           curl -fsS http://127.0.0.1:8787/health >/dev/null
           pnpm release:gate
 
-      - name: 校验 UI 标签、稳定版本登记与包版本一致
+      - name: 校验 UI 标签、稳定版本登记与 GitHub Release 分发契约
         if: steps.release-target.outputs.stable == 'true'
         env:
           VERSION: ${{ steps.release-target.outputs.version }}
         run: |
-          node -e 'const fs=require("fs"); const v=process.argv[1]; const p=JSON.parse(fs.readFileSync("packages/ui/package.json")); const m=JSON.parse(fs.readFileSync("sync/base-capabilities.json")); if(p.version!==v||m.ui.latestStableVersion!==v||m.clientFoundation.latestStableVersion!==v) throw new Error(`版本不一致: tag=${v}, package=${p.version}, uiStable=${m.ui.latestStableVersion}, clientStable=${m.clientFoundation.latestStableVersion}`); if(p.publishConfig?.registry!=="https://registry.npmjs.org"||p.publishConfig?.access!=="public") throw new Error("@workloom/ui publishConfig 必须固定官方 npmjs/public")' "$VERSION"
+          node -e 'const fs=require("fs"); const v=process.argv[1]; const p=JSON.parse(fs.readFileSync("packages/ui/package.json")); const m=JSON.parse(fs.readFileSync("sync/base-capabilities.json")); const d=m.ui?.distribution; const expectedUrl="https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v{version}/workloom-ui-{version}.tgz"; if(p.version!==v||m.ui?.latestStableVersion!==v||m.clientFoundation?.latestStableVersion!==v) throw new Error(`版本不一致: tag=${v}, package=${p.version}, uiStable=${m.ui?.latestStableVersion}, clientStable=${m.clientFoundation?.latestStableVersion}`); if(p.private!==true||p.publishConfig!==undefined) throw new Error("@workloom/ui 必须关闭第三方 registry 发布通道"); if(d?.type!=="github-release-tarball"||d?.urlTemplate!==expectedUrl||d?.assetNameTemplate!=="workloom-ui-{version}.tgz") throw new Error("@workloom/ui 必须固定 GitHub Release tarball 分发契约"); if(!/^sha512-[A-Za-z0-9+/]{86}==$/.test(d?.integrityByVersion?.[v]??"")) throw new Error(`缺少 ${v} 的 sha512 SRI 登记`)' "$VERSION"
           node sync/client-foundation.mjs verify-source --version "$VERSION"
 
       - name: 八个下游仓访问与迁移现状只读预检
@@ -199,10 +203,15 @@ jobs:
 
       - name: 生成待发布的不可变 UI 制品
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/ui-v')
+        env:
+          VERSION: ${{ steps.release-target.outputs.version }}
         run: |
+          pnpm -C packages/ui run prepack
           mkdir -p "$RUNNER_TEMP/ui-package"
           cd packages/ui
-          npm pack --json --pack-destination "$RUNNER_TEMP/ui-package" > "$RUNNER_TEMP/ui-package/pack-metadata.json"
+          npm pack --ignore-scripts --json --pack-destination "$RUNNER_TEMP/ui-package" > "$RUNNER_TEMP/ui-package/pack-metadata.json"
+          cd "$GITHUB_WORKSPACE"
+          node -e 'const fs=require("fs"); const v=process.argv[1]; const dir=process.argv[2]; const meta=JSON.parse(fs.readFileSync(`${dir}/pack-metadata.json`)); const manifest=JSON.parse(fs.readFileSync("sync/base-capabilities.json")); const expected=`workloom-ui-${v}.tgz`; if(!Array.isArray(meta)||meta.length!==1||meta[0]?.filename!==expected) throw new Error(`npm pack 必须且只能生成 ${expected}`); const registered=manifest.ui?.distribution?.integrityByVersion?.[v]; if(!registered||meta[0]?.integrity!==registered) throw new Error(`pack integrity 与 ${v} 的受控 manifest 登记不一致`)' "$VERSION" "$RUNNER_TEMP/ui-package"
 
       - name: 留存待发布 UI 制品
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/ui-v')
@@ -213,57 +222,74 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  publish-ui:
+  publish-github-release:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/ui-v')
     needs: verify-and-preflight
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: production
     permissions:
-      contents: read
-      id-token: write
+      contents: write
     steps:
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      # 不向 setup-node 写 registry-url，避免生成依赖空 NODE_AUTH_TOKEN 的用户级
-      # npmrc。OIDC job 不 checkout、不安装仓库依赖，只固定 npm CLI 后发布已验 tarball。
-      - name: 固定支持 Trusted Publisher 的 npm CLI
-        run: npm install --global --ignore-scripts npm@11.6.2
-
       - uses: actions/download-artifact@v4
         with:
           name: workloom-ui-package
           path: ${{ runner.temp }}/ui-package
 
-      - name: 发布或核验完全相同的稳定 UI 制品
+      - name: 发布或逐字节核验 GitHub Release 稳定制品
         env:
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.verify-and-preflight.outputs.release-version }}
+          RELEASE_TAG: ${{ needs.verify-and-preflight.outputs.release-tag }}
+          RELEASE_SHA: ${{ needs.verify-and-preflight.outputs.release-sha }}
         run: |
           set -euo pipefail
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          LOCAL_INTEGRITY="$(node -e 'const fs=require("fs"); const m=JSON.parse(fs.readFileSync(process.argv[1])); if(!Array.isArray(m)||m.length!==1||!m[0].integrity) throw new Error("pack 元数据无效"); process.stdout.write(m[0].integrity)' "$RUNNER_TEMP/ui-package/pack-metadata.json")"
-          REMOTE_INTEGRITY="$(npm view "@workloom/ui@$VERSION" dist.integrity --json --registry=https://registry.npmjs.org 2>/dev/null | tr -d '"' || true)"
-          if [ -n "$REMOTE_INTEGRITY" ]; then
-            test "$REMOTE_INTEGRITY" = "$LOCAL_INTEGRITY" || { echo "❌ registry 已存在同版本异内容制品，拒绝 rollout"; exit 1; }
-            echo "✅ registry 已存在完全相同的不可变制品，继续幂等 rollout"
-          else
-            mapfile -t TARBALLS < <(find "$RUNNER_TEMP/ui-package" -maxdepth 1 -name '*.tgz' -type f)
-            test "${#TARBALLS[@]}" -eq 1 || { echo "❌ 待发布 tarball 数量必须为 1"; exit 1; }
-            npm publish "${TARBALLS[0]}" --access public --provenance --registry=https://registry.npmjs.org
-          fi
-          for _ in $(seq 1 12); do
-            PUBLISHED="$(npm view "@workloom/ui@$VERSION" version --json --registry=https://registry.npmjs.org 2>/dev/null | tr -d '"' || true)"
-            [ "$PUBLISHED" = "$VERSION" ] && exit 0
-            sleep 5
-          done
-          echo "❌ registry 未确认 @workloom/ui@$VERSION，拒绝 rollout"
-          exit 1
+          test "$RELEASE_TAG" = "ui-v$VERSION"
+          test -n "$RELEASE_SHA"
+          EXPECTED_ASSET="workloom-ui-${VERSION}.tgz"
+          mapfile -t TARBALLS < <(find "$RUNNER_TEMP/ui-package" -maxdepth 1 -name '*.tgz' -type f)
+          test "${#TARBALLS[@]}" -eq 1 || { echo "❌ 待发布 tarball 数量必须为 1"; exit 1; }
+          TARBALL="${TARBALLS[0]}"
+          test "$(basename "$TARBALL")" = "$EXPECTED_ASSET"
+          LOCAL_INTEGRITY="$(node -e 'const fs=require("fs"),c=require("crypto"); process.stdout.write(`sha512-${c.createHash("sha512").update(fs.readFileSync(process.argv[1])).digest("base64")}`)' "$TARBALL")"
+          PACK_INTEGRITY="$(node -e 'const fs=require("fs"); const m=JSON.parse(fs.readFileSync(process.argv[1])); if(!Array.isArray(m)||m.length!==1||!m[0].integrity) throw new Error("pack 元数据无效"); process.stdout.write(m[0].integrity)' "$RUNNER_TEMP/ui-package/pack-metadata.json")"
+          test "$LOCAL_INTEGRITY" = "$PACK_INTEGRITY" || { echo "❌ tarball 与 pack metadata 的 sha512 不一致"; exit 1; }
 
-  rollout-after-publish:
+          RELEASE_JSON="$RUNNER_TEMP/release.json"
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json databaseId,tagName,isDraft,isPrerelease,targetCommitish,assets > "$RELEASE_JSON" 2>/dev/null; then
+            echo "已找到稳定 Release，进入幂等核验"
+          else
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --target "$RELEASE_SHA" \
+              --title "WorkLoom 三端基座 v${VERSION}" \
+              --notes "由受保护 production 环境发布；制品经基座全门禁、标签/main 祖先证明与 sha512 完整性校验。"
+            gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json databaseId,tagName,isDraft,isPrerelease,targetCommitish,assets > "$RELEASE_JSON"
+          fi
+
+          node -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync(process.argv[1])); const tag=process.argv[2]; if(r.tagName!==tag||r.isDraft||r.isPrerelease) throw new Error("Release 必须绑定精确稳定标签且不得为草稿/预发布"); const tgz=(r.assets??[]).filter((a)=>a.name?.endsWith(".tgz")); if(tgz.length>1) throw new Error("Release 不得包含多个 tgz 制品")' "$RELEASE_JSON" "$RELEASE_TAG"
+          ASSET_COUNT="$(node -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync(process.argv[1])); const n=process.argv[2]; process.stdout.write(String((r.assets??[]).filter((a)=>a.name===n).length))' "$RELEASE_JSON" "$EXPECTED_ASSET")"
+          TGZ_COUNT="$(node -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync(process.argv[1])); process.stdout.write(String((r.assets??[]).filter((a)=>a.name?.endsWith(".tgz")).length))' "$RELEASE_JSON")"
+          if [ "$TGZ_COUNT" -eq 1 ]; then
+            test "$ASSET_COUNT" -eq 1 || { echo "❌ Release 已存在错误命名的 tgz 制品"; exit 1; }
+          else
+            test "$TGZ_COUNT" -eq 0
+            gh release upload "$RELEASE_TAG" "$TARBALL" --repo "$GITHUB_REPOSITORY"
+          fi
+
+          REMOTE_DIR="$(mktemp -d)"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$EXPECTED_ASSET" --dir "$REMOTE_DIR"
+          test -f "$REMOTE_DIR/$EXPECTED_ASSET"
+          REMOTE_INTEGRITY="$(node -e 'const fs=require("fs"),c=require("crypto"); process.stdout.write(`sha512-${c.createHash("sha512").update(fs.readFileSync(process.argv[1])).digest("base64")}`)' "$REMOTE_DIR/$EXPECTED_ASSET")"
+          test "$REMOTE_INTEGRITY" = "$LOCAL_INTEGRITY" || { echo "❌ Release 已存在同版本异内容制品，拒绝 rollout"; exit 1; }
+          cmp -s "$TARBALL" "$REMOTE_DIR/$EXPECTED_ASSET" || { echo "❌ Release 制品未通过逐字节核验"; exit 1; }
+          echo "✅ GitHub Release 稳定制品已发布并通过 sha512/逐字节核验：$EXPECTED_ASSET"
+
+  rollout-after-release:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/ui-v')
-    needs: [verify-and-preflight, publish-ui]
+    needs: [verify-and-preflight, publish-github-release]
     runs-on: ubuntu-latest
     timeout-minutes: 35
     environment: production
@@ -286,28 +312,18 @@ jobs:
       - run: corepack enable && corepack prepare pnpm@10.14.0 --activate
       - run: pnpm install --frozen-lockfile
 
-      - name: 发布后仅创建八个独立升级 PR
+      - name: 从 GitHub Release 核验自动发布的不可变 UI 制品
         env:
-          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
           STABLE_VERSION: ${{ needs.verify-and-preflight.outputs.release-version }}
-          REPORT_PATH: ${{ runner.temp }}/ui-rollout.json
+        run: node sync/ui-upgrade-pr.mjs --verify-artifact --version "$STABLE_VERSION"
+
+      - name: 提示使用本地受控凭据分波升级
+        env:
+          STABLE_VERSION: ${{ needs.verify-and-preflight.outputs.release-version }}
         run: |
           set -euo pipefail
-          if [ -z "${SYNC_TOKEN:-}" ]; then
-            echo "::warning title=等待人工逐仓升级::稳定 UI 已发布；跨仓凭据未进入工作流，因此未自动写入八仓。"
-            echo "稳定版本：$STABLE_VERSION。请按 W1→W5 使用本地受控凭据执行同一升级器，并逐仓验证后创建 PR。" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          node sync/ui-upgrade-pr.mjs --rollout --version "$STABLE_VERSION" --report "$REPORT_PATH"
-
-      - name: 留存升级 PR 结果
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ui-rollout-result
-          path: ${{ runner.temp }}/ui-rollout.json
-          if-no-files-found: warn
-          retention-days: 30
+          echo "::notice title=等待本地逐仓升级::GitHub Release 稳定制品已验真；Actions 不保存跨仓 PAT。"
+          echo "稳定版本：$STABLE_VERSION。请按 W1→W5 使用本地受控凭据执行同一升级器，并逐仓验证后创建 PR。" >> "$GITHUB_STEP_SUMMARY"
 
   continue-rollout:
     if: github.event_name == 'workflow_dispatch' && inputs.action == 'rollout'
@@ -331,7 +347,7 @@ jobs:
         run: npm install --global --ignore-scripts npm@11.6.2
       - run: corepack enable && corepack prepare pnpm@10.14.0 --activate
       - run: pnpm install --frozen-lockfile
-      - name: 从固定标签核验手动 rollout 的不可变 UI 制品
+      - name: 从 GitHub Release 核验手动 rollout 的不可变 UI 制品
         env:
           STABLE_VERSION: ${{ needs.verify-and-preflight.outputs.release-version }}
         run: node sync/ui-upgrade-pr.mjs --verify-artifact --version "$STABLE_VERSION"

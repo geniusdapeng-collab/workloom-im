@@ -99,6 +99,7 @@ if [ "$NEW_INDUSTRY" = true ]; then
     sync/install-adoption-assets.mjs \
     sync/install-ui-governance.mjs \
     sync/set-ui-version.mjs \
+    sync/ui-lockfile-integrity.mjs \
     sync/base-capabilities.json \
     sync/ui-consumer-template.yml \
     scripts/verify-client-foundation-consumer.mjs \
@@ -222,7 +223,11 @@ if [ "$NEW_INDUSTRY" = true ]; then
     STATUS=$?
     rollback_adoption "$STATUS"
   }
-  # verifier 静态导入固定解析器；临时 clone/新仓不能依赖基座 node_modules 偶然兜底。
+  # pnpm 10 对 URL tarball 不会自动把 sha512 写进 lockfile。使用已由 HEAD 验真的
+  # 零外部依赖绑定器把 .workloom-ui.json 的受控摘要注入唯一 canonical resolution；
+  # 下一步 frozen install 将由 pnpm 自身执行该 SRI。
+  node "$SYNC_DIR/ui-lockfile-integrity.mjs" --repo "$WORKDIR"
+  # verifier 静态导入固定 TypeScript/YAML 解析器；临时 clone/新仓不能依赖基座 node_modules 偶然兜底。
   # 先生成锁文件，再按该锁文件真实安装，随后才允许执行消费门禁。
   (cd "$WORKDIR" && pnpm install --frozen-lockfile --ignore-scripts) || {
     STATUS=$?

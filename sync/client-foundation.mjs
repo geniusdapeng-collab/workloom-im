@@ -27,6 +27,7 @@ import {
 } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveUiReleaseArtifact } from "./set-ui-version.mjs";
 
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const SYNC_DIR = dirname(SCRIPT_PATH);
@@ -179,6 +180,7 @@ export function resolveStableFoundationVersion(manifest, requestedVersion) {
   if (manifest.ui?.latestStableVersion !== stable) {
     throw new Error(`三端客户端基座 ${stable} 与共享 UI 稳定版 ${manifest.ui?.latestStableVersion ?? "未登记"} 不一致`);
   }
+  resolveUiReleaseArtifact(manifest, stable);
   return stable;
 }
 
@@ -208,6 +210,15 @@ export function loadStableFoundationSnapshot(baseDir, manifest, requestedVersion
   if (taggedUiPackage.version !== version) {
     throw new Error(`${sourceRef} 的 @workloom/ui 版本 ${taggedUiPackage.version ?? "未登记"} 与稳定版 ${version} 不一致`);
   }
+  const configuredArtifact = resolveUiReleaseArtifact(manifest, version);
+  const taggedArtifact = resolveUiReleaseArtifact(taggedManifest, version);
+  if (
+    configuredArtifact.url !== taggedArtifact.url
+    || configuredArtifact.assetName !== taggedArtifact.assetName
+    || configuredArtifact.sha512 !== taggedArtifact.sha512
+  ) {
+    throw new Error(`${sourceRef} 的 GitHub Release 制品契约与当前稳定清单不一致`);
+  }
 
   const tree = run("git", ["ls-tree", "-rz", sourceRef, "--", ...config.managedRoots], root, null);
   const records = tree.toString("utf8").split("\0").filter(Boolean);
@@ -232,11 +243,19 @@ export function loadStableFoundationSnapshot(baseDir, manifest, requestedVersion
   if (files.size > config.maxManagedFiles) {
     throw new Error(`稳定客户端基座文件数 ${files.size} 超过上限 ${config.maxManagedFiles}`);
   }
-  return materializeUiVersion({ version, sourceRef, sourceCommit, files }, manifest);
+  return materializeUiVersion({ version, sourceRef, sourceCommit, uiArtifact: taggedArtifact, files }, manifest);
 }
 
 /** 将基座工作区依赖 materialize 为下游可安装的精确稳定 UI 版本。 */
 export function materializeUiVersion(snapshot, manifest) {
+  const uiArtifact = resolveUiReleaseArtifact(manifest, snapshot.version);
+  if (snapshot.uiArtifact && (
+    snapshot.uiArtifact.url !== uiArtifact.url
+    || snapshot.uiArtifact.assetName !== uiArtifact.assetName
+    || snapshot.uiArtifact.sha512 !== uiArtifact.sha512
+  )) {
+    throw new Error("客户端基座快照的 GitHub Release 制品契约与稳定清单不一致");
+  }
   const files = new Map(snapshot.files);
   for (const packagePath of manifest.ui.requiredClientPackages) {
     const file = files.get(packagePath);
@@ -249,7 +268,7 @@ export function materializeUiVersion(snapshot, manifest) {
       content: Buffer.from(`${JSON.stringify(packageJson, null, 2)}\n`),
     });
   }
-  return { ...snapshot, files };
+  return { ...snapshot, uiArtifact, files };
 }
 
 function validateProductIdentity(repoRoot) {
@@ -369,6 +388,15 @@ function validateSnapshot(snapshot, manifest) {
   const config = validateFoundationConfig(manifest);
   if (!/^\d+\.\d+\.\d+$/.test(snapshot?.version ?? "")) throw new Error("客户端基座快照版本必须是精确稳定 semver");
   resolveStableFoundationVersion(manifest, snapshot.version);
+  const expectedArtifact = resolveUiReleaseArtifact(manifest, snapshot.version);
+  if (
+    snapshot?.uiArtifact?.type !== expectedArtifact.type
+    || snapshot.uiArtifact.assetName !== expectedArtifact.assetName
+    || snapshot.uiArtifact.url !== expectedArtifact.url
+    || snapshot.uiArtifact.sha512 !== expectedArtifact.sha512
+  ) {
+    throw new Error("客户端基座快照缺少同版 GitHub Release URL 与 SHA-512 证明");
+  }
   if (!/^refs\/tags\/ui-v\d+\.\d+\.\d+$/.test(snapshot?.sourceRef ?? "")) throw new Error("客户端基座快照必须来自 ui-v* 稳定标签");
   if (!/^[0-9a-f]{40}$/.test(snapshot?.sourceCommit ?? "")) throw new Error("客户端基座快照缺少不可变来源提交");
   if (!(snapshot.files instanceof Map)) throw new Error("客户端基座快照缺少文件映射");
@@ -667,6 +695,7 @@ function main() {
       version: snapshot.version,
       sourceRef: snapshot.sourceRef,
       sourceCommit: snapshot.sourceCommit,
+      uiArtifact: snapshot.uiArtifact,
       managedFileCount: snapshot.files.size,
       clients: CLIENTS,
       verified: true,

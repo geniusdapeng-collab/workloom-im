@@ -28,6 +28,7 @@ const POST_FILES = Object.freeze([
   "scripts/bundle-governance.mts",
 ]);
 const GOVERNANCE_TYPESCRIPT = "npm:typescript@5.9.3";
+const GOVERNANCE_YAML = "npm:yaml@2.9.0";
 const GOVERNANCE_FILES = Object.freeze([
   "scripts/verify-ui-consumer.mjs",
   "scripts/ui-governance-rules.mjs",
@@ -149,6 +150,7 @@ export function verifyAdoptionContract({ repoRoot, workdir, mode = "preflight" }
     const governanceState = readJson(join(target, ".workloom-ui-governance.json"), ".workloom-ui-governance.json", errors);
     if (governanceState && (governanceState.schemaVersion !== "workloom.ui-governance-state/v1"
       || governanceState.dependency !== GOVERNANCE_TYPESCRIPT
+      || governanceState.yamlDependency !== GOVERNANCE_YAML
       || governanceState.updatePolicy !== "stable-upgrade-pr-only"
       || !governanceState.files?.["scripts/verify-ui-consumer.mjs"]?.sha256
       || !governanceState.files?.["scripts/ui-governance-rules.mjs"]?.sha256)) {
@@ -167,6 +169,7 @@ export function verifyAdoptionContract({ repoRoot, workdir, mode = "preflight" }
     const lockSource = existsSync(workspacePath) && existsSync(join(target, "pnpm-lock.yaml"))
       ? readFileSync(join(target, "pnpm-lock.yaml"), "utf8") : "";
     if (!lockSource.includes("typescript-governance")) errors.push("pnpm-lock.yaml 未锁定 typescript-governance");
+    if (!lockSource.includes("yaml-governance")) errors.push("pnpm-lock.yaml 未锁定 yaml-governance");
     if (!existsSync(join(root, ".github/workflows/workloom-ui-contract.yml"))) {
       errors.push("完整接入缺少 .github/workflows/workloom-ui-contract.yml");
     }
