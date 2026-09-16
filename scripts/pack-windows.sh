@@ -176,6 +176,7 @@ fi
 
 # ---------- 6. 启动器 ----------
 copy apps/desktop/windows/WorkLoom.bat "$PKG/WorkLoom.bat"
+copy apps/desktop/electron/bootstrap.cjs "$PKG/bootstrap.cjs"
 
 # ---------- 7. 打包 + 校验和 ----------
 echo "→ 压缩…"

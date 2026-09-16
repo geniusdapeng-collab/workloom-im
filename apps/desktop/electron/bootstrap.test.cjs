@@ -12,7 +12,17 @@ const {
   parseDesktopPort,
   assertPostmasterIdentity,
   ownedPostgresRunning,
+  stopOwnedPostgres,
   buildDesktopEnvironment,
+  ensureDatabaseState,
+  bindDatabaseState,
+  completeDatabaseHardening,
+  secureInitdbArgs,
+  renderStrictPgHba,
+  enforceStrictPgHba,
+  validateDatabaseHelper,
+  openExternalUrl,
+  acquireBootstrapLock,
 } = require("./bootstrap.cjs");
 
 function fixture(version, withCurrent = true) {
@@ -52,6 +62,7 @@ describe("桌面载荷原子装配", () => {
         bootstrap({ resourcesDir, supportDir, smoke: true }),
         /载荷版本标记缺失/u,
       );
+      assert.equal(fs.existsSync(path.join(supportDir, ".bootstrap-lock")), false);
       assert.equal(fs.existsSync(path.join(supportDir, "runtime")), false);
       assert.equal(fs.existsSync(path.join(supportDir, "node")), false);
       assert.equal(fs.existsSync(path.join(supportDir, "pg")), false);
@@ -93,6 +104,20 @@ describe("桌面载荷原子装配", () => {
     assert.equal(fs.existsSync(path.join(f.supportDir, ".bootstrapped")), false);
     tx.commit();
     assert.deepEqual(transientDirectories(f.supportDir), []);
+  });
+
+  it("提交清理故障发生在不可逆边界之后，不会重新开放旧载荷回滚", () => {
+    const f = fixture("2.0.0");
+    const tx = installPayloadAtomically({
+      sourceRoot: f.sourceRoot,
+      supportDir: f.supportDir,
+      payloadVer: "2.0.0",
+      failAt: "during-commit-cleanup",
+    });
+    tx.commit();
+    tx.rollback();
+    assert.equal(fs.readFileSync(path.join(f.supportDir, "runtime", "payload.txt"), "utf8"), "runtime-2.0.0");
+    assert.equal(fs.readFileSync(path.join(f.supportDir, "VERSION"), "utf8").trim(), "2.0.0");
   });
 
   it("换入第一项后故障会恢复旧版目录、版本和首航状态", () => {
@@ -202,6 +227,29 @@ describe("桌面 PostgreSQL 实例归属与端口契约", () => {
     }
   });
 
+  it("退出前重新复验实例归属，PID 文件被替换时绝不发送 stop", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "workloom-pg-stop-owner-"));
+    const pgData = path.join(root, "pgdata");
+    const foreign = path.join(root, "foreign");
+    fs.mkdirSync(pgData);
+    fs.mkdirSync(foreign);
+    fs.writeFileSync(path.join(pgData, "postmaster.pid"), `31415\n${foreign}\n1\n55432\n/tmp\n127.0.0.1\n`);
+    let stops = 0;
+    try {
+      assert.throws(() => stopOwnedPostgres({
+        pgCtl: "/test-only/pg_ctl",
+        pgData,
+        expectedPort: 55432,
+        logFile: path.join(root, "pg.log"),
+        runCommand() { return { code: 0 }; },
+        stopCommand() { stops += 1; return { code: 0 }; },
+      }), /数据目录不属于当前产品/u);
+      assert.equal(stops, 0);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("托管环境只重写数据库与服务端口，保留其他用户配置", () => {
     const scheme = "postgres://";
     const original = [
@@ -231,5 +279,258 @@ describe("桌面 PostgreSQL 实例归属与端口契约", () => {
       assert.equal(new URL(value).hostname, "127.0.0.1");
       assert.equal(new URL(value).port, "55432");
     }
+  });
+});
+
+describe("桌面 PostgreSQL 凭据状态与 SCRAM 围栏", () => {
+  function deterministicRandom() {
+    let value = 1;
+    return (size) => Buffer.alloc(size, value++);
+  }
+
+  function boundIdentity(supportDir, port = 55432) {
+    const pgData = path.join(supportDir, "pgdata");
+    return {
+      systemIdentifier: "7654321098765432109",
+      dataDirectory: pgData,
+      hbaFile: path.join(pgData, "pg_hba.conf"),
+      port,
+    };
+  }
+
+  it("0600 状态文件生成三份互异随机凭据，重复启动不轮换", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "workloom-db-state-"));
+    try {
+      const first = ensureDatabaseState(root, {
+        legacyOwnerPasswords: ["test-only-legacy"],
+        randomBytes: deterministicRandom(),
+      });
+      assert.equal(first.created, true);
+      assert.equal(fs.statSync(first.file).mode & 0o777, 0o600);
+      assert.equal(new Set(Object.values(first.state.credentials)).size, 3);
+      assert.equal(first.state.legacyOwnerPasswords[0], "test-only-legacy");
+      const second = ensureDatabaseState(root, {
+        randomBytes() { throw new Error("existing state must not rotate"); },
+      });
+      assert.equal(second.created, false);
+      assert.deepEqual(second.state.credentials, first.state.credentials);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("损坏状态失败关闭；绑定 system_identifier 后才能完成并清除旧凭据", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "workloom-db-bind-"));
+    try {
+      const record = ensureDatabaseState(root, {
+        legacyOwnerPasswords: ["test-only-legacy"],
+        randomBytes: deterministicRandom(),
+      });
+      const bound = bindDatabaseState(record.file, record.state, boundIdentity(root));
+      assert.equal(bound.cluster.systemIdentifier, "7654321098765432109");
+      assert.throws(
+        () => bindDatabaseState(record.file, bound, { ...boundIdentity(root), systemIdentifier: "7654321098765432110" }),
+        /systemIdentifier 与运行实例不一致/u,
+      );
+      const complete = completeDatabaseHardening(record.file, bound);
+      assert.equal(complete.auth.status, "scram-sha-256");
+      assert.deepEqual(complete.legacyOwnerPasswords, []);
+
+      fs.writeFileSync(record.file, "{broken", { mode: 0o600 });
+      assert.throws(() => ensureDatabaseState(root), /状态损坏/u);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("pending 状态可从恢复后的旧配置补充候选；hardened 后绝不重新收录", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "workloom-db-recovery-"));
+    try {
+      const first = ensureDatabaseState(root, { randomBytes: deterministicRandom() });
+      assert.deepEqual(first.state.legacyOwnerPasswords, []);
+      const recovered = ensureDatabaseState(root, {
+        legacyOwnerPasswords: ["test-only-recovered", "test-only-recovered"],
+      });
+      assert.deepEqual(recovered.state.legacyOwnerPasswords, ["test-only-recovered"]);
+      const bound = bindDatabaseState(recovered.file, recovered.state, boundIdentity(root));
+      completeDatabaseHardening(recovered.file, bound);
+      const hardened = ensureDatabaseState(root, {
+        legacyOwnerPasswords: ["test-only-must-not-return"],
+      });
+      assert.deepEqual(hardened.state.legacyOwnerPasswords, []);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("initdb 只接受 pwfile + SCRAM，HBA 只允许本机 SCRAM", () => {
+    const args = secureInitdbArgs("/test-only/pgdata", "/test-only/pwfile");
+    assert.ok(args.includes("--auth-host=scram-sha-256"));
+    assert.ok(args.includes("--auth-local=scram-sha-256"));
+    assert.ok(args.includes("--pwfile=/test-only/pwfile"));
+    assert.equal(args.some((arg) => /trust|md5/iu.test(arg)), false);
+
+    const hba = renderStrictPgHba();
+    assert.match(hba, /^local all all scram-sha-256$/mu);
+    assert.match(hba, /^host all all 127\.0\.0\.1\/32 scram-sha-256$/mu);
+    assert.match(hba, /^host all all ::1\/128 scram-sha-256$/mu);
+    assert.doesNotMatch(hba, /\b(?:trust|md5)\b|0\.0\.0\.0|::\/0/iu);
+  });
+
+  it("pending 迁移复验失败会原子恢复旧 HBA 并再次 reload", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "workloom-hba-rollback-"));
+    const pgData = path.join(root, "pgdata");
+    fs.mkdirSync(pgData);
+    const original = "host all all 127.0.0.1/32 trust\n";
+    fs.writeFileSync(path.join(pgData, "pg_hba.conf"), original);
+    const calls = [];
+    try {
+      assert.throws(() => enforceStrictPgHba({
+        pgData,
+        pgCtl: "/test-only/pg_ctl",
+        rollbackOnFailure: true,
+        forceReload: true,
+        runCommand(command, args) { calls.push({ command, args }); return { code: 0 }; },
+        verifyCommand() { return { code: 1 }; },
+      }), /新凭据复验失败/u);
+      assert.equal(fs.readFileSync(path.join(pgData, "pg_hba.conf"), "utf8"), original);
+      assert.equal(calls.length, 2);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("即使磁盘 HBA 未变化也强制 reload，再以正反向凭据复验结果为准", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "workloom-hba-reload-"));
+    const pgData = path.join(root, "pgdata");
+    fs.mkdirSync(pgData);
+    fs.writeFileSync(path.join(pgData, "pg_hba.conf"), renderStrictPgHba());
+    let reloads = 0;
+    try {
+      const result = enforceStrictPgHba({
+        pgData,
+        pgCtl: "/test-only/pg_ctl",
+        rollbackOnFailure: false,
+        forceReload: true,
+        runCommand() { reloads += 1; return { code: 0 }; },
+        verifyCommand() { return { code: 0 }; },
+      });
+      assert.equal(result.changed, false);
+      assert.equal(reloads, 1);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("源码固定先提交新 payload 再创建状态或改库，且不含 trust initdb", () => {
+    const source = fs.readFileSync(path.join(__dirname, "bootstrap.cjs"), "utf8");
+    const commit = source.indexOf("payloadTransaction?.commit();");
+    const stateMutation = source.indexOf("const databaseStateRecord = ensureDatabaseState");
+    const databaseMutation = source.indexOf('runDatabaseHelper("prepare"');
+    assert.ok(commit > 0 && commit < stateMutation && stateMutation < databaseMutation);
+    assert.doesNotMatch(source, /--auth=trust/u);
+    assert.match(source, /password_encryption=scram-sha-256/u);
+  });
+
+  it("payload commit 前用内置 Node 语法检查安全 helper，校验失败立即阻断", () => {
+    const calls = [];
+    validateDatabaseHelper("/test-only/node", "/test-only/helper.mjs", (command, args) => {
+      calls.push({ command, args });
+      return { code: 0, out: "", err: "" };
+    });
+    assert.deepEqual(calls, [{
+      command: "/test-only/node",
+      args: ["--check", "/test-only/helper.mjs"],
+    }]);
+    assert.throws(
+      () => validateDatabaseHelper("/test-only/node", "/test-only/helper.mjs", () => ({ code: 1, err: "test-only syntax" })),
+      /语法校验失败/u,
+    );
+    const source = fs.readFileSync(path.join(__dirname, "bootstrap.cjs"), "utf8");
+    assert.ok(source.indexOf("validateDatabaseHelper(NODE_BIN, DB_HELPER)") < source.indexOf("payloadTransaction?.commit();"));
+  });
+
+  it("所有 migrate 入口在轮换 app/gateway 角色前固定本会话 SCRAM", () => {
+    const source = fs.readFileSync(path.join(__dirname, "../../../scripts/migrate.ts"), "utf8");
+    const scram = source.indexOf("SET password_encryption = 'scram-sha-256'");
+    const rotation = source.indexOf("const roles:");
+    assert.ok(scram > 0 && scram < rotation);
+  });
+});
+
+describe("应急浏览器壳与正式 Electron 共用安全引导", () => {
+  it("原子单实例锁拒绝活进程，并可接管死进程遗留锁", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "workloom-bootstrap-lock-"));
+    let byte = 1;
+    const randomBytes = (size) => Buffer.alloc(size, byte++);
+    try {
+      const first = acquireBootstrapLock(root, {
+        pid: 41001, randomBytes, isProcessAlive: () => true,
+      });
+      const ownerFile = path.join(first.lockDir, "owner.json");
+      assert.equal(fs.statSync(ownerFile).mode & 0o777, 0o600);
+      assert.throws(
+        () => acquireBootstrapLock(root, {
+          pid: 41002, randomBytes, isProcessAlive: () => true,
+        }),
+        /已在启动或运行/u,
+      );
+
+      const recovered = acquireBootstrapLock(root, {
+        pid: 41003, randomBytes, isProcessAlive: () => false,
+      });
+      assert.equal(first.release(), false);
+      assert.equal(recovered.release(), true);
+      assert.equal(fs.existsSync(path.join(root, ".bootstrap-lock")), false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("两端旧启动器只委托 bootstrap，不再维护 trust/helper 分支", () => {
+    const macLauncher = fs.readFileSync(
+      path.join(__dirname, "../WorkLoom.app/Contents/MacOS/WorkLoom"),
+      "utf8",
+    );
+    const windowsLauncher = fs.readFileSync(
+      path.join(__dirname, "../windows/WorkLoom.bat"),
+      "utf8",
+    );
+    for (const source of [macLauncher, windowsLauncher]) {
+      assert.match(source, /bootstrap\.cjs/u);
+      assert.doesNotMatch(source, /--auth(?:=|\s+)trust|desktop-bootstrap-db\.mjs/iu);
+    }
+    assert.match(windowsLauncher, /set "RESOURCES=%~dp0\."/u);
+    assert.doesNotMatch(windowsLauncher, /set "RESOURCES=%~dp0"/u);
+
+    const macPack = fs.readFileSync(path.join(__dirname, "../../../scripts/pack-macos.sh"), "utf8");
+    const windowsPack = fs.readFileSync(path.join(__dirname, "../../../scripts/pack-windows.sh"), "utf8");
+    assert.match(macPack, /electron\/bootstrap\.cjs[^\n]+Resources\/bootstrap\.cjs/u);
+    assert.match(windowsPack, /electron\/bootstrap\.cjs[^\n]+PKG\/bootstrap\.cjs/u);
+    assert.match(macPack, /Resources\/pg\/bin/u);
+    assert.doesNotMatch(macPack, /Resources\/pg\/Postgres\.app/u);
+  });
+
+  it("浏览器壳按平台使用无 shell 拼接的固定打开命令", () => {
+    const calls = [];
+    const spawnCommand = (command, args, options) => {
+      calls.push({ command, args, options });
+      return { on() {}, unref() {} };
+    };
+    openExternalUrl("http://127.0.0.1:5173", { platform: "darwin", spawnCommand });
+    openExternalUrl("http://127.0.0.1:5173", { platform: "win32", spawnCommand });
+    assert.deepEqual(calls[0].command, "open");
+    assert.deepEqual(calls[0].args, ["http://127.0.0.1:5173"]);
+    assert.deepEqual(calls[1].command, "cmd.exe");
+    assert.deepEqual(calls[1].args, ["/d", "/s", "/c", "start", "", "http://127.0.0.1:5173"]);
+    assert.equal(calls.every(({ options }) => options.detached && options.stdio === "ignore"), true);
+  });
+
+  it("CLI 在启动前注册 INT/TERM/HUP，并用 AbortSignal 驱动初始化清理", () => {
+    const source = fs.readFileSync(path.join(__dirname, "bootstrap.cjs"), "utf8");
+    const signalRegistration = source.indexOf('for (const signalName of ["SIGINT", "SIGTERM", "SIGHUP"])');
+    const invocation = source.indexOf("bootstrap({ resourcesDir, supportDir, smoke, signal: abortController.signal })");
+    assert.ok(signalRegistration > 0 && signalRegistration < invocation);
+    assert.match(source, /if \(abortSignal\?\.aborted\) throw new Error/u);
   });
 });

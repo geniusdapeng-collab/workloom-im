@@ -46,6 +46,8 @@ echo "== 装配 WorkLoom.app（$VERSION · darwin-${ARCH}）=="
 [ -f apps/desktop/WorkLoom.app/Contents/Info.plist ] || { echo "❌ 缺 apps/desktop 骨架"; exit 1; }
 copy apps/desktop/WorkLoom.app "$APP"
 chmod +x "$APP/Contents/MacOS/WorkLoom"
+mkdir -p "$APP/Contents/Resources"
+cp apps/desktop/electron/bootstrap.cjs "$APP/Contents/Resources/bootstrap.cjs"
 
 # 2. 产品载荷 runtime/
 echo "→ 装配产品载荷…"
@@ -85,20 +87,22 @@ tar xzf "$STAGE/$NODE_TARBALL" -C "$APP/Contents/Resources/node" --strip-compone
 # 5. Postgres.app（DMG 挂载仅 macOS 可行）
 if [ "$STRUCTURE_ONLY" = "1" ]; then
   echo "⚠️  structure-only：跳过 Postgres.app 挂载（占位目录代替，禁分发此包）"
-  mkdir -p "$APP/Contents/Resources/pg/Postgres.app/Contents/Versions/17/bin"
+  mkdir -p "$APP/Contents/Resources/pg/bin"
   printf 'structure-only placeholder\n' > "$APP/Contents/Resources/pg/PLACEHOLDER-NOT-FOR-RELEASE"
 else
   echo "→ Postgres.app ${PGAPP_VER}（内置 pgvector 0.8.6）…"
   curl -sfL --retry 4 -o "$STAGE/pg.dmg" "$PGAPP_URL"
   hdiutil attach -nobrowse -mountpoint "$STAGE/mnt" "$STAGE/pg.dmg" >/dev/null
   mkdir -p "$APP/Contents/Resources/pg"
-  ditto "$STAGE/mnt/Postgres.app" "$APP/Contents/Resources/pg/Postgres.app"
+  copy "$STAGE/mnt/Postgres.app/Contents/Versions/17/bin" "$APP/Contents/Resources/pg/bin"
+  copy "$STAGE/mnt/Postgres.app/Contents/Versions/17/lib" "$APP/Contents/Resources/pg/lib"
+  copy "$STAGE/mnt/Postgres.app/Contents/Versions/17/share" "$APP/Contents/Resources/pg/share"
   hdiutil detach "$STAGE/mnt" >/dev/null
   # 结构断言：PG 17 主程序与 pgvector 扩展在位
   # 注：macOS 上 PG≥16 的动态库后缀为 .dylib（非 .so），见 PostgresApp src-17/makefile（vector.dylib）
-  [ -x "$APP/Contents/Resources/pg/Postgres.app/Contents/Versions/17/bin/postgres" ] || { echo "❌ Postgres.app 结构异常"; exit 1; }
-  ls "$APP/Contents/Resources/pg/Postgres.app/Contents/Versions/17/lib/postgresql/vector.dylib" >/dev/null || { echo "❌ pgvector 未随包"; exit 1; }
-  ls "$APP/Contents/Resources/pg/Postgres.app/Contents/Versions/17/share/postgresql/extension/vector.control" >/dev/null || { echo "❌ pgvector control 缺失"; exit 1; }
+  [ -x "$APP/Contents/Resources/pg/bin/postgres" ] || { echo "❌ Postgres.app 结构异常"; exit 1; }
+  ls "$APP/Contents/Resources/pg/lib/postgresql/vector.dylib" >/dev/null || { echo "❌ pgvector 未随包"; exit 1; }
+  ls "$APP/Contents/Resources/pg/share/postgresql/extension/vector.control" >/dev/null || { echo "❌ pgvector control 缺失"; exit 1; }
 fi
 
 # ---------- 5.5 内嵌 nats-server（P0-3 决策点 4：+20MB 开箱即持久化事件总线） ----------
