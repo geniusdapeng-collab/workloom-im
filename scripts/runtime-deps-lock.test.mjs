@@ -9,6 +9,7 @@ import {
   verifyRuntimeDepsLock,
   verifyRuntimePackageLock,
 } from "./runtime-deps-lock.mjs";
+import { loadProductRuntime } from "./product-runtime.mjs";
 
 const REPOSITORY_ROOT = fileURLToPath(new URL("../", import.meta.url));
 
@@ -52,7 +53,20 @@ function writePackage(root, path, value) {
 }
 
 test("仓库提交的每产品 runtime lock 与当前依赖输入完全一致", () => {
-  assert.equal(verifyRuntimeDepsLock().product.productId, "workloom-im");
+  const expected = loadProductRuntime(REPOSITORY_ROOT);
+  const verified = verifyRuntimeDepsLock(REPOSITORY_ROOT);
+  assert.deepEqual(
+    {
+      productId: verified.product.productId,
+      role: verified.product.role,
+      repository: verified.product.repository,
+    },
+    {
+      productId: expected.productId,
+      role: expected.role,
+      repository: expected.repository,
+    },
+  );
 });
 
 test("package-lock 必须锁定完整三目标原生包与 registry integrity", () => {
@@ -110,7 +124,6 @@ test("正式与应急装配线统一使用每产品 lock、目标 OS/CPU 和身�
   const electron = readFileSync(join(REPOSITORY_ROOT, "scripts/pack-electron-payload.sh"), "utf8");
   const windows = readFileSync(join(REPOSITORY_ROOT, "scripts/pack-windows.sh"), "utf8");
   const macos = readFileSync(join(REPOSITORY_ROOT, "scripts/pack-macos.sh"), "utf8");
-  const workflow = readFileSync(join(REPOSITORY_ROOT, ".github/workflows/desktop-production-release.yml"), "utf8");
   for (const source of [electron, windows, macos]) {
     assert.match(source, /runtime-deps-lock\.mjs stage/u);
     assert.match(source, /product-runtime\.mjs --manifest-path/u);
@@ -126,6 +139,10 @@ test("正式与应急装配线统一使用每产品 lock、目标 OS/CPU 和身�
   assert.match(macos, /--os darwin --cpu "\$NODE_ARCH"/u);
   assert.match(macos, /x86_64\|x64\) NATS_ARCH="amd64"/u);
   assert.doesNotMatch(windows, /\bcopy_nm\b/u);
-  assert.doesNotMatch(workflow, /node-version:\s*24(?:\s|,|$)/u);
-  assert.match(workflow, /node-version:\s*24\.19\.0/u);
+  const product = loadProductRuntime(REPOSITORY_ROOT);
+  if (product.repository === "geniusdapeng-collab/workloom-im") {
+    const workflow = readFileSync(join(REPOSITORY_ROOT, ".github/workflows/desktop-production-release.yml"), "utf8");
+    assert.doesNotMatch(workflow, /node-version:\s*24(?:\s|,|$)/u);
+    assert.match(workflow, /node-version:\s*24\.19\.0/u);
+  }
 });
