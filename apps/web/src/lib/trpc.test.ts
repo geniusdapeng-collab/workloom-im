@@ -92,8 +92,8 @@ describe("PC 身份切换竞态", () => {
 
   it("正式令牌写入会清除既有游客标记", async () => {
     const session = await loadSessionModule();
-    localStorage.setItem("workloom.demo.token", "mock-guest-token");
-    localStorage.setItem("workloom.guest", "1");
+    localStorage.setItem("workloom:workloom-im:b-pc:access-token", "mock-guest-token");
+    localStorage.setItem("workloom:workloom-im:b-pc:guest", "1");
     fakeTrpc.auth.loginAs.mutate.mockResolvedValueOnce({ token: "mock-formal-token" });
 
     await session.ensureDemoLogin("MEM-001");

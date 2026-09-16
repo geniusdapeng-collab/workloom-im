@@ -244,8 +244,11 @@ function newIndustryFixture() {
   write(join(fx.child, "product.manifest.json"), `${JSON.stringify({
     productId: "example-industry",
     role: "industry",
+    displayName: "示例行业经营系统",
     repository: "example/example-industry",
     defaultBundle: "example",
+    demoWorkspaceSlug: "example-demo",
+    demoMemberNo: "MEM-X01",
     release: { appId: "com.example.industry" },
     desktop: { portOffset: 101 },
     clients: {
@@ -504,10 +507,10 @@ test("缺少 B 端移动客户端时只报告第一阶段迁移，绝不伪装�
   }
 });
 
-test("v9 scope 明确保护产品身份、同步认证、依赖闭包与 Bundle 装配契约，并将三端应用壳和 UI 治理交给稳定升级分发", () => {
+test("v10 scope 明确保护产品身份、同步认证、依赖闭包与 Bundle 装配契约，并将三端应用壳和 UI 治理交给稳定升级分发", () => {
   const scope = JSON.parse(readFileSync(join(REAL_BASE, "sync/base-scope.json"), "utf8"));
   const ci = readFileSync(join(REAL_BASE, ".github/workflows/ci.yml"), "utf8");
-  assert.equal(scope.version, 9);
+  assert.equal(scope.version, 10);
   assert.ok(scope.protectedChildAssets.files.includes("electron-builder.yml"));
   assert.ok(scope.protectedChildAssets.files.includes("product.manifest.json"));
   assert.ok(scope.exclude.includes("electron-builder.yml"));
@@ -527,11 +530,29 @@ test("v9 scope 明确保护产品身份、同步认证、依赖闭包与 Bundle 
     "apps/server/src/service/inspection-adapter.ts",
     "apps/server/src/service/inspection-adapter.test.ts",
     "scripts/bundle-governance.test.ts",
-    "scripts/generate-client-projections.mts",
     "scripts/hotel-seed-preflight.ts",
     "scripts/hotel-seed-preflight.test.ts",
     "scripts/suite.ts",
   ]) assert.ok(scope.exclude.includes(industryCoupled), `${industryCoupled} 必须保留在基座仓`);
+  assert.ok(!scope.exclude.includes("scripts/generate-client-projections.mts"), "客户端投影生成器必须随 base-sync 下发");
+  const projectionGenerator = readFileSync(join(REAL_BASE, "scripts/generate-client-projections.mts"), "utf8");
+  assert.ok(projectionGenerator.includes(".workloom-ui.json"));
+  assert.ok(projectionGenerator.includes("node_modules/@workloom/ui"));
+  assert.ok(!projectionGenerator.includes("../packages/ui/src/"));
+  const evalSourcePgTest = readFileSync(join(REAL_BASE, "apps/server/src/service/eval-source.pg.test.ts"), "utf8");
+  assert.ok(evalSourcePgTest.includes("ExplicitEvalQuestionFixture"));
+  assert.ok(!evalSourcePgTest.includes('loadVerifiedBundleEvalQuestions("ai-pm")'));
+  assert.ok(!evalSourcePgTest.includes("'ai-pm','ai-pm'"));
+  assert.deepEqual(scope.publicAppendOnlyFiles, [
+    "packages/db/migrations/0026_tenant_overlay.sql",
+    "packages/db/migrations/0028_onboarding_truth_gate.sql",
+    "packages/db/migrations/0029_onboarding_continuity.sql",
+    "packages/db/migrations/0030_single_active_bundle_install.sql",
+    "packages/db/migrations/0031_accounts_overlay_least_privilege.sql",
+    "packages/db/migrations/0032_remove_cross_industry_hotel_bootstrap.sql",
+    "packages/db/migrations/0033_neutral_workspace_industry_default.sql",
+    "packages/db/migrations/0034_api_key_rotation.sql",
+  ]);
   for (const publicCaptain of [
     "packages/base/captain/charter.ts",
     "packages/base/captain/decision.ts",
@@ -588,6 +609,53 @@ test("UI 治理受管文件一旦重新进入普通 base-sync，scope 契约立�
     assert.match(result.stderr, /UI governance managed file 必须排除普通 base-sync/);
   } finally {
     rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("公共追加资产只补齐缺失文件，同路径异内容冲突失败关闭", () => {
+  const missing = fixture();
+  try {
+    const scope = readScope(missing.base);
+    scope.publicAppendOnlyFiles = ["shared/public-migration.sql"];
+    scope.exclude.push("shared/public-migration.sql");
+    writeScope(missing.base, scope);
+    write(join(missing.base, "shared/public-migration.sql"), "-- public migration\n");
+    commitAll(missing.base, "add public append-only migration");
+
+    const installed = cli([
+      "pull", "--repo", "governance", "--base-dir", missing.base, "--no-commit",
+    ], missing.child);
+    assert.equal(installed.status, 0, installed.stderr);
+    assert.equal(
+      readFileSync(join(missing.child, "governance/shared/public-migration.sql"), "utf8"),
+      "-- public migration\n",
+    );
+  } finally {
+    rmSync(missing.root, { recursive: true, force: true });
+  }
+
+  const conflict = fixture();
+  try {
+    const scope = readScope(conflict.base);
+    scope.publicAppendOnlyFiles = ["shared/public-migration.sql"];
+    scope.exclude.push("shared/public-migration.sql");
+    writeScope(conflict.base, scope);
+    write(join(conflict.base, "shared/public-migration.sql"), "-- base public migration\n");
+    commitAll(conflict.base, "add public append-only migration");
+    write(join(conflict.child, "governance/shared/public-migration.sql"), "-- child collision\n");
+    commitAll(conflict.child, "add conflicting child migration");
+
+    const rejected = cli([
+      "pull", "--repo", "governance", "--base-dir", conflict.base, "--no-commit",
+    ], conflict.child);
+    assert.equal(rejected.status, 1);
+    assert.match(rejected.stderr, /公共追加资产与子仓同路径内容冲突/);
+    assert.equal(
+      readFileSync(join(conflict.child, "governance/shared/public-migration.sql"), "utf8"),
+      "-- child collision\n",
+    );
+  } finally {
+    rmSync(conflict.root, { recursive: true, force: true });
   }
 });
 

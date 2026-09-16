@@ -97,7 +97,7 @@
     "bundleId": "ai-pm",
     "bundleVersion": "3.0.0",
     "contractVersion": "2.0.0",
-    "uiVersion": "0.1.0",
+    "uiVersion": "0.1.1",
     "manifestDigest": "c62224f67f92acab9d7f5af27c4fb5341969e9cb29532e81ee4eab5e41ec5c1c"
   }
 }

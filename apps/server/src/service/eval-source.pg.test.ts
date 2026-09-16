@@ -23,23 +23,29 @@ describe.runIf(RUN_DB)("考试院题源 PG 契约", () => {
   let getSettings: typeof import("./eval.js").getSettings;
   let setPromotionGate: typeof import("./eval.js").setPromotionGate;
   let setPromotionGateOn: typeof import("./eval.js").setPromotionGateOn;
-  let expectedQuestionCount = 0;
+  const fixture: import("./eval.js").ExplicitEvalQuestionFixture = {
+    id: "pg-generic-v1",
+    questions: [{
+      subject: "skill",
+      structure: "single-single",
+      primaryDimensions: ["accuracy"],
+      redLine: false,
+      difficulty: "easy",
+      source: "customer",
+      tags: ["通用"],
+      scenario: { turns: [{ role: "guest", input: "请说明当前能力边界。" }] },
+      assertions: [{ type: "fact_terms_present", expected: ["边界"] }],
+    }],
+  };
 
   beforeAll(async () => {
     ({ seedQuestionsIfEmpty, listExams, listCandidateResults, listAnswers, getSettings, setPromotionGate, setPromotionGateOn } = await import("./eval.js"));
-    const { loadVerifiedBundleEvalQuestions } = await import("@workloom/base/bundles");
-    expectedQuestionCount = loadVerifiedBundleEvalQuestions("ai-pm").questions.length;
     await owner.query(`INSERT INTO tenants (id, name, plan) VALUES ($1,$2,'community')`, [tenantId, "考试题源隔离租户"]);
     await owner.query(
       `INSERT INTO workspaces (id, tenant_id, name, slug, industry, bundle_id)
-       VALUES ($1,$3,'活动题源工作区',$4,'ai-pm','ai-pm'),
+       VALUES ($1,$3,'显式题源工作区',$4,'general',NULL),
               ($2,$3,'无题源工作区',$5,'general',NULL)`,
       [activeWorkspaceId, emptyWorkspaceId, tenantId, `eval-active-${suffix}`, `eval-empty-${suffix}`],
-    );
-    await owner.query(
-      `INSERT INTO bundle_installs (id, workspace_id, bundle_id, assets, status)
-       VALUES ($1,$2,'ai-pm','{}','active')`,
-      [`bi-eval-${suffix}`, activeWorkspaceId],
     );
   });
 
@@ -51,14 +57,14 @@ describe.runIf(RUN_DB)("考试院题源 PG 契约", () => {
     await owner.end();
   });
 
-  it("活动 Bundle 题集按工作区确定性装载且可幂等重跑", async () => {
-    expect(await seedQuestionsIfEmpty(activeWorkspaceId)).toBe(expectedQuestionCount);
-    expect(await seedQuestionsIfEmpty(activeWorkspaceId)).toBe(0);
+  it("显式服务端题集按工作区确定性装载且可幂等重跑", async () => {
+    expect(await seedQuestionsIfEmpty(activeWorkspaceId, fixture)).toBe(fixture.questions.length);
+    expect(await seedQuestionsIfEmpty(activeWorkspaceId, fixture)).toBe(0);
     const stored = await owner.query<{ count: string }>(
       `SELECT count(*)::text AS count FROM eval_questions WHERE workspace_id=$1`,
       [activeWorkspaceId],
     );
-    expect(Number(stored.rows[0]?.count)).toBe(expectedQuestionCount);
+    expect(Number(stored.rows[0]?.count)).toBe(fixture.questions.length);
   });
 
   it("没有活动 Bundle 时失败关闭并保持业务表与事件账本零写入", async () => {

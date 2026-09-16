@@ -37,11 +37,11 @@ async function enterOwnerDemo(page: Page, next = "/") {
 
 async function enterBMobileOwner(page: Page, next = "/") {
   await enterOwnerDemo(page);
-  const token = await page.evaluate(() => localStorage.getItem("workloom.demo.token"));
+  const token = await page.evaluate(() => localStorage.getItem("workloom:workloom-im:b-pc:access-token"));
   expect(token, "PC 开发身份应返回可供同源 B 端验证的短期访问令牌").toBeTruthy();
   await page.goto(`http://127.0.0.1:3101${next}`);
   await page.evaluate((value) => {
-    sessionStorage.setItem("workloom.b-mobile.access", value ?? "");
+    sessionStorage.setItem("workloom:workloom-im:b-mobile:access-token", value ?? "");
   }, token);
   await page.reload();
   await waitForStableUi(page);

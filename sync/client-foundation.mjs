@@ -287,6 +287,10 @@ function validateProductIdentity(repoRoot) {
     || !product.productId.trim()
     || typeof product.repository !== "string"
     || !product.repository.trim()
+    || typeof product.demoWorkspaceSlug !== "string"
+    || !/^[a-z0-9][a-z0-9-]{1,63}$/.test(product.demoWorkspaceSlug)
+    || typeof product.demoMemberNo !== "string"
+    || !/^[A-Z][A-Z0-9-]{1,31}$/.test(product.demoMemberNo)
     || typeof product.release?.appId !== "string"
     || !product.release.appId.trim()
     || product.release.appId === "com.workloom.im"

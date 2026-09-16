@@ -6,8 +6,9 @@
  */
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import type { AppRouter } from "@workloom/server/router";
+import { DEMO_MEMBER, DEMO_WORKSPACE, storageKey } from "./product";
 
-const TOKEN_KEY = "workloom.demo.token";
+const TOKEN_KEY = storageKey("access-token");
 // 身份切换代次：显式登录开始后，较早发出的游客请求不得再覆盖正式令牌。
 let identityRevision = 0;
 let formalLoginEpoch = 0;
@@ -35,7 +36,7 @@ export function clearToken(): void {
   announceIdentityChange();
 }
 
-const REFRESH_KEY = "workloom.accounts.refresh";
+const REFRESH_KEY = storageKey("refresh-token");
 export function getRefreshToken(): string | null { return localStorage.getItem(REFRESH_KEY); }
 export function setRefreshToken(token: string): void { localStorage.setItem(REFRESH_KEY, token); }
 
@@ -43,7 +44,7 @@ export function setRefreshToken(token: string): void { localStorage.setItem(REFR
  * 首次安装后默认游客身份：只读浏览示例工作区（数字人/汇报/页面能力完整体验），
  * 进入配置引导（/onboarding）时才引导正式登录。游客令牌由 accounts.auth.guestEnter
  * 签发（readonly 角色；服务端 writeProcedure 403 一切写操作——体验全程零写入）。 */
-const GUEST_KEY = "workloom.guest";
+const GUEST_KEY = storageKey("guest");
 export function isGuest(): boolean { return localStorage.getItem(GUEST_KEY) === "1"; }
 export function clearGuestFlag(): void { localStorage.removeItem(GUEST_KEY); }
 
@@ -120,8 +121,6 @@ export const trpc: ReturnType<typeof createTRPCClient<AppRouter>> = createTRPCCl
  * F-GUEST1 语义升级：无参调用 = 游客进场（readonly 只读体验，各页面挂载点沿用）；
  * 仅显式传 memberNo 时才走旧的种子成员真身份登录（开发后门专用，生产不出现）。
  */
-const DEMO_WORKSPACE = (import.meta.env.VITE_DEMO_WORKSPACE as string | undefined) ?? "ai-pm-demo";
-const DEMO_MEMBER = (import.meta.env.VITE_DEMO_MEMBER as string | undefined) ?? "MEM-001";
 export const DEV_DEMO_MEMBER = DEMO_MEMBER;
 export async function ensureDemoLogin(memberNo?: string): Promise<void> {
   if (memberNo) {

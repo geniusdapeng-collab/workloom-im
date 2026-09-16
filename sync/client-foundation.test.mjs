@@ -83,7 +83,10 @@ function createIndustryRepo({ role = "industry" } = {}) {
     schemaVersion: "workloom.product/v1",
     productId: "example-industry",
     role,
+    displayName: "示例行业经营系统",
     repository: "geniusdapeng-collab/example-industry",
+    demoWorkspaceSlug: "example-demo",
+    demoMemberNo: "MEM-X01",
     release: { appId: role === "base" ? "com.workloom.im" : "com.workloom.example" },
     desktop: { portOffset: role === "base" ? 0 : 400 },
     clients: {

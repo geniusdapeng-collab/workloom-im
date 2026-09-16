@@ -7,7 +7,9 @@
  */
 import { initTRPC, TRPCError } from "@trpc/server";
 import {
+  capabilityDisplayName,
   hasCapability,
+  planDisplayName,
   verifySessionToken,
   type CapabilityKey,
   type Identity,
@@ -42,6 +44,29 @@ export async function createContext(req: Request): Promise<TrpcContext> {
 }
 
 const t = initTRPC.context<TrpcContext>().create();
+
+const ACTION_PERMISSION_LABELS: Record<BaseActionPermission, string> = {
+  "workspace.write": "工作区内容修改",
+  "task.dispatch": "任务派发",
+  "approval.decide": "审批裁决",
+  "guardrail.manage": "围栏管理",
+  "exam.run": "考试运行",
+  "memory.manage": "记忆管理",
+  "memory.recall": "记忆查阅",
+  "night.manage": "夜班管理",
+  "skill.manage": "技能管理",
+  "bundle.manage": "行业包管理",
+  "agent.manage": "数字员工管理",
+  "member.manage": "成员管理",
+  "member.role.manage": "成员角色管理",
+  "partner.manage": "合作伙伴管理",
+  "workspace.configure": "工作区配置",
+  "tenant.plan.manage": "租户版本管理",
+};
+
+function capabilityForbiddenMessage(plan: Identity["plan"], capability: CapabilityKey): string {
+  return `当前使用${planDisplayName(plan)}，暂不包含“${capabilityDisplayName(capability)}”，请升级后再试。`;
+}
 
 export const router = t.router;
 export const publicProcedure = t.procedure;
@@ -80,7 +105,7 @@ export const capabilityProcedure = (cap: CapabilityKey) =>
     if (!hasCapability(plan, cap)) {
       throw new TRPCError({
         code: "FORBIDDEN",
-        message: `当前版本「${plan}」不含能力「${cap}」，请升级（F7.2）`,
+        message: capabilityForbiddenMessage(plan, cap),
       });
     }
     return next();
@@ -102,7 +127,7 @@ export const actionProcedure = (permission: BaseActionPermission) =>
     if (!grants.actionPermissions.includes(permission)) {
       throw new TRPCError({
         code: "FORBIDDEN",
-        message: `当前成员没有动作权限「${permission}」（服务端权威授权）`,
+        message: `当前成员没有“${ACTION_PERMISSION_LABELS[permission]}”权限。`,
       });
     }
     return next();
@@ -147,7 +172,7 @@ export const capabilityWriteProcedure = (cap: CapabilityKey) =>
     if (!hasCapability(plan, cap)) {
       throw new TRPCError({
         code: "FORBIDDEN",
-        message: `当前版本「${plan}」不含能力「${cap}」，请升级（F7.2）`,
+        message: capabilityForbiddenMessage(plan, cap),
       });
     }
     return next();
@@ -160,7 +185,7 @@ export const capabilityActionProcedure = (cap: CapabilityKey, permission: BaseAc
     if (!hasCapability(plan, cap)) {
       throw new TRPCError({
         code: "FORBIDDEN",
-        message: `当前版本「${plan}」不含能力「${cap}」，请升级（F7.2）`,
+        message: capabilityForbiddenMessage(plan, cap),
       });
     }
     return next();

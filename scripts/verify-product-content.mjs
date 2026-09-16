@@ -32,6 +32,8 @@ if (product) {
   if (product.schemaVersion !== "workloom.product/v1") errors.push("产品清单 schemaVersion 必须为 workloom.product/v1");
   if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(product.productId ?? "")) errors.push("产品标识格式不正确");
   if (!/^[\w.-]+\/[\w.-]+$/.test(product.repository ?? "")) errors.push("产品清单 repository 格式不正确");
+  if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(product.demoWorkspaceSlug ?? "")) errors.push("演示工作区标识格式不正确");
+  if (!/^[A-Z][A-Z0-9-]{1,31}$/.test(product.demoMemberNo ?? "")) errors.push("演示成员编号格式不正确");
   if (!Number.isInteger(product.desktop?.portOffset) || product.desktop.portOffset < 0 || product.desktop.portOffset > 900) {
     errors.push("桌面端口偏移必须为 0 到 900 的整数");
   }
@@ -79,8 +81,11 @@ if (product) {
   }
 
   const releaseScript = path.join(root, "scripts/release.sh");
-  if (fs.existsSync(releaseScript) && !fs.readFileSync(releaseScript, "utf8").includes(`REPO=\"${product.repository}\"`)) {
-    errors.push("release.sh 目标仓库与产品清单不一致");
+  if (fs.existsSync(releaseScript)) {
+    const releaseSource = fs.readFileSync(releaseScript, "utf8");
+    if (!releaseSource.includes('REPO="$(node scripts/product-runtime.mjs --field repository)"') || releaseSource.includes('REPO="geniusdapeng-collab/')) {
+      errors.push("release.sh 必须从产品清单动态解析目标仓库");
+    }
   }
   const siteRoot = path.resolve(root, product.release?.website ?? "");
   for (const file of ["index.html", "en.html"]) {

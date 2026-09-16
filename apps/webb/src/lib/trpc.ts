@@ -1,10 +1,11 @@
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import type { AppRouter } from "@workloom/server/router";
+import { DEMO_WORKSPACE, storageKey } from "./product";
 
-const ACCESS_KEY = "workloom.b-mobile.access";
-const REFRESH_KEY = "workloom.b-mobile.refresh";
-const WORKSPACE_KEY = "workloom.b-mobile.workspace";
-const GUEST_KEY = "workloom.b-mobile.guest";
+const ACCESS_KEY = storageKey("access-token");
+const REFRESH_KEY = storageKey("refresh-token");
+const WORKSPACE_KEY = storageKey("workspace");
+const GUEST_KEY = storageKey("guest");
 
 export const trpc: ReturnType<typeof createTRPCClient<AppRouter>> = createTRPCClient<AppRouter>({
   links: [httpBatchLink({
@@ -42,7 +43,7 @@ export async function logoutSession(): Promise<void> {
 }
 
 export function savedWorkspace() {
-  return localStorage.getItem(WORKSPACE_KEY) ?? (import.meta.env.VITE_DEFAULT_WORKSPACE as string | undefined) ?? "";
+  return localStorage.getItem(WORKSPACE_KEY) ?? DEMO_WORKSPACE;
 }
 
 export async function restoreSession(): Promise<boolean> {

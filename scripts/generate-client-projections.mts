@@ -1,16 +1,85 @@
 #!/usr/bin/env node
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { parseBundleManifest } from "../packages/industry-contract/src/index.ts";
-import { validateLightBrandTheme } from "../packages/ui/src/color-contrast.ts";
 
 const root = resolve(import.meta.dirname, "..");
+let repositoryRoot = root;
+try {
+  repositoryRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+    cwd: root,
+    encoding: "utf8",
+  }).trim();
+} catch {
+  // 非 Git 制品继续以客户端基座目录为产品根；后续缺失清单会给出明确错误。
+}
 const write = process.argv.includes("--write");
-const product = JSON.parse(readFileSync(join(root, "product.manifest.json"), "utf8")) as {
+const product = JSON.parse(readFileSync(join(repositoryRoot, "product.manifest.json"), "utf8")) as {
   defaultBundle: string;
   clients: { cMobile: { enabled: boolean; entry: string } };
 };
-const uiPackage = JSON.parse(readFileSync(join(root, "packages/ui/package.json"), "utf8")) as { version: string };
+
+function readUiVersion(): string {
+  const consumerStatePath = join(root, ".workloom-ui.json");
+  if (existsSync(consumerStatePath)) {
+    const state = JSON.parse(readFileSync(consumerStatePath, "utf8")) as {
+      schemaVersion?: unknown;
+      package?: unknown;
+      version?: unknown;
+    };
+    if (
+      state.schemaVersion !== "workloom.ui-consumer-state/v1"
+      || state.package !== "@workloom/ui"
+      || typeof state.version !== "string"
+      || !/^\d+\.\d+\.\d+$/.test(state.version)
+    ) {
+      throw new Error("共享 UI 消费状态无效，无法生成可追溯的客户端投影");
+    }
+    return state.version;
+  }
+
+  const sourcePackagePath = join(root, "packages/ui/package.json");
+  if (!existsSync(sourcePackagePath)) {
+    throw new Error("缺少 .workloom-ui.json；行业仓必须先完成稳定 UI 制品安装与验真");
+  }
+  const sourcePackage = JSON.parse(readFileSync(sourcePackagePath, "utf8")) as { version?: unknown };
+  if (typeof sourcePackage.version !== "string" || !/^\d+\.\d+\.\d+$/.test(sourcePackage.version)) {
+    throw new Error("基座 packages/ui 版本无效");
+  }
+  return sourcePackage.version;
+}
+
+async function loadThemeValidator(): Promise<(theme: { primary: string; secondary: string }) => string[]> {
+  const clientPackagePath = join(root, product.clients.cMobile.entry, "package.json");
+  if (!existsSync(clientPackagePath)) {
+    throw new Error(`C端客户端入口不存在：${product.clients.cMobile.entry}`);
+  }
+  const installedPackageRoot = join(root, product.clients.cMobile.entry, "node_modules/@workloom/ui");
+  const installedManifestPath = join(installedPackageRoot, "package.json");
+  const entryPath = join(installedPackageRoot, "dist/index.js");
+  if (!existsSync(installedManifestPath) || !existsSync(entryPath)) {
+    throw new Error("C端客户端尚未安装经锁定的 @workloom/ui，拒绝生成投影");
+  }
+  const installedManifest = JSON.parse(readFileSync(installedManifestPath, "utf8")) as {
+    name?: unknown;
+    version?: unknown;
+  };
+  if (installedManifest.name !== "@workloom/ui" || installedManifest.version !== uiVersion) {
+    throw new Error(`C端客户端 @workloom/ui 与受控版本 ${uiVersion} 不一致`);
+  }
+  const uiModule = await import(pathToFileURL(entryPath).href) as {
+    validateLightBrandTheme?: (theme: { primary: string; secondary: string }) => string[];
+  };
+  if (typeof uiModule.validateLightBrandTheme !== "function") {
+    throw new Error("当前 @workloom/ui 未导出品牌色可访问性校验器");
+  }
+  return uiModule.validateLightBrandTheme;
+}
+
+const uiVersion = readUiVersion();
+const validateLightBrandTheme = await loadThemeValidator();
 const bundleDir = join(root, "bundles", product.defaultBundle);
 const manifest = parseBundleManifest(JSON.parse(readFileSync(join(bundleDir, "bundle.json"), "utf8")));
 
@@ -51,7 +120,7 @@ const projection = {
     bundleId: manifest.workloom.industry,
     bundleVersion: manifest.version,
     contractVersion: manifest.workloom.compatibility.contract,
-    uiVersion: uiPackage.version,
+    uiVersion,
     manifestDigest: manifest.integrity?.digest ?? "草稿未封装",
   },
 };

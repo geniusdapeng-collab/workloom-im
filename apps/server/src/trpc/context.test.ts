@@ -16,6 +16,7 @@ vi.mock("../service/access-authority.js", async (importOriginal) => {
 
 import {
   actionProcedure,
+  capabilityProcedure,
   createContext,
   navigationPermissionProcedure,
   navigationPermissionWriteProcedure,
@@ -66,9 +67,39 @@ describe("会话域隔离", () => {
     const testRouter = router({
       mutateGuardrail: actionProcedure("guardrail.manage").mutation(() => "不应到达"),
     });
-    await expect(testRouter.createCaller(context).mutateGuardrail()).rejects.toMatchObject({
+    const promise = testRouter.createCaller(context).mutateGuardrail();
+    await expect(promise).rejects.toMatchObject({
       code: "FORBIDDEN",
+      message: expect.stringContaining("围栏管理"),
+    });
+    await expect(promise).rejects.not.toMatchObject({
       message: expect.stringContaining("guardrail.manage"),
+    });
+  });
+
+  it("越版错误只返回中文业务名，不暴露套餐或能力代码", async () => {
+    const identity: Identity = {
+      kind: "member",
+      memberId: "mem-community",
+      memberNo: "MEM-003",
+      name: "社区版成员",
+      role: "owner",
+      tenantId: "tenant-1",
+      workspaceId: "ws-1",
+      plan: "community",
+    };
+    currentMemberAuthorityMock.mockResolvedValue({ identity, permissions: {} });
+    const context = { session: identity, identity, partnerIdentity: null, headers: new Headers() };
+    const testRouter = router({
+      manageNight: capabilityProcedure("nightShift").query(() => "不应到达"),
+    });
+    const promise = testRouter.createCaller(context).manageNight();
+    await expect(promise).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: expect.stringContaining("夜班自动运行"),
+    });
+    await expect(promise).rejects.not.toMatchObject({
+      message: expect.stringMatching(/community|nightShift|F7\.2/i),
     });
   });
 
