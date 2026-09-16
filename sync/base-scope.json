@@ -1,5 +1,5 @@
 {
-  "version": 10,
+  "version": 11,
   "description": "WorkLoom IM 基座能力同步范围声明——base-sync 引擎的唯一事实源。文件型公共能力按 include/exclude 受控分发；三端组件/视觉语言通过与 ui-v* 同版的 GitHub Release @workloom/ui tarball 下发，三端应用壳/导航/布局/状态/API 接线通过同一稳定标签和逐文件指纹升级 PR 下发。行业属性与演示能力永不同步。requiredRootAssets 无视行业代码的 pathPrefix，始终安装并校验在 Git 仓库根目录。修改本文件即修改同步边界，需基座 owner 评审。",
 
   "registryCapabilities": [
@@ -95,7 +95,7 @@
       "reason": "环境示例仅展示带省略号的 Ed25519 PEM 结构，并明确要求私钥只能进入密钥库；不含可用私钥。"
     },
     ".github/workflows/ui-release.yml": {
-      "sha256": "caca88f89542b2e46515dddb6628807ff7a162a13260a3a58fc932d219125049",
+      "sha256": "1dd29ee5132eb96c8d9dbc978e65c580cbca8db225256911eee2ee02a4f5addb",
       "findings": [
         { "rule": "credential-in-url", "line": 56 },
         { "rule": "literal-sensitive-assignment", "line": 56 },
@@ -307,6 +307,13 @@
     "scripts/ui-governance-rules.mjs",
     "scripts/ui-governance-rules.test.mjs",
     "scripts/verify-ui-governance.mjs",
+    "scripts/action-pins.json",
+    "scripts/action-trust-policy.test.mjs",
+    "scripts/desktop-release-policy.test.mjs",
+    "scripts/desktop-release-state.mjs",
+    "scripts/desktop-release-state.test.mjs",
+    "scripts/desktop-workflow-path.test.mjs",
+    "scripts/release-publisher-policy.test.mjs",
     "scripts/pack-macos.sh",
     "scripts/install-im-channels.sh",
     "scripts/skill-forge.mts",

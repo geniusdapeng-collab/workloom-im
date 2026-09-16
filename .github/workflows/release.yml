@@ -1,11 +1,10 @@
-# 【已降级为应急回退线，v2.1.0 起】唯一发行形态为 build-desktop.yml 的
+# 【已降级为应急回退线，v2.1.0 起】唯一发行形态为 desktop-production-release.yml 的
 # Electron 完全自包含安装包（DMG/NSIS，客户端窗口即产品）。
 # 本管线（zip 浏览器壳）不再随 tag 触发，仅保留手动 dispatch 应急；产物禁止上传正式 Release。
 # ============================================================
 # WorkLoom macOS 发行管线（W2 / D16）
-# 产物：WorkLoom-macOS.zip + .sha256 → GitHub Release
-# 验收：macos-14 runner 上以 WORKLOOM_SMOKE=1 跑启动器首航冒烟
-#       （PG 起停 + 迁移 + 种子 + server/web 健康检查）通过才发布
+# 产物：WorkLoom-macOS.zip + .sha256 → 短期 Actions Artifact（不创建 Release）
+# 验收：macos-14 runner 上以 WORKLOOM_SMOKE=1 跑启动器首航冒烟。
 # ============================================================
 name: release-macos
 
@@ -18,22 +17,27 @@ on:
         default: "v1.1.0"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   pack-release:
     runs-on: macos-14
     timeout-minutes: 60
     env:
-      VER: ${{ github.ref_name || inputs.version }}
+      VER: ${{ inputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Node 24 + pnpm
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
       - run: corepack enable && corepack prepare pnpm@10.14.0 --activate
+
+      - name: 校验应急工件版本
+        run: '[[ "$VER" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "❌ 版本必须是 vX.Y.Z"; exit 1; }'
 
       - name: 依赖与构建
         run: |
@@ -58,35 +62,15 @@ jobs:
           [ "$RC" -eq 0 ] || exit "$RC"
           tail -5 "$HOME/Library/Logs/WorkLoom/"launch-*.log | grep -q "首航检查单全绿"
 
-      - name: 发布 Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          NOTES=$(mktemp)
-          cat > "$NOTES" <<EOF
-          ## WorkLoom 织元 $VER（macOS）
-
-          企业 Agent IM 底座桌面发行版：AI 员工班组在围栏内全自动巡航，关键时刻人来拍板。
-
-          ### 三步启航
-          1. 下载 \`WorkLoom-macOS.zip\` 并双击解压
-          2. 把 WorkLoom 拖入「应用程序」
-          3. 首次启动：Control+点按 → 打开（Gatekeeper 标准流程，唯一一次授权）
-
-          之后一切自动完成：运行时装配 → PostgreSQL 初始化 → 迁移与演示数据 → 服务启动 → 浏览器打开经营主页。
-          全部依赖包内自带（Node 24 / PostgreSQL 17 + pgvector），无需 brew、无需 sudo、无需命令行。
-
-          ### 校验
-          \`\`\`
-          shasum -a 256 -c WorkLoom-macOS.zip.sha256
-          \`\`\`
-
-          首航冒烟：本包在 macos-14 runner 通过启动器全链冒烟（PG/迁移/种子/server/web 健康检查）后发布。
-          EOF
-          gh release create "$VER" \
-            dist/WorkLoom-macOS.zip dist/WorkLoom-macOS.zip.sha256 \
-            --title "WorkLoom 织元 $VER" --notes-file "$NOTES" \
-            || gh release upload "$VER" dist/WorkLoom-macOS.zip dist/WorkLoom-macOS.zip.sha256 --clobber
+      - name: 上传短期应急工件（不创建 GitHub Release）
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: emergency-macos-${{ inputs.version }}
+          path: |
+            dist/WorkLoom-macOS.zip
+            dist/WorkLoom-macOS.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
 
       - name: 产物摘要
         run: ls -lh dist/ && cat dist/WorkLoom-macOS.zip.sha256

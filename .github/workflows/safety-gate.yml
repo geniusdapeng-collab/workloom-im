@@ -8,15 +8,20 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   guard-and-classify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with: { version: 10.14.0 }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       # G1 前置：保护清单闸 + 变更分级（deny 即红）
@@ -27,10 +32,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: guard-and-classify
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with: { version: 10.14.0 }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       # G1 静态闸：tsc 严格模式 0 错误（审计红线 A1）
@@ -42,12 +49,12 @@ jobs:
         run: pnpm exec vitest run platform-ops/test --reporter=verbose 2>&1 | tee /tmp/g2-vitest.log
       - name: G2 失败留证上传（远程诊断）
         if: failure() && steps.g2.outcome == 'failure'
-        uses: softprops/action-gh-release@v2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          files: /tmp/g2-vitest.log
-          tag_name: safety-evidence
-          name: safety-evidence
-          fail_on_unmatched_files: false
+          name: safety-evidence-${{ github.run_id }}
+          path: /tmp/g2-vitest.log
+          if-no-files-found: warn
+          retention-days: 7
       # G3 考试院闸：硬轨全过（exam.test.ts 内嵌于 G2，此处独立门禁防跳过）
       - name: G3 考试院硬轨
         run: pnpm exec vitest run platform-ops/test/exam.test.ts
@@ -58,9 +65,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: static-and-tests
     steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: 24 }
       - name: 镜像备份到 CNB/工蜂
         env:

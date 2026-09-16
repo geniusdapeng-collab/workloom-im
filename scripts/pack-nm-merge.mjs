@@ -8,55 +8,80 @@
 //   冲突：后写覆盖先写并告警（monorepo 版本基本对齐，运行期可容忍）
 // 用法：node scripts/pack-nm-merge.mjs <输出 package.json 路径>
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadPayloadPolicy } from "./payload-policy.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const OUT = process.argv[2];
-if (!OUT) { console.error("用法：node scripts/pack-nm-merge.mjs <输出路径>"); process.exit(1); }
 
 const SKIP_VALUE = (v) => typeof v === "string" && v.startsWith("workspace:");
 const SKIP_NAME = (n) => /^(electron|electron-builder|@electron|playwright|@playwright)/.test(n);
 
-// packages/*/package.json 动态收集（行业仓有自定义包，如 @hyperreality/video-studio——
-// v1.0.0 硬编码四包漏收集其运行依赖实证）
-const pkgSources = readdirSync(join(ROOT, "packages"), { withFileTypes: true })
-  .filter((d) => d.isDirectory())
-  .map((d) => [`packages/${d.name}/package.json`, ["dependencies"]]);
-// 仓根级一方包（andromeda platform-ops/ 等，存在才收集——v1.1.0 缺失实证）
-if (existsSync(join(ROOT, "platform-ops/package.json"))) pkgSources.push(["platform-ops/package.json", ["dependencies"]]);
+export function runtimeDependencySources(root, policy) {
+  // packages/*/package.json 动态收集（行业仓有自定义包，如 @hyperreality/video-studio——
+  // v1.0.0 硬编码四包漏收集其运行依赖实证）
+  const pkgSources = readdirSync(join(root, "packages"), { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => [`packages/${d.name}/package.json`, ["dependencies"]]);
 
-const sources = [
-  ["package.json", ["dependencies"]],
-  ["apps/server/package.json", ["dependencies"]],
-  ...pkgSources,
-  // 运行期工具（来自 devDependencies，仅取这两个）
-  ["package.json", ["devDependencies"], ["tsx"]],
-  ["apps/web/package.json", ["devDependencies"], ["vite", "@tailwindcss/vite", "@vitejs/plugin-react"]],
-];
-
-const deps = {};
-for (const [file, fields, only] of sources) {
-  let pkg;
-  try { pkg = JSON.parse(readFileSync(join(ROOT, file), "utf8")); }
-  catch { console.warn(`⚠️ 缺 ${file}，跳过`); continue; }
-  for (const field of fields) {
-    for (const [name, ver] of Object.entries(pkg[field] ?? {})) {
-      if (SKIP_NAME(name) || SKIP_VALUE(ver)) continue;
-      if (only && !only.includes(name)) continue;
-      if (deps[name] && deps[name] !== ver) console.warn(`⚠️ 版本冲突 ${name}: ${deps[name]} → ${ver}（${file}，后者生效）`);
-      deps[name] = ver;
+  // platform-ops 的物理存在不是授权。只有仙女座精确产品身份允许收集；
+  // 身份允许却缺包时也必须失败，避免发布一个名义上是运营中枢、实际残缺的载荷。
+  if (policy.includePlatformOps) {
+    if (!existsSync(join(root, "platform-ops/package.json"))) {
+      throw new Error("仙女座正式载荷缺少 platform-ops/package.json");
     }
+    pkgSources.push(["platform-ops/package.json", ["dependencies"]]);
   }
+
+  return [
+    ["package.json", ["dependencies"]],
+    ["apps/server/package.json", ["dependencies"]],
+    ...pkgSources,
+    // 运行期工具（来自 devDependencies，仅取这两个）
+    ["package.json", ["devDependencies"], ["tsx"]],
+    ["apps/web/package.json", ["devDependencies"], ["vite", "@tailwindcss/vite", "@vitejs/plugin-react"]],
+  ];
 }
 
-const merged = {
-  name: "workloom-runtime-payload",
-  private: true,
-  version: "0.0.0",
-  description: "pack-windows 运行期依赖合成（npm 扁平化安装用，自动生成勿手改）",
-  dependencies: Object.fromEntries(Object.entries(deps).sort(([a], [b]) => a.localeCompare(b))),
-};
-mkdirSync(dirname(OUT), { recursive: true });
-writeFileSync(OUT, JSON.stringify(merged, null, 2) + "\n");
-console.log(`✅ 合成 ${OUT}：${Object.keys(deps).length} 个直接依赖`);
+export function buildMergedRuntimeManifest(root, policy) {
+  const deps = {};
+  for (const [file, fields, only] of runtimeDependencySources(root, policy)) {
+    let pkg;
+    try { pkg = JSON.parse(readFileSync(join(root, file), "utf8")); }
+    catch { console.warn(`⚠️ 缺 ${file}，跳过`); continue; }
+    for (const field of fields) {
+      for (const [name, ver] of Object.entries(pkg[field] ?? {})) {
+        if (SKIP_NAME(name) || SKIP_VALUE(ver)) continue;
+        if (only && !only.includes(name)) continue;
+        if (deps[name] && deps[name] !== ver) console.warn(`⚠️ 版本冲突 ${name}: ${deps[name]} → ${ver}（${file}，后者生效）`);
+        deps[name] = ver;
+      }
+    }
+  }
+  return {
+    name: "workloom-runtime-payload",
+    private: true,
+    version: "0.0.0",
+    description: "正式桌面运行期依赖合成（npm 扁平化安装用，自动生成勿手改）",
+    dependencies: Object.fromEntries(Object.entries(deps).sort(([a], [b]) => a.localeCompare(b))),
+  };
+}
+
+function main() {
+  const out = process.argv[2];
+  if (!out) throw new Error("用法：node scripts/pack-nm-merge.mjs <输出路径>");
+  const policy = loadPayloadPolicy(ROOT);
+  const merged = buildMergedRuntimeManifest(ROOT, policy);
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(out, JSON.stringify(merged, null, 2) + "\n");
+  console.log(`✅ 合成 ${out}：${Object.keys(merged.dependencies).length} 个直接依赖（platform-ops: ${policy.includePlatformOps ? "include" : "exclude"}）`);
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    main();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+}

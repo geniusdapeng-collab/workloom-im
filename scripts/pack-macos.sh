@@ -12,6 +12,7 @@
 # ============================================================
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source scripts/release-assets.sh
 
 VERSION="v1.1.0"
 ARCH="arm64"
@@ -27,7 +28,12 @@ done
 
 NODE_VER="24.19.0"
 PGAPP_VER="2.9.6-17"
-NODE_TARBALL="node-v${NODE_VER}-darwin-${ARCH}.tar.gz"
+case "$ARCH" in
+  arm64) NODE_ARCH="arm64" ;;
+  x86_64|x64) NODE_ARCH="x64" ;;
+  *) echo "❌ 未知 arch $ARCH"; exit 1 ;;
+esac
+NODE_TARBALL="node-v${NODE_VER}-darwin-${NODE_ARCH}.tar.gz"
 NODE_URL="https://nodejs.org/dist/v${NODE_VER}/${NODE_TARBALL}"
 PGAPP_URL="https://github.com/PostgresApp/PostgresApp/releases/download/v2.9.6/Postgres-${PGAPP_VER}.dmg"
 
@@ -46,6 +52,8 @@ echo "== 装配 WorkLoom.app（$VERSION · darwin-${ARCH}）=="
 [ -f apps/desktop/WorkLoom.app/Contents/Info.plist ] || { echo "❌ 缺 apps/desktop 骨架"; exit 1; }
 copy apps/desktop/WorkLoom.app "$APP"
 chmod +x "$APP/Contents/MacOS/WorkLoom"
+mkdir -p "$APP/Contents/Resources"
+cp apps/desktop/electron/bootstrap.cjs "$APP/Contents/Resources/bootstrap.cjs"
 
 # 2. 产品载荷 runtime/
 echo "→ 装配产品载荷…"
@@ -78,27 +86,29 @@ done
 
 # 4. Node darwin 官方二进制
 echo "→ Node $NODE_VER darwin-${ARCH}…"
-curl -sfL --retry 4 -o "$STAGE/$NODE_TARBALL" "$NODE_URL"
+workloom_fetch_verified "$STAGE/$NODE_TARBALL" "$NODE_TARBALL" "$NODE_URL"
 mkdir -p "$APP/Contents/Resources/node"
 tar xzf "$STAGE/$NODE_TARBALL" -C "$APP/Contents/Resources/node" --strip-components=1
 
 # 5. Postgres.app（DMG 挂载仅 macOS 可行）
 if [ "$STRUCTURE_ONLY" = "1" ]; then
   echo "⚠️  structure-only：跳过 Postgres.app 挂载（占位目录代替，禁分发此包）"
-  mkdir -p "$APP/Contents/Resources/pg/Postgres.app/Contents/Versions/17/bin"
+  mkdir -p "$APP/Contents/Resources/pg/bin"
   printf 'structure-only placeholder\n' > "$APP/Contents/Resources/pg/PLACEHOLDER-NOT-FOR-RELEASE"
 else
   echo "→ Postgres.app ${PGAPP_VER}（内置 pgvector 0.8.6）…"
-  curl -sfL --retry 4 -o "$STAGE/pg.dmg" "$PGAPP_URL"
+  workloom_fetch_verified "$STAGE/pg.dmg" "Postgres-${PGAPP_VER}.dmg" "$PGAPP_URL"
   hdiutil attach -nobrowse -mountpoint "$STAGE/mnt" "$STAGE/pg.dmg" >/dev/null
   mkdir -p "$APP/Contents/Resources/pg"
-  ditto "$STAGE/mnt/Postgres.app" "$APP/Contents/Resources/pg/Postgres.app"
+  copy "$STAGE/mnt/Postgres.app/Contents/Versions/17/bin" "$APP/Contents/Resources/pg/bin"
+  copy "$STAGE/mnt/Postgres.app/Contents/Versions/17/lib" "$APP/Contents/Resources/pg/lib"
+  copy "$STAGE/mnt/Postgres.app/Contents/Versions/17/share" "$APP/Contents/Resources/pg/share"
   hdiutil detach "$STAGE/mnt" >/dev/null
   # 结构断言：PG 17 主程序与 pgvector 扩展在位
   # 注：macOS 上 PG≥16 的动态库后缀为 .dylib（非 .so），见 PostgresApp src-17/makefile（vector.dylib）
-  [ -x "$APP/Contents/Resources/pg/Postgres.app/Contents/Versions/17/bin/postgres" ] || { echo "❌ Postgres.app 结构异常"; exit 1; }
-  ls "$APP/Contents/Resources/pg/Postgres.app/Contents/Versions/17/lib/postgresql/vector.dylib" >/dev/null || { echo "❌ pgvector 未随包"; exit 1; }
-  ls "$APP/Contents/Resources/pg/Postgres.app/Contents/Versions/17/share/postgresql/extension/vector.control" >/dev/null || { echo "❌ pgvector control 缺失"; exit 1; }
+  [ -x "$APP/Contents/Resources/pg/bin/postgres" ] || { echo "❌ Postgres.app 结构异常"; exit 1; }
+  ls "$APP/Contents/Resources/pg/lib/postgresql/vector.dylib" >/dev/null || { echo "❌ pgvector 未随包"; exit 1; }
+  ls "$APP/Contents/Resources/pg/share/postgresql/extension/vector.control" >/dev/null || { echo "❌ pgvector control 缺失"; exit 1; }
 fi
 
 # ---------- 5.5 内嵌 nats-server（P0-3 决策点 4：+20MB 开箱即持久化事件总线） ----------
@@ -110,7 +120,8 @@ if [ "$STRUCTURE_ONLY" = "1" ]; then
 ' > "$APP/Contents/Resources/nats/PLACEHOLDER-NOT-FOR-RELEASE"
 else
   echo "→ nats-server ${NATS_VER} darwin-${NATS_ARCH}…"
-  curl -sfL --retry 4 -o "$STAGE/nats.tgz" "https://github.com/nats-io/nats-server/releases/download/${NATS_VER}/nats-server-${NATS_VER}-darwin-${NATS_ARCH}.tar.gz"
+  NATS_DIST="nats-server-${NATS_VER}-darwin-${NATS_ARCH}.tar.gz"
+  workloom_fetch_verified "$STAGE/nats.tgz" "$NATS_DIST" "https://github.com/nats-io/nats-server/releases/download/${NATS_VER}/${NATS_DIST}"
   tar -xzf "$STAGE/nats.tgz" -C "$STAGE"
   mkdir -p "$APP/Contents/Resources/nats"
   cp "$STAGE/nats-server-${NATS_VER}-darwin-${NATS_ARCH}/nats-server" "$APP/Contents/Resources/nats/"

@@ -1,4 +1,4 @@
-# 【已降级为应急回退线，v2.1.0 起】唯一发行形态为 build-desktop.yml 的
+# 【已降级为应急回退线，v2.1.0 起】唯一发行形态为 desktop-production-release.yml 的
 # Electron 完全自包含安装包（DMG/NSIS，客户端窗口即产品）。
 # 本流水线（zip+bat 浏览器壳）不再随 tag 触发、不再上传 Release，仅保留手动
 # dispatch 作为应急回退；产物禁止上传 Release（避免与正式安装包混淆）。
@@ -16,7 +16,7 @@ on:
         default: "v1.1.0"
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   VERSION: ${{ github.event.inputs.version || github.ref_name }}
@@ -25,10 +25,15 @@ jobs:
   macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: 24, cache: pnpm }
+      - name: 校验应急工件版本
+        shell: bash
+        run: '[[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "❌ 版本必须是 vX.Y.Z"; exit 1; }'
       - name: 装配 macOS 自包含包（PG17+pgvector 内嵌）
         run: bash scripts/pack-macos.sh --version "$VERSION" --arch arm64
       - name: 冒烟验收（首启自愈全流程：装配→initdb→迁移→种子→起服务→健康检查）
@@ -36,24 +41,26 @@ jobs:
           unzip -q dist/WorkLoom-macOS.zip -d /tmp/wl-smoke
           WORKLOOM_SMOKE=1 bash /tmp/wl-smoke/WorkLoom.app/Contents/MacOS/WorkLoom
       - name: 上传产物
-        uses: softprops/action-gh-release@v2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          files: dist/WorkLoom-macOS.zip*
-          name: ${{ env.VERSION }}
-          generate_release_notes: true
-          body: |
-            ## 安装说明
-            **macOS**：下载 `WorkLoom-macOS.zip` 解压 → 把 `WorkLoom.app` 拖入「应用程序」→ 首次打开右键→「打开」（仅首次需要）→ 等待首启初始化约 30 秒 → 自动打开系统。
-            **Windows**：下载 `WorkLoom-Windows.zip` 解压到任意目录 → 双击 `WorkLoom.bat` → SmartScreen 点「更多信息 → 仍要运行」（仅首次）→ 等待首启初始化约 30 秒 → 自动打开系统。
-            > 开箱即「体验模式」（演示数据+离线可用）；体验完可一键清理，按「配置引导」定制自己行业版，填入模型 Key 即可真实使用。
+          name: emergency-macos-${{ env.VERSION }}
+          path: dist/WorkLoom-macOS.zip*
+          if-no-files-found: error
+          retention-days: 7
 
   windows:
-    runs-on: windows-latest
+    # 与正式桌面链保持同一干净底座；build-pgvector-win 会拒绝任何预置 PG17。
+    runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: 24, cache: pnpm }
+      - name: 校验应急工件版本
+        shell: pwsh
+        run: if ($env:VERSION -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') { throw '版本必须是 vX.Y.Z' }
       - name: 编译 pgvector（官方无 Windows 预编译件，MSVC 源码构建）
         shell: pwsh
         run: scripts/build-pgvector-win.ps1
@@ -76,14 +83,16 @@ jobs:
           copy /Y "%LOCALAPPDATA%\WorkLoom\Logs\*.log" smoke-logs\ 2>nul || echo no-logs > smoke-logs\no-logs.txt
       - name: 上传冒烟日志
         if: failure() && steps.smoke.outcome == 'failure'
-        uses: softprops/action-gh-release@v2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          files: smoke-logs/**
-          name: ${{ env.VERSION }}
-          fail_on_unmatched_files: false
+          name: emergency-windows-smoke-logs-${{ env.VERSION }}
+          path: smoke-logs/**
+          if-no-files-found: warn
+          retention-days: 7
       - name: 上传产物
-        uses: softprops/action-gh-release@v2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          files: dist/WorkLoom-Windows.zip*
-          name: ${{ env.VERSION }}
-          generate_release_notes: true
+          name: emergency-windows-${{ env.VERSION }}
+          path: dist/WorkLoom-Windows.zip*
+          if-no-files-found: error
+          retention-days: 7

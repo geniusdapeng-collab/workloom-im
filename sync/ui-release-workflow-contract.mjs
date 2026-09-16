@@ -160,14 +160,44 @@ export function findUiReleaseWorkflowRisks(source) {
         'EXPECTED_ASSET="workloom-ui-${VERSION}.tgz"',
         'test "${#TARBALLS[@]}" -eq 1',
         'test "$LOCAL_INTEGRITY" = "$PACK_INTEGRITY"',
+        "resolve_remote_tag()",
+        'gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}"',
+        'TAG_SHA_BEFORE="$(resolve_remote_tag)"',
+        'test "$TAG_SHA_BEFORE" = "$RELEASE_SHA"',
         'gh release view "$RELEASE_TAG"',
         'gh release create "$RELEASE_TAG"',
+        "--draft --latest=false",
         "--verify-tag",
         '--target "$RELEASE_SHA"',
+        "isImmutable",
+        'if [ "$IS_IMMUTABLE" = "true" ]',
+        'test "$IS_DRAFT" = "false"',
+        'gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=true --latest=false',
         'gh release upload "$RELEASE_TAG" "$TARBALL"',
         'gh release download "$RELEASE_TAG"',
         'test "$REMOTE_INTEGRITY" = "$LOCAL_INTEGRITY"',
         'cmp -s "$TARBALL" "$REMOTE_DIR/$EXPECTED_ASSET"',
+        'TAG_SHA_PREPUBLISH="$(resolve_remote_tag)"',
+        'test "$TAG_SHA_PREPUBLISH" = "$RELEASE_SHA"',
+        'if [ "$IS_IMMUTABLE" = "false" ]',
+        'gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false',
+        'gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName,isLatest,isDraft,isImmutable',
+        "match[0].isLatest!==false",
+        "verify_public_release()",
+        'if(tgz.length!==1||exact.length!==1) throw new Error("Release 最终 tgz 资产必须唯一且精确命名")',
+        'FINAL_REMOTE_DIR="$(mktemp -d)" || return 1',
+        'gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$EXPECTED_ASSET" --dir "$FINAL_REMOTE_DIR" || return 1',
+        '[ "$FINAL_REMOTE_INTEGRITY" = "$LOCAL_INTEGRITY" ] || return 1',
+        'cmp -s "$TARBALL" "$FINAL_REMOTE_DIR/$EXPECTED_ASSET" || return 1',
+        'TAG_SHA_AFTER="$(resolve_remote_tag)" || return 1',
+        '[ "$TAG_SHA_AFTER" = "$RELEASE_SHA" ] || return 1',
+        "rollback_public_release()",
+        "if ! verify_public_release",
+        'FINAL_IS_IMMUTABLE="$(node',
+        'if [ "$FINAL_IS_IMMUTABLE" = "false" ]',
+        "最终证明失败后的可变 Release 必须恢复为草稿",
+        "Release 公开后的状态、资产、latest 或标签证明失败",
+        "Release 最终状态必须公开且非预发布",
       ];
       for (const fragment of requiredFragments) {
         if (!command.includes(fragment)) risks.push(`GitHub Release 幂等发布缺少受控动作：${fragment}`);
@@ -177,6 +207,36 @@ export function findUiReleaseWorkflowRisks(source) {
       }
       if (!command.includes('if(tgz.length>1) throw new Error("Release 不得包含多个 tgz 制品")')) {
         risks.push("GitHub Release 必须拒绝同一稳定版出现多个 tgz 制品");
+      }
+      const beforeTagIndex = command.indexOf('TAG_SHA_BEFORE="$(resolve_remote_tag)"');
+      const releaseViewIndex = command.indexOf('gh release view "$RELEASE_TAG"');
+      const hideDraftIndex = command.indexOf('gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=true --latest=false');
+      const releaseValidationIndex = command.indexOf('if(r.tagName!==tag||r.isPrerelease)');
+      const assetCountIndex = command.indexOf('ASSET_COUNT="$(node');
+      const byteCheckIndex = command.indexOf('cmp -s "$TARBALL" "$REMOTE_DIR/$EXPECTED_ASSET"');
+      const prepublishTagIndex = command.indexOf('TAG_SHA_PREPUBLISH="$(resolve_remote_tag)"');
+      const publishIndex = command.indexOf('gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false');
+      const finalByteCheckIndex = command.indexOf('cmp -s "$TARBALL" "$FINAL_REMOTE_DIR/$EXPECTED_ASSET" || return 1');
+      const latestIndex = command.indexOf('gh release list --repo "$GITHUB_REPOSITORY"');
+      const afterTagIndex = command.indexOf('TAG_SHA_AFTER="$(resolve_remote_tag)" || return 1');
+      const postDriftRedraftIndex = command.lastIndexOf('gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=true --latest=false');
+      if (beforeTagIndex < 0 || releaseViewIndex <= beforeTagIndex) {
+        risks.push("GitHub Release 任何变更前必须重新解析远端标签并绑定 verify-and-preflight 的提交");
+      }
+      if (hideDraftIndex < 0 || releaseValidationIndex <= hideDraftIndex || assetCountIndex <= hideDraftIndex) {
+        risks.push("可变 Release 必须先收回草稿，再校验状态或检查、上传已有资产");
+      }
+      if (byteCheckIndex < 0 || prepublishTagIndex <= byteCheckIndex || publishIndex <= prepublishTagIndex) {
+        risks.push("GitHub Release 必须在逐字节核验后再次证明标签未漂移，才能公开草稿");
+      }
+      if (finalByteCheckIndex <= publishIndex || latestIndex <= finalByteCheckIndex || afterTagIndex <= latestIndex) {
+        risks.push("GitHub Release 公开后必须独立证明未抢占 latest 且标签仍未漂移");
+      }
+      if (postDriftRedraftIndex <= afterTagIndex) {
+        risks.push("公开后标签漂移时，可变 Release 必须立即恢复草稿再拒绝 rollout");
+      }
+      if (!/if \[ "\$IS_IMMUTABLE" = "false" \]; then\ngh release edit "\$RELEASE_TAG" --repo "\$GITHUB_REPOSITORY" --draft=false --latest=false\nfi/u.test(command)) {
+        risks.push("不可变且已公开 Release 的幂等重跑不得再次 edit");
       }
     }
   }

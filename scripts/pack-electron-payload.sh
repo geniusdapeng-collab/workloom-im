@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# WorkLoom Electron 自包含载荷装配（build-desktop 流水线专用）
+# WorkLoom Electron 自包含载荷装配（desktop-production-release 流水线专用）
 # 产出：dist-payload/{runtime,node,pg,nats}——由 electron-builder extraResources 打入安装包
 #   runtime/  产品载荷（源码+迁移+种子+扁平 node_modules+web dist+VERSION）
 #   node/     Node 24 官方二进制（按平台/架构）
@@ -17,6 +17,7 @@
 # ============================================================
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source scripts/release-assets.sh
 
 PLATFORM=""
 ARCH=""
@@ -38,21 +39,6 @@ OUT="dist-payload"
 STAGE="$(mktemp -d /tmp/workloom-epayload.XXXXXX)"
 trap 'rm -rf "$STAGE"' EXIT
 
-fetch() { # fetch <out> <url...>：按序回退
-  local out="$1"; shift
-  for u in "$@"; do
-    echo "  ↓ $u"
-    # GitHub/npm 大文件偶发 5xx、HTTP/2 RESET 或半途断流。发行流水线必须在单一
-    # 镜像上充分重试，再走备用源，不能因为一次公网抖动产出“本项目失败”的假象。
-    if curl --http1.1 -fsSL \
-      --retry 10 --retry-all-errors --retry-delay 4 \
-      --connect-timeout 30 --max-time 1800 \
-      -o "$out" "$u"; then return 0; fi
-    echo "  ⚠️  失败，回退下一源"
-  done
-  echo "❌ 全部下载源失败：$out"; return 1
-}
-
 # 跨平台解引用拷贝：macOS 自带 BSD cp 无 -a（用 -pRL 跟随符号链接），GNU cp 用 -aL
 # 必须 "$@" 透传——调用方有 glob 多文件展开（v2.1.1 实证 $1/$2 只拷首文件致 node.exe 丢失）
 copy() {
@@ -63,6 +49,14 @@ echo "== 装配 Electron 自包含载荷（${VERSION} · ${PLATFORM}-${ARCH}）=
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
+# 产品边界只能来自受保护 product.manifest.json。platform-ops 属于仙女座，不能因
+# 基座仓里物理残留该目录就进入 WorkLoom IM 或行业安装包。
+PLATFORM_OPS_MODE="$(node scripts/payload-policy.mjs platform-ops-mode)"
+case "$PLATFORM_OPS_MODE" in
+  include|exclude) ;;
+  *) echo "❌ 无效的载荷边界策略：$PLATFORM_OPS_MODE"; exit 1 ;;
+esac
+
 # ---------- 1. 产品载荷 runtime/（与 pack-macos/pack-windows 同白名单口径） ----------
 echo "→ 装配产品载荷…"
 R="$OUT/runtime"
@@ -71,7 +65,12 @@ for f in package.json pnpm-workspace.yaml tsconfig.base.json .env.example; do
   [ -f "$f" ] && cp "$f" "$R/"
 done
 [ -f "$R/.env.defaults" ] || cp .env.example "$R/.env.defaults"
-for d in apps/server apps/web/src apps/web/index.html apps/web/public apps/web/package.json apps/web/vite.config.ts apps/web/tsconfig.json packages bundles platform-ops; do
+RUNTIME_SOURCE_DIRS=(
+  apps/server apps/web/src apps/web/index.html apps/web/public apps/web/package.json
+  apps/web/vite.config.ts apps/web/tsconfig.json packages bundles
+)
+[ "$PLATFORM_OPS_MODE" = "include" ] && RUNTIME_SOURCE_DIRS+=(platform-ops)
+for d in "${RUNTIME_SOURCE_DIRS[@]}"; do
   [ -e "$d" ] || continue
   mkdir -p "$R/$(dirname "$d")"
   copy "$d" "$R/$(dirname "$d")/"
@@ -96,9 +95,10 @@ NPM_REG="${NPM_REGISTRY:-https://registry.npmjs.org}"
 copy "$NM_STAGE/node_modules" "$R/node_modules"
 # 内部工作区包以实体目录入 node_modules（v2.0.14 @workloom 缺失实证）——
 # 按各包 package.json 的 name 动态注册（行业仓有自定义包，如 @hyperreality/video-studio；
-# 仓根级一方包如 andromeda 的 platform-ops/（@workloom/platform-ops）同口径注册，
-# v1.1.0 andromeda 冒烟 ERR_MODULE_NOT_FOUND 实证）
-for pkgjson in packages/*/package.json platform-ops/package.json; do
+# 仓根级一方包 platform-ops 仅在仙女座精确身份下注册；目录存在本身不构成授权。
+INTERNAL_PACKAGE_MANIFESTS=(packages/*/package.json)
+[ "$PLATFORM_OPS_MODE" = "include" ] && INTERNAL_PACKAGE_MANIFESTS+=(platform-ops/package.json)
+for pkgjson in "${INTERNAL_PACKAGE_MANIFESTS[@]}"; do
   [ -f "$pkgjson" ] || continue
   pname="$(node -p "try{require('./$pkgjson').name||''}catch(e){''}" 2>/dev/null)"
   [ -n "$pname" ] || continue
@@ -118,7 +118,7 @@ case "$PLATFORM-$ARCH" in
   win-x64)   NODE_DIST="node-v${NODE_VER}-win-x64.zip" ;;
   *) echo "❌ 不支持的平台组合 $PLATFORM-$ARCH"; exit 1 ;;
 esac
-fetch "$STAGE/$NODE_DIST" \
+workloom_fetch_verified "$STAGE/$NODE_DIST" "$NODE_DIST" \
   "https://nodejs.org/dist/v${NODE_VER}/${NODE_DIST}" \
   "https://npmmirror.com/mirrors/node/v${NODE_VER}/${NODE_DIST}"
 mkdir -p "$OUT/node" "$STAGE/node"
@@ -138,7 +138,8 @@ echo "→ PostgreSQL + pgvector…"
 mkdir -p "$OUT/pg"
 if [ "$PLATFORM" = "mac" ]; then
   # Postgres.app 2.9.6-17 为 universal 二进制（arm64+x86_64 通吃）
-  fetch "$STAGE/pg.dmg" "https://github.com/PostgresApp/PostgresApp/releases/download/v2.9.6/Postgres-${PGAPP_VER}.dmg"
+  PGAPP_DIST="Postgres-${PGAPP_VER}.dmg"
+  workloom_fetch_verified "$STAGE/pg.dmg" "$PGAPP_DIST" "https://github.com/PostgresApp/PostgresApp/releases/download/v2.9.6/${PGAPP_DIST}"
   hdiutil attach -nobrowse -mountpoint "$STAGE/mnt" "$STAGE/pg.dmg" >/dev/null
   copy "$STAGE/mnt/Postgres.app/Contents/Versions/17/bin" "$OUT/pg/bin"
   copy "$STAGE/mnt/Postgres.app/Contents/Versions/17/lib" "$OUT/pg/lib"
@@ -149,11 +150,13 @@ if [ "$PLATFORM" = "mac" ]; then
 else
   # Windows：vendor/pg-win（与 pgvector 编译底座同源 EDB 全量树，82139ce 口径）+ CI 预编译 pgvector
   [ -f "vendor/pg-win/bin/postgres.exe" ] || { echo "❌ 缺 vendor/pg-win——先跑 scripts/build-pgvector-win.ps1"; exit 1; }
+  node scripts/release-assets.mjs verify-windows-pg-provenance vendor/pg-win/WORKLOOM-PROVENANCE.txt
   copy vendor/pg-win/bin "$OUT/pg/bin"
   copy vendor/pg-win/lib "$OUT/pg/lib"
   copy vendor/pg-win/share "$OUT/pg/share"
   PV="vendor/pgvector-win"
   [ -f "$PV/lib/vector.dll" ] || { echo "❌ 缺 $PV/lib/vector.dll——先跑 scripts/build-pgvector-win.ps1"; exit 1; }
+  node scripts/release-assets.mjs verify-windows-pg-provenance "$PV/WORKLOOM-PROVENANCE.txt"
   cp "$PV/lib/vector.dll" "$OUT/pg/lib/"
   cp "$PV"/share/extension/vector.control "$OUT/pg/share/extension/"
   cp "$PV"/share/extension/vector--*.sql "$OUT/pg/share/extension/"
@@ -168,7 +171,7 @@ case "$PLATFORM-$ARCH" in
   mac-x64)   NATS_DIST="nats-server-${NATS_VER}-darwin-amd64.tar.gz" ;;
   win-x64)   NATS_DIST="nats-server-${NATS_VER}-windows-amd64.zip" ;;
 esac
-fetch "$STAGE/$NATS_DIST" "https://github.com/nats-io/nats-server/releases/download/${NATS_VER}/${NATS_DIST}"
+workloom_fetch_verified "$STAGE/$NATS_DIST" "$NATS_DIST" "https://github.com/nats-io/nats-server/releases/download/${NATS_VER}/${NATS_DIST}"
 if [[ "$NATS_DIST" == *.zip ]]; then
   unzip -qo "$STAGE/$NATS_DIST" -d "$STAGE/nats-x"
   cp "$STAGE/nats-x/nats-server-${NATS_VER}-windows-amd64/nats-server.exe" "$OUT/nats/"
@@ -195,6 +198,7 @@ else
   [ -f "$OUT/node/bin/node" ] || { echo "❌ 载荷自检失败：node/bin/node 缺失"; exit 1; }
   [ -f "$OUT/pg/bin/initdb" ] || { echo "❌ 载荷自检失败：pg/bin/initdb 缺失"; exit 1; }
 fi
+node scripts/payload-policy.mjs assert-runtime "$R"
 echo "✓ 载荷自检通过"
 
 # ---------- 10. 载荷压缩包（electron-builder extraResources 对 **/node_modules/** 有硬排除，
@@ -204,6 +208,7 @@ echo "$VERSION" > "$OUT/PAYLOAD_VERSION"
 rm -f dist-payload.tar.gz
 tar -czf dist-payload.tar.gz -C "$OUT" .
 [ -s dist-payload.tar.gz ] || { echo "❌ 载荷归档失败"; exit 1; }
+tar -tzf dist-payload.tar.gz | node scripts/payload-policy.mjs assert-archive-list
 
 SIZE=$(du -sh "$OUT" | cut -f1)
 ASIZE=$(du -sh dist-payload.tar.gz | cut -f1)
