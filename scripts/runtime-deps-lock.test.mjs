@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, posix, win32 } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  bundledNpmCliCandidates,
   runtimeInputSha256,
   verifyInstalledRuntimeTarget,
   verifyRuntimeDepsLock,
@@ -57,6 +58,13 @@ test("运行依赖锁输入摘要忽略 Git 工作树 LF/CRLF 差异", () => {
   const lf = "lockfileVersion: '9.0'\nimporters:\n";
   assert.equal(runtimeInputSha256(lf), runtimeInputSha256(lf.replaceAll("\n", "\r\n")));
   assert.notEqual(runtimeInputSha256(lf), runtimeInputSha256(lf.replace("\n", "\r")));
+});
+
+test("正式装配跨平台直接调用 Node 随附 npm CLI", () => {
+  assert.ok(bundledNpmCliCandidates("/opt/node/bin/node", posix).includes("/opt/node/lib/node_modules/npm/bin/npm-cli.js"));
+  assert.ok(bundledNpmCliCandidates("C:\\node\\node.exe", win32).includes("C:\\node\\node_modules\\npm\\bin\\npm-cli.js"));
+  const source = readFileSync(join(REPOSITORY_ROOT, "scripts/runtime-deps-lock.mjs"), "utf8");
+  assert.doesNotMatch(source, /execFileSync\(["']npm["']/u);
 });
 
 test("仓库提交的每产品 runtime lock 与当前依赖输入完全一致", () => {
