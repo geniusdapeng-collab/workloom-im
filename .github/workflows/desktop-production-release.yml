@@ -16,6 +16,12 @@ on:
       version:
         description: "与当前 origin/main HEAD 完全相同的精确稳定 tag（如 v2.3.0）"
         required: true
+      platform_signing:
+        description: "平台签名模式；unsigned 仅在没有 Apple/Windows 证书时使用，并会在 Release 中明确披露"
+        required: true
+        type: choice
+        options: [signed, unsigned]
+        default: signed
 
 permissions:
   contents: read
@@ -34,6 +40,7 @@ jobs:
       release-tag: ${{ steps.target.outputs.tag }}
       release-version: ${{ steps.target.outputs.version }}
       release-sha: ${{ steps.target.outputs.sha }}
+      platform-signing: ${{ steps.target.outputs.platform-signing }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -47,11 +54,14 @@ jobs:
         shell: bash
         env:
           REQUESTED_TAG: ${{ inputs.version }}
+          REQUESTED_PLATFORM_SIGNING: ${{ inputs.platform_signing }}
         run: |
           set -euo pipefail
           test "$GITHUB_REF" = "refs/heads/main" || { echo "❌ 必须从默认 main 分支上的当前受审 workflow 手动发行"; exit 1; }
           TARGET_TAG="$REQUESTED_TAG"
+          PLATFORM_SIGNING="$REQUESTED_PLATFORM_SIGNING"
           [[ "$TARGET_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "❌ 版本必须是精确 vX.Y.Z tag"; exit 1; }
+          [[ "$PLATFORM_SIGNING" =~ ^(signed|unsigned)$ ]] || { echo "❌ 平台签名模式必须是 signed 或 unsigned"; exit 1; }
           TARGET_SHA="$(git rev-parse --verify "refs/tags/${TARGET_TAG}^{commit}")"
           test "$(git rev-parse --verify HEAD^{commit})" = "$TARGET_SHA" || { echo "❌ checkout 未绑定目标标签提交"; exit 1; }
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
@@ -71,7 +81,8 @@ jobs:
           echo "tag=$TARGET_TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TARGET_TAG#v}" >> "$GITHUB_OUTPUT"
           echo "sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
-          echo "✅ 桌面发行对象已固定：$TARGET_TAG @ ${TARGET_SHA:0:12}（当前 origin/main HEAD）"
+          echo "platform-signing=$PLATFORM_SIGNING" >> "$GITHUB_OUTPUT"
+          echo "✅ 桌面发行对象已固定：$TARGET_TAG @ ${TARGET_SHA:0:12}（当前 origin/main HEAD，platform=$PLATFORM_SIGNING）"
 
   macos:
     needs: preflight
@@ -82,6 +93,7 @@ jobs:
       contents: read
     env:
       VERSION: ${{ needs.preflight.outputs.release-tag }}
+      PLATFORM_SIGNING: ${{ needs.preflight.outputs.platform-signing }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -131,6 +143,7 @@ jobs:
         run: bash scripts/pack-electron-payload.sh --platform mac --arch arm64 --version "$VERSION"
 
       - name: 打包 DMG（arm64）
+        if: needs.preflight.outputs.platform-signing == 'signed'
         env:
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
@@ -143,13 +156,26 @@ jobs:
           retry() { local attempt=1; until "$@"; do [ "$attempt" -ge 3 ] && return 1; echo "网络依赖下载失败，准备第 $((attempt + 1))/3 次重试"; attempt=$((attempt + 1)); sleep 8; done; }
           retry pnpm exec electron-builder --mac dmg --arm64 --publish never -c.extraMetadata.version="${VERSION#v}"
 
+      - name: 打包未签名 DMG（arm64）
+        if: needs.preflight.outputs.platform-signing == 'unsigned'
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          echo "⚠️ 按发布输入生成未签名、未 Apple 公证的 macOS 安装包"
+          retry() { local attempt=1; until "$@"; do [ "$attempt" -ge 3 ] && return 1; echo "网络依赖下载失败，准备第 $((attempt + 1))/3 次重试"; attempt=$((attempt + 1)); sleep 8; done; }
+          retry pnpm exec electron-builder --mac dmg --arm64 --publish never -c.mac.notarize=false -c.extraMetadata.version="${VERSION#v}"
+
       - name: 拆包验收 + 冒烟（对 .app 内载荷归档跑首启全流程——验证用户拿到的内容）
         run: |
           APP="$(find release/mac-arm64 -maxdepth 1 -name '*.app' -print -quit)"
           test -n "$APP" || { echo "❌ arm64 .app 未生成"; exit 1; }
-          codesign --verify --deep --strict --verbose=2 "$APP"
-          spctl --assess --verbose --type exec "$APP"
-          xcrun stapler validate "$APP"
+          if [ "$PLATFORM_SIGNING" = "signed" ]; then
+            codesign --verify --deep --strict --verbose=2 "$APP"
+            spctl --assess --verbose --type exec "$APP"
+            xcrun stapler validate "$APP"
+          else
+            echo "⚠️ 未签名发行：跳过 Developer ID、Gatekeeper 与公证票据验收"
+          fi
           RES="$APP/Contents/Resources"
           test -f "$RES/payload.tar.gz" || { echo "❌ 拆包验收失败：payload.tar.gz 未进包"; exit 1; }
           test -f "$RES/payload/PAYLOAD_VERSION" || { echo "❌ 拆包验收失败：PAYLOAD_VERSION 未进包（缺失将致每次启动重解压）"; exit 1; }
@@ -185,6 +211,7 @@ jobs:
         run: bash scripts/pack-electron-payload.sh --platform mac --arch x64 --version "$VERSION"
 
       - name: 打包 DMG（x64）
+        if: needs.preflight.outputs.platform-signing == 'signed'
         env:
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
@@ -197,13 +224,26 @@ jobs:
           retry() { local attempt=1; until "$@"; do [ "$attempt" -ge 3 ] && return 1; echo "网络依赖下载失败，准备第 $((attempt + 1))/3 次重试"; attempt=$((attempt + 1)); sleep 8; done; }
           retry pnpm exec electron-builder --mac dmg --x64 --publish never -c.extraMetadata.version="${VERSION#v}"
 
+      - name: 打包未签名 DMG（x64）
+        if: needs.preflight.outputs.platform-signing == 'unsigned'
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          echo "⚠️ 按发布输入生成未签名、未 Apple 公证的 macOS 安装包"
+          retry() { local attempt=1; until "$@"; do [ "$attempt" -ge 3 ] && return 1; echo "网络依赖下载失败，准备第 $((attempt + 1))/3 次重试"; attempt=$((attempt + 1)); sleep 8; done; }
+          retry pnpm exec electron-builder --mac dmg --x64 --publish never -c.mac.notarize=false -c.extraMetadata.version="${VERSION#v}"
+
       - name: 拆包验收（x64 .app 载荷归档完整性；arm64 runner 无法跑 x64 二进制，文件级核验）
         run: |
           APP="$(find release/mac -maxdepth 1 -name '*.app' -print -quit)"
           test -n "$APP" || { echo "❌ x64 .app 未生成"; exit 1; }
-          codesign --verify --deep --strict --verbose=2 "$APP"
-          spctl --assess --verbose --type exec "$APP"
-          xcrun stapler validate "$APP"
+          if [ "$PLATFORM_SIGNING" = "signed" ]; then
+            codesign --verify --deep --strict --verbose=2 "$APP"
+            spctl --assess --verbose --type exec "$APP"
+            xcrun stapler validate "$APP"
+          else
+            echo "⚠️ 未签名发行：跳过 Developer ID、Gatekeeper 与公证票据验收"
+          fi
           RES="$APP/Contents/Resources"
           test -f "$RES/payload.tar.gz" || { echo "❌ x64 载荷归档未进包"; exit 1; }
           test -s "$RES/bundle-trust.json" || { echo "❌ x64 独立 Bundle 公钥环未进包"; exit 1; }
@@ -238,7 +278,7 @@ jobs:
           test -f "release/$ARM_SOURCE" && test -f "release/$X64_SOURCE"
           cp "release/$ARM_SOURCE" "$OUT/$ARM"
           cp "release/$X64_SOURCE" "$OUT/$X64"
-          node -e 'const fs=require("fs"),p=require("path"),c=require("crypto");const dir=process.argv[1],sha=process.argv[2],tag=process.argv[3],names=["WorkLoom-mac-arm64.dmg","WorkLoom-mac-x64.dmg"];const assets=names.map(name=>{const b=fs.readFileSync(p.join(dir,name));return{name,size:b.length,sha512:c.createHash("sha512").update(b).digest("hex")}});fs.writeFileSync(p.join(dir,"desktop-macos-manifest.json"),JSON.stringify({schemaVersion:1,tag,sha,assets},null,2)+"\n")' "$OUT" "$RELEASE_SHA" "$RELEASE_TAG"
+          node -e 'const fs=require("fs"),p=require("path"),c=require("crypto");const dir=process.argv[1],sha=process.argv[2],tag=process.argv[3],platformSigning=process.argv[4],names=["WorkLoom-mac-arm64.dmg","WorkLoom-mac-x64.dmg"];const assets=names.map(name=>{const b=fs.readFileSync(p.join(dir,name));return{name,size:b.length,sha512:c.createHash("sha512").update(b).digest("hex")}});fs.writeFileSync(p.join(dir,"desktop-macos-manifest.json"),JSON.stringify({schemaVersion:1,tag,sha,platformSigning,assets},null,2)+"\n")' "$OUT" "$RELEASE_SHA" "$RELEASE_TAG" "$PLATFORM_SIGNING"
 
       - name: 上传已验收 macOS 候选制品
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -261,6 +301,7 @@ jobs:
       contents: read
     env:
       VERSION: ${{ needs.preflight.outputs.release-tag }}
+      PLATFORM_SIGNING: ${{ needs.preflight.outputs.platform-signing }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -308,6 +349,7 @@ jobs:
         run: bash scripts/pack-electron-payload.sh --platform win --arch x64 --version "$VERSION"
 
       - name: 打包 NSIS 安装包
+        if: needs.preflight.outputs.platform-signing == 'signed'
         shell: bash  # pwsh 会把 -c.extraMetadata.version="x" 的 -c 吞掉（ENOENT 实证），统一 bash
         run: |
           test -n "$WIN_CSC_LINK" && test -n "$WIN_CSC_KEY_PASSWORD" || { echo "❌ 缺少 Windows 代码签名证书，拒绝对外发行"; exit 1; }
@@ -317,6 +359,17 @@ jobs:
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+
+      - name: 打包未签名 NSIS 安装包
+        if: needs.preflight.outputs.platform-signing == 'unsigned'
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+        run: |
+          echo "⚠️ 按发布输入生成未 Authenticode 签名的 Windows 安装包"
+          retry() { local attempt=1; until "$@"; do [ "$attempt" -ge 3 ] && return 1; echo "网络依赖下载失败，准备第 $((attempt + 1))/3 次重试"; attempt=$((attempt + 1)); sleep 8; done; }
+          retry pnpm exec electron-builder --win nsis --x64 --publish never -c.extraMetadata.version="${VERSION#v}"
 
       - name: 拆包验收 + 冒烟（对 win-unpacked 载荷归档跑首启全流程——验证用户拿到的内容）
         shell: bash
@@ -329,10 +382,14 @@ jobs:
           node apps/desktop/electron/bootstrap.cjs --smoke --resources "$RES" --support "${TEMP}/wl-smoke"
           EXE="$(find release/win-unpacked -maxdepth 1 -type f -name '*.exe' ! -iname '*uninstall*' -print -quit)"
           test -n "$EXE" || { echo "❌ Windows 应用主程序未生成"; exit 1; }
-          powershell -NoProfile -Command '$s = Get-AuthenticodeSignature -FilePath $args[0]; if ($s.Status -ne "Valid") { Write-Error "应用签名无效：$($s.Status)"; exit 1 }' "$EXE"
           INSTALLER="$(find release -maxdepth 1 -type f -name '*.exe' -print -quit)"
           test -n "$INSTALLER" || { echo "❌ Windows 安装包未生成"; exit 1; }
-          powershell -NoProfile -Command '$s = Get-AuthenticodeSignature -FilePath $args[0]; if ($s.Status -ne "Valid") { Write-Error "安装包签名无效：$($s.Status)"; exit 1 }' "$INSTALLER"
+          if [ "$PLATFORM_SIGNING" = "signed" ]; then
+            powershell -NoProfile -Command '$s = Get-AuthenticodeSignature -FilePath $args[0]; if ($s.Status -ne "Valid") { Write-Error "应用签名无效：$($s.Status)"; exit 1 }' "$EXE"
+            powershell -NoProfile -Command '$s = Get-AuthenticodeSignature -FilePath $args[0]; if ($s.Status -ne "Valid") { Write-Error "安装包签名无效：$($s.Status)"; exit 1 }' "$INSTALLER"
+          else
+            powershell -NoProfile -Command '$s = Get-AuthenticodeSignature -FilePath $args[0]; if ($s.Status -eq "Valid") { Write-Error "未签名模式不得混入未知正式证书"; exit 1 }; Write-Host "未签名状态：$($s.Status)"' "$INSTALLER"
+          fi
           node -e 'const {spawnSync}=require("node:child_process"); const r=spawnSync(process.argv[1],[],{stdio:"inherit",env:{...process.env,WORKLOOM_APP_SMOKE:"1",WORKLOOM_SUPPORT_DIR:process.argv[2]}}); process.exit(r.status ?? 1)' "$EXE" "${TEMP}/wl-app-smoke"
           test -f "${TEMP}/wl-app-smoke/.bootstrapped" || { echo "❌ 真实应用首启未完成"; exit 1; }
           node -e 'const {spawnSync}=require("node:child_process"); const r=spawnSync(process.argv[1],[],{stdio:"inherit",env:{...process.env,WORKLOOM_RENDER_SMOKE:"1",WORKLOOM_SUPPORT_DIR:process.argv[2]}}); process.exit(r.status ?? 1)' "$EXE" "${TEMP}/wl-render-default"
@@ -365,7 +422,7 @@ jobs:
           test "$(find release -maxdepth 1 -type f -name '*.exe' | wc -l | tr -d ' ')" -eq 1
           test -f "release/$SOURCE"
           cp "release/$SOURCE" "$OUT/$TARGET"
-          node -e 'const fs=require("fs"),p=require("path"),c=require("crypto");const dir=process.argv[1],sha=process.argv[2],tag=process.argv[3],name="WorkLoom-win-x64.exe";const b=fs.readFileSync(p.join(dir,name));fs.writeFileSync(p.join(dir,"desktop-windows-manifest.json"),JSON.stringify({schemaVersion:1,tag,sha,assets:[{name,size:b.length,sha512:c.createHash("sha512").update(b).digest("hex")}]},null,2)+"\n")' "$OUT" "$RELEASE_SHA" "$RELEASE_TAG"
+          node -e 'const fs=require("fs"),p=require("path"),c=require("crypto");const dir=process.argv[1],sha=process.argv[2],tag=process.argv[3],platformSigning=process.argv[4],name="WorkLoom-win-x64.exe";const b=fs.readFileSync(p.join(dir,name));fs.writeFileSync(p.join(dir,"desktop-windows-manifest.json"),JSON.stringify({schemaVersion:1,tag,sha,platformSigning,assets:[{name,size:b.length,sha512:c.createHash("sha512").update(b).digest("hex")}]},null,2)+"\n")' "$OUT" "$RELEASE_SHA" "$RELEASE_TAG" "$PLATFORM_SIGNING"
 
       - name: 上传已验收 Windows 候选制品
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -483,11 +540,13 @@ jobs:
           RELEASE_TAG: ${{ needs.preflight.outputs.release-tag }}
           RELEASE_VERSION: ${{ needs.preflight.outputs.release-version }}
           RELEASE_SHA: ${{ needs.preflight.outputs.release-sha }}
+          PLATFORM_SIGNING: ${{ needs.preflight.outputs.platform-signing }}
         run: |
           set -euo pipefail
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           test "$RELEASE_TAG" = "v$RELEASE_VERSION"
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$PLATFORM_SIGNING" =~ ^(signed|unsigned)$ ]]
 
           ROOT="$RUNNER_TEMP/desktop-candidate"
           MAC="$ROOT/macos"
@@ -500,8 +559,8 @@ jobs:
           test "$(find "$WIN" -maxdepth 1 -type f | wc -l | tr -d ' ')" -eq 2
           cp "$MAC/WorkLoom-mac-arm64.dmg" "$MAC/WorkLoom-mac-x64.dmg" "$WIN/WorkLoom-win-x64.exe" "$ASSET_DIR/"
 
-          node -e 'const fs=require("fs"),p=require("path"),c=require("crypto");const root=process.argv[1],tag=process.argv[2],sha=process.argv[3];const specs=[["macos","desktop-macos-manifest.json",["WorkLoom-mac-arm64.dmg","WorkLoom-mac-x64.dmg"]],["windows","desktop-windows-manifest.json",["WorkLoom-win-x64.exe"]]];for(const [dir,mf,names] of specs){const m=JSON.parse(fs.readFileSync(p.join(root,dir,mf)));if(m.schemaVersion!==1||m.tag!==tag||m.sha!==sha||!Array.isArray(m.assets)||m.assets.length!==names.length)throw new Error(`${mf}: 版本、tag、SHA 或数量不匹配`);for(const name of names){const matches=m.assets.filter(a=>a.name===name);if(matches.length!==1)throw new Error(`${mf}: ${name} 必须唯一`);const file=p.join(root,dir,name),b=fs.readFileSync(file),a=matches[0],digest=c.createHash("sha512").update(b).digest("hex");if(a.size!==b.length||a.sha512!==digest)throw new Error(`${mf}: ${name} 大小或 sha512 不匹配`)}}' "$ROOT" "$RELEASE_TAG" "$RELEASE_SHA"
-          node -e 'const fs=require("fs"),p=require("path"),c=require("crypto");const dir=process.argv[1],tag=process.argv[2],sha=process.argv[3],names=process.argv.slice(4);const assets=names.map(name=>{const b=fs.readFileSync(p.join(dir,name));return{name,size:b.length,sha512:c.createHash("sha512").update(b).digest("hex")}});fs.writeFileSync(p.join(dir,"WorkLoom-release-manifest.json"),JSON.stringify({schemaVersion:1,product:"workloom-desktop",tag,sha,assets},null,2)+"\n");fs.writeFileSync(p.join(dir,"WorkLoom-SHA512SUMS.txt"),assets.map(a=>`${a.sha512}  ${a.name}`).join("\n")+"\n")' "$ASSET_DIR" "$RELEASE_TAG" "$RELEASE_SHA" "${INSTALLERS[@]}"
+          node -e 'const fs=require("fs"),p=require("path"),c=require("crypto");const root=process.argv[1],tag=process.argv[2],sha=process.argv[3],platformSigning=process.argv[4];const specs=[["macos","desktop-macos-manifest.json",["WorkLoom-mac-arm64.dmg","WorkLoom-mac-x64.dmg"]],["windows","desktop-windows-manifest.json",["WorkLoom-win-x64.exe"]]];for(const [dir,mf,names] of specs){const m=JSON.parse(fs.readFileSync(p.join(root,dir,mf)));if(m.schemaVersion!==1||m.tag!==tag||m.sha!==sha||m.platformSigning!==platformSigning||!Array.isArray(m.assets)||m.assets.length!==names.length)throw new Error(`${mf}: 版本、tag、SHA、签名模式或数量不匹配`);for(const name of names){const matches=m.assets.filter(a=>a.name===name);if(matches.length!==1)throw new Error(`${mf}: ${name} 必须唯一`);const file=p.join(root,dir,name),b=fs.readFileSync(file),a=matches[0],digest=c.createHash("sha512").update(b).digest("hex");if(a.size!==b.length||a.sha512!==digest)throw new Error(`${mf}: ${name} 大小或 sha512 不匹配`)}}' "$ROOT" "$RELEASE_TAG" "$RELEASE_SHA" "$PLATFORM_SIGNING"
+          node -e 'const fs=require("fs"),p=require("path"),c=require("crypto");const dir=process.argv[1],tag=process.argv[2],sha=process.argv[3],platformSigning=process.argv[4],names=process.argv.slice(5);const assets=names.map(name=>{const b=fs.readFileSync(p.join(dir,name));return{name,size:b.length,sha512:c.createHash("sha512").update(b).digest("hex")}});fs.writeFileSync(p.join(dir,"WorkLoom-release-manifest.json"),JSON.stringify({schemaVersion:1,product:"workloom-desktop",tag,sha,platformSigning,assets},null,2)+"\n");fs.writeFileSync(p.join(dir,"WorkLoom-SHA512SUMS.txt"),assets.map(a=>`${a.sha512}  ${a.name}`).join("\n")+"\n")' "$ASSET_DIR" "$RELEASE_TAG" "$RELEASE_SHA" "$PLATFORM_SIGNING" "${INSTALLERS[@]}"
           test "$(find "$ASSET_DIR" -maxdepth 1 -type f | wc -l | tr -d ' ')" -eq 5
 
           resolve_remote_tag() {
@@ -544,13 +603,18 @@ jobs:
           else
             [ "$TARGET_IS_HIGHEST" = "true" ] || { echo "❌ 新桌面版本必须高于所有已公开稳定桌面版"; exit 1; }
             CREATE_STATUS=0
+            if [ "$PLATFORM_SIGNING" = "signed" ]; then
+              RELEASE_NOTES="由受保护 desktop-production 环境发布；macOS 双架构与 Windows x64 制品已通过平台签名、公证、自包含载荷、真实首启、渲染冒烟与 sha512/逐字节门禁。"
+            else
+              RELEASE_NOTES="由受保护 desktop-production 环境发布；macOS 双架构与 Windows x64 制品已通过自包含载荷、真实首启、渲染冒烟与 sha512/逐字节门禁。因当前没有 Apple Developer ID 与 Windows Authenticode 证书，本版本明确为未签名、未 Apple 公证安装包；macOS 首次打开需按说明解除隔离，Windows 可能显示 SmartScreen 提示。"
+            fi
             gh release create "$RELEASE_TAG" \
               --repo "$GITHUB_REPOSITORY" \
               --verify-tag \
               --target "$RELEASE_SHA" \
               --draft --latest=false \
               --title "WorkLoom Desktop $RELEASE_TAG" \
-              --notes "由受保护 desktop-production 环境发布；macOS 双架构与 Windows x64 制品已通过签名、自包含载荷、真实首启、渲染冒烟与 sha512/逐字节门禁。" || CREATE_STATUS=$?
+              --notes "$RELEASE_NOTES" || CREATE_STATUS=$?
             gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json name,tagName,isDraft,isImmutable,isPrerelease,targetCommitish,assets > "$RELEASE_JSON" || {
               echo "❌ Release 创建/回读状态不确定（create=$CREATE_STATUS），人工阻断"
               exit 1
