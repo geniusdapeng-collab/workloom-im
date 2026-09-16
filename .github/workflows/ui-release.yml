@@ -265,8 +265,22 @@ jobs:
               --verify-tag \
               --target "$RELEASE_SHA" \
               --title "WorkLoom 三端基座 v${VERSION}" \
-              --notes "由受保护 production 环境发布；制品经基座全门禁、标签/main 祖先证明与 sha512 完整性校验。"
+              --notes "由受保护 production 环境发布；制品经基座全门禁、标签/main 祖先证明与 sha512 完整性校验。本 Release 是工程分发制品，不占用桌面客户端固定下载入口。"
             gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json databaseId,tagName,isDraft,isPrerelease,targetCommitish,assets > "$RELEASE_JSON"
+          fi
+
+          # 同仓同时承载桌面安装包与工程 UI 制品。GitHub 新建正式 Release 默认会
+          # 接管 /releases/latest；UI Release 必须显式退出 Latest，固定下载入口只留给
+          # 含 macOS/Windows 安装包的 v* 桌面 Release。
+          RELEASE_ID="$(node -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync(process.argv[1])); if(!Number.isInteger(r.databaseId)) throw new Error("Release databaseId 缺失"); process.stdout.write(String(r.databaseId))' "$RELEASE_JSON")"
+          gh api --method PATCH \
+            "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+            --raw-field make_latest=false >/dev/null
+          if LATEST_TAG="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null)"; then
+            test "$LATEST_TAG" != "$RELEASE_TAG" || {
+              echo "❌ UI Release 不得占用桌面客户端 /releases/latest：$RELEASE_TAG"
+              exit 1
+            }
           fi
 
           node -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync(process.argv[1])); const tag=process.argv[2]; if(r.tagName!==tag||r.isDraft||r.isPrerelease) throw new Error("Release 必须绑定精确稳定标签且不得为草稿/预发布"); const tgz=(r.assets??[]).filter((a)=>a.name?.endsWith(".tgz")); if(tgz.length>1) throw new Error("Release 不得包含多个 tgz 制品")' "$RELEASE_JSON" "$RELEASE_TAG"

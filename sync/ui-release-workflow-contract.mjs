@@ -164,6 +164,8 @@ export function findUiReleaseWorkflowRisks(source) {
         'gh release create "$RELEASE_TAG"',
         "--verify-tag",
         '--target "$RELEASE_SHA"',
+        "--raw-field make_latest=false",
+        'test "$LATEST_TAG" != "$RELEASE_TAG"',
         'gh release upload "$RELEASE_TAG" "$TARBALL"',
         'gh release download "$RELEASE_TAG"',
         'test "$REMOTE_INTEGRITY" = "$LOCAL_INTEGRITY"',

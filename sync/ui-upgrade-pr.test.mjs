@@ -1116,6 +1116,16 @@ process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", f
     assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(noByteComparison))
       .some((risk) => risk.includes("cmp -s")),
     "已有 Release 资产未逐字节核验不得继续 rollout");
+    const latestDesktopHijack = structuredClone(parsed);
+    latestDesktopHijack.jobs["publish-github-release"].steps
+      .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品").run =
+        latestDesktopHijack.jobs["publish-github-release"].steps
+          .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品").run
+          .replace("--raw-field make_latest=false", "--raw-field make_latest=true")
+          .replace('test "$LATEST_TAG" != "$RELEASE_TAG"', "echo 跳过 Latest 下载入口隔离");
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(latestDesktopHijack))
+      .some((risk) => risk.includes("make_latest=false")),
+    "UI 工程制品不得接管桌面客户端 /releases/latest");
     const floatingDistribution = structuredClone(parsed);
     floatingDistribution.jobs["verify-and-preflight"].steps
       .find((step) => step.name === "校验 UI 标签、稳定版本登记与 GitHub Release 分发契约").run =
