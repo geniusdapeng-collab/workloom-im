@@ -18,7 +18,14 @@
       "--wl-brand-accent"
     ],
     "sourceDirectory": "packages/ui",
-    "distribution": "registry-and-upgrade-pr"
+    "distribution": {
+      "type": "github-release-tarball",
+      "urlTemplate": "https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v{version}/workloom-ui-{version}.tgz",
+      "assetNameTemplate": "workloom-ui-{version}.tgz",
+      "integrityByVersion": {
+        "0.1.0": "sha512-0O2dJkxvzNoRQcnVH6v8o7qyWW/yYmImrNhaaUWqR/FgovwJI3sHzugAaa4mHeCERWeMihxCRX/jIY93WHW8Vw=="
+      }
+    }
   },
   "clientFoundation": {
     "schemaVersion": "workloom.client-foundation/v1",

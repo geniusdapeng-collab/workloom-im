@@ -29,6 +29,7 @@ const CLIENT_FOUNDATION = join(HERE, "client-foundation.mjs");
 const INSTALL_ADOPTION_ASSETS = join(HERE, "install-adoption-assets.mjs");
 const INSTALL_UI_GOVERNANCE = join(HERE, "install-ui-governance.mjs");
 const SET_UI_VERSION = join(HERE, "set-ui-version.mjs");
+const UI_LOCKFILE_INTEGRITY = join(HERE, "ui-lockfile-integrity.mjs");
 const UI_CONSUMER_TEMPLATE = join(HERE, "ui-consumer-template.yml");
 const NODE = process.execPath;
 const BEGIN = "<!-- WORKLOOM-CONTEXT:BEGIN -->";
@@ -93,6 +94,7 @@ function fixture() {
       installer: "sync/install-ui-governance.mjs",
       stateFile: ".workloom-ui-governance.json",
       dependency: "npm:typescript@5.9.3",
+      yamlDependency: "npm:yaml@2.9.0",
       managedFiles: [
         "scripts/verify-ui-consumer.mjs",
         "scripts/ui-governance-rules.mjs",
@@ -161,6 +163,7 @@ function newIndustryFixture() {
     [INSTALL_ADOPTION_ASSETS, "sync/install-adoption-assets.mjs"],
     [INSTALL_UI_GOVERNANCE, "sync/install-ui-governance.mjs"],
     [SET_UI_VERSION, "sync/set-ui-version.mjs"],
+    [UI_LOCKFILE_INTEGRITY, "sync/ui-lockfile-integrity.mjs"],
     [UI_CONSUMER_TEMPLATE, "sync/ui-consumer-template.yml"],
     [join(REAL_BASE, "scripts/verify-ui-consumer.mjs"), "scripts/verify-ui-consumer.mjs"],
     [join(REAL_BASE, "scripts/ui-governance-rules.mjs"), "scripts/ui-governance-rules.mjs"],
@@ -172,15 +175,23 @@ function newIndustryFixture() {
   write(join(fx.base, "packages/ui/package.json"), `${JSON.stringify({ name: "@workloom/ui", version: stable }, null, 2)}\n`);
   const baseCapabilities = {
     schemaVersion: 1,
-    baseRepository: "example/base",
+    baseRepository: "geniusdapeng-collab/workloom-im",
     releasePolicy: "base-first-stable-only",
     ui: {
       package: "@workloom/ui",
-      contractVersion: "1.0.0",
+      contractVersion: "2.0.0",
       candidateVersion: stable,
       latestStableVersion: stable,
       requiredClientPackages: ["apps/web/package.json", "apps/webb/package.json", "apps/webc/package.json"],
       allowedIndustryOverrides: ["--wl-brand-primary", "--wl-brand-on-primary", "--wl-brand-accent"],
+      distribution: {
+        type: "github-release-tarball",
+        urlTemplate: "https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v{version}/workloom-ui-{version}.tgz",
+        assetNameTemplate: "workloom-ui-{version}.tgz",
+        integrityByVersion: {
+          [stable]: `sha512-${Buffer.alloc(64, 3).toString("base64")}`,
+        },
+      },
     },
     clientFoundation: {
       schemaVersion: "workloom.client-foundation/v1",
@@ -261,14 +272,57 @@ function newIndustryFixture() {
   const bin = join(fx.root, "bin");
   const fakePnpm = join(bin, "pnpm");
   const parserTarget = realpathSync(join(REAL_BASE, "node_modules/typescript-governance"));
+  const yamlTarget = realpathSync(join(REAL_BASE, "node_modules/yaml"));
   write(fakePnpm, `#!/usr/bin/env node
-const { existsSync, mkdirSync, symlinkSync, writeFileSync } = require("node:fs");
+const { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } = require("node:fs");
 const { join } = require("node:path");
-writeFileSync(join(process.cwd(), "pnpm-lock.yaml"), "lockfileVersion: '9.0'\\n# typescript-governance\\n");
+const packageJson = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8"));
+const selector = "@workloom/ui@${stable}";
+const releaseUrl = packageJson.pnpm && packageJson.pnpm.overrides && packageJson.pnpm.overrides[selector];
+if (!releaseUrl) throw new Error("missing canonical UI Release override");
+if (process.argv.includes("--lockfile-only")) {
+  const packageKey = "@workloom/ui@" + releaseUrl;
+  writeFileSync(join(process.cwd(), "pnpm-lock.yaml"), [
+    "lockfileVersion: '9.0'",
+    "overrides:",
+    "  '" + selector + "': " + releaseUrl,
+    "importers:",
+    "  apps/web:",
+    "    dependencies:",
+    "      '@workloom/ui':",
+    "        specifier: " + releaseUrl,
+    "        version: " + releaseUrl,
+    "  apps/webb:",
+    "    dependencies:",
+    "      '@workloom/ui':",
+    "        specifier: " + releaseUrl,
+    "        version: " + releaseUrl,
+    "  apps/webc:",
+    "    dependencies:",
+    "      '@workloom/ui':",
+    "        specifier: " + releaseUrl,
+    "        version: " + releaseUrl,
+    "packages:",
+    "  '" + packageKey + "':",
+    "    resolution: {tarball: " + releaseUrl + "}",
+    "    version: '${stable}'",
+    "snapshots:",
+    "  '" + packageKey + "': {}",
+    "# typescript-governance",
+    "# yaml-governance",
+    "",
+  ].join("\\n"));
+}
 if (process.argv.includes("--frozen-lockfile")) {
-  const target = join(process.cwd(), "node_modules/typescript-governance");
   mkdirSync(join(process.cwd(), "node_modules"), { recursive: true });
-  if (!existsSync(target)) symlinkSync(${JSON.stringify(parserTarget)}, target, "dir");
+  const dependencies = [
+    ["typescript-governance", ${JSON.stringify(parserTarget)}],
+    ["yaml-governance", ${JSON.stringify(yamlTarget)}],
+  ];
+  for (const [name, source] of dependencies) {
+    const target = join(process.cwd(), "node_modules", name);
+    if (!existsSync(target)) symlinkSync(source, target, "dir");
+  }
 }
 `);
   chmodSync(fakePnpm, 0o755);
@@ -428,7 +482,7 @@ test("缺少 B 端移动客户端时只报告第一阶段迁移，绝不伪装�
   try {
     const capability = {
       package: "@workloom/ui",
-      distribution: "stable-registry-upgrade-pr",
+      distribution: "stable-github-release-upgrade-pr",
       consumerGate: "scripts/verify-ui-consumer.mjs",
       consumers: ["apps/web", "apps/webb", "apps/webc"],
     };
@@ -492,13 +546,14 @@ test("v9 scope 明确保护产品身份、同步认证、依赖闭包与 Bundle 
   )));
   assert.ok(scope.exclude.includes("apps/server/src/industry/**"));
   assert.ok(scope.exclude.includes("apps/server/src/service/adapters/**"));
-  assert.equal(scope.registryCapabilities[0].distribution, "stable-registry-upgrade-pr");
+  assert.equal(scope.registryCapabilities[0].distribution, "stable-github-release-upgrade-pr");
   assert.equal(scope.clientFoundationCapability.distribution, "stable-tag-upgrade-pr");
   assert.equal(scope.clientFoundationCapability.conflictPolicy, "previous-source-sha256-fail-close");
   assert.equal(scope.uiGovernanceCapability.distribution, "stable-upgrade-pr-only");
   assert.equal(scope.uiGovernanceCapability.installer, "sync/install-ui-governance.mjs");
   assert.equal(scope.uiGovernanceCapability.stateFile, ".workloom-ui-governance.json");
   assert.equal(scope.uiGovernanceCapability.dependency, "npm:typescript@5.9.3");
+  assert.equal(scope.uiGovernanceCapability.yamlDependency, "npm:yaml@2.9.0");
   assert.deepEqual(scope.uiGovernanceCapability.managedFiles, [
     "scripts/verify-ui-consumer.mjs",
     "scripts/ui-governance-rules.mjs",
@@ -1158,10 +1213,18 @@ test("最小新行业仓一次完成 full 基座、三端稳定壳与消费门�
     ]) assert.equal(existsSync(join(fx.child, path)), true, `${path} 应已安装`);
     const packageJson = JSON.parse(readFileSync(join(fx.child, "package.json"), "utf8"));
     assert.equal(packageJson.devDependencies["typescript-governance"], "npm:typescript@5.9.3");
-    assert.match(readFileSync(join(fx.child, "pnpm-lock.yaml"), "utf8"), /typescript-governance/u);
+    assert.equal(packageJson.devDependencies["yaml-governance"], "npm:yaml@2.9.0");
+    const releaseUrl = `https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v${fx.stable}/workloom-ui-${fx.stable}.tgz`;
+    assert.equal(packageJson.pnpm.overrides[`@workloom/ui@${fx.stable}`], releaseUrl);
+    const lockfile = readFileSync(join(fx.child, "pnpm-lock.yaml"), "utf8");
+    assert.match(lockfile, /typescript-governance/u);
+    assert.match(lockfile, /yaml-governance/u);
+    assert.ok(lockfile.includes(releaseUrl));
     assert.equal(existsSync(join(fx.child, "node_modules/typescript-governance")), true, "消费门禁前必须真实安装解析器");
+    assert.equal(existsSync(join(fx.child, "node_modules/yaml-governance")), true, "消费门禁前必须真实安装 YAML 解析器");
     const governanceState = JSON.parse(readFileSync(join(fx.child, ".workloom-ui-governance.json"), "utf8"));
     assert.equal(governanceState.schemaVersion, "workloom.ui-governance-state/v1");
+    assert.equal(governanceState.yamlDependency, "npm:yaml@2.9.0");
     assert.ok(governanceState.files["scripts/verify-ui-consumer.mjs"].sha256);
     assert.ok(governanceState.files["scripts/ui-governance-rules.mjs"].sha256);
   } finally {

@@ -6,6 +6,7 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const GOVERNANCE_TYPESCRIPT = "npm:typescript@5.9.3";
+export const GOVERNANCE_YAML = "npm:yaml@2.9.0";
 export const GOVERNANCE_STATE = ".workloom-ui-governance.json";
 const BASE_SYNC_STATE = ".workloom-base-sync.json";
 const CANONICAL_BASE_REPO = "geniusdapeng-collab/workloom-im";
@@ -201,11 +202,17 @@ export function installUiGovernance({ repo, sourceRoot, repositoryRoot = repo, d
   if (dependency && dependency !== GOVERNANCE_TYPESCRIPT) {
     throw new Error(`typescript-governance 已由行业仓固定为 ${dependency}；拒绝静默覆盖为 ${GOVERNANCE_TYPESCRIPT}`);
   }
+  const yamlDependency = packageJson.devDependencies?.["yaml-governance"]
+    ?? packageJson.dependencies?.["yaml-governance"];
+  if (yamlDependency && yamlDependency !== GOVERNANCE_YAML) {
+    throw new Error(`yaml-governance 已由行业仓固定为 ${yamlDependency}；拒绝静默覆盖为 ${GOVERNANCE_YAML}`);
+  }
 
   const statePath = safeFile(targetRoot, GOVERNANCE_STATE, "UI 治理 state");
   const previous = existsSync(statePath) ? readJson(statePath, GOVERNANCE_STATE) : null;
   if (previous && (previous.schemaVersion !== "workloom.ui-governance-state/v1"
     || previous.dependency !== GOVERNANCE_TYPESCRIPT
+    || (previous.yamlDependency !== undefined && previous.yamlDependency !== GOVERNANCE_YAML)
     || previous.updatePolicy !== "stable-upgrade-pr-only"
     || GOVERNANCE_FILES.some((path) => !/^[0-9a-f]{64}$/u.test(previous.files?.[path]?.sha256 ?? "")))) {
     throw new Error(`${GOVERNANCE_STATE} 契约无效`);
@@ -247,9 +254,11 @@ export function installUiGovernance({ repo, sourceRoot, repositoryRoot = repo, d
 
   packageJson.devDependencies ??= {};
   if (!dependency) packageJson.devDependencies["typescript-governance"] = GOVERNANCE_TYPESCRIPT;
+  if (!yamlDependency) packageJson.devDependencies["yaml-governance"] = GOVERNANCE_YAML;
   const state = {
     schemaVersion: "workloom.ui-governance-state/v1",
     dependency: GOVERNANCE_TYPESCRIPT,
+    yamlDependency: GOVERNANCE_YAML,
     updatePolicy: "stable-upgrade-pr-only",
     files,
     ...(legacyProof ? {
@@ -285,6 +294,7 @@ export function installUiGovernance({ repo, sourceRoot, repositoryRoot = repo, d
   return {
     files: GOVERNANCE_FILES,
     dependency: GOVERNANCE_TYPESCRIPT,
+    yamlDependency: GOVERNANCE_YAML,
     legacyTakeover: Boolean(legacyProof),
     changed: !dryRun,
   };
@@ -301,7 +311,7 @@ function main() {
   const repositoryRoot = value("--repository-root") || repo;
   if (!repo || !sourceRoot) throw new Error("用法：node sync/install-ui-governance.mjs --repo <行业目录> --repository-root <Git 仓根> --source-root <基座目录> [--dry-run]");
   const result = installUiGovernance({ repo, repositoryRoot, sourceRoot, dryRun: args.includes("--dry-run") });
-  process.stdout.write(`✅ UI 治理单元已${args.includes("--dry-run") ? "预检" : "安装"}：${result.files.join("、")}；${result.dependency}\n`);
+  process.stdout.write(`✅ UI 治理单元已${args.includes("--dry-run") ? "预检" : "安装"}：${result.files.join("、")}；${result.dependency}；${result.yamlDependency}\n`);
 }
 
 if (resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) {

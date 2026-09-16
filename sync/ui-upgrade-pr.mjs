@@ -5,7 +5,7 @@
  * 发布严格分成两个阶段：
  * 1. --preflight：只读克隆全部八个下游仓，确认清单与访问能力，同时把迁移缺口
  *    结构化输出。存量仓未迁移不反向锁死基座稳定制品，只有清单/访问失败才阻断发布。
- * 2. --rollout：确认 registry 中已存在目标稳定制品，并从同一 ui-v* 不可变标签
+ * 2. --rollout：确认 canonical GitHub Release 中已存在目标稳定制品，并从同一 ui-v* 不可变标签
  *    读取三端应用壳，再按 child-repos.json 的波次处理。受管文件经旧版 SHA-256
  *    验真；行业修改冲突会 fail closed。只创建独立 PR，不直推 main。
  */
@@ -34,13 +34,13 @@ import {
   loadStableFoundationSnapshot,
   resolveStableFoundationVersion,
 } from "./client-foundation.mjs";
-import { resolveUiVersion, setUiVersion } from "./set-ui-version.mjs";
+import { resolveUiReleaseArtifact, resolveUiVersion, setUiVersion } from "./set-ui-version.mjs";
+import { bindUiLockfileIntegrity } from "./ui-lockfile-integrity.mjs";
 
 const syncDir = dirname(fileURLToPath(import.meta.url));
 const baseDir = resolve(syncDir, "..");
 const EXPECTED_DOWNSTREAM_COUNT = 8;
 const CANONICAL_BASE_REPOSITORY = "geniusdapeng-collab/workloom-im";
-const OFFICIAL_NPM_REGISTRY = "https://registry.npmjs.org";
 const RELEASE_PAYLOAD_SCHEMA = "workloom.ui-release-payload/v1";
 const RELEASE_GOVERNANCE_PAYLOAD_PATHS = Object.freeze([
   ...GOVERNANCE_FILES,
@@ -55,6 +55,7 @@ const RELEASE_GOVERNANCE_PAYLOAD_PATHS = Object.freeze([
   "sync/set-ui-version.mjs",
   "sync/install-ui-governance.mjs",
   "sync/install-adoption-assets.mjs",
+  "sync/ui-lockfile-integrity.mjs",
 ]);
 const PRODUCT_CLIENTS = Object.freeze({
   bPc: "apps/web",
@@ -358,12 +359,13 @@ export function validateRelease(manifest, packageJson, version) {
   if (manifest.ui.latestStableVersion !== version) throw new Error(`稳定清单版本 ${manifest.ui.latestStableVersion} 与目标版本 ${version} 不一致`);
   if (packageJson.version !== version) throw new Error(`@workloom/ui 包版本 ${packageJson.version} 与目标版本 ${version} 不一致`);
   resolveStableFoundationVersion(manifest, version);
+  resolveUiReleaseArtifact(manifest, version);
   return true;
 }
 
 /**
  * 只读盘点可以在首个稳定版尚未发布时针对当前候选版运行；它不授予发布或 rollout
- * 权限。rollout 仍只接受 latestStableVersion，并继续校验 registry 不可变制品。
+ * 权限。rollout 仍只接受 latestStableVersion，并继续校验 GitHub Release 不可变制品。
  */
 export function resolvePreflightTarget(manifest, packageJson, requestedVersion) {
   const version = requestedVersion
@@ -914,6 +916,57 @@ function validIntegrity(value) {
   return typeof value === "string" && /^sha512-[A-Za-z0-9+/]+={0,2}$/.test(value);
 }
 
+const sha512Integrity = (value) => `sha512-${createHash("sha512").update(value).digest("base64")}`;
+
+/**
+ * 只允许公开 canonical GitHub Release 下载。--disable 阻断用户 .curlrc 注入，
+ * 初始 URL 与重定向都限制 HTTPS；返回的是实际下载字节的 SHA-512，不信任
+ * Release API 或文件名中自报的摘要。
+ */
+export function readCanonicalGithubReleaseArtifact({
+  manifest,
+  targetVersion,
+  ambientEnvironment = process.env,
+  execute = execFileSync,
+}) {
+  const artifact = resolveUiReleaseArtifact(manifest, targetVersion);
+  let output;
+  try {
+    output = execute("curl", [
+      "--disable",
+      "--fail",
+      "--location",
+      "--silent",
+      "--show-error",
+      "--proto", "=https",
+      "--proto-redir", "=https",
+      "--max-redirs", "5",
+      "--connect-timeout", "30",
+      "--max-time", "300",
+      "--", artifact.url,
+    ], {
+      cwd: baseDir,
+      encoding: null,
+      maxBuffer: 256 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: sanitizedSubprocessEnvironment(ambientEnvironment, { GIT_TERMINAL_PROMPT: "0" }),
+    });
+  } catch {
+    throw new Error(`无法从 canonical GitHub Release 下载 ${artifact.assetName}`);
+  }
+  if (!Buffer.isBuffer(output) && !(output instanceof Uint8Array)) {
+    throw new Error(`canonical GitHub Release ${artifact.assetName} 未返回二进制制品`);
+  }
+  const bytes = Buffer.from(output);
+  if (bytes.length === 0) throw new Error(`canonical GitHub Release ${artifact.assetName} 为空制品`);
+  return {
+    url: artifact.url,
+    assetName: artifact.assetName,
+    integrity: sha512Integrity(bytes),
+    size: bytes.length,
+  };
+}
+
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
 function normalizedRemoteIdentity(value) {
@@ -1141,8 +1194,9 @@ export function packTaggedUiArtifact({
   expectedOriginUrl = `https://github.com/${CANONICAL_BASE_REPOSITORY}.git`,
   readNpmVersion = () => run("npm", ["--version"], resolve(root)),
   readPnpmVersion = () => run("pnpm", ["--version"], resolve(root)),
+  prepack = ({ cwd }) => run("pnpm", ["run", "prepack"], cwd),
   pack = ({ cwd, artifactRoot, sourceRef }) => parseJson(
-    run("npm", ["pack", "--json", "--pack-destination", artifactRoot], cwd),
+    run("npm", ["pack", "--ignore-scripts", "--json", "--pack-destination", artifactRoot], cwd),
     `${sourceRef} 的 npm pack 元数据`,
   ),
 }) {
@@ -1177,10 +1231,7 @@ export function packTaggedUiArtifact({
   if (taggedPackage.name !== manifest.ui.package) {
     throw new Error(`${sourceRef} 的包名 ${taggedPackage.name ?? "未登记"} 与 ${manifest.ui.package} 不一致`);
   }
-  if (taggedPackage.publishConfig?.registry !== OFFICIAL_NPM_REGISTRY
-    || taggedPackage.publishConfig?.access !== "public") {
-    throw new Error(`${sourceRef} 的 @workloom/ui 必须固定 publishConfig.registry=${OFFICIAL_NPM_REGISTRY} 且 access=public`);
-  }
+  const releaseArtifact = resolveUiReleaseArtifact(taggedManifest, stableVersion);
   assertWorkingGovernancePayloadMatchesTag(repositoryRoot, sourceRef);
   const payload = releasePayload({
     repositoryRoot,
@@ -1219,8 +1270,10 @@ export function packTaggedUiArtifact({
     run("tar", ["-xf", archivePath, "-C", sourceRoot], repositoryRoot);
     rmSync(archivePath, { force: true });
 
-    // npm pack 的 prepack 会构建并测试标签源码。依赖来自调用方刚以固定 lockfile
-    // 安装的工作区；链接仅存在于即将销毁的临时目录且不会进入 files 白名单。
+    // 先用已校验为 10.14.0 的 pnpm 显式运行 prepack；构建/vitest 的 stdout
+    // 只属于这个子进程，不会污染后续 JSON。随后 npm pack 必须 --ignore-scripts，
+    // 防止 prepack 二次执行并保证 stdout 只含 pack 元数据。依赖来自调用方刚以固定
+    // lockfile 安装的工作区；链接仅存在于即将销毁的临时目录且不会进入 files 白名单。
     for (const relativeDependencyPath of ["node_modules", "packages/ui/node_modules"]) {
       const dependencyPath = join(repositoryRoot, relativeDependencyPath);
       if (!existsSync(dependencyPath)) continue;
@@ -1229,7 +1282,9 @@ export function packTaggedUiArtifact({
       symlinkSync(dependencyPath, linkPath, process.platform === "win32" ? "junction" : "dir");
     }
 
-    const metadata = pack({ cwd: join(sourceRoot, "packages/ui"), artifactRoot, sourceRef });
+    const packageRoot = join(sourceRoot, "packages/ui");
+    prepack({ cwd: packageRoot, artifactRoot, sourceRef });
+    const metadata = pack({ cwd: packageRoot, artifactRoot, sourceRef });
     if (!Array.isArray(metadata) || metadata.length !== 1) {
       throw new Error(`${sourceRef} 的 npm pack 必须且只能生成一个制品`);
     }
@@ -1243,6 +1298,7 @@ export function packTaggedUiArtifact({
       sourceRef,
       sourceCommit,
       integrity: artifact.integrity,
+      releaseArtifact,
       releasePayload: payload,
     };
   } finally {
@@ -1250,7 +1306,7 @@ export function packTaggedUiArtifact({
   }
 }
 
-export function assertPublishedArtifactIntegrity(localArtifact, remoteIntegrity, packageName, version) {
+export function assertReleaseArtifactIntegrity(localArtifact, releaseArtifact, manifest, packageName, version) {
   if (
     localArtifact?.package !== packageName
     || localArtifact?.version !== version
@@ -1258,70 +1314,54 @@ export function assertPublishedArtifactIntegrity(localArtifact, remoteIntegrity,
   ) {
     throw new Error(`本地标签未生成有效的 ${packageName}@${version} npm pack`);
   }
-  if (!validIntegrity(remoteIntegrity)) {
-    throw new Error(`registry 尚未返回 ${packageName}@${version} 的 dist.integrity，拒绝 rollout`);
+  const registered = resolveUiReleaseArtifact(manifest, version);
+  const taggedRegistration = localArtifact.releaseArtifact;
+  if (!taggedRegistration
+    || ["type", "url", "assetName", "sha512", "overrideSelector"]
+      .some((key) => taggedRegistration[key] !== registered[key])) {
+    throw new Error(`工作树与固定标签的 base-capabilities.json 制品登记不一致：${packageName}@${version}`);
   }
-  if (remoteIntegrity !== localArtifact.integrity) {
-    throw new Error(`registry 中 ${packageName}@${version} 与 ${localArtifact.sourceRef} 的 dist.integrity 不一致，拒绝同版本异内容 rollout`);
+  if (registered.sha512 !== localArtifact.integrity) {
+    throw new Error(`base-capabilities.json 登记的 ${packageName}@${version} integrity 与 ${localArtifact.sourceRef} 本地 pack 不一致`);
+  }
+  if (releaseArtifact?.url !== registered.url || releaseArtifact?.assetName !== registered.assetName) {
+    throw new Error(`GitHub Release 制品来源不是 canonical ${registered.assetName}`);
+  }
+  if (!validIntegrity(releaseArtifact?.integrity) || !Number.isInteger(releaseArtifact?.size) || releaseArtifact.size <= 0) {
+    throw new Error(`canonical GitHub Release 尚未返回 ${packageName}@${version} 的有效非空 tarball`);
+  }
+  if (releaseArtifact.integrity !== registered.sha512) {
+    throw new Error(`GitHub Release ${registered.assetName} 的字节 integrity 与 base-capabilities.json 登记值不一致`);
+  }
+  if (releaseArtifact.integrity !== localArtifact.integrity) {
+    throw new Error(`GitHub Release ${registered.assetName} 与 ${localArtifact.sourceRef} 本地 pack 不一致，拒绝同版本异内容 rollout`);
   }
   assertReleasePayloadIntegrity(localArtifact.releasePayload, {
     version,
     sourceRef: localArtifact.sourceRef,
     sourceCommit: localArtifact.sourceCommit,
   });
-  return { ...localArtifact, registryIntegrity: remoteIntegrity };
-}
-
-/**
- * registry 信任锚固定到 npmjs。查询在空 cwd、临时 HOME 与空 user/global npmrc 中
- * 执行，且 CLI 再显式指定官方 registry，避免用户或项目 @scope registry 重定向。
- */
-export function readOfficialRegistryIntegrity({
-  packageName,
-  targetVersion,
-  ambientEnvironment = process.env,
-  execute = execFileSync,
-}) {
-  const temp = mkdtempSync(join(tmpdir(), "workloom-npmjs-integrity-"));
-  const userConfig = join(temp, "user.npmrc");
-  const globalConfig = join(temp, "global.npmrc");
-  writeFileSync(userConfig, "");
-  writeFileSync(globalConfig, "");
-  try {
-    const output = execute("npm", [
-      "view",
-      `${packageName}@${targetVersion}`,
-      "dist.integrity",
-      "--json",
-      `--registry=${OFFICIAL_NPM_REGISTRY}`,
-      `--userconfig=${userConfig}`,
-      `--globalconfig=${globalConfig}`,
-    ], {
-      cwd: temp,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      env: sanitizedSubprocessEnvironment(ambientEnvironment, {
-        HOME: temp,
-        GIT_TERMINAL_PROMPT: "0",
-      }),
-    });
-    return parseJson(String(output).trim(), `npmjs ${packageName}@${targetVersion} dist.integrity`);
-  } finally {
-    rmSync(temp, { recursive: true, force: true });
-  }
+  return {
+    ...localArtifact,
+    declaredIntegrity: registered.sha512,
+    githubReleaseIntegrity: releaseArtifact.integrity,
+    releaseAssetUrl: releaseArtifact.url,
+    releaseAssetName: releaseArtifact.assetName,
+    releaseAssetSize: releaseArtifact.size,
+  };
 }
 
 export function verifyPublishedArtifact(manifest, version, {
   root = baseDir,
   packArtifact = packTaggedUiArtifact,
-  readRemoteIntegrity = readOfficialRegistryIntegrity,
+  readReleaseArtifact = readCanonicalGithubReleaseArtifact,
 } = {}) {
   const localArtifact = packArtifact({ root, manifest, version });
-  const remoteIntegrity = readRemoteIntegrity({
-    packageName: manifest.ui.package,
+  const releaseArtifact = readReleaseArtifact({
+    manifest,
     targetVersion: version,
   });
-  return assertPublishedArtifactIntegrity(localArtifact, remoteIntegrity, manifest.ui.package, version);
+  return assertReleaseArtifactIntegrity(localArtifact, releaseArtifact, manifest, manifest.ui.package, version);
 }
 
 async function upgradeChild(child, manifest, version, token, dryRun, foundationSnapshot) {
@@ -1361,7 +1401,11 @@ async function upgradeChild(child, manifest, version, token, dryRun, foundationS
       copyFileSync(join(baseDir, path), join(workdir, path));
     }
     run("pnpm", ["install", "--lockfile-only", "--ignore-scripts"], workdir);
-    // verifier 静态依赖 typescript-governance。rollout 的临时 clone 必须按刚生成
+    // pnpm 10 会锁定 canonical tarball URL，但不会为 URL tarball 自动写 SRI。
+    // 在 frozen install 前把同一稳定 state 的 SHA-512 注入唯一 resolution，令包管理器
+    // 真正执行完整性校验，避免 Release 资产在同 URL 下被替换后仍可冷安装。
+    bindUiLockfileIntegrity(workdir);
+    // verifier 静态依赖固定的 TypeScript/YAML governance 解析器。rollout 的临时 clone 必须按刚生成
     // 的锁文件建立真实依赖树，不能从基座工作树的 node_modules 偶然解析成功。
     run("pnpm", ["install", "--frozen-lockfile", "--ignore-scripts"], workdir);
     run("node", [join(workdir, "scripts/verify-ui-consumer.mjs"), "--repo", workdir], workdir);
@@ -1420,7 +1464,8 @@ async function main() {
   }
 
   // 所有 rollout（包括本地 dry-run）均在访问任何下游仓之前重新生成固定标签的
-  // npm pack，并与 registry 完整性逐字节核对；只验证 version 不再构成授权条件。
+  // npm pack，下载 canonical GitHub Release tarball，再与标签内 base-capabilities 登记的
+  // SHA-512 做三方逐字节核对；只验证 version 不构成授权条件。
   const verifiedArtifact = options.mode === "rollout"
     ? verifyPublishedArtifact(manifest, version)
     : null;
@@ -1532,7 +1577,9 @@ async function main() {
     targetVersion: version,
     targetArtifacts: {
       sharedUi: `${manifest.ui.package}@${version}`,
-      sharedUiIntegrity: verifiedArtifact.integrity,
+      sharedUiIntegrity: verifiedArtifact.githubReleaseIntegrity,
+      sharedUiReleaseAsset: verifiedArtifact.releaseAssetUrl,
+      sharedUiReleaseAssetSize: verifiedArtifact.releaseAssetSize,
       clientFoundation: `ui-v${version}`,
       clientFoundationDigest: verifiedArtifact.releasePayload.clientFoundation.digest,
       governanceDigest: verifiedArtifact.releasePayload.governance.digest,

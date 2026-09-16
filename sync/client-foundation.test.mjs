@@ -15,6 +15,14 @@ import {
 import { verifyClientFoundationConsumer } from "../scripts/verify-client-foundation-consumer.mjs";
 
 const VERSION = "1.2.3";
+const integrity = (version) => `sha512-${Buffer.alloc(64, Number(version.split(".").at(-1)) || 1).toString("base64")}`;
+const artifact = (version) => ({
+  type: "github-release-tarball",
+  assetName: `workloom-ui-${version}.tgz`,
+  url: `https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v${version}/workloom-ui-${version}.tgz`,
+  sha512: integrity(version),
+  overrideSelector: `@workloom/ui@${version}`,
+});
 
 function manifest(stable = VERSION) {
   return {
@@ -28,6 +36,12 @@ function manifest(stable = VERSION) {
       latestStableVersion: stable,
       requiredClientPackages: ["apps/web/package.json", "apps/webb/package.json", "apps/webc/package.json"],
       allowedIndustryOverrides: ["--wl-brand-primary"],
+      distribution: {
+        type: "github-release-tarball",
+        urlTemplate: "https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v{version}/workloom-ui-{version}.tgz",
+        assetNameTemplate: "workloom-ui-{version}.tgz",
+        integrityByVersion: Object.fromEntries(["1.2.2", "1.2.3", "1.2.4"].map((version) => [version, integrity(version)])),
+      },
     },
     clientFoundation: {
       schemaVersion: "workloom.client-foundation/v1",
@@ -101,6 +115,7 @@ function makeSnapshot(version = VERSION, suffix = "v1", extra = {}) {
     version,
     sourceRef: `refs/tags/ui-v${version}`,
     sourceCommit: "a".repeat(40),
+    uiArtifact: artifact(version),
     files: source,
   };
 }
@@ -196,6 +211,23 @@ describe("三端客户端基座稳定分发", () => {
     for (const path of manifest().ui.requiredClientPackages) {
       assert.equal(JSON.parse(result.files.get(path).content).dependencies["@workloom/ui"], VERSION);
     }
+    assert.deepEqual(result.uiArtifact, artifact(VERSION));
+  });
+
+  it("客户端快照缺少或篡改同版 Release URL/SHA-512 时 fail closed", () => {
+    const repo = createIndustryRepo();
+    const missing = makeSnapshot();
+    delete missing.uiArtifact;
+    assert.throws(
+      () => planClientFoundation({ repoRoot: repo, manifest: manifest(), snapshot: missing, mode: "scaffold" }),
+      /缺少同版 GitHub Release URL 与 SHA-512/,
+    );
+    const tampered = makeSnapshot();
+    tampered.uiArtifact.url = "https://github.com/someone/fork/releases/download/ui-v1.2.3/workloom-ui-1.2.3.tgz";
+    assert.throws(
+      () => planClientFoundation({ repoRoot: repo, manifest: manifest(), snapshot: tampered, mode: "scaffold" }),
+      /缺少同版 GitHub Release URL 与 SHA-512/,
+    );
   });
 
   it("下游自包含门禁复算所有指纹、扩展白名单和 UI 同版关系", () => {
@@ -270,6 +302,7 @@ describe("三端客户端基座稳定分发", () => {
     assert.equal(result.sourceRef, `refs/tags/ui-v${VERSION}`);
     assert.equal(result.files.get("apps/web/src/main.tsx").content.toString(), 'export const source = "tag-web";\n');
     assert.equal(JSON.parse(result.files.get("apps/web/package.json").content).dependencies["@workloom/ui"], VERSION);
+    assert.deepEqual(result.uiArtifact, artifact(VERSION));
     assert.equal(result.files.has("apps/webc/public/service-front.config.json"), true);
     assert.equal(result.files.has("apps/webc/public/industry/service-front.config.json"), false);
   });

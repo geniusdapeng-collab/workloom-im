@@ -1,16 +1,17 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import YAML from "yaml";
+import { resolveUiReleaseArtifact } from "./set-ui-version.mjs";
 import { findUiReleaseWorkflowRisks } from "./ui-release-workflow-contract.mjs";
 import {
   assertExactUpgradePathSet,
-  assertPublishedArtifactIntegrity,
+  assertReleaseArtifactIntegrity,
   assertReleasePayloadIntegrity,
   assertIndependentUpgradeBranch,
   buildUpgradePullRequestBody,
@@ -20,7 +21,7 @@ import {
   inspectMigratedConsumer,
   packTaggedUiArtifact,
   preflightChildren,
-  readOfficialRegistryIntegrity,
+  readCanonicalGithubReleaseArtifact,
   redactCloneDiagnostic,
   renderConsumerWorkflow,
   resolvePreflightTarget,
@@ -37,6 +38,9 @@ import {
 const testDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(testDir, "..");
 const waveOrder = ["W1", "W2", "W3A", "W3B", "W4", "W5"];
+const fixtureArtifactBytes = Buffer.from("export const source = 'stable-tag';\n");
+const fixtureArtifactIntegrity = `sha512-${createHash("sha512").update(fixtureArtifactBytes).digest("base64")}`;
+const fixtureReleaseUrl = "https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v1.2.3/workloom-ui-1.2.3.tgz";
 const manifest = {
   baseRepository: "geniusdapeng-collab/workloom-im",
   releasePolicy: "base-first-stable-only",
@@ -47,6 +51,12 @@ const manifest = {
     latestStableVersion: "1.2.3",
     allowedIndustryOverrides: ["--wl-brand-primary", "--wl-brand-on-primary", "--wl-brand-accent"],
     requiredClientPackages: ["apps/web/package.json", "apps/webb/package.json", "apps/webc/package.json"],
+    distribution: {
+      type: "github-release-tarball",
+      urlTemplate: "https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v{version}/workloom-ui-{version}.tgz",
+      assetNameTemplate: "workloom-ui-{version}.tgz",
+      integrityByVersion: { "1.2.3": fixtureArtifactIntegrity },
+    },
   },
   clientFoundation: {
     schemaVersion: "workloom.client-foundation/v1",
@@ -82,6 +92,24 @@ function writeJson(path, value) {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
+function writeReadyConsumerLockfile(repo) {
+  writeFileSync(join(repo, "pnpm-lock.yaml"), YAML.stringify({
+    lockfileVersion: "9.0",
+    overrides: { "@workloom/ui@1.2.3": fixtureReleaseUrl },
+    importers: Object.fromEntries(manifest.ui.requiredClientPackages.map((packagePath) => [
+      packagePath.replace(/\/package\.json$/u, ""),
+      { dependencies: { "@workloom/ui": { specifier: fixtureReleaseUrl, version: fixtureReleaseUrl } } },
+    ])),
+    packages: {
+      [`@workloom/ui@${fixtureReleaseUrl}`]: {
+        resolution: { tarball: fixtureReleaseUrl, integrity: fixtureArtifactIntegrity },
+        version: "1.2.3",
+      },
+    },
+    snapshots: { [`@workloom/ui@${fixtureReleaseUrl}`]: {} },
+  }));
+}
+
 function createReadyConsumer(repo, repository = "geniusdapeng-collab/example") {
   writeJson(join(repo, "package.json"), {
     name: "workloom-example",
@@ -91,7 +119,16 @@ function createReadyConsumer(repo, repository = "geniusdapeng-collab/example") {
       "product:verify": "node scripts/verify-product-content.mjs",
       "bundle:governance": "tsx scripts/bundle-governance.mts",
     },
-    devDependencies: { tsx: "^4.23.12", "typescript-governance": "npm:typescript@5.9.3" },
+    pnpm: {
+      overrides: {
+        "@workloom/ui@1.2.3": fixtureReleaseUrl,
+      },
+    },
+    devDependencies: {
+      tsx: "^4.23.12",
+      "typescript-governance": "npm:typescript@5.9.3",
+      "yaml-governance": "npm:yaml@2.9.0",
+    },
   });
   writeFileSync(join(repo, "pnpm-workspace.yaml"), [
     "packages:",
@@ -146,6 +183,7 @@ function createReadyConsumer(repo, repository = "geniusdapeng-collab/example") {
     },
   });
   writeJson(join(repo, ".workloom-ui.json"), {
+    schemaVersion: "workloom.ui-consumer-state/v1",
     package: "@workloom/ui",
     version: "1.2.3",
     contractVersion: "2.0.0",
@@ -155,6 +193,12 @@ function createReadyConsumer(repo, repository = "geniusdapeng-collab/example") {
     allowedIndustryOverrides: manifest.ui.allowedIndustryOverrides,
     requiredClientPackages: manifest.ui.requiredClientPackages,
     connectedClientPackages: manifest.ui.requiredClientPackages,
+    artifact: {
+      type: "github-release-tarball",
+      assetName: "workloom-ui-1.2.3.tgz",
+      url: fixtureReleaseUrl,
+      sha512: fixtureArtifactIntegrity,
+    },
   });
   const managedFiles = {};
   for (const client of clients) {
@@ -177,6 +221,7 @@ function createReadyConsumer(repo, repository = "geniusdapeng-collab/example") {
     allowedIndustryExtensionPaths: manifest.clientFoundation.allowedIndustryExtensionPaths,
     managedFiles,
   });
+  writeReadyConsumerLockfile(repo);
 }
 
 function initializeMainRepository(target) {
@@ -219,6 +264,7 @@ function writeTaggedReleaseSource(root) {
     "sync/set-ui-version.mjs",
     "sync/install-ui-governance.mjs",
     "sync/install-adoption-assets.mjs",
+    "sync/ui-lockfile-integrity.mjs",
   ]) writeFileSync(join(root, path), `// release controller ${path}\n`);
   for (const path of [
     "scripts/verify-ui-consumer.mjs",
@@ -232,8 +278,8 @@ function writeTaggedReleaseSource(root) {
   writeJson(join(root, "packages/ui/package.json"), {
     name: "@workloom/ui",
     version: "1.2.3",
+    private: true,
     files: ["index.js"],
-    publishConfig: { access: "public", registry: "https://registry.npmjs.org" },
   });
   writeFileSync(join(root, "packages/ui/index.js"), "export const source = 'stable-tag';\n");
   for (const client of ["web", "webb", "webc"]) {
@@ -256,9 +302,23 @@ describe("UI 稳定发布门禁", () => {
       () => validateRelease({ ...manifest, releasePolicy: "anything" }, { version: "1.2.3" }, "1.2.3"),
       /base-first-stable-only/,
     );
+    assert.throws(
+      () => validateRelease({
+        ...manifest,
+        ui: { ...manifest.ui, distribution: { ...manifest.ui.distribution, urlTemplate: "https://attacker.invalid/{version}.tgz" } },
+      }, { version: "1.2.3" }, "1.2.3"),
+      /urlTemplate/u,
+    );
+    assert.throws(
+      () => validateRelease({
+        ...manifest,
+        ui: { ...manifest.ui, distribution: { ...manifest.ui.distribution, integrityByVersion: {} } },
+      }, { version: "1.2.3" }, "1.2.3"),
+      /缺少有效 SHA-512/u,
+    );
   });
 
-  it("rollout 从固定 ui-v 标签生成 npm pack，并逐字节核对 registry dist.integrity", () => {
+  it("rollout 从固定 ui-v 标签生成 npm pack，并与 GitHub Release 及基座登记值三方核对", () => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), "workloom-ui-tagged-pack-"));
     const root = join(fixtureRoot, "base");
     const origin = join(fixtureRoot, "origin.git");
@@ -271,6 +331,7 @@ describe("UI 稳定发布门禁", () => {
       root,
       manifest,
       version: "1.2.3",
+      prepack: () => "vitest stdout 噪声必须与 npm pack JSON 隔离",
       pack: packFixture,
       readNpmVersion: () => "11.6.2",
       readPnpmVersion: () => "10.14.0",
@@ -289,33 +350,53 @@ describe("UI 稳定发布门禁", () => {
       assert.match(tagged.integrity, /^sha512-/u);
       assert.equal(assertReleasePayloadIntegrity(tagged.releasePayload), true);
       assert.ok(tagged.releasePayload.clientFoundation.fileCount >= 7);
-      assert.equal(tagged.releasePayload.governance.fileCount, 12);
+      assert.equal(tagged.releasePayload.governance.fileCount, 13);
+      assert.ok(tagged.releasePayload.files.some((file) => (
+        file.category === "governance" && file.path === "sync/ui-lockfile-integrity.mjs"
+      )));
       assert.equal(execFileSync("git", ["for-each-ref", "--format=%(refname)", "refs/workloom-release-verification"], { cwd: root, encoding: "utf8" }).trim(), "");
 
       // 工作树即使出现未提交污染，重新 pack 仍只读取固定标签。
       writeFileSync(join(root, "packages/ui/index.js"), "export const source = 'dirty-worktree';\n");
       const repacked = packTaggedUiArtifact(taggedPackOptions);
       assert.equal(repacked.integrity, tagged.integrity);
-      assert.deepEqual(
-        verifyPublishedArtifact(manifest, "1.2.3", {
-          root,
-          packArtifact: () => repacked,
-          readRemoteIntegrity: () => tagged.integrity,
-        }),
-        { ...repacked, registryIntegrity: tagged.integrity },
+      const downloaded = {
+        url: fixtureReleaseUrl,
+        assetName: "workloom-ui-1.2.3.tgz",
+        integrity: tagged.integrity,
+        size: fixtureArtifactBytes.length,
+      };
+      const verified = verifyPublishedArtifact(manifest, "1.2.3", {
+        root,
+        packArtifact: () => repacked,
+        readReleaseArtifact: () => downloaded,
+      });
+      assert.equal(verified.integrity, tagged.integrity);
+      assert.equal(verified.declaredIntegrity, tagged.integrity);
+      assert.equal(verified.githubReleaseIntegrity, tagged.integrity);
+      assert.equal(verified.releaseAssetUrl, fixtureReleaseUrl);
+      assert.equal(verified.releaseAssetSize, fixtureArtifactBytes.length);
+      assert.throws(
+        () => assertReleaseArtifactIntegrity(repacked, { ...downloaded, integrity: `sha512-${"A".repeat(88)}` }, manifest, "@workloom/ui", "1.2.3"),
+        /GitHub Release .*integrity.*登记值不一致/u,
       );
       assert.throws(
-        () => assertPublishedArtifactIntegrity(repacked, `sha512-${"A".repeat(88)}`, "@workloom/ui", "1.2.3"),
-        /dist\.integrity 不一致/u,
+        () => assertReleaseArtifactIntegrity(repacked, { ...downloaded, integrity: "1.2.3" }, manifest, "@workloom/ui", "1.2.3"),
+        /未返回.*有效非空 tarball/u,
       );
+      const mismatchedRegistration = structuredClone(repacked);
+      const otherIntegrity = `sha512-${createHash("sha512").update("other artifact").digest("base64")}`;
+      mismatchedRegistration.releaseArtifact.sha512 = otherIntegrity;
+      const mismatchedManifest = structuredClone(manifest);
+      mismatchedManifest.ui.distribution.integrityByVersion["1.2.3"] = otherIntegrity;
       assert.throws(
-        () => assertPublishedArtifactIntegrity(repacked, "1.2.3", "@workloom/ui", "1.2.3"),
-        /尚未返回.*dist\.integrity/u,
+        () => assertReleaseArtifactIntegrity(mismatchedRegistration, downloaded, mismatchedManifest, "@workloom/ui", "1.2.3"),
+        /base-capabilities\.json.*本地 pack 不一致/u,
       );
       const tamperedPayload = structuredClone(repacked);
       tamperedPayload.releasePayload.files[0].sha256 = "0".repeat(64);
       assert.throws(
-        () => assertPublishedArtifactIntegrity(tamperedPayload, tagged.integrity, "@workloom/ui", "1.2.3"),
+        () => assertReleaseArtifactIntegrity(tamperedPayload, downloaded, manifest, "@workloom/ui", "1.2.3"),
         /载荷摘要不一致/u,
       );
       assert.throws(
@@ -359,6 +440,83 @@ describe("UI 稳定发布门禁", () => {
         /必须在已固定 refs\/tags\/ui-v1\.2\.3/u,
       );
     } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("prepack 真实 stdout 噪声与 npm pack JSON 分离，且 pack 禁止重复脚本", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "workloom-ui-prepack-output-"));
+    const root = join(fixtureRoot, "base");
+    const origin = join(fixtureRoot, "origin.git");
+    const bin = join(fixtureRoot, "bin");
+    const marker = join(fixtureRoot, "prepack-complete");
+    const lifecycleLog = join(fixtureRoot, "lifecycle.log");
+    const previousEnvironment = {
+      PATH: process.env.PATH,
+      WORKLOOM_PREPACK_MARKER: process.env.WORKLOOM_PREPACK_MARKER,
+      WORKLOOM_PACK_LIFECYCLE_LOG: process.env.WORKLOOM_PACK_LIFECYCLE_LOG,
+    };
+    const restoreEnvironment = () => {
+      for (const [key, value] of Object.entries(previousEnvironment)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    };
+    try {
+      writeTaggedReleaseSource(root);
+      initializeMainRepository(root);
+      execFileSync("git", ["tag", "ui-v1.2.3"], { cwd: root, stdio: "ignore" });
+      createBareOrigin(root, origin);
+      mkdirSync(bin, { recursive: true });
+      const pnpmShim = join(bin, "pnpm");
+      writeFileSync(pnpmShim, `#!/usr/bin/env node
+const fs = require("node:fs");
+const args = process.argv.slice(2);
+if (args[0] === "--version") { process.stdout.write("10.14.0\\n"); process.exit(0); }
+fs.appendFileSync(process.env.WORKLOOM_PACK_LIFECYCLE_LOG, \`pnpm \${args.join(" ")}\\n\`);
+if (args[0] !== "run" || args[1] !== "prepack") process.exit(21);
+fs.writeFileSync(process.env.WORKLOOM_PREPACK_MARKER, "complete\\n");
+process.stdout.write("vitest stdout noise\\n[not npm pack json]\\n");
+`);
+      chmodSync(pnpmShim, 0o755);
+      const npmShim = join(bin, "npm");
+      writeFileSync(npmShim, `#!/usr/bin/env node
+const crypto = require("node:crypto");
+const fs = require("node:fs");
+const path = require("node:path");
+const args = process.argv.slice(2);
+if (args[0] === "--version") { process.stdout.write("11.6.2\\n"); process.exit(0); }
+fs.appendFileSync(process.env.WORKLOOM_PACK_LIFECYCLE_LOG, \`npm \${args.join(" ")}\\n\`);
+if (args[0] !== "pack") process.exit(22);
+if (!args.includes("--ignore-scripts")) process.stdout.write("prepack pollution before JSON\\n");
+if (!fs.existsSync(process.env.WORKLOOM_PREPACK_MARKER)) process.exit(23);
+const destination = args[args.indexOf("--pack-destination") + 1];
+const bytes = fs.readFileSync(path.join(process.cwd(), "index.js"));
+const filename = "workloom-ui-1.2.3.tgz";
+fs.mkdirSync(destination, { recursive: true });
+fs.writeFileSync(path.join(destination, filename), bytes);
+const integrity = \`sha512-\${crypto.createHash("sha512").update(bytes).digest("base64")}\`;
+process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", filename, integrity }]));
+`);
+      chmodSync(npmShim, 0o755);
+      process.env.PATH = `${bin}:${previousEnvironment.PATH ?? ""}`;
+      process.env.WORKLOOM_PREPACK_MARKER = marker;
+      process.env.WORKLOOM_PACK_LIFECYCLE_LOG = lifecycleLog;
+
+      const artifact = packTaggedUiArtifact({
+        root,
+        manifest,
+        version: "1.2.3",
+        expectedOriginUrl: origin,
+      });
+      assert.equal(artifact.integrity, fixtureArtifactIntegrity);
+      const invocations = readFileSync(lifecycleLog, "utf8").trim().split("\n");
+      assert.equal(invocations.length, 2);
+      assert.equal(invocations[0], "pnpm run prepack");
+      assert.match(invocations[1], /^npm pack --ignore-scripts --json --pack-destination /u);
+      assert.equal(existsSync(marker), true);
+    } finally {
+      restoreEnvironment();
       rmSync(fixtureRoot, { recursive: true, force: true });
     }
   });
@@ -420,32 +578,59 @@ describe("UI 稳定发布门禁", () => {
     }
   });
 
-  it("registry 完整性查询忽略自定义 HOME scope registry 并只信任 npmjs", () => {
-    const root = mkdtempSync(join(tmpdir(), "workloom-malicious-npm-home-"));
+  it("GitHub Release 下载固定 canonical URL、禁用 curlrc 并从真实字节计算 sha512", () => {
+    const root = mkdtempSync(join(tmpdir(), "workloom-malicious-curl-home-"));
     const maliciousHome = join(root, "home");
     mkdirSync(maliciousHome, { recursive: true });
-    writeFileSync(join(maliciousHome, ".npmrc"), "@workloom:registry=https://registry.attacker.invalid\n");
-    const expectedIntegrity = `sha512-${"A".repeat(88)}`;
+    writeFileSync(join(maliciousHome, ".curlrc"), "url = https://attacker.invalid/payload.tgz\n");
     try {
-      const actual = readOfficialRegistryIntegrity({
-        packageName: "@workloom/ui",
+      const actual = readCanonicalGithubReleaseArtifact({
+        manifest,
         targetVersion: "1.2.3",
-        ambientEnvironment: { ...process.env, HOME: maliciousHome, NPM_CONFIG_REGISTRY: "https://registry.attacker.invalid" },
+        ambientEnvironment: {
+          ...process.env,
+          HOME: maliciousHome,
+          GH_TOKEN: "must-not-leak",
+          GITHUB_TOKEN: "must-not-leak",
+          NPM_CONFIG_REGISTRY: "https://registry.attacker.invalid",
+        },
         execute(command, args, options) {
-          assert.equal(command, "npm");
-          assert.ok(args.includes("--registry=https://registry.npmjs.org"));
-          assert.notEqual(options.cwd, root);
-          assert.equal(options.env.HOME, options.cwd);
+          assert.equal(command, "curl");
+          assert.equal(args[0], "--disable");
+          assert.equal(args.at(-1), fixtureReleaseUrl);
+          assert.deepEqual(args.slice(args.indexOf("--proto"), args.indexOf("--proto") + 2), ["--proto", "=https"]);
+          assert.deepEqual(args.slice(args.indexOf("--proto-redir"), args.indexOf("--proto-redir") + 2), ["--proto-redir", "=https"]);
+          assert.equal(options.encoding, null);
+          assert.equal(options.env.GH_TOKEN, undefined);
+          assert.equal(options.env.GITHUB_TOKEN, undefined);
           assert.equal(options.env.NPM_CONFIG_REGISTRY, undefined);
-          for (const prefix of ["--userconfig=", "--globalconfig="]) {
-            const config = args.find((arg) => arg.startsWith(prefix))?.slice(prefix.length);
-            assert.ok(config?.startsWith(`${options.cwd}/`));
-            assert.equal(readFileSync(config, "utf8"), "");
-          }
-          return JSON.stringify(expectedIntegrity);
+          return fixtureArtifactBytes;
         },
       });
-      assert.equal(actual, expectedIntegrity);
+      assert.deepEqual(actual, {
+        url: fixtureReleaseUrl,
+        assetName: "workloom-ui-1.2.3.tgz",
+        integrity: fixtureArtifactIntegrity,
+        size: fixtureArtifactBytes.length,
+      });
+      assert.deepEqual(resolveUiReleaseArtifact(manifest, "1.2.3"), {
+        type: "github-release-tarball",
+        url: fixtureReleaseUrl,
+        assetName: "workloom-ui-1.2.3.tgz",
+        sha512: fixtureArtifactIntegrity,
+        overrideSelector: "@workloom/ui@1.2.3",
+      });
+      assert.throws(
+        () => readCanonicalGithubReleaseArtifact({
+          manifest: {
+            ...manifest,
+            ui: { ...manifest.ui, distribution: { ...manifest.ui.distribution, assetNameTemplate: "other-{version}.tgz" } },
+          },
+          targetVersion: "1.2.3",
+          execute: () => { throw new Error("不应访问网络"); },
+        }),
+        /assetNameTemplate 必须为/u,
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -839,7 +1024,7 @@ describe("UI 稳定发布门禁", () => {
     assert.throws(() => renderConsumerWorkflow("../governance"), /非法消费仓 pathPrefix/u);
   });
 
-  it("工作流以固定 main 标签完成无凭据预检、最小权限 OIDC publish 与逐步 rollout", () => {
+  it("工作流以固定 main 标签完成无凭据预检、受保护 GitHub Release 发布与逐步 rollout", () => {
     const workflow = readFileSync(join(repoRoot, ".github/workflows/ui-release.yml"), "utf8");
     const parsed = YAML.parse(workflow);
     assert.match(workflow, /^# ui-v\* 只封存共享 UI 与三端客户端基座/mu);
@@ -847,6 +1032,10 @@ describe("UI 稳定发布门禁", () => {
     assert.match(workflow, /候选 Bundle 契约、摘要与投影一致性门禁/u);
     assert.doesNotMatch(workflow, /BUNDLE_SIGNING_PRIVATE_KEY|BUNDLE_SIGNING_KEY_ID|pnpm bundle:release|build\/bundle-trust\.json/u);
     assert.deepEqual(findUiReleaseWorkflowRisks(workflow), []);
+    assert.deepEqual(parsed.concurrency, {
+      group: "shared-ui-release-${{ github.ref }}",
+      "cancel-in-progress": false,
+    });
 
     const verify = parsed.jobs["verify-and-preflight"];
     const releaseTarget = verify.steps.find((step) => step.id === "release-target");
@@ -857,21 +1046,25 @@ describe("UI 稳定发布门禁", () => {
     assert.equal(preflight.if, undefined, "公开八仓 preflight 不得被 token 条件跳过");
     assert.doesNotMatch(JSON.stringify(preflight), /SYNC_TOKEN/u);
 
-    const publish = parsed.jobs["publish-ui"];
-    const automaticRollout = parsed.jobs["rollout-after-publish"];
+    const publish = parsed.jobs["publish-github-release"];
+    const automaticRollout = parsed.jobs["rollout-after-release"];
     const continueRollout = parsed.jobs["continue-rollout"];
     assert.equal(publish.needs, "verify-and-preflight");
-    assert.deepEqual(automaticRollout.needs, ["verify-and-preflight", "publish-ui"]);
+    assert.deepEqual(automaticRollout.needs, ["verify-and-preflight", "publish-github-release"]);
     assert.equal(continueRollout.needs, "verify-and-preflight");
     for (const job of [publish, automaticRollout, continueRollout]) assert.equal(job.environment, "production");
+    assert.deepEqual(publish.permissions, { contents: "write" });
+    assert.deepEqual(automaticRollout.permissions, { contents: "read" });
+    assert.doesNotMatch(JSON.stringify(parsed.jobs), /id-token/u);
     for (const job of Object.values(parsed.jobs)) assert.equal(job.env?.SYNC_TOKEN, undefined, "跨仓 token 不得放到 job scope");
     const tokenSteps = Object.entries(parsed.jobs).flatMap(([jobName, job]) => (job.steps ?? [])
       .filter((step) => step.env?.SYNC_TOKEN !== undefined)
       .map((step) => `${jobName}:${step.name}`));
     assert.deepEqual(tokenSteps, [
-      "rollout-after-publish:发布后仅创建八个独立升级 PR",
       "continue-rollout:按严格波次继续创建独立升级 PR",
     ]);
+    assert.doesNotMatch(JSON.stringify(automaticRollout), /SYNC_TOKEN|--rollout/u);
+    assert.match(JSON.stringify(automaticRollout), /--verify-artifact/u);
     const fakeRollout = structuredClone(parsed);
     fakeRollout.jobs["continue-rollout"].steps
       .find((step) => step.name === "按严格波次继续创建独立升级 PR").run = [
@@ -885,18 +1078,18 @@ describe("UI 稳定发布门禁", () => {
 
     const versionOnlyManualGate = structuredClone(parsed);
     versionOnlyManualGate.jobs["continue-rollout"].steps
-      .find((step) => step.name === "从固定标签核验手动 rollout 的不可变 UI 制品").run =
-        'npm view "@workloom/ui@$STABLE_VERSION" version --json';
+      .find((step) => step.name === "从 GitHub Release 核验手动 rollout 的不可变 UI 制品").run =
+        'echo "$STABLE_VERSION"';
     assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(versionOnlyManualGate))
-      .some((risk) => risk.includes("dist.integrity 预校验")),
-    "手动 rollout 只查版本号不得通过语义契约");
+      .some((risk) => risk.includes("GitHub Release sha512 预校验")),
+    "手动 rollout 只读版本号不得通过语义契约");
 
     const lateIntegrityGate = structuredClone(parsed);
     const lateSteps = lateIntegrityGate.jobs["continue-rollout"].steps;
-    const integrityIndex = lateSteps.findIndex((step) => step.name === "从固定标签核验手动 rollout 的不可变 UI 制品");
+    const integrityIndex = lateSteps.findIndex((step) => step.name === "从 GitHub Release 核验手动 rollout 的不可变 UI 制品");
     lateSteps.push(...lateSteps.splice(integrityIndex, 1));
     assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(lateIntegrityGate))
-      .some((risk) => risk.includes("先通过 dist.integrity")),
+      .some((risk) => risk.includes("先通过 GitHub Release sha512")),
     "完整性核验位于跨仓写入之后不得通过");
 
     const floatingPackCli = structuredClone(parsed);
@@ -905,37 +1098,46 @@ describe("UI 稳定发布门禁", () => {
     assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(floatingPackCli))
       .some((risk) => risk.includes("固定 npm 11.6.2")),
     "手动复算不得使用随时间漂移的 npm CLI");
-    const redirectedRegistry = structuredClone(parsed);
-    redirectedRegistry.jobs["publish-ui"].steps
-      .find((step) => step.name === "发布或核验完全相同的稳定 UI 制品").run =
-        redirectedRegistry.jobs["publish-ui"].steps
-          .find((step) => step.name === "发布或核验完全相同的稳定 UI 制品").run
-          .replaceAll(" --registry=https://registry.npmjs.org", "");
-    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(redirectedRegistry))
-      .some((risk) => risk.includes("显式固定官方 npmjs registry")),
-    "用户 npmrc 不得重定向发布、查询或确认 registry");
-    const floatingPublishConfig = structuredClone(parsed);
-    floatingPublishConfig.jobs["verify-and-preflight"].steps
-      .find((step) => step.name === "校验 UI 标签、稳定版本登记与包版本一致").run =
+    const pollutedPackMetadata = structuredClone(parsed);
+    const packStep = pollutedPackMetadata.jobs["verify-and-preflight"].steps
+      .find((step) => step.name === "生成待发布的不可变 UI 制品");
+    packStep.run = packStep.run
+      .replace("pnpm -C packages/ui run prepack", "echo 跳过显式 prepack")
+      .replace("npm pack --ignore-scripts --json", "npm pack --json");
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(pollutedPackMetadata))
+      .some((risk) => risk.includes("--ignore-scripts 生成纯净 JSON metadata")),
+    "npm pack 不得让 prepack 测试输出污染 JSON metadata");
+    const noByteComparison = structuredClone(parsed);
+    noByteComparison.jobs["publish-github-release"].steps
+      .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品").run =
+        noByteComparison.jobs["publish-github-release"].steps
+          .find((step) => step.name === "发布或逐字节核验 GitHub Release 稳定制品").run
+          .replace('cmp -s "$TARBALL" "$REMOTE_DIR/$EXPECTED_ASSET"', "echo 跳过逐字节比较");
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(noByteComparison))
+      .some((risk) => risk.includes("cmp -s")),
+    "已有 Release 资产未逐字节核验不得继续 rollout");
+    const floatingDistribution = structuredClone(parsed);
+    floatingDistribution.jobs["verify-and-preflight"].steps
+      .find((step) => step.name === "校验 UI 标签、稳定版本登记与 GitHub Release 分发契约").run =
         'node -e \'console.log("只检查版本")\' "$VERSION"';
-    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(floatingPublishConfig))
-      .some((risk) => risk.includes("npmjs/public publishConfig")),
-    "标签内 publishConfig 不得把 publish 重定向到其他 registry");
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(floatingDistribution))
+      .some((risk) => risk.includes("GitHub Release 分发模板与 sha512")),
+    "标签内分发 URL、资产名和 sha512 登记不得漂移");
     assert.equal(automaticRollout.steps[0].with.ref, "${{ needs.verify-and-preflight.outputs.release-sha }}");
     assert.equal(continueRollout.steps[0].with.ref, "${{ needs.verify-and-preflight.outputs.release-sha }}");
 
     const decoy = structuredClone(parsed);
-    decoy.jobs["publish-ui"].permissions["id-token"] = "read";
-    decoy.jobs.decoy = { permissions: { "id-token": "write" }, steps: [{ run: "echo npm publish fake --provenance" }] };
+    decoy.jobs["publish-github-release"].permissions.contents = "read";
+    decoy.jobs.decoy = { permissions: { contents: "write" }, steps: [{ run: "echo gh release upload fake" }] };
     const decoyRisks = findUiReleaseWorkflowRisks(YAML.stringify(decoy));
-    assert.ok(decoyRisks.some((risk) => risk.includes("publish-ui 缺少") || risk.includes("只能授予 publish-ui")),
-      "错误 job 的 OIDC 文本不得让真正 publish job 通过");
+    assert.ok(decoyRisks.some((risk) => risk.includes("publish-github-release 必须且只能拥有 contents: write")),
+      "错误 job 的 Release 文本不得让真正 publish job 通过");
 
     assert.match(workflow, /inputs\.action == 'rollout'/);
     assert.match(workflow, /--wave "\$ROLLOUT_WAVE"/);
     assert.match(workflow, /--repos "\$ROLLOUT_REPOSITORIES"/);
     assert.match(workflow, /sync\/client-foundation\.test\.mjs/u);
-    assert.match(workflow, /m\.clientFoundation\.latestStableVersion!==v/u);
+    assert.match(workflow, /m\.clientFoundation\?\.latestStableVersion!==v/u);
     assert.match(workflow, /client-foundation\.mjs verify-source/u);
     const desktopWorkflow = readFileSync(join(repoRoot, ".github/workflows/build-desktop.yml"), "utf8");
     assert.match(desktopWorkflow, /BUNDLE_SIGNING_PRIVATE_KEY/u);
@@ -949,20 +1151,30 @@ describe("UI 稳定发布门禁", () => {
     assert.match(implementation, /verify-client-foundation-consumer\.mjs/u);
     assert.match(implementation, /ADOPTION_SCRIPTS/u);
     assert.match(implementation, /SYNC_TOKEN\|GH_TOKEN\|GITHUB_TOKEN\|NPM_TOKEN\|NODE_AUTH_TOKEN/u);
-    assert.match(implementation, /npm.*view.*dist\.integrity/su);
+    assert.match(implementation, /resolveUiReleaseArtifact/u);
+    assert.match(implementation, /readCanonicalGithubReleaseArtifact/u);
+    assert.match(implementation, /assertReleaseArtifactIntegrity/u);
+    assert.match(implementation, /githubReleaseIntegrity/u);
+    assert.match(implementation, /base-capabilities\.json/u);
     assert.match(implementation, /packTaggedUiArtifact/u);
+    assert.match(implementation, /prepack\s*=\s*\(\{ cwd \}\)\s*=>\s*run\("pnpm", \["run", "prepack"\]/u);
+    assert.match(implementation, /run\("npm", \["pack", "--ignore-scripts", "--json"/u);
+    const explicitPrepack = implementation.indexOf("prepack({ cwd: packageRoot");
+    const cleanPack = implementation.indexOf("const metadata = pack({ cwd: packageRoot");
+    assert.ok(explicitPrepack >= 0 && cleanPack > explicitPrepack,
+      "必须先单独执行 prepack，再解析 --ignore-scripts npm pack 的干净 JSON");
     assert.match(implementation, /verifyCanonicalReleaseTag/u);
     assert.match(implementation, /merge-base.*--is-ancestor/su);
     assert.match(implementation, /workloom\.ui-release-payload\/v1/u);
     assert.match(implementation, /clientFoundationDigest/u);
     assert.match(implementation, /governanceDigest/u);
-    assert.doesNotMatch(implementation, /npm", \["view"[^\n]+"version"/u);
+    assert.doesNotMatch(implementation, /npm", \["view"/u);
     assert.doesNotMatch(implementation, /git", \["add", "-A"/u);
     assert.match(implementation, /stageExactUpgradeChanges/u);
     const rolloutIntegrity = implementation.indexOf('const verifiedArtifact = options.mode === "rollout"');
     const downstreamPreflight = implementation.indexOf("const preflight = preflightChildren");
     assert.ok(rolloutIntegrity >= 0 && downstreamPreflight > rolloutIntegrity,
-      "任何下游访问都必须发生在固定标签与 registry 完整性核验之后");
+      "任何下游访问都必须发生在固定标签与 GitHub Release 三方完整性核验之后");
     assert.doesNotMatch(implementation, /HEAD:main/u);
     const governanceInstaller = readFileSync(join(repoRoot, "sync/install-ui-governance.mjs"), "utf8");
     assert.match(governanceInstaller, /scripts\/verify-ui-consumer\.mjs/u);
@@ -970,10 +1182,11 @@ describe("UI 稳定发布门禁", () => {
     assert.match(governanceInstaller, /npm:typescript@5\.9\.3/u);
     assert.match(governanceInstaller, /拒绝静默覆盖/u);
     const lockOnly = implementation.indexOf('"--lockfile-only"');
+    const lockIntegrityBinding = implementation.indexOf("bindUiLockfileIntegrity(workdir)");
     const frozenInstall = implementation.indexOf('"--frozen-lockfile"');
     const consumerVerify = implementation.indexOf('scripts/verify-ui-consumer.mjs"), "--repo"');
-    assert.ok(lockOnly >= 0 && frozenInstall > lockOnly && consumerVerify > frozenInstall,
-      "rollout 必须先更新锁文件，再真实安装依赖，最后运行 verifier");
+    assert.ok(lockOnly >= 0 && lockIntegrityBinding > lockOnly && frozenInstall > lockIntegrityBinding && consumerVerify > frozenInstall,
+      "rollout 必须先更新锁文件、注入 canonical SRI，再 frozen 安装并运行 verifier");
     const syncWorkflow = readFileSync(join(repoRoot, ".github/workflows/base-sync-push.yml"), "utf8");
     assert.match(syncWorkflow, /sync\/ui-consumer-template\.yml/u);
     const syncSecretSelfTest = syncWorkflow.indexOf("node scripts/secret-scan.mjs --self-test");

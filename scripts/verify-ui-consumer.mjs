@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import YAML from "yaml-governance";
 import {
   findBundleDisplayLanguageRisks,
   findClientWebManifestRisks,
@@ -79,6 +80,7 @@ const CLIENT_CONTRACTS = Object.freeze([
     ],
   },
 ]);
+const REQUIRED_CLIENT_PACKAGES = Object.freeze(CLIENT_CONTRACTS.map((client) => client.packagePath));
 
 const DUPLICATE_COMPONENTS = new Map([
   ...[
@@ -98,7 +100,14 @@ const DUPLICATE_COMPONENTS = new Map([
 ]);
 const REQUIRED_STYLES = ["tokens.css", "content-safety.css", "components.css"];
 const DEFAULT_ALLOWED_TOKENS = ["--wl-brand-primary", "--wl-brand-on-primary", "--wl-brand-accent"];
+const UI_STATE_SCHEMA = "workloom.ui-consumer-state/v1";
+const UI_PACKAGE = "@workloom/ui";
+const UI_CONTRACT_VERSION = "2.0.0";
+const UI_RELEASE_TYPE = "github-release-tarball";
+const CANONICAL_BASE_REPOSITORY = "geniusdapeng-collab/workloom-im";
+const EXACT_SEMVER = /^\d+\.\d+\.\d+$/u;
 const GOVERNANCE_TYPESCRIPT = "npm:typescript@5.9.3";
+const GOVERNANCE_YAML = "npm:yaml@2.9.0";
 const GOVERNANCE_STATE = ".workloom-ui-governance.json";
 const GOVERNANCE_SCHEMA = "workloom.ui-governance-state/v1";
 const GOVERNANCE_UPDATE_POLICY = "stable-upgrade-pr-only";
@@ -106,8 +115,159 @@ const GOVERNANCE_FILES = Object.freeze([
   "scripts/verify-ui-consumer.mjs",
   "scripts/ui-governance-rules.mjs",
 ]);
+const LOCKFILE_NAME = "pnpm-lock.yaml";
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
+
+function validSha512(value) {
+  if (typeof value !== "string" || !value.startsWith("sha512-")) return false;
+  const encoded = value.slice("sha512-".length);
+  if (!/^[A-Za-z0-9+/]+={0,2}$/u.test(encoded)) return false;
+  try {
+    const digest = Buffer.from(encoded, "base64");
+    return digest.length === 64 && digest.toString("base64") === encoded;
+  } catch {
+    return false;
+  }
+}
+
+function canonicalUiArtifact(version) {
+  const assetName = `workloom-ui-${version}.tgz`;
+  return {
+    type: UI_RELEASE_TYPE,
+    assetName,
+    url: `https://github.com/${CANONICAL_BASE_REPOSITORY}/releases/download/ui-v${version}/${assetName}`,
+    overrideSelector: `${UI_PACKAGE}@${version}`,
+  };
+}
+
+function isUiOverrideSelector(selector) {
+  const leaf = String(selector).split(">").at(-1);
+  return leaf === UI_PACKAGE || leaf.startsWith(`${UI_PACKAGE}@`);
+}
+
+function validUiStateLockContract(state) {
+  if (!state || typeof state !== "object" || Array.isArray(state)) return false;
+  if (!EXACT_SEMVER.test(state.version ?? "")) return false;
+  const expectedArtifact = canonicalUiArtifact(state.version);
+  const exactClientList = (value) => Array.isArray(value)
+    && value.length === REQUIRED_CLIENT_PACKAGES.length
+    && new Set(value).size === REQUIRED_CLIENT_PACKAGES.length
+    && REQUIRED_CLIENT_PACKAGES.every((path) => value.includes(path));
+  return state.schemaVersion === UI_STATE_SCHEMA
+    && state.package === UI_PACKAGE
+    && state.contractVersion === UI_CONTRACT_VERSION
+    && state.source === CANONICAL_BASE_REPOSITORY
+    && state.releaseChannel === "stable"
+    && state.updatePolicy === "upgrade-pr-only"
+    && exactClientList(state.requiredClientPackages)
+    && exactClientList(state.connectedClientPackages)
+    && state.artifact
+    && typeof state.artifact === "object"
+    && !Array.isArray(state.artifact)
+    && state.artifact.type === expectedArtifact.type
+    && state.artifact.assetName === expectedArtifact.assetName
+    && state.artifact.url === expectedArtifact.url
+    && validSha512(state.artifact.sha512);
+}
+
+function parseUiLockfile(repo) {
+  const lockPath = join(repo, LOCKFILE_NAME);
+  if (!existsSync(lockPath)) return { lockPath, error: `缺少 ${LOCKFILE_NAME}，无法证明安装字节与 UI SRI 一致` };
+  const stat = lstatSync(lockPath);
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    return { lockPath, error: `${LOCKFILE_NAME} 必须是仓内非符号链接普通文件` };
+  }
+  const source = readFileSync(lockPath, "utf8");
+  let document;
+  try {
+    document = YAML.parseDocument(source, { uniqueKeys: true });
+  } catch (error) {
+    return { lockPath, error: `${LOCKFILE_NAME} 不是有效 YAML：${String(error?.message ?? error).split("\n")[0]}` };
+  }
+  if (document.errors.length) {
+    return { lockPath, error: `${LOCKFILE_NAME} 不是有效 YAML：${document.errors[0].message}` };
+  }
+  const lock = document.toJS();
+  if (!lock || typeof lock !== "object" || Array.isArray(lock)) {
+    return { lockPath, error: `${LOCKFILE_NAME} 顶层必须是 YAML 映射` };
+  }
+  return { lockPath, stat, source, document, lock };
+}
+
+function uiPackageLockEntries(lock, packageName) {
+  const packages = lock.packages;
+  if (!packages || typeof packages !== "object" || Array.isArray(packages)) return [];
+  return Object.entries(packages).filter(([key]) => key.startsWith(`${packageName}@`));
+}
+
+function importerPath(packagePath) {
+  return String(packagePath).replace(/\/package\.json$/u, "");
+}
+
+/**
+ * pnpm 10 会把 URL tarball 写入 lockfile，却不会自动写该 tarball 的 integrity。
+ * 这里把 state、override、三个 importer 与唯一 packages resolution 绑定为同一契约；
+ * frozen install 随后会真正执行该 SRI，阻断 Release 资产被同 URL 替换。
+ */
+export function uiLockfileIntegrityErrors(repoPath, state) {
+  const repo = resolve(repoPath);
+  if (!validUiStateLockContract(state)) return [".workloom-ui.json 缺少可用于锁文件验真的稳定 UI 制品契约"];
+  const parsed = parseUiLockfile(repo);
+  if (parsed.error) return [parsed.error];
+  const { lock } = parsed;
+  const errors = [];
+  if (String(lock.lockfileVersion ?? "") !== "9.0") {
+    errors.push(`${LOCKFILE_NAME} lockfileVersion 必须为 pnpm 10 的 9.0`);
+  }
+
+  const selector = `${state.package}@${state.version}`;
+  const overrides = lock.overrides;
+  if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) {
+    errors.push(`${LOCKFILE_NAME} 缺少共享 UI overrides`);
+  } else {
+    if (overrides[selector] !== state.artifact.url) {
+      errors.push(`${LOCKFILE_NAME} overrides 必须精确设置 ${selector} → canonical Release URL`);
+    }
+    for (const key of Object.keys(overrides)) {
+      if (key !== selector && isUiOverrideSelector(key)) errors.push(`${LOCKFILE_NAME} 存在冲突或过期的共享 UI override：${key}`);
+    }
+  }
+
+  const entries = uiPackageLockEntries(lock, state.package);
+  if (entries.length !== 1) {
+    errors.push(`${LOCKFILE_NAME} 必须且只能锁定一个 ${state.package} packages 记录，当前为 ${entries.length}`);
+  }
+  const [entry] = entries;
+  if (entry) {
+    const [key, value] = entry;
+    if (value?.version !== state.version) errors.push(`${LOCKFILE_NAME} 的 ${key} 版本必须为 ${state.version}`);
+    if (value?.resolution?.tarball !== state.artifact.url) {
+      errors.push(`${LOCKFILE_NAME} 的 ${state.package} resolution.tarball 必须为 canonical Release URL`);
+    }
+    const integrity = value?.resolution?.integrity;
+    if (integrity !== state.artifact.sha512) {
+      errors.push(`${LOCKFILE_NAME} 的 ${state.package} resolution.integrity 必须等于 .workloom-ui.json SHA-512`);
+    }
+  }
+
+  const importers = lock.importers;
+  for (const packagePath of state.requiredClientPackages) {
+    const path = importerPath(packagePath);
+    const dependency = importers?.[path]?.dependencies?.[state.package];
+    if (!dependency || typeof dependency !== "object") {
+      errors.push(`${LOCKFILE_NAME} importer ${path} 未锁定 ${state.package}`);
+      continue;
+    }
+    if (dependency.specifier !== state.artifact.url) {
+      errors.push(`${LOCKFILE_NAME} importer ${path} specifier 必须为 canonical Release URL`);
+    }
+    if (dependency.version !== state.artifact.url && !String(dependency.version ?? "").startsWith(`${state.artifact.url}(`)) {
+      errors.push(`${LOCKFILE_NAME} importer ${path} version 必须解析到 canonical Release URL`);
+    }
+  }
+  return [...new Set(errors)];
+}
 
 function governanceStateErrors(repo) {
   const errors = [];
@@ -135,6 +295,9 @@ function governanceStateErrors(repo) {
   }
   if (state.dependency !== GOVERNANCE_TYPESCRIPT) {
     errors.push(`${GOVERNANCE_STATE} dependency 必须为 ${GOVERNANCE_TYPESCRIPT}`);
+  }
+  if (state.yamlDependency !== GOVERNANCE_YAML) {
+    errors.push(`${GOVERNANCE_STATE} yamlDependency 必须为 ${GOVERNANCE_YAML}`);
   }
   for (const path of GOVERNANCE_FILES) {
     const expected = state.files?.[path]?.sha256;
@@ -534,19 +697,56 @@ export function verifyUiConsumerRepo(repoPath, { allowMissingClients = false, re
   } catch {
     return [...errors, ".workloom-ui.json 不是有效 JSON"];
   }
-  if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(state.version ?? "")) errors.push("UI 版本必须是精确 semver，禁止 latest、范围或 workspace 引用");
+  if (!state || typeof state !== "object" || Array.isArray(state)) {
+    return [...errors, ".workloom-ui.json 顶层必须是 JSON 对象"];
+  }
+  const validVersion = EXACT_SEMVER.test(state.version ?? "");
+  if (!validVersion) errors.push("UI 版本必须是精确稳定 semver，禁止 latest、范围、预发布版或 workspace 引用");
+  if (state.schemaVersion !== UI_STATE_SCHEMA) errors.push(`.workloom-ui.json schemaVersion 必须为 ${UI_STATE_SCHEMA}`);
+  if (state.package !== UI_PACKAGE) errors.push(`.workloom-ui.json package 必须为 ${UI_PACKAGE}`);
+  if (state.contractVersion !== UI_CONTRACT_VERSION) errors.push(`.workloom-ui.json contractVersion 必须为 ${UI_CONTRACT_VERSION}`);
+  if (state.source !== CANONICAL_BASE_REPOSITORY) errors.push(`.workloom-ui.json source 必须为 ${CANONICAL_BASE_REPOSITORY}`);
+  if (state.releaseChannel !== "stable") errors.push(".workloom-ui.json releaseChannel 必须为 stable");
   if (state.updatePolicy !== "upgrade-pr-only") errors.push("更新策略必须为 upgrade-pr-only");
-  if (existsSync(join(repo, "packages/ui"))) errors.push("行业仓存在 packages/ui 公共源码副本；必须删除并消费 registry 制品");
+  const expectedArtifact = validVersion ? canonicalUiArtifact(state.version) : null;
+  if (!state.artifact || typeof state.artifact !== "object" || Array.isArray(state.artifact)) {
+    errors.push(".workloom-ui.json 缺少 GitHub Release artifact 契约");
+  } else {
+    if (state.artifact.type !== UI_RELEASE_TYPE) errors.push(`UI artifact.type 必须为 ${UI_RELEASE_TYPE}`);
+    if (expectedArtifact && state.artifact.assetName !== expectedArtifact.assetName) errors.push("UI artifact.assetName 必须与精确版本一致");
+    if (expectedArtifact && state.artifact.url !== expectedArtifact.url) errors.push("UI artifact.url 必须固定到官方仓库的同版本 HTTPS Release 资产");
+    if (!validSha512(state.artifact.sha512)) errors.push("UI artifact.sha512 必须是有效 SHA-512 SRI");
+  }
+  if (existsSync(join(repo, "packages/ui"))) errors.push("行业仓存在 packages/ui 公共源码副本；必须删除并消费 GitHub Release 稳定制品");
   let rootPackage = {};
   try {
     rootPackage = JSON.parse(readFileSync(join(repo, "package.json"), "utf8"));
   } catch {
     errors.push("缺少或无法读取根 package.json，不能执行行业扩展 AST 治理");
   }
+  const overrides = rootPackage.pnpm?.overrides;
+  if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) {
+    errors.push("根 package.json 必须通过 pnpm.overrides 锁定共享 UI GitHub Release 制品");
+  } else if (expectedArtifact) {
+    if (overrides[expectedArtifact.overrideSelector] !== expectedArtifact.url) {
+      errors.push(`根 package.json pnpm.overrides 必须精确设置 ${expectedArtifact.overrideSelector} → ${expectedArtifact.url}`);
+    }
+    for (const selector of Object.keys(overrides)) {
+      if (selector !== expectedArtifact.overrideSelector && isUiOverrideSelector(selector)) {
+        errors.push(`根 package.json 存在冲突或过期的共享 UI override：${selector}`);
+      }
+    }
+  }
+  errors.push(...uiLockfileIntegrityErrors(repo, state));
   const governanceTypescript = rootPackage.devDependencies?.["typescript-governance"]
     ?? rootPackage.dependencies?.["typescript-governance"];
   if (governanceTypescript !== GOVERNANCE_TYPESCRIPT) {
     errors.push(`行业仓必须精确依赖 typescript-governance=${GOVERNANCE_TYPESCRIPT}，确保 UI AST 门禁可复现`);
+  }
+  const governanceYaml = rootPackage.devDependencies?.["yaml-governance"]
+    ?? rootPackage.dependencies?.["yaml-governance"];
+  if (governanceYaml !== GOVERNANCE_YAML) {
+    errors.push(`行业仓必须精确依赖 yaml-governance=${GOVERNANCE_YAML}，确保 lockfile YAML 门禁可复现`);
   }
 
   const required = CLIENT_CONTRACTS.map((client) => client.packagePath);

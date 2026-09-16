@@ -307,8 +307,8 @@ function validateScope(scope, baseDir) {
     for (const consumer of capability.consumers) assertSafeRelative(consumer, `${capability.package} consumer`);
     const gate = assertSafeRelative(capability.consumerGate, `${capability.package} consumerGate`);
     assertNoSymlinkPath(baseDir, join(baseDir, gate), `${capability.package} consumerGate`, { allowMissing: false });
-    if (capability.distribution !== "stable-registry-upgrade-pr") {
-      throw new Error(`registry capability ${capability.package} 必须通过 stable-registry-upgrade-pr 分发`);
+    if (capability.distribution !== "stable-github-release-upgrade-pr") {
+      throw new Error(`release artifact capability ${capability.package} 必须通过 stable-github-release-upgrade-pr 分发`);
     }
   }
   const foundation = scope.clientFoundationCapability;
@@ -343,6 +343,9 @@ function validateScope(scope, baseDir) {
   }
   if (uiGovernance.dependency !== "npm:typescript@5.9.3") {
     throw new Error("UI 消费治理单元必须固定 typescript-governance 解析器");
+  }
+  if (uiGovernance.yamlDependency !== "npm:yaml@2.9.0") {
+    throw new Error("UI 消费治理单元必须固定 yaml-governance 解析器");
   }
   if (!Array.isArray(uiGovernance.managedFiles) || uiGovernance.managedFiles.length === 0) {
     throw new Error("UI 消费治理单元缺少 managedFiles");

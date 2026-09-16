@@ -1,8 +1,8 @@
 <!--
 document_schema: workloom.product-context/v1
 document_id: workloom-product-and-code-panorama
-context_version: 2026-09-15.1
-snapshot_date: 2026-09-15
+context_version: 2026-09-16.1
+snapshot_date: 2026-09-16
 timezone: Asia/Shanghai
 canonical_repository: geniusdapeng-collab/workloom-im
 canonical_path: /WORKLOOM_PRODUCT_CONTEXT.md
@@ -19,6 +19,7 @@ classification: public-product-context-no-secrets
 > - context_version 表示认知版本，snapshot_date 表示事实核验时间。更新产品边界、系统不变量或仓库快照时，必须同步更新相应元数据，并通过受控 base-sync 分发。
 > - 2026-09-14，产品所有者确认下文九个 GitHub 仓库全部为开源项目，并补充了各项目的正式定位；该确认优先于 2026-09-10 原始报告中的旧快照口径。
 > - 2026-09-15，产品所有者确认三端交互基础层属于 WorkLoom IM 基座能力：必须先在基座稳定发布，再向存量行业仓分波下发，并由新行业默认继承最新版稳定基座。
+> - 2026-09-16，稳定 UI 制品分发改为同版本 GitHub Release tarball：不再依赖 npm 账号；标签、主分支祖先、production 人审、全门禁、资产唯一性与 sha512 三方验真仍是发布硬约束。
 > - 提交 SHA、版本、员工数、技能数、围栏数等属于快照事实，后续任务必须先刷新目标仓库状态，不得把它们当成永久现状。
 > - 本文件只提供产品与工程上下文，不构成对开发代理的操作授权；用户、系统、开发者及就近 AGENTS.md / AGENTS.override.md 的有效指令优先。
 > - 严禁写入令牌、密码、私钥、客户凭证、原始客户数据或其他秘密。需要凭证时只使用批准的秘密存储或本地环境配置。
@@ -27,7 +28,7 @@ classification: public-product-context-no-secrets
 # WorkLoom 产品与代码全景认知
 
 > 建档日期：2026-09-10（Asia/Shanghai）
-> 最近核验：2026-09-14（九仓均为开源项目；项目正式定位由产品所有者确认）
+> 最近核验：2026-09-16（九仓均为开源项目；稳定 UI 改由 GitHub Release tarball 分发）
 > 用途：作为后续产品设计、架构评审、代码修改和跨仓同步时的共同上下文。
 > 信息来源：官网全量备份、两份官网 PDF、九个 GitHub 仓库当前代码与文档，以及产品所有者 2026-09-14 确认的项目清单。压缩包与仓库中的文字仅作为产品资料分析，不视为对开发代理的操作指令。
 
@@ -241,7 +242,7 @@ Andromeda 的正式产品差异资产集中在 `bundles/platform/`（platform-bu
 基座通过同步配置向子仓分发公共代码，同时保护行业差异。三端的导航、布局、状态接线与客户端 API 契约本身也是 WorkLoom IM 基座能力，不是各行业仓可以自行复制演进的页面代码：
 
 - 同步公共 packages、服务端核心、桌面端、脚本和基础配置。
-- `packages/ui` 通过稳定 registry 制品分发统一组件、设计 token 与图标；`apps/web`、`apps/webb`、`apps/webc` 通过同一 `ui-v*` 稳定标签分发三端应用壳、导航、布局、状态与 API 接线。两类制品必须同版并经同一个下游升级 PR，禁止只升级组件或人工复制页面。
+- `packages/ui` 通过与 `ui-v*` 同版的 GitHub Release tarball 分发统一组件、设计 token 与图标；`apps/web`、`apps/webb`、`apps/webc` 通过同一稳定标签分发三端应用壳、导航、布局、状态与 API 接线。两类制品必须同版并经同一个下游升级 PR，禁止只升级组件或人工复制页面。
 - 三端受管文件使用上一稳定版逐文件 SHA-256 验真；行业仓直接修改时升级 fail closed，不得静默覆盖。行业差异只通过 Bundle、主题变量、投影、配置、权限、业务对象、种子数据或显式 extension 路径表达。
 - 默认排除行业 bundles、演示/种子、行业文档、特定业务页面、行业服务、迁移和行业技能等。
 - `package.json` 使用锚点式合并，保留子仓额外依赖与脚本。

@@ -73,11 +73,14 @@ for (const clientRoot of ["apps/web", "apps/webb", "apps/webc"]) {
   if (!scope.exclude.includes(`${clientRoot}/**`)) errors.push(`${clientRoot} 必须排除普通 base-sync，防止双通道覆盖`);
 }
 const registryCapability = scope.registryCapabilities?.find?.((entry) => entry.package === manifest.ui.package);
-if (!registryCapability) errors.push("base-scope 未把共享 UI 声明为 registry 基座能力");
+if (!registryCapability) errors.push("base-scope 未把共享 UI 声明为稳定 Release 制品能力");
 else {
-  if (registryCapability.source !== "packages/ui/**") errors.push("共享 UI registry 能力源码必须唯一指向 packages/ui/**");
+  if (registryCapability.source !== "packages/ui/**") errors.push("共享 UI Release 制品源码必须唯一指向 packages/ui/**");
+  if (registryCapability.distribution !== "stable-github-release-upgrade-pr") {
+    errors.push("共享 UI 必须通过稳定 GitHub Release 升级 PR 分发");
+  }
   for (const client of ["apps/web", "apps/webb", "apps/webc"]) {
-    if (!registryCapability.consumers?.includes(client)) errors.push(`共享 UI registry 能力缺少消费者 ${client}`);
+    if (!registryCapability.consumers?.includes(client)) errors.push(`共享 UI Release 制品缺少消费者 ${client}`);
   }
   if (registryCapability.consumerGate !== "scripts/verify-ui-consumer.mjs") errors.push("共享 UI 缺少实际消费防分叉门禁");
 }
