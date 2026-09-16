@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
+import { relativeModuleSpecifiers, verifyRuntimeImportClosure } from "./runtime-import-closure.mjs";
 import {
   assertArchivePayloadBoundary,
   assertRuntimePayloadBoundary,
@@ -227,4 +228,65 @@ test("归档中的身份闭包必须是精确文件路径，目录或大小写�
     )), policy),
     /产品身份归档不完整.*product\.manifest\.json/u,
   );
+});
+
+function sourceClosureFixture(files) {
+  const root = mkdtempSync(join(tmpdir(), "workloom-runtime-closure-"));
+  for (const [relativePath, content] of Object.entries(files)) {
+    const target = join(root, relativePath);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, content);
+  }
+  return root;
+}
+
+test("载荷闭包只提取真实相对模块引用，不把注释与裸包导入当作文件", () => {
+  const source = `
+    // import "./commented.js";
+    import type { Context } from "hono";
+    import { router } from "./trpc/router.js";
+    export { helper } from "./helper.js";
+    const lazy = import("./lazy.js");
+    const legacy = require("./legacy.cjs");
+  `;
+  assert.deepEqual(relativeModuleSpecifiers(source).sort(), [
+    "./helper.js", "./lazy.js", "./legacy.cjs", "./trpc/router.js",
+  ]);
+});
+
+test("载荷闭包从服务入口递归检查 .js 说明符对应的 TypeScript 源文件", () => {
+  const root = sourceClosureFixture({
+    "apps/server/src/index.ts": 'import "./trpc/router.js";\n',
+    "apps/server/src/trpc/router.ts": 'import "../service/inspection-adapter.js";\n',
+  });
+  try {
+    assert.throws(
+      () => verifyRuntimeImportClosure(root),
+      /trpc\/router\.ts -> \.\.\/service\/inspection-adapter\.js/u,
+    );
+    mkdirSync(join(root, "apps/server/src/service"), { recursive: true });
+    writeFileSync(join(root, "apps/server/src/service/inspection-adapter.ts"), "export {};\n");
+    assert.deepEqual(verifyRuntimeImportClosure(root).files, [
+      "apps/server/src/index.ts",
+      "apps/server/src/service/inspection-adapter.ts",
+      "apps/server/src/trpc/router.ts",
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("载荷相对依赖即使物理存在也不得越出正式运行时根目录", () => {
+  const root = sourceClosureFixture({
+    "outside.ts": "export {};\n",
+    "runtime/apps/server/src/index.ts": 'import "../../../../outside.js";\n',
+  });
+  try {
+    assert.throws(
+      () => verifyRuntimeImportClosure(join(root, "runtime")),
+      /越出运行时载荷/u,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

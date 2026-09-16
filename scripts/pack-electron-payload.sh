@@ -90,6 +90,11 @@ printf '%s\n' "$VERSION" > "$R/VERSION"
 # 源码不携带 node_modules：运行期统一由下方 npm 扁平化安装的根 node_modules 提供（v2.0.8 实证）
 find "$R/apps" "$R/packages" -type d -name node_modules -prune -exec rm -rf {} + 2>/dev/null || true
 
+# 从真实服务入口递归验证正式载荷内的相对导入。TypeScript 源码普遍按 NodeNext
+# 书写 `.js` 说明符，因此门禁会映射回 `.ts/.tsx/.mts/.cts`，但绝不接受缺文件或
+# 越出载荷根目录的依赖。该检查必须在下载大型平台运行时之前失败关闭。
+node scripts/runtime-import-closure.mjs "$R" apps/server/src/index.ts
+
 # ---------- 2. web 构建产物 + 运行期依赖（npm 扁平化，无 symlink，electron-builder 友好） ----------
 if [ ! -f apps/web/dist/index.html ]; then
   echo "→ 构建 web…"; pnpm -C apps/web build
