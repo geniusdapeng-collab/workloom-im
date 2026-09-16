@@ -20,6 +20,7 @@
 # ============================================================
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source scripts/release-assets.sh
 
 VERSION="v1.1.0"
 STRUCTURE_ONLY=0
@@ -43,16 +44,6 @@ ZONKY_URLS=(
   "https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-windows-amd64/${PG_ZONKY_VER}/${ZONKY_JAR}"
   "https://mirrors.cloud.tencent.com/nexus/repository/maven-public/io/zonky/test/postgres/embedded-postgres-binaries-windows-amd64/${PG_ZONKY_VER}/${ZONKY_JAR}"
 )
-
-fetch() { # fetch <url...> -o <out>：按序回退
-  local out="${@: -1}"; local urls=("${@:1:$#-1}")
-  for u in "${urls[@]}"; do
-    echo "  ↓ $u"
-    if curl -sfL --retry 3 -o "$out" "$u"; then return 0; fi
-    echo "  ⚠️  失败，回退下一源"
-  done
-  echo "❌ 全部下载源失败：$out"; return 1
-}
 
 STAGE="$(mktemp -d /tmp/workloom-pack-win.XXXXXX)"
 trap 'rm -rf "$STAGE"' EXIT
@@ -122,7 +113,7 @@ fi
 # ---------- 3. Node win-x64 官方二进制 ----------
 echo "→ Node $NODE_VER win-x64…"
 mkdir -p "$PKG/node"
-fetch "${NODE_URLS[@]}" -o "$STAGE/$NODE_TARBALL"
+workloom_fetch_verified "$STAGE/$NODE_TARBALL" "$NODE_TARBALL" "${NODE_URLS[@]}"
 mkdir -p "$STAGE/node"
 if command -v unzip >/dev/null; then unzip -q "$STAGE/$NODE_TARBALL" -d "$STAGE/node"; else tar -xf "$STAGE/$NODE_TARBALL" -C "$STAGE/node"; fi
 mv "$STAGE/node/node-v${NODE_VER}-win-x64/"* "$PKG/node/"
@@ -131,10 +122,11 @@ mv "$STAGE/node/node-v${NODE_VER}-win-x64/"* "$PKG/node/"
 mkdir -p "$PKG/pg"
 if [ -f "vendor/pg-win/bin/postgres.exe" ]; then
   echo "→ PG 运行时：vendor/pg-win（与 pgvector 编译底座同源，ABI 一致）…"
+  node scripts/release-assets.mjs verify-windows-pg-provenance vendor/pg-win/WORKLOOM-PROVENANCE.txt
   cp -a vendor/pg-win/bin vendor/pg-win/lib vendor/pg-win/share "$PKG/pg/"
 else
   echo "→ PG 运行时：zonky ${PG_ZONKY_VER}（回退；注意与 pgvector ABI 需同小版本）…"
-  fetch "${ZONKY_URLS[@]}" -o "$STAGE/pg.jar"
+  workloom_fetch_verified "$STAGE/pg.jar" "$ZONKY_JAR" "${ZONKY_URLS[@]}"
   mkdir -p "$STAGE/pgjar"
   if command -v unzip >/dev/null; then unzip -q -o "$STAGE/pg.jar" -d "$STAGE/pgjar"; else tar -xf "$STAGE/pg.jar" -C "$STAGE/pgjar"; fi
   TXZ="$(find "$STAGE/pgjar" -name '*.txz' | head -1)"
@@ -153,6 +145,7 @@ if [ "$STRUCTURE_ONLY" = "1" ]; then
 else
   PV="vendor/pgvector-win"
   [ -f "$PV/lib/vector.dll" ] || { echo "❌ 缺 vendor/pgvector-win/lib/vector.dll——先在 Windows CI 跑 scripts/build-pgvector-win.ps1"; exit 1; }
+  node scripts/release-assets.mjs verify-windows-pg-provenance "$PV/WORKLOOM-PROVENANCE.txt"
   cp "$PV/lib/vector.dll" "$PKG/pg/lib/"
   cp "$PV"/share/extension/vector.control "$PKG/pg/share/extension/"
   cp "$PV"/share/extension/vector--*.sql "$PKG/pg/share/extension/"
@@ -167,7 +160,8 @@ if [ "$STRUCTURE_ONLY" = "1" ]; then
 ' > "$PKG/nats/PLACEHOLDER-NOT-FOR-RELEASE"
 else
   echo "→ nats-server ${NATS_VER} windows-amd64…"
-  curl -sfL --retry 4 -o "$STAGE/nats.zip" "https://github.com/nats-io/nats-server/releases/download/${NATS_VER}/nats-server-${NATS_VER}-windows-amd64.zip"
+  NATS_DIST="nats-server-${NATS_VER}-windows-amd64.zip"
+  workloom_fetch_verified "$STAGE/nats.zip" "$NATS_DIST" "https://github.com/nats-io/nats-server/releases/download/${NATS_VER}/${NATS_DIST}"
   unzip -qo "$STAGE/nats.zip" -d "$STAGE/nats-x"
   mkdir -p "$PKG/nats"
   cp "$STAGE/nats-x/nats-server-${NATS_VER}-windows-amd64/nats-server.exe" "$PKG/nats/"

@@ -17,6 +17,7 @@
 # ============================================================
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source scripts/release-assets.sh
 
 PLATFORM=""
 ARCH=""
@@ -37,21 +38,6 @@ NATS_VER="v2.11.4"
 OUT="dist-payload"
 STAGE="$(mktemp -d /tmp/workloom-epayload.XXXXXX)"
 trap 'rm -rf "$STAGE"' EXIT
-
-fetch() { # fetch <out> <url...>：按序回退
-  local out="$1"; shift
-  for u in "$@"; do
-    echo "  ↓ $u"
-    # GitHub/npm 大文件偶发 5xx、HTTP/2 RESET 或半途断流。发行流水线必须在单一
-    # 镜像上充分重试，再走备用源，不能因为一次公网抖动产出“本项目失败”的假象。
-    if curl --http1.1 -fsSL \
-      --retry 10 --retry-all-errors --retry-delay 4 \
-      --connect-timeout 30 --max-time 1800 \
-      -o "$out" "$u"; then return 0; fi
-    echo "  ⚠️  失败，回退下一源"
-  done
-  echo "❌ 全部下载源失败：$out"; return 1
-}
 
 # 跨平台解引用拷贝：macOS 自带 BSD cp 无 -a（用 -pRL 跟随符号链接），GNU cp 用 -aL
 # 必须 "$@" 透传——调用方有 glob 多文件展开（v2.1.1 实证 $1/$2 只拷首文件致 node.exe 丢失）
@@ -132,7 +118,7 @@ case "$PLATFORM-$ARCH" in
   win-x64)   NODE_DIST="node-v${NODE_VER}-win-x64.zip" ;;
   *) echo "❌ 不支持的平台组合 $PLATFORM-$ARCH"; exit 1 ;;
 esac
-fetch "$STAGE/$NODE_DIST" \
+workloom_fetch_verified "$STAGE/$NODE_DIST" "$NODE_DIST" \
   "https://nodejs.org/dist/v${NODE_VER}/${NODE_DIST}" \
   "https://npmmirror.com/mirrors/node/v${NODE_VER}/${NODE_DIST}"
 mkdir -p "$OUT/node" "$STAGE/node"
@@ -152,7 +138,8 @@ echo "→ PostgreSQL + pgvector…"
 mkdir -p "$OUT/pg"
 if [ "$PLATFORM" = "mac" ]; then
   # Postgres.app 2.9.6-17 为 universal 二进制（arm64+x86_64 通吃）
-  fetch "$STAGE/pg.dmg" "https://github.com/PostgresApp/PostgresApp/releases/download/v2.9.6/Postgres-${PGAPP_VER}.dmg"
+  PGAPP_DIST="Postgres-${PGAPP_VER}.dmg"
+  workloom_fetch_verified "$STAGE/pg.dmg" "$PGAPP_DIST" "https://github.com/PostgresApp/PostgresApp/releases/download/v2.9.6/${PGAPP_DIST}"
   hdiutil attach -nobrowse -mountpoint "$STAGE/mnt" "$STAGE/pg.dmg" >/dev/null
   copy "$STAGE/mnt/Postgres.app/Contents/Versions/17/bin" "$OUT/pg/bin"
   copy "$STAGE/mnt/Postgres.app/Contents/Versions/17/lib" "$OUT/pg/lib"
@@ -163,11 +150,13 @@ if [ "$PLATFORM" = "mac" ]; then
 else
   # Windows：vendor/pg-win（与 pgvector 编译底座同源 EDB 全量树，82139ce 口径）+ CI 预编译 pgvector
   [ -f "vendor/pg-win/bin/postgres.exe" ] || { echo "❌ 缺 vendor/pg-win——先跑 scripts/build-pgvector-win.ps1"; exit 1; }
+  node scripts/release-assets.mjs verify-windows-pg-provenance vendor/pg-win/WORKLOOM-PROVENANCE.txt
   copy vendor/pg-win/bin "$OUT/pg/bin"
   copy vendor/pg-win/lib "$OUT/pg/lib"
   copy vendor/pg-win/share "$OUT/pg/share"
   PV="vendor/pgvector-win"
   [ -f "$PV/lib/vector.dll" ] || { echo "❌ 缺 $PV/lib/vector.dll——先跑 scripts/build-pgvector-win.ps1"; exit 1; }
+  node scripts/release-assets.mjs verify-windows-pg-provenance "$PV/WORKLOOM-PROVENANCE.txt"
   cp "$PV/lib/vector.dll" "$OUT/pg/lib/"
   cp "$PV"/share/extension/vector.control "$OUT/pg/share/extension/"
   cp "$PV"/share/extension/vector--*.sql "$OUT/pg/share/extension/"
@@ -182,7 +171,7 @@ case "$PLATFORM-$ARCH" in
   mac-x64)   NATS_DIST="nats-server-${NATS_VER}-darwin-amd64.tar.gz" ;;
   win-x64)   NATS_DIST="nats-server-${NATS_VER}-windows-amd64.zip" ;;
 esac
-fetch "$STAGE/$NATS_DIST" "https://github.com/nats-io/nats-server/releases/download/${NATS_VER}/${NATS_DIST}"
+workloom_fetch_verified "$STAGE/$NATS_DIST" "$NATS_DIST" "https://github.com/nats-io/nats-server/releases/download/${NATS_VER}/${NATS_DIST}"
 if [[ "$NATS_DIST" == *.zip ]]; then
   unzip -qo "$STAGE/$NATS_DIST" -d "$STAGE/nats-x"
   cp "$STAGE/nats-x/nats-server-${NATS_VER}-windows-amd64/nats-server.exe" "$OUT/nats/"

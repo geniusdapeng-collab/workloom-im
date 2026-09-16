@@ -167,7 +167,9 @@ jobs:
             > 客户端完全自包含（内嵌 Node 24 + PostgreSQL 17 + pgvector + 事件总线），无需安装任何依赖、不打开外部浏览器。
 
   windows:
-    runs-on: windows-latest
+    # windows-latest/Windows 2025 预装 PG17，来源不在发行锁内；脚本会 fail-closed。
+    # 固定到不预装 PG17 的镜像，随后只从 release-assets.json 锁定源安装 17.2.0。
+    runs-on: windows-2022
     env:
       WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
       WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}

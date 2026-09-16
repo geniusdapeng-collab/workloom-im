@@ -12,6 +12,7 @@
 # ============================================================
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source scripts/release-assets.sh
 
 VERSION="v1.1.0"
 ARCH="arm64"
@@ -27,7 +28,12 @@ done
 
 NODE_VER="24.19.0"
 PGAPP_VER="2.9.6-17"
-NODE_TARBALL="node-v${NODE_VER}-darwin-${ARCH}.tar.gz"
+case "$ARCH" in
+  arm64) NODE_ARCH="arm64" ;;
+  x86_64|x64) NODE_ARCH="x64" ;;
+  *) echo "❌ 未知 arch $ARCH"; exit 1 ;;
+esac
+NODE_TARBALL="node-v${NODE_VER}-darwin-${NODE_ARCH}.tar.gz"
 NODE_URL="https://nodejs.org/dist/v${NODE_VER}/${NODE_TARBALL}"
 PGAPP_URL="https://github.com/PostgresApp/PostgresApp/releases/download/v2.9.6/Postgres-${PGAPP_VER}.dmg"
 
@@ -80,7 +86,7 @@ done
 
 # 4. Node darwin 官方二进制
 echo "→ Node $NODE_VER darwin-${ARCH}…"
-curl -sfL --retry 4 -o "$STAGE/$NODE_TARBALL" "$NODE_URL"
+workloom_fetch_verified "$STAGE/$NODE_TARBALL" "$NODE_TARBALL" "$NODE_URL"
 mkdir -p "$APP/Contents/Resources/node"
 tar xzf "$STAGE/$NODE_TARBALL" -C "$APP/Contents/Resources/node" --strip-components=1
 
@@ -91,7 +97,7 @@ if [ "$STRUCTURE_ONLY" = "1" ]; then
   printf 'structure-only placeholder\n' > "$APP/Contents/Resources/pg/PLACEHOLDER-NOT-FOR-RELEASE"
 else
   echo "→ Postgres.app ${PGAPP_VER}（内置 pgvector 0.8.6）…"
-  curl -sfL --retry 4 -o "$STAGE/pg.dmg" "$PGAPP_URL"
+  workloom_fetch_verified "$STAGE/pg.dmg" "Postgres-${PGAPP_VER}.dmg" "$PGAPP_URL"
   hdiutil attach -nobrowse -mountpoint "$STAGE/mnt" "$STAGE/pg.dmg" >/dev/null
   mkdir -p "$APP/Contents/Resources/pg"
   copy "$STAGE/mnt/Postgres.app/Contents/Versions/17/bin" "$APP/Contents/Resources/pg/bin"
@@ -114,7 +120,8 @@ if [ "$STRUCTURE_ONLY" = "1" ]; then
 ' > "$APP/Contents/Resources/nats/PLACEHOLDER-NOT-FOR-RELEASE"
 else
   echo "→ nats-server ${NATS_VER} darwin-${NATS_ARCH}…"
-  curl -sfL --retry 4 -o "$STAGE/nats.tgz" "https://github.com/nats-io/nats-server/releases/download/${NATS_VER}/nats-server-${NATS_VER}-darwin-${NATS_ARCH}.tar.gz"
+  NATS_DIST="nats-server-${NATS_VER}-darwin-${NATS_ARCH}.tar.gz"
+  workloom_fetch_verified "$STAGE/nats.tgz" "$NATS_DIST" "https://github.com/nats-io/nats-server/releases/download/${NATS_VER}/${NATS_DIST}"
   tar -xzf "$STAGE/nats.tgz" -C "$STAGE"
   mkdir -p "$APP/Contents/Resources/nats"
   cp "$STAGE/nats-server-${NATS_VER}-darwin-${NATS_ARCH}/nats-server" "$APP/Contents/Resources/nats/"
