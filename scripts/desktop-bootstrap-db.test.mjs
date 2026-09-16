@@ -1,16 +1,30 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, posix, win32 } from "node:path";
 import { describe, it } from "node:test";
 import {
   bootstrapDatabase,
   isDirectExecution,
   readDesktopDatabaseConfig,
 } from "./desktop-bootstrap-db.mjs";
+import { isStrictPathWithin } from "./path-containment.mjs";
 
 const SYSTEM_IDENTIFIER = "7654321098765432109";
 const POSTMASTER_START_TIME = "2026-09-16 16:52:18.418+00";
+
+describe("客户端投影路径围栏", () => {
+  it("同时接受 POSIX 与 Windows 的目录分隔符", () => {
+    assert.equal(isStrictPathWithin("/repo/bundles/ai-pm", "/repo/bundles/ai-pm/service-front/client.json", posix), true);
+    assert.equal(isStrictPathWithin("D:\\repo\\bundles\\ai-pm", "D:\\repo\\bundles\\ai-pm\\service-front\\client.json", win32), true);
+  });
+
+  it("拒绝同目录、父目录逃逸和 Windows 跨盘路径", () => {
+    assert.equal(isStrictPathWithin("/repo/bundles/ai-pm", "/repo/bundles/ai-pm", posix), false);
+    assert.equal(isStrictPathWithin("/repo/bundles/ai-pm", "/repo/bundles/other/client.json", posix), false);
+    assert.equal(isStrictPathWithin("D:\\repo\\bundles\\ai-pm", "E:\\outside\\client.json", win32), false);
+  });
+});
 
 function fixtureEnvironment(expectedDataDirectory, mode = "prepare", port = "55432") {
   return {
