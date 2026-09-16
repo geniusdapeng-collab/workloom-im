@@ -85,9 +85,9 @@ function fakeClientFactory({
           rows: [{
             current_user: this.config.user,
             database_name: this.config.database,
-            server_address: "127.0.0.1",
+            server_address: "127.0.0.1/32",
             server_port: port,
-            postmaster_start_time: POSTMASTER_START_TIME,
+            postmaster_start_time: "2026-09-16 17:52:18.418+01",
           }],
           rowCount: 1,
         };

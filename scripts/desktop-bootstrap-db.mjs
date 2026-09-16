@@ -167,13 +167,23 @@ async function connectVerifiedRoleClient({ Client, config, database, password, u
               pg_postmaster_start_time()::text AS postmaster_start_time`,
     );
     const row = result.rows?.[0];
+    const serverAddress = String(row?.server_address ?? "")
+      .replace(/^::ffff:/u, "")
+      .replace(/\/\d{1,3}$/u, "");
+    const expectedStartTime = Date.parse(postmasterStartTime);
+    const actualStartTime = Date.parse(String(row?.postmaster_start_time ?? ""));
     if (!row
         || row.current_user !== user
         || row.database_name !== database
-        || row.server_address !== config.host
+        || serverAddress !== config.host
         || Number(row.server_port) !== config.port
-        || row.postmaster_start_time !== postmasterStartTime) {
-      throw new Error(`数据库角色会话校验失败：${user} 未连接当前产品实例`);
+        || !Number.isFinite(expectedStartTime)
+        || actualStartTime !== expectedStartTime) {
+      throw new Error(
+        `数据库角色会话校验失败：${user} 未连接当前产品实例`
+        + `（角色=${String(row?.current_user ?? "未知")}，数据库=${String(row?.database_name ?? "未知")}`
+        + `，地址=${serverAddress || "未知"}，端口=${String(row?.server_port ?? "未知")}）`,
+      );
     }
     return client;
   } catch (error) {
