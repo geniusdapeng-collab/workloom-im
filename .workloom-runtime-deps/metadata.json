@@ -80,7 +80,7 @@
     },
     {
       "path": "scripts/runtime-deps-lock.mjs",
-      "sha256": "b7152636ea4542a086027afbbbc42c918c3d3f70c39fce1c4aebccaed70df9a4"
+      "sha256": "9c92b6251ed3e64b983c72f730219e999d15f806d1ef996f36cd38f663f6527f"
     }
   ],
   "manifestSha256": "bae08a229cce26438b95966696c66e9e7e285b3dcf6885dc475ecb490faebefb",

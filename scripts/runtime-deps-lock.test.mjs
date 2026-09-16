@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  runtimeInputSha256,
   verifyInstalledRuntimeTarget,
   verifyRuntimeDepsLock,
   verifyRuntimePackageLock,
@@ -51,6 +52,12 @@ function writePackage(root, path, value) {
   mkdirSync(directory, { recursive: true });
   writeFileSync(join(directory, "package.json"), `${JSON.stringify(value)}\n`);
 }
+
+test("运行依赖锁输入摘要忽略 Git 工作树 LF/CRLF 差异", () => {
+  const lf = "lockfileVersion: '9.0'\nimporters:\n";
+  assert.equal(runtimeInputSha256(lf), runtimeInputSha256(lf.replaceAll("\n", "\r\n")));
+  assert.notEqual(runtimeInputSha256(lf), runtimeInputSha256(lf.replace("\n", "\r")));
+});
 
 test("仓库提交的每产品 runtime lock 与当前依赖输入完全一致", () => {
   const expected = loadProductRuntime(REPOSITORY_ROOT);
