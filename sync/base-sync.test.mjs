@@ -600,6 +600,10 @@ test("v12 scope 明确保护产品身份、仓级发布器、同步认证、产�
   assert.ok(Object.values(scope.acceptedBaseSecretScanFindings).every((entry) => (
     /^[0-9a-f]{64}$/.test(entry.sha256) && entry.findings.length > 0 && entry.reason.length > 0
   )));
+  assert.deepEqual(scope.acceptedBaseSecretScanFindings["scripts/release-gate.ts"].findings, [
+    { rule: "credential-in-url", line: 21 },
+    { rule: "credential-in-url", line: 22 },
+  ]);
   assert.ok(scope.exclude.includes("apps/server/src/industry/**"));
   assert.ok(scope.exclude.includes("apps/server/src/service/adapters/**"));
   assert.equal(scope.registryCapabilities[0].distribution, "stable-github-release-upgrade-pr");

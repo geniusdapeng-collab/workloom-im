@@ -168,8 +168,11 @@
     },
     "scripts/release-gate.ts": {
       "sha256": "7607c5730a95e6dee0ba7dd335bba776a7a17d1148a5fa375127eb0eaaa0e982",
-      "findings": [{ "rule": "credential-in-url", "line": 22 }],
-      "reason": "发布门禁新增的 owner 连接串是仓库 docker-compose 中公开的本机测试库默认值；生产连接仍只能来自环境变量。"
+      "findings": [
+        { "rule": "credential-in-url", "line": 21 },
+        { "rule": "credential-in-url", "line": 22 }
+      ],
+      "reason": "发布门禁的 app / owner 连接串均为仓库 docker-compose 中公开的本机测试库默认值；生产连接仍只能来自环境变量。"
     }
   },
 
