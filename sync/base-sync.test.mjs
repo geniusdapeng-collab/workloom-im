@@ -534,10 +534,18 @@ test("v13 scope 明确保护产品身份、仓级发布器、桌面发布封口�
   const ci = readFileSync(join(REAL_BASE, ".github/workflows/ci.yml"), "utf8");
   assert.equal(scope.version, 13);
   assert.equal(scope.desktopReleaseCapability.finalizer, "scripts/desktop-release-finalizer.mjs");
+  assert.equal(scope.desktopReleaseCapability.consumerWorkflow, ".github/workflows/build-desktop.yml");
+  assert.equal(
+    scope.desktopReleaseCapability.distribution,
+    "base-sync-script-plus-reviewed-workflow-upgrade-pr",
+  );
   assert.deepEqual(scope.desktopReleaseCapability.evidenceAssets, [
     "WorkLoom-SHA512SUMS.txt",
     "WorkLoom-release-manifest.json",
   ]);
+  assert.ok(scope.include.includes("scripts/**"));
+  assert.ok(!scope.exclude.includes("scripts/desktop-release-finalizer.mjs"));
+  assert.ok(existsSync(join(REAL_BASE, scope.desktopReleaseCapability.finalizer)));
   assert.ok(scope.protectedChildAssets.files.includes("electron-builder.yml"));
   assert.ok(scope.protectedChildAssets.files.includes("product.manifest.json"));
   assert.ok(scope.exclude.includes("electron-builder.yml"));
