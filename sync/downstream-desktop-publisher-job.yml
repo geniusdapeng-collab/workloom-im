@@ -1,0 +1,236 @@
+# WorkLoom 下游桌面正式发行的唯一写入 job 模板。
+#
+# 消费约束：调用工作流必须提供 preflight/macos/windows 三个 job；两个平台 job 先用
+# scripts/desktop-release-finalizer.mjs seal-platform 生成同一 run/attempt 的候选 Artifact。
+# 本 job 刻意不 checkout、不安装依赖、不执行仓库脚本；contents:write 只接触已验真的候选字节。
+publish-desktop-release:
+  needs: [preflight, macos, windows]
+  runs-on: ubuntu-latest
+  permissions:
+    actions: read
+    contents: write
+  steps:
+    - name: 解析同一 run 最近的双平台候选
+      id: candidates
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        RELEASE_SHA: ${{ needs.preflight.outputs.release-sha }}
+      run: |
+        set -euo pipefail
+        gh api --paginate --slurp \
+          "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100" > "$RUNNER_TEMP/artifacts-pages.json"
+        node - "$RUNNER_TEMP/artifacts-pages.json" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$RELEASE_SHA" >> "$GITHUB_OUTPUT" <<'NODE'
+        const fs = require("node:fs");
+        const [file, runIdText, attemptText, releaseSha] = process.argv.slice(2);
+        const pages = JSON.parse(fs.readFileSync(file, "utf8"));
+        const artifacts = pages.flatMap((page) => page.artifacts ?? []);
+        const runId = Number(runIdText);
+        const maxAttempt = Number(attemptText);
+        for (const platform of ["macos", "windows"]) {
+          const prefix = `desktop-${platform}-candidate-${runId}-`;
+          const candidates = artifacts
+            .filter((artifact) => artifact.name?.startsWith(prefix) && !artifact.expired)
+            .map((artifact) => ({
+              id: artifact.id,
+              attempt: Number(artifact.name.slice(prefix.length)),
+              headSha: artifact.workflow_run?.head_sha,
+            }))
+            .filter((artifact) => Number.isInteger(artifact.attempt) && artifact.attempt <= maxAttempt)
+            .sort((left, right) => right.attempt - left.attempt);
+          if (!candidates.length) throw new Error(`${platform}: 同一 run 没有有效候选`);
+          if (candidates[0].headSha && candidates[0].headSha !== releaseSha) {
+            throw new Error(`${platform}: 候选提交与发布提交不一致`);
+          }
+          process.stdout.write(`${platform}-id=${candidates[0].id}\n`);
+        }
+        NODE
+
+    - name: 下载 macOS 候选
+      uses: actions/download-artifact@v4
+      with:
+        artifact-ids: ${{ steps.candidates.outputs.macos-id }}
+        path: ${{ runner.temp }}/desktop-candidate/macos
+
+    - name: 下载 Windows 候选
+      uses: actions/download-artifact@v4
+      with:
+        artifact-ids: ${{ steps.candidates.outputs.windows-id }}
+        path: ${{ runner.temp }}/desktop-candidate/windows
+
+    - name: 草稿封存、五资产核验并正式发布
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        RELEASE_TAG: ${{ needs.preflight.outputs.release-tag }}
+        RELEASE_SHA: ${{ needs.preflight.outputs.release-sha }}
+        PLATFORM_SIGNING: ${{ needs.preflight.outputs.platform-signing }}
+      run: |
+        set -euo pipefail
+        ROOT="$RUNNER_TEMP/desktop-candidate"
+        ASSET_DIR="$ROOT/release-assets"
+        REMOTE_DIR="$ROOT/remote-assets"
+        FINALIZER="$RUNNER_TEMP/workloom-inline-release-finalizer.mjs"
+        mkdir -p "$ASSET_DIR" "$REMOTE_DIR"
+
+        cat > "$FINALIZER" <<'NODE'
+        import { constants, copyFileSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+        import { createHash } from "node:crypto";
+        import { basename, join } from "node:path";
+
+        const CHECKSUM = "WorkLoom-SHA512SUMS.txt";
+        const RELEASE_MANIFEST = "WorkLoom-release-manifest.json";
+        const [command, directory, output, tag, sha, signing, repository] = process.argv.slice(2);
+        const fail = (message) => { throw new Error(message); };
+        const digest = (file) => createHash("sha512").update(readFileSync(file)).digest("hex");
+        const files = (root) => readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => entry.name).sort();
+        const record = (root, name) => {
+          const size = statSync(join(root, name)).size;
+          if (!(size > 0)) fail(`${name} 不能为空`);
+          return { name, size, sha512: digest(join(root, name)) };
+        };
+        const identity = (manifest, label) => {
+          if (manifest.schemaVersion !== 1 || manifest.product !== repository || manifest.tag !== tag
+            || manifest.sha !== sha || manifest.platformSigning !== signing) fail(`${label} 身份不匹配`);
+        };
+        const installers = (root, platform) => {
+          const names = files(root);
+          const patterns = platform === "macos" ? [/-mac-arm64\.dmg$/u, /-mac-x64\.dmg$/u] : [/-win-x64\.exe$/u];
+          return patterns.map((pattern) => {
+            const matches = names.filter((name) => pattern.test(name));
+            if (matches.length !== 1) fail(`${platform} ${pattern} 必须唯一`);
+            return matches[0];
+          });
+        };
+        const verifyRelease = (root) => {
+          const names = files(root);
+          const manifest = JSON.parse(readFileSync(join(root, RELEASE_MANIFEST), "utf8"));
+          identity(manifest, RELEASE_MANIFEST);
+          const expectedInstallers = [...installers(root, "macos"), ...installers(root, "windows")];
+          const expected = [...expectedInstallers, CHECKSUM, RELEASE_MANIFEST].sort();
+          if (names.length !== 5 || JSON.stringify(names) !== JSON.stringify(expected)) fail("正式资产集必须精确为五项");
+          if (!Array.isArray(manifest.assets) || manifest.assets.length !== 3) fail("发布清单必须精确记录三份安装包");
+          const lines = readFileSync(join(root, CHECKSUM), "utf8").trimEnd().split("\n");
+          if (lines.length !== 3) fail("SHA512SUMS 必须精确记录三份安装包");
+          for (const name of expectedInstallers) {
+            const actual = record(root, name);
+            const rows = manifest.assets.filter((asset) => asset.name === name);
+            if (rows.length !== 1 || rows[0].size !== actual.size || rows[0].sha512 !== actual.sha512) fail(`${name} 清单证据不一致`);
+            if (lines.filter((line) => line === `${actual.sha512}  ${name}`).length !== 1) fail(`${name} 校验表记录不唯一`);
+          }
+        };
+
+        if (!/^v\d+\.\d+\.\d+$/u.test(tag) || !/^[0-9a-f]{40}$/u.test(sha)
+          || !["signed", "unsigned"].includes(signing) || !/^[^/]+\/[^/]+$/u.test(repository)) fail("发布身份参数无效");
+        if (command === "assemble") {
+          const all = [];
+          for (const [platform, manifestName] of [["macos", "desktop-macos-manifest.json"], ["windows", "desktop-windows-manifest.json"]]) {
+            const root = join(directory, platform);
+            const names = installers(root, platform);
+            const expectedFiles = [...names, manifestName].sort();
+            if (JSON.stringify(files(root)) !== JSON.stringify(expectedFiles)) fail(`${platform} 候选资产集不精确`);
+            const manifest = JSON.parse(readFileSync(join(root, manifestName), "utf8"));
+            identity(manifest, manifestName);
+            if (manifest.platform !== platform || !Array.isArray(manifest.assets) || manifest.assets.length !== names.length) fail(`${manifestName} 平台或数量错误`);
+            for (const name of names) {
+              const actual = record(root, name);
+              const rows = manifest.assets.filter((asset) => asset.name === name);
+              if (rows.length !== 1 || rows[0].size !== actual.size || rows[0].sha512 !== actual.sha512) fail(`${manifestName}: ${name} 证据不一致`);
+              copyFileSync(join(root, name), join(output, name), constants.COPYFILE_EXCL);
+              all.push(actual);
+            }
+          }
+          writeFileSync(join(output, RELEASE_MANIFEST), `${JSON.stringify({ schemaVersion: 1, product: repository, tag, sha, platformSigning: signing, assets: all }, null, 2)}\n`);
+          writeFileSync(join(output, CHECKSUM), `${all.map((asset) => `${asset.sha512}  ${asset.name}`).join("\n")}\n`);
+          verifyRelease(output);
+        } else if (command === "verify") {
+          verifyRelease(directory);
+        } else {
+          fail("未知封口命令");
+        }
+        NODE
+
+        node "$FINALIZER" assemble "$ROOT" "$ASSET_DIR" "$RELEASE_TAG" "$RELEASE_SHA" "$PLATFORM_SIGNING" "$GITHUB_REPOSITORY"
+
+        resolve_remote_tag() {
+          local object_type object_sha ref_json tag_json depth=0
+          ref_json="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}")"
+          object_type="$(node -e 'const r=JSON.parse(process.argv[1]);process.stdout.write(r.object?.type??"")' "$ref_json")"
+          object_sha="$(node -e 'const r=JSON.parse(process.argv[1]);process.stdout.write(r.object?.sha??"")' "$ref_json")"
+          while [ "$object_type" = "tag" ]; do
+            depth=$((depth + 1)); test "$depth" -le 8
+            tag_json="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${object_sha}")"
+            object_type="$(node -e 'const r=JSON.parse(process.argv[1]);process.stdout.write(r.object?.type??"")' "$tag_json")"
+            object_sha="$(node -e 'const r=JSON.parse(process.argv[1]);process.stdout.write(r.object?.sha??"")' "$tag_json")"
+          done
+          test "$object_type" = commit
+          printf '%s\n' "$object_sha"
+        }
+        test "$(resolve_remote_tag)" = "$RELEASE_SHA" || { echo "❌ 发布前标签发生漂移"; exit 1; }
+        if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          echo "❌ 目标 Release 已存在；不可变正式版本不得复用"
+          exit 1
+        fi
+
+        if [ "$PLATFORM_SIGNING" = "signed" ]; then
+          TRUST_NOTE="本版本已完成 Apple Developer ID、公证与 Windows Authenticode 签名。"
+        else
+          TRUST_NOTE="本版本未做 Apple/Windows 平台代码签名，未做 Apple 公证；内部行业 Bundle 仍已通过 Ed25519 信任环校验。macOS 首次打开可能需要解除隔离，Windows 可能显示 SmartScreen 提示。"
+        fi
+        printf '%s\n\n%s\n\n%s\n' "## 安装说明" "$TRUST_NOTE" \
+          "固定下载页 /releases/latest 提供 Mac arm64、Mac x64 与 Windows x64 三个平台安装包，并附 SHA-512 校验表和发布清单。" \
+          > "$RUNNER_TEMP/release-notes.md"
+
+        gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+          --verify-tag --target "$RELEASE_SHA" --draft --latest=false \
+          --title "${GITHUB_REPOSITORY#*/} $RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
+        gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+          --json tagName,targetCommitish,isDraft,isPrerelease,assets > "$RUNNER_TEMP/draft.json"
+        node - "$RUNNER_TEMP/draft.json" "$RELEASE_TAG" "$RELEASE_SHA" <<'NODE'
+        const fs = require("node:fs");
+        const [file, tag, sha] = process.argv.slice(2), release = JSON.parse(fs.readFileSync(file, "utf8"));
+        if (release.tagName !== tag || release.targetCommitish !== sha || !release.isDraft || release.isPrerelease) throw new Error("草稿身份或状态错误");
+        if ((release.assets ?? []).length !== 0) throw new Error("新草稿必须从空资产集开始");
+        NODE
+
+        ASSETS=("$ASSET_DIR"/*)
+        test "${#ASSETS[@]}" -eq 5
+        gh release upload "$RELEASE_TAG" "${ASSETS[@]}" --repo "$GITHUB_REPOSITORY"
+        gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+          --json tagName,targetCommitish,isDraft,isPrerelease,assets > "$RUNNER_TEMP/uploaded.json"
+        node - "$RUNNER_TEMP/uploaded.json" "$RELEASE_TAG" "$RELEASE_SHA" "$ASSET_DIR" <<'NODE'
+        const fs = require("node:fs");
+        const [file, tag, sha, dir] = process.argv.slice(2), release = JSON.parse(fs.readFileSync(file, "utf8"));
+        const expected = fs.readdirSync(dir).sort(), assets = release.assets ?? [], names = assets.map((asset) => asset.name).sort();
+        if (release.tagName !== tag || release.targetCommitish !== sha || !release.isDraft || release.isPrerelease) throw new Error("上传后草稿身份或状态错误");
+        if (expected.length !== 5 || JSON.stringify(names) !== JSON.stringify(expected)) throw new Error("草稿必须精确包含五项资产");
+        if (assets.some((asset) => asset.state !== "uploaded" || !(asset.size > 0))) throw new Error("草稿存在未完成或空资产");
+        NODE
+
+        for asset in "${ASSETS[@]}"; do
+          name="$(basename "$asset")"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir "$REMOTE_DIR"
+          cmp -s "$asset" "$REMOTE_DIR/$name" || { echo "❌ 远端资产与候选字节不一致：$name"; exit 1; }
+        done
+        node "$FINALIZER" verify "$REMOTE_DIR" unused "$RELEASE_TAG" "$RELEASE_SHA" "$PLATFORM_SIGNING" "$GITHUB_REPOSITORY"
+
+        gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest=true
+        PROVEN=false
+        for attempt in $(seq 1 12); do
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json tagName,targetCommitish,isDraft,isPrerelease,isLatest,isImmutable,assets > "$RUNNER_TEMP/public.json"
+          if node - "$RUNNER_TEMP/public.json" "$RELEASE_TAG" "$RELEASE_SHA" "$ASSET_DIR" <<'NODE'
+        const fs = require("node:fs");
+        const [file, tag, sha, dir] = process.argv.slice(2), release = JSON.parse(fs.readFileSync(file, "utf8"));
+        const expected = fs.readdirSync(dir).sort(), assets = release.assets ?? [], names = assets.map((asset) => asset.name).sort();
+        if (release.tagName !== tag || release.targetCommitish !== sha || release.isDraft || release.isPrerelease) process.exit(1);
+        if (!release.isLatest || !release.isImmutable || JSON.stringify(names) !== JSON.stringify(expected)) process.exit(1);
+        if (assets.some((asset) => asset.state !== "uploaded" || !(asset.size > 0))) process.exit(1);
+        NODE
+          then
+            PROVEN=true
+            break
+          fi
+          sleep 5
+        done
+        test "$PROVEN" = "true" || { echo "❌ 公开版本未进入 Latest + immutable 完整状态"; exit 1; }

@@ -63,12 +63,20 @@
   "desktopReleaseCapability": {
     "consumerWorkflow": ".github/workflows/build-desktop.yml",
     "finalizer": "scripts/desktop-release-finalizer.mjs",
+    "publisherTemplate": "sync/downstream-desktop-publisher-job.yml",
+    "buildRuntime": {
+      "nodeVersion": "24.19.0",
+      "npmVersion": "11.17.0",
+      "nodeSource": "scripts/release-assets.json",
+      "npmSource": ".workloom-runtime-deps/metadata.json",
+      "setupNodePolicy": "exact-version-only"
+    },
     "platformCandidates": ["macos", "windows"],
     "installerDiscovery": ["*-mac-arm64.dmg", "*-mac-x64.dmg", "*-win-x64.exe"],
     "evidenceAssets": ["WorkLoom-SHA512SUMS.txt", "WorkLoom-release-manifest.json"],
     "distribution": "base-sync-script-plus-reviewed-workflow-upgrade-pr",
     "publisherInvariant": "platform jobs are read-only; one publisher seals a draft, verifies five assets, then promotes Latest",
-    "comment": "桌面正式发布封口器从各仓 electron-builder.yml 已生成的真实 artifactName 发现三平台安装包，不维护产品名称表。行业身份由 github.repository、稳定 tag、精确提交和签名模式注入；平台 job 只能上传同一 run 的候选，唯一发布 job 才能写 Release。"
+    "comment": "桌面正式发布封口器从各仓 electron-builder.yml 已生成的真实 artifactName 发现三平台安装包，不维护产品名称表。行业身份由 github.repository、稳定 tag、精确提交和签名模式注入；平台 job 只能上传同一 run 的候选，唯一发布 job 才能写 Release。setup-node 必须使用 buildRuntime.nodeVersion 精确值，禁止 24 等浮动主版本，否则 Node 随附 npm 会与 runtime lock 漂移。"
   },
 
   "requiredRootAssets": {
