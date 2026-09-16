@@ -10,6 +10,10 @@ const workflowUrl = new URL("../.github/workflows/desktop-production-release.yml
 const source = readFileSync(workflowUrl, "utf8");
 const statePolicy = readFileSync(new URL("./desktop-release-state.mjs", import.meta.url), "utf8");
 const workflow = YAML.parse(source);
+const downstreamPublisher = YAML.parse(readFileSync(
+  new URL("../sync/downstream-desktop-publisher-job.yml", import.meta.url),
+  "utf8",
+))["publish-desktop-release"];
 
 function job(name) {
   const value = workflow.jobs?.[name];
@@ -20,6 +24,12 @@ function job(name) {
 function stepByName(jobName, name) {
   const step = job(jobName).steps?.find((entry) => entry.name === name);
   assert.ok(step, `${jobName}: missing step ${name}`);
+  return step;
+}
+
+function downstreamPublisherStep(name) {
+  const step = downstreamPublisher.steps?.find((entry) => entry.name === name);
+  assert.ok(step, `downstream publisher: missing step ${name}`);
   return step;
 }
 
@@ -377,6 +387,15 @@ test("candidate artifacts support partial reruns without crossing the workflow r
   }
   assert.match(JSON.stringify(job("macos")), /diagnostics-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/u);
   assert.match(JSON.stringify(job("windows")), /diagnostics-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/u);
+});
+
+test("downstream publisher flattens selected artifacts into the exact finalizer input directories", () => {
+  for (const name of ["下载 macOS 候选", "下载 Windows 候选"]) {
+    const step = downstreamPublisherStep(name);
+    assert.equal(step.uses, "actions/download-artifact@v4");
+    assert.equal(step.with["merge-multiple"], true);
+    assert.equal(step.with.name, undefined);
+  }
 });
 
 test("the actual inline writer state machine survives rollback and immutability mutations", () => {
