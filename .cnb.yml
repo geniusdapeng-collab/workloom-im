@@ -186,12 +186,10 @@
         set -eu
         pnpm suite
 
-# 注意：ui-gate 当前为「显式非阻断」（allowFailure）。
-# 原因：CNB 环境下 15 条用例通过 14 条，仅 `三端静态视觉基线` 因跨环境字体渲染差异失败；
-# 视觉基线需在 CNB 同一环境重新生成后才可转为必需检查。此处不使用静默跳过，失败仍会显红。
+# ui-gate：三端响应式/视觉/无障碍门禁。
+# 2026-09-18 起 Linux 视觉基线已在同一 CNB 镜像内重生成并入仓，故转为必需检查（不再 allowFailure）。
 .ui-gate: &ui_gate
   name: ui-gate
-  allowFailure: true
   docker:
     image: pgvector/pgvector:pg17
     volumes:
