@@ -101,13 +101,8 @@
       - /cnb-cache/pnpm-store:copy-on-write
       - /cnb-cache/node:copy-on-write
   env:
-    # 与 .github/workflows/ci.yml 的 job env 逐项对齐（DB 集成测试依赖这些连接串与角色口令）
-    DATABASE_URL: postgres://postgres:workloom@localhost:5432/workloom
-    DATABASE_APP_URL: postgres://workloom_app:workloom_dev_app@localhost:5432/workloom
-    DATABASE_GATEWAY_URL: postgres://workloom_gateway:workloom_dev_gateway@localhost:5432/workloom
-    APP_DB_PASSWORD: workloom_dev_app
-    GATEWAY_DB_PASSWORD: workloom_dev_gateway
-    JWT_SECRET: ci-gate-secret
+    # DB 连接串与角色口令不写死在这里（会被基座增量秘密扫描拦截为 credential-in-url）：
+    # 统一从 .env.example 派生的 .env 读取，见「迁移 + 种子」与各测试阶段开头的 set -a / . ./.env
     LLM_PROVIDER: mock
     IM_DRIVER: mock
     RUN_DB_TESTS: "1"
@@ -157,6 +152,7 @@
       script: |
         set -eu
         cp .env.example .env
+        set -a; . ./.env; set +a
         pnpm db:migrate
         pnpm db:seed:aipm
         pnpm db:seed:aipm:verify-idempotence
@@ -170,6 +166,7 @@
 
     - name: 基座单元与集成测试（DB 集成全开）
       script: |
+        set -a; . ./.env; set +a
         set -eu
         pnpm -C packages/shared test
         pnpm -C packages/base test
@@ -179,11 +176,13 @@
       env:
         SERVICE_C_TEST_WORKSPACE_ID: ws-yunqi
       script: |
+        set -a; . ./.env; set +a
         set -eu
         pnpm -C apps/server test
 
     - name: 全场景套件
       script: |
+        set -a; . ./.env; set +a
         set -eu
         pnpm suite
 
