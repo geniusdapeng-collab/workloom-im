@@ -20,7 +20,7 @@ const SCRIPT_ROOT = dirname(fileURLToPath(import.meta.url));
 const GOVERNANCE_FILES = ["verify-ui-consumer.mjs", "ui-governance-rules.mjs"];
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 const UI_VERSION = "1.2.3";
-const UI_URL = `https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v${UI_VERSION}/workloom-ui-${UI_VERSION}.tgz`;
+const UI_URL = `https://cnb.cool/workloom-ai/workloom-im/-/releases/download/ui-v${UI_VERSION}/workloom-ui-${UI_VERSION}.tgz`;
 const UI_SHA512 = `sha512-${Buffer.alloc(64, 7).toString("base64")}`;
 const PNPM_10_CLI = process.env.WORKLOOM_PNPM_10_CLI;
 const PNPM_COMMAND = PNPM_10_CLI ? process.execPath : "pnpm";
@@ -33,7 +33,7 @@ function uiState(sha512 = UI_SHA512) {
     package: "@workloom/ui",
     version: UI_VERSION,
     contractVersion: "2.0.0",
-    source: "geniusdapeng-collab/workloom-im",
+    source: "workloom-ai/workloom-im",
     updatePolicy: "upgrade-pr-only",
     releaseChannel: "stable",
     requiredClientPackages: CLIENTS.map((client) => `${client.root}/package.json`),

@@ -4,7 +4,7 @@
   "role": "base",
   "displayName": "WorkLoom 织元",
   "packageName": "workloom-im",
-  "repository": "geniusdapeng-collab/workloom-im",
+  "repository": "workloom-ai/workloom-im",
   "defaultBundle": "ai-pm",
   "demoWorkspaceSlug": "ai-pm-demo",
   "demoMemberNo": "MEM-001",

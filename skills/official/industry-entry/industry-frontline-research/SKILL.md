@@ -358,7 +358,7 @@ WorkLoom进入餐饮行业，需要深度还原餐厅店长、前厅服务员、
 
 ### A.1 前置环节：WorkLoom最新代码动态轻量读取（强制）
 
-**读取目标**：WorkLoom开源仓库 `https://github.com/geniusdapeng-collab/workloom-im`（主干即可，无需全量clone历史）。
+**读取目标**：WorkLoom开源仓库 `https://github.com/workloom-ai/workloom-im`（主干即可，无需全量clone历史）。
 
 **轻量读取清单**（按优先级，预计10-20分钟）：
 

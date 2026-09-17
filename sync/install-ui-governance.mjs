@@ -9,7 +9,7 @@ export const GOVERNANCE_TYPESCRIPT = "npm:typescript@5.9.3";
 export const GOVERNANCE_YAML = "npm:yaml@2.9.0";
 export const GOVERNANCE_STATE = ".workloom-ui-governance.json";
 const BASE_SYNC_STATE = ".workloom-base-sync.json";
-const CANONICAL_BASE_REPO = "geniusdapeng-collab/workloom-im";
+const CANONICAL_BASE_REPO = "workloom-ai/workloom-im";
 const LEGACY_SCOPE_VERSION = 8;
 export const GOVERNANCE_FILES = Object.freeze([
   "scripts/verify-ui-consumer.mjs",

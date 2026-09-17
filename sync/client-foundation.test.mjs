@@ -19,7 +19,7 @@ const integrity = (version) => `sha512-${Buffer.alloc(64, Number(version.split("
 const artifact = (version) => ({
   type: "github-release-tarball",
   assetName: `workloom-ui-${version}.tgz`,
-  url: `https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v${version}/workloom-ui-${version}.tgz`,
+  url: `https://cnb.cool/workloom-ai/workloom-im/-/releases/download/ui-v${version}/workloom-ui-${version}.tgz`,
   sha512: integrity(version),
   overrideSelector: `@workloom/ui@${version}`,
 });
@@ -27,7 +27,7 @@ const artifact = (version) => ({
 function manifest(stable = VERSION) {
   return {
     schemaVersion: 1,
-    baseRepository: "geniusdapeng-collab/workloom-im",
+    baseRepository: "workloom-ai/workloom-im",
     releasePolicy: "base-first-stable-only",
     ui: {
       package: "@workloom/ui",
@@ -38,7 +38,7 @@ function manifest(stable = VERSION) {
       allowedIndustryOverrides: ["--wl-brand-primary"],
       distribution: {
         type: "github-release-tarball",
-        urlTemplate: "https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v{version}/workloom-ui-{version}.tgz",
+        urlTemplate: "https://cnb.cool/workloom-ai/workloom-im/-/releases/download/ui-v{version}/workloom-ui-{version}.tgz",
         assetNameTemplate: "workloom-ui-{version}.tgz",
         integrityByVersion: Object.fromEntries(["1.2.2", "1.2.3", "1.2.4"].map((version) => [version, integrity(version)])),
       },
@@ -84,7 +84,7 @@ function createIndustryRepo({ role = "industry" } = {}) {
     productId: "example-industry",
     role,
     displayName: "示例行业经营系统",
-    repository: "geniusdapeng-collab/example-industry",
+    repository: "workloom-ai/example-industry",
     demoWorkspaceSlug: "example-demo",
     demoMemberNo: "MEM-X01",
     release: { appId: role === "base" ? "com.workloom.im" : "com.workloom.example" },

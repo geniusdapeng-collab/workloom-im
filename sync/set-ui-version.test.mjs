@@ -8,7 +8,7 @@ import { resolveUiReleaseArtifact, resolveUiVersion, setUiVersion } from "./set-
 const integrity = (byte) => `sha512-${Buffer.alloc(64, byte).toString("base64")}`;
 
 const manifest = {
-  baseRepository: "geniusdapeng-collab/workloom-im",
+  baseRepository: "workloom-ai/workloom-im",
   ui: {
     package: "@workloom/ui",
     contractVersion: "2.0.0",
@@ -18,7 +18,7 @@ const manifest = {
     requiredClientPackages: ["apps/web/package.json", "apps/webb/package.json", "apps/webc/package.json"],
     distribution: {
       type: "github-release-tarball",
-      urlTemplate: "https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v{version}/workloom-ui-{version}.tgz",
+      urlTemplate: "https://cnb.cool/workloom-ai/workloom-im/-/releases/download/ui-v{version}/workloom-ui-{version}.tgz",
       assetNameTemplate: "workloom-ui-{version}.tgz",
       integrityByVersion: {
         "0.1.0": integrity(1),
@@ -45,7 +45,7 @@ describe("UI 稳定版本接入", () => {
   it("只接受官方仓库、HTTPS、同版本资产名与有效 SHA-512", () => {
     const artifact = resolveUiReleaseArtifact(manifest, "1.2.3");
     assert.equal(artifact.assetName, "workloom-ui-1.2.3.tgz");
-    assert.equal(artifact.url, "https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v1.2.3/workloom-ui-1.2.3.tgz");
+    assert.equal(artifact.url, "https://cnb.cool/workloom-ai/workloom-im/-/releases/download/ui-v1.2.3/workloom-ui-1.2.3.tgz");
     assert.equal(artifact.sha512, integrity(2));
     assert.equal(artifact.overrideSelector, "@workloom/ui@1.2.3");
 
@@ -86,7 +86,7 @@ describe("UI 稳定版本接入", () => {
     assert.deepEqual(state.artifact, {
       type: "github-release-tarball",
       assetName: "workloom-ui-1.2.3.tgz",
-      url: "https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v1.2.3/workloom-ui-1.2.3.tgz",
+      url: "https://cnb.cool/workloom-ai/workloom-im/-/releases/download/ui-v1.2.3/workloom-ui-1.2.3.tgz",
       sha512: integrity(2),
     });
     const rootPackage = JSON.parse(readFileSync(join(repo, "package.json"), "utf8"));

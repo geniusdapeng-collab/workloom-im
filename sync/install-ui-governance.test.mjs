@@ -84,7 +84,7 @@ function legacyFixture({ pathPrefix = "", legacyExcludes = [] } = {}) {
   write(join(target, "package.json"), `${JSON.stringify({ name: "industry", devDependencies: {} }, null, 2)}\n`);
   for (const [path, content] of oldContents) write(join(target, path), content);
   write(join(repositoryRoot, ".workloom-base-sync.json"), `${JSON.stringify({
-    baseRepo: "geniusdapeng-collab/workloom-im",
+    baseRepo: "workloom-ai/workloom-im",
     lastSyncedBaseSha: legacyCommit,
     lastSyncMode: "required-only",
     pathPrefix: pathPrefix || ".",
@@ -237,7 +237,7 @@ test("伪造 v8 state 指向非基座祖先提交也不能取得接管授权", (
   try {
     const forgedCommit = git(fx.repositoryRoot, "rev-parse", "HEAD");
     write(join(fx.repositoryRoot, ".workloom-base-sync.json"), `${JSON.stringify({
-      baseRepo: "geniusdapeng-collab/workloom-im",
+      baseRepo: "workloom-ai/workloom-im",
       lastSyncedBaseSha: forgedCommit,
       lastSyncMode: "required-only",
       pathPrefix: ".",

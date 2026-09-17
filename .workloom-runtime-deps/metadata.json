@@ -3,7 +3,7 @@
   "product": {
     "productId": "workloom-im",
     "role": "base",
-    "repository": "geniusdapeng-collab/workloom-im",
+    "repository": "workloom-ai/workloom-im",
     "includePlatformOps": false
   },
   "npmVersion": "11.17.0",
@@ -56,7 +56,7 @@
     },
     {
       "path": "packages/ui/package.json",
-      "sha256": "684ee5e7add21831f74f03c6c9f5f816e911d3e903a9d2eadfa662c371c463e4"
+      "sha256": "780020e885f75322dc4135826138f43e329be65803bee2134c1e0b215baed85f"
     },
     {
       "path": "pnpm-lock.yaml",
@@ -64,7 +64,7 @@
     },
     {
       "path": "product.manifest.json",
-      "sha256": "fc4e0e602a17bc6d0ffb03af67f187beea92dbe3750e8d7ae8e24921c6606ce3"
+      "sha256": "cd79d5cb5627b55fb7fc2d0547e45fb5fc0c3e611adcc066b3432a20a1ea7e2d"
     },
     {
       "path": "scripts/pack-nm-merge.mjs",
@@ -72,11 +72,11 @@
     },
     {
       "path": "scripts/payload-policy.mjs",
-      "sha256": "d64c2cb3e1a4fe99476cdde438df751de98f3095a029e4d090a7ba691508650a"
+      "sha256": "be1035d6c7f1e12f739bbc8e94e97c3aa8a45c2fc38a605537f2eb18916a6118"
     },
     {
       "path": "scripts/product-runtime.mjs",
-      "sha256": "189981fad7f2fc1267564f5a5a9b8f5040d647087b845e83f7533ac88f422349"
+      "sha256": "bf8a446d4a600424b8d38189fa4cbe61a36126dc051124c71012a1ec46c439e3"
     },
     {
       "path": "scripts/runtime-deps-lock.mjs",

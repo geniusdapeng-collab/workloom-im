@@ -31,7 +31,7 @@ import { fileURLToPath } from "node:url";
 
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(SCRIPT_PATH);
-const DEFAULT_BASE_REPO = "geniusdapeng-collab/workloom-im";
+const DEFAULT_BASE_REPO = "workloom-ai/workloom-im";
 const STATE_FILE = ".workloom-base-sync.json";
 const MODULE_SOURCE_EXTENSIONS = Object.freeze([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".json"]);
 

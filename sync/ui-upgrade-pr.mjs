@@ -40,7 +40,7 @@ import { bindUiLockfileIntegrity } from "./ui-lockfile-integrity.mjs";
 const syncDir = dirname(fileURLToPath(import.meta.url));
 const baseDir = resolve(syncDir, "..");
 const EXPECTED_DOWNSTREAM_COUNT = 8;
-const CANONICAL_BASE_REPOSITORY = "geniusdapeng-collab/workloom-im";
+const CANONICAL_BASE_REPOSITORY = "workloom-ai/workloom-im";
 const RELEASE_PAYLOAD_SCHEMA = "workloom.ui-release-payload/v1";
 const RELEASE_GOVERNANCE_PAYLOAD_PATHS = Object.freeze([
   ...GOVERNANCE_FILES,

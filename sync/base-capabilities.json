@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "baseRepository": "geniusdapeng-collab/workloom-im",
+  "baseRepository": "workloom-ai/workloom-im",
   "releasePolicy": "base-first-stable-only",
   "ui": {
     "package": "@workloom/ui",
@@ -20,12 +20,13 @@
     "sourceDirectory": "packages/ui",
     "distribution": {
       "type": "github-release-tarball",
-      "urlTemplate": "https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v{version}/workloom-ui-{version}.tgz",
+      "urlTemplate": "https://cnb.cool/workloom-ai/workloom-im/-/releases/download/ui-v{version}/workloom-ui-{version}.tgz",
       "assetNameTemplate": "workloom-ui-{version}.tgz",
       "integrityByVersion": {
         "0.1.0": "sha512-0O2dJkxvzNoRQcnVH6v8o7qyWW/yYmImrNhaaUWqR/FgovwJI3sHzugAaa4mHeCERWeMihxCRX/jIY93WHW8Vw==",
-        "0.1.1": "sha512-cJu1SHORmQy/N0Tv3sJ37Ad7HjCOcOt3nreQFeMN2MaPnb/Q7GzNF6uSYmvrOUdTu2XprGCOfYLFgMUrlxo/pg=="
-      }
+        "0.1.1": "sha512-7OXEtRNRknpkd5VTb6SX4j7SZQ1cE1QGHqay7EDNpW40EXuyvJiC5wI6YLTZ4GleFP6lKKItbCLTjoc1SeTrAw=="
+      },
+      "comment": "2026-09-17 起 @workloom/ui 制品托管在 CNB Release（cnb.cool/workloom-ai/workloom-im），替代已失效的 GitHub Release tarball；type 枚举保留历史值以兼容各仓 state。"
     }
   },
   "clientFoundation": {

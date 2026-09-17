@@ -265,6 +265,56 @@
         set -a; . ./.env; set +a
         pnpm ui:e2e
 
+.ui-release: &ui_release
+  name: ui-release
+  docker:
+    image: node:24.19.0-bookworm
+    volumes:
+      - /cnb-cache/pnpm-store:copy-on-write
+  env:
+    UI_VERSION: "0.1.1"
+  stages:
+    - name: 构建并打包 @workloom/ui
+      script: |
+        set -eu
+        corepack enable
+        corepack prepare pnpm@10.14.0 --activate
+        pnpm config set store-dir /cnb-cache/pnpm-store
+        pnpm install --frozen-lockfile
+        mkdir -p dist
+        pnpm -C packages/ui build
+        (cd packages/ui && pnpm pack --pack-destination /workspace/dist)
+        ls -l /workspace/dist
+    - name: 发布到 CNB Release
+      script: |
+        set -eu
+        cat > /tmp/publish.mjs <<'JS'
+        import fs from 'node:fs';
+        const API='https://api.cnb.cool', REPO='workloom-ai/workloom-im';
+        const ver=process.env.UI_VERSION;
+        const tag=`ui-v${ver}`, asset=`workloom-ui-${ver}.tgz`;
+        const token=process.env.CNB_TOKEN;
+        const J={'Authorization':`Bearer ${token}`,'Accept':'application/json','Content-Type':'application/json'};
+        async function req(url, opts={}) {
+          const r=await fetch(url,{...opts,headers:{...J,...(opts.headers||{})}});
+          const t=await r.text();
+          if(!r.ok) throw new Error(`${r.status} ${t.slice(0,400)}`);
+          return t?JSON.parse(t):{};
+        }
+        let rel;
+        try { rel = await req(`${API}/${REPO}/-/releases/tags/${tag}`); }
+        catch { rel = await req(`${API}/${REPO}/-/releases`, {method:'POST', body: JSON.stringify({tag_name:tag,name:tag,body:'WorkLoom 织元共享 UI 制品（CNB 托管）',target_commitish:'main',draft:false,prerelease:false,make_latest:'false'})}); }
+        const buf=fs.readFileSync(`/workspace/dist/${asset}`);
+        const up=await req(`${API}/${REPO}/-/releases/${rel.id}/asset-upload-url`, {method:'POST', body: JSON.stringify({asset_name:asset,size:buf.length,overwrite:true})});
+        const put=await fetch(up.upload_url,{method:'PUT',body:buf,headers:{'Content-Type':'application/octet-stream'}});
+        if(!put.ok) throw new Error('upload '+put.status+' '+(await put.text()).slice(0,200));
+        await req(up.verify_url, {method:'POST', body:'{}'});
+        const after=await req(`${API}/${REPO}/-/releases/tags/${tag}`);
+        console.log('assets', (after.assets||[]).map(a=>`${a.name}:${a.size}`).join(', '));
+        console.log('DONE', `https://cnb.cool/${REPO}/-/releases/download/${tag}/${asset}`);
+        JS
+        node /tmp/publish.mjs
+
 main:
   push:
     - *static_gate
@@ -276,3 +326,8 @@ main:
     - *static_gate
     - *db_gate
     - *ui_gate
+
+# 发布共享 UI 制品：由 API 触发（event: api_trigger_ui_release），也可页面触发
+$:
+  api_trigger_ui_release:
+    - *ui_release

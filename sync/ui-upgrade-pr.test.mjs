@@ -40,9 +40,9 @@ const repoRoot = resolve(testDir, "..");
 const waveOrder = ["W1", "W2", "W3A", "W3B", "W4", "W5"];
 const fixtureArtifactBytes = Buffer.from("export const source = 'stable-tag';\n");
 const fixtureArtifactIntegrity = `sha512-${createHash("sha512").update(fixtureArtifactBytes).digest("base64")}`;
-const fixtureReleaseUrl = "https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v1.2.3/workloom-ui-1.2.3.tgz";
+const fixtureReleaseUrl = "https://cnb.cool/workloom-ai/workloom-im/-/releases/download/ui-v1.2.3/workloom-ui-1.2.3.tgz";
 const manifest = {
-  baseRepository: "geniusdapeng-collab/workloom-im",
+  baseRepository: "workloom-ai/workloom-im",
   releasePolicy: "base-first-stable-only",
   ui: {
     package: "@workloom/ui",
@@ -53,7 +53,7 @@ const manifest = {
     requiredClientPackages: ["apps/web/package.json", "apps/webb/package.json", "apps/webc/package.json"],
     distribution: {
       type: "github-release-tarball",
-      urlTemplate: "https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v{version}/workloom-ui-{version}.tgz",
+      urlTemplate: "https://cnb.cool/workloom-ai/workloom-im/-/releases/download/ui-v{version}/workloom-ui-{version}.tgz",
       assetNameTemplate: "workloom-ui-{version}.tgz",
       integrityByVersion: { "1.2.3": fixtureArtifactIntegrity },
     },
@@ -110,7 +110,7 @@ function writeReadyConsumerLockfile(repo) {
   }));
 }
 
-function createReadyConsumer(repo, repository = "geniusdapeng-collab/example") {
+function createReadyConsumer(repo, repository = "workloom-ai/example") {
   writeJson(join(repo, "package.json"), {
     name: "workloom-example",
     private: true,
@@ -187,7 +187,7 @@ function createReadyConsumer(repo, repository = "geniusdapeng-collab/example") {
     package: "@workloom/ui",
     version: "1.2.3",
     contractVersion: "2.0.0",
-    source: "geniusdapeng-collab/workloom-im",
+    source: "workloom-ai/workloom-im",
     updatePolicy: "upgrade-pr-only",
     releaseChannel: "stable",
     allowedIndustryOverrides: manifest.ui.allowedIndustryOverrides,
@@ -657,9 +657,9 @@ process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", f
     assert.deepEqual(childManifest.uiRolloutWaveOrder, waveOrder);
     assert.equal(validateChildInventory(childManifest.children, childManifest.uiRolloutWaveOrder), true);
     const waves = Object.fromEntries(childManifest.children.map((child) => [child.repo, child.uiRolloutWave]));
-    assert.equal(waves["geniusdapeng-collab/workroom-andromeda"], "W1");
-    assert.equal(waves["geniusdapeng-collab/workroom-eagle"], "W1");
-    assert.equal(waves["geniusdapeng-collab/workroom-tiger"], "W5");
+    assert.equal(waves["workloom-ai/workroom-andromeda"], "W1");
+    assert.equal(waves["workloom-ai/workroom-eagle"], "W1");
+    assert.equal(waves["workloom-ai/workroom-tiger"], "W5");
   });
 
   it("逐路径识别缺 B 端移动、产品清单和 UI 状态，不只返回仓名", () => {
@@ -683,16 +683,16 @@ process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", f
   it("完整三端、产品身份与共享消费契约通过只读检查", () => {
     const repo = mkdtempSync(join(tmpdir(), "workloom-ui-ready-"));
     createReadyConsumer(repo);
-    assert.deepEqual(inspectMigratedConsumer(repo, { repo: "geniusdapeng-collab/example", pathPrefix: "" }, manifest), []);
+    assert.deepEqual(inspectMigratedConsumer(repo, { repo: "workloom-ai/example", pathPrefix: "" }, manifest), []);
   });
 
   it("pathPrefix 仓仍从 Git 仓根读取受保护产品身份", () => {
     const repo = mkdtempSync(join(tmpdir(), "workloom-ui-prefix-"));
     mkdirSync(join(repo, "governance"), { recursive: true });
-    createReadyConsumer(join(repo, "governance"), "geniusdapeng-collab/workroom-tiger");
+    createReadyConsumer(join(repo, "governance"), "workloom-ai/workroom-tiger");
     const nestedProduct = JSON.parse(readFileSync(join(repo, "governance/product.manifest.json"), "utf8"));
     writeJson(join(repo, "product.manifest.json"), nestedProduct);
-    const blockers = inspectMigratedConsumer(repo, { repo: "geniusdapeng-collab/workroom-tiger", pathPrefix: "governance/" }, manifest);
+    const blockers = inspectMigratedConsumer(repo, { repo: "workloom-ai/workroom-tiger", pathPrefix: "governance/" }, manifest);
     assert.deepEqual(blockers, []);
   });
 

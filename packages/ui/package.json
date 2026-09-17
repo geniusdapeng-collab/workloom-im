@@ -6,12 +6,12 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/geniusdapeng-collab/workloom-im.git",
+    "url": "git+https://github.com/workloom-ai/workloom-im.git",
     "directory": "packages/ui"
   },
-  "homepage": "https://github.com/geniusdapeng-collab/workloom-im#readme",
+  "homepage": "https://github.com/workloom-ai/workloom-im#readme",
   "bugs": {
-    "url": "https://github.com/geniusdapeng-collab/workloom-im/issues"
+    "url": "https://github.com/workloom-ai/workloom-im/issues"
   },
   "type": "module",
   "sideEffects": [

@@ -8,7 +8,7 @@ export const UI_STATE_SCHEMA = "workloom.ui-consumer-state/v1";
 export const UI_PACKAGE = "@workloom/ui";
 export const UI_CONTRACT_VERSION = "2.0.0";
 export const UI_RELEASE_TYPE = "github-release-tarball";
-export const CANONICAL_BASE_REPOSITORY = "geniusdapeng-collab/workloom-im";
+export const CANONICAL_BASE_REPOSITORY = "workloom-ai/workloom-im";
 export const LOCKFILE_NAME = "pnpm-lock.yaml";
 export const REQUIRED_CLIENT_PACKAGES = Object.freeze([
   "apps/web/package.json",
@@ -35,7 +35,7 @@ export function canonicalUiArtifact(version) {
   return {
     type: UI_RELEASE_TYPE,
     assetName,
-    url: `https://github.com/${CANONICAL_BASE_REPOSITORY}/releases/download/ui-v${version}/${assetName}`,
+    url: `https://cnb.cool/${CANONICAL_BASE_REPOSITORY}/-/releases/download/ui-v${version}/${assetName}`,
     overrideSelector: `${UI_PACKAGE}@${version}`,
   };
 }

@@ -197,7 +197,7 @@ if (command === "refresh") {
   write(join(fx.base, "packages/ui/package.json"), `${JSON.stringify({ name: "@workloom/ui", version: stable }, null, 2)}\n`);
   const baseCapabilities = {
     schemaVersion: 1,
-    baseRepository: "geniusdapeng-collab/workloom-im",
+    baseRepository: "workloom-ai/workloom-im",
     releasePolicy: "base-first-stable-only",
     ui: {
       package: "@workloom/ui",
@@ -208,7 +208,7 @@ if (command === "refresh") {
       allowedIndustryOverrides: ["--wl-brand-primary", "--wl-brand-on-primary", "--wl-brand-accent"],
       distribution: {
         type: "github-release-tarball",
-        urlTemplate: "https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v{version}/workloom-ui-{version}.tgz",
+        urlTemplate: "https://cnb.cool/workloom-ai/workloom-im/-/releases/download/ui-v{version}/workloom-ui-{version}.tgz",
         assetNameTemplate: "workloom-ui-{version}.tgz",
         integrityByVersion: {
           [stable]: `sha512-${Buffer.alloc(64, 3).toString("base64")}`,
@@ -1489,7 +1489,7 @@ test("最小新行业仓一次完成 full 基座、三端稳定壳与消费门�
     const packageJson = JSON.parse(readFileSync(join(fx.child, "package.json"), "utf8"));
     assert.equal(packageJson.devDependencies["typescript-governance"], "npm:typescript@5.9.3");
     assert.equal(packageJson.devDependencies["yaml-governance"], "npm:yaml@2.9.0");
-    const releaseUrl = `https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v${fx.stable}/workloom-ui-${fx.stable}.tgz`;
+    const releaseUrl = `https://cnb.cool/workloom-ai/workloom-im/-/releases/download/ui-v${fx.stable}/workloom-ui-${fx.stable}.tgz`;
     assert.equal(packageJson.pnpm.overrides[`@workloom/ui@${fx.stable}`], releaseUrl);
     const lockfile = readFileSync(join(fx.child, "pnpm-lock.yaml"), "utf8");
     assert.match(lockfile, /typescript-governance/u);

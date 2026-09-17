@@ -17,7 +17,7 @@
 八仓 `pnpm install --frozen-lockfile` 实测报错：
 
 ```
-ERR_PNPM_FETCH_404 GET https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v0.1.1/workloom-ui-0.1.1.tgz
+ERR_PNPM_FETCH_404 GET https://cnb.cool/workloom-ai/workloom-im/-/releases/download/ui-v0.1.1/workloom-ui-0.1.1.tgz
 ```
 
 即 `@workloom/ui` 的制品仍托管在已封禁的 GitHub 组织。**这是 DEF-P1-0015「下游 CI 既有红灯」的真实根因。**

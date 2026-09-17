@@ -4,10 +4,11 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const syncDir = dirname(fileURLToPath(import.meta.url));
-const CANONICAL_BASE_REPOSITORY = "geniusdapeng-collab/workloom-im";
+const CANONICAL_BASE_REPOSITORY = "workloom-ai/workloom-im";
 const UI_PACKAGE = "@workloom/ui";
+// 兼容字段：本枚举名沿用历史值（含各仓 state 与 capabilities），现指 CNB Release 托管的 UI tarball。
 const DISTRIBUTION_TYPE = "github-release-tarball";
-const RELEASE_URL_TEMPLATE = "https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v{version}/workloom-ui-{version}.tgz";
+const RELEASE_URL_TEMPLATE = "https://cnb.cool/workloom-ai/workloom-im/-/releases/download/ui-v{version}/workloom-ui-{version}.tgz";
 const RELEASE_ASSET_NAME_TEMPLATE = "workloom-ui-{version}.tgz";
 const EXACT_SEMVER = /^\d+\.\d+\.\d+$/u;
 
@@ -102,13 +103,13 @@ export function resolveUiReleaseArtifact(manifest, version) {
   }
   if (
     parsed.protocol !== "https:"
-    || parsed.hostname !== "github.com"
+    || parsed.hostname !== "cnb.cool"
     || parsed.port
     || parsed.username
     || parsed.password
     || parsed.search
     || parsed.hash
-    || parsed.pathname !== `/${CANONICAL_BASE_REPOSITORY}/releases/download/ui-v${version}/${assetName}`
+    || parsed.pathname !== `/${CANONICAL_BASE_REPOSITORY}/-/releases/download/ui-v${version}/${assetName}`
     || url !== parsed.href
   ) {
     throw new Error("UI Release 制品 URL 必须是官方仓库、HTTPS、同版本标签与同版本 tarball");

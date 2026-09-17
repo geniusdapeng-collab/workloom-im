@@ -156,7 +156,7 @@ const rootPackage = readJson("package.json");
 if (!rootPackage.scripts?.["bundle:governance"]) errors.push("根包缺少 bundle:governance 行业契约门禁");
 const ciSource = readFileSync(join(root, ".github/workflows/ci.yml"), "utf8");
 if (!ciSource.includes("pnpm bundle:governance")) errors.push("CI 未执行行业包契约门禁");
-const expectedUiRepository = "git+https://github.com/geniusdapeng-collab/workloom-im.git";
+const expectedUiRepository = "git+https://github.com/workloom-ai/workloom-im.git";
 if (uiPackage.license !== "Apache-2.0") errors.push("共享 UI 包必须声明与主仓一致的 Apache-2.0 许可证");
 if (uiPackage.repository?.type !== "git" || uiPackage.repository?.url !== expectedUiRepository
   || uiPackage.repository?.directory !== "packages/ui") {
