@@ -1,70 +1,60 @@
-# CNB 迁移收口手册（2026-09-17）
+# CNB 迁移收口手册（2026-09-18 更新）
 
-> 背景：九仓从 GitHub 迁到 `cnb.cool/workloom-ai`。基座闸门已落地并全绿；下游仍有三个待办。
-> 本文件是收口清单，按顺序执行即可，不需要重新探查。
+> 背景：九仓从 GitHub 迁到 `cnb.cool/workloom-ai`。
+> **UI 制品、仓库标识、九仓闸门均已落地并实测**；本文件记录结果、遗留项与复现命令。
 
 ## 0. 现状（已实测）
 
 | 项 | 状态 |
 |---|---|
-| 基座 `workloom-im` 闸门 | `static-gate` / `db-gate` 必需且全绿；`ui-gate` 显式 `allowFailure`（15 用例过 14，仅静态视觉基线跨环境差异） |
-| 文档 `WORKLOOM_PRODUCT_CONTEXT.md` | 九仓均为 2026-09-17.2，记账已同步 |
-| 八仓闸门 PR | 已开（各仓 PR #2），**依赖安装即失败**，根因见 §1 |
-| 分支保护 | 未配置（CNB API 需仓库设置权限的令牌，见 §4） |
+| `@workloom/ui` 制品 | CNB Release 托管：`https://cnb.cool/workloom-ai/workloom-im/-/releases/download/ui-v0.1.1/workloom-ui-0.1.1.tgz`（HTTP 200，91,187 字节，由 `ui-release` 流水线在 CNB 内构建上传） |
+| 仓库标识 | 九仓 `product.manifest.json`、`.workloom-runtime-deps/metadata.json`、`.workloom-base-sync.json`、`sync/child-repos.json`、脚本常量与文档链接全部指向 `cnb.cool/workloom-ai` |
+| 基座闸门 | 三条**必需**流水线：`static-gate`、`db-gate`、`ui-gate`（Linux 视觉基线已在 CNB 同镜像内重生成） |
+| 子仓闸门 | 八仓均已合并 `.cnb.yml`：`static-gate`（安装/产品身份/三端构建）与 `db-gate`（PG17+pgvector/迁移/种子幂等/验链）为**阻断**；`test-gate`（typecheck/主测试/全场景套件）为**显式非阻断**，登记为既有债务 |
+| 旧 GitHub Actions | 保留为历史遗留（CNB 上不生效），暂未删除 |
 
-## 1. 根因：下游 `@workloom/ui` 指向已失效的 GitHub Release tarball
+## 1. 遗留项（按优先级）
 
-八仓 `pnpm install --frozen-lockfile` 实测报错：
+1. **分支保护（唯一阻塞项）**：CNB API `POST /{repo}/-/settings/branch-protections` 与 `PUT /{slug}/-/settings/pull-request` 用当前令牌均返回 400（令牌缺仓库设置权限）。需要在网页 **设置 → 保护分支** 为 `main` 勾选：必须通过合并请求、需要通过状态检查、禁止强推/删除；或提供带设置权限的令牌后批量配置九仓。
+2. **子仓 `test-gate` 转必需**：需逐仓修复既有债务：
+   - 套件语义类：`H-14~H-18`（期望 real 模式）、`D-15`（R2 直译）、`H-33`（吊销并集收缩）、`J-01`（巡检正常快照）；
+   - 依赖产物类：`apps/webc` 测试无法解析 `@workloom/ui/dist/language`（dist 产物为无扩展名 ESM 导入）——需在 `packages/ui` 构建产物中输出带 `.js` 扩展的导入，或让消费方走 bundler 解析；
+   - 类型漂移类：`hyperreality-system`、`workloom` 等仓 `apps/server` 与当前基座 API 不一致（`IntentRuleExtension`、`KbSearchLexicon`、router 参数个数等）。
+3. **`.cnb.yml` 是否纳入基座分发**：目前每仓一份、手工维护；建议纳入 `sync/base-scope.json` 受控资产，避免再漂移。
+4. **发布链路**：桌面签名/公证 secrets 仍未配置（BLK-B-01-003）；`.github/workflows/*` 在 CNB 上无效，需按需迁移。
 
+## 2. 复现命令（幂等）
+
+发布共享 UI 制品（改 `UI_VERSION` 即换版本；流水线内含构建、打包、Release 资产上传与确认）：
+
+```bash
+curl -X POST -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
+  -d '{"branch":"main","event":"api_trigger_ui_release"}' \
+  https://api.cnb.cool/workloom-ai/workloom-im/-/build/start
 ```
-ERR_PNPM_FETCH_404 GET https://cnb.cool/workloom-ai/workloom-im/-/releases/download/ui-v0.1.1/workloom-ui-0.1.1.tgz
+
+子仓阻断闸门（PR 事件未触发时的 API 替代路径）：读取目标分支 `.cnb.yml` 并追加：
+
+```yaml
+$:
+  api_trigger_gates:
+    - *static_gate
+    - *db_gate
+    - *test_gate
 ```
 
-即 `@workloom/ui` 的制品仍托管在已封禁的 GitHub 组织。**这是 DEF-P1-0015「下游 CI 既有红灯」的真实根因。**
+再 `POST /{repo}/-/build/start`，`config` 传拼接后的 YAML、`event` 传 `api_trigger_gates`。
 
-### 1.1 迁移步骤（成套改，缺一即红）
+## 3. 迁移过程留痕（要点）
 
-1. **确定新落脚点**（三选一，推荐 A）：
-   - A. 发布到 CNB：在基座跑 `pnpm -C packages/ui build && pnpm -C packages/ui pack`，把 `workloom-ui-<version>.tgz` 作为 CNB Release 附件/制品上传，得到稳定 URL；
-   - B. 仓内 vendor：把 tarball 提交到基座 `vendor/ui/`，消费方用 CNB 原始文件 URL；
-   - C. 改为 workspace 依赖：把 `packages/ui` 纳入 `sync/base-scope.json` 的 include，三端改用 `workspace:*`——改动最大，但彻底摆脱制品分发。
-2. **基座侧同步修改**（缺一即 `ui:governance` / `verify-ui-consumer` 红）：
-   - `sync/base-scope.json#registryCapabilities`（`distribution` 字段是代码级契约，改前先改 `sync/base-sync.mjs` 的判定）、`sync/base-capabilities.json`；
-   - `sync/{client-foundation,set-ui-version,ui-upgrade-pr}.mjs` 里的 URL 模板与校验；
-   - 测试夹具：`sync/base-sync.test.mjs`、`sync/client-foundation.test.mjs`、`sync/set-ui-version.test.mjs`、`sync/ui-upgrade-pr.test.mjs`、`scripts/verify-ui-consumer.test.mjs`。
-3. **消费方（8 仓）逐仓改**：`apps/{web,webb,webc}/package.json` + `pnpm-lock.yaml` 里的 tarball URL；`.workloom-client-foundation.json` 的 `uiArtifact.url`；再 `pnpm install` 重建 lock。
-4. **回读验证**：每仓 PR 上 `static-gate` 的「依赖安装」必须绿，再跑 `pnpm ui:governance`。
+- **制品**：一次性流水线在 CNB 内 `pnpm -C packages/ui build` + `pnpm pack` → Release 资产上传（`asset-upload-url` → PUT → 确认）；`integrityByVersion["0.1.1"]` 同步为重建产物 `sha512-7OXEtRN…`（原 GitHub 制品已不可获取，按同源码重建）。
+- **校验**：`sync/set-ui-version.mjs`、`scripts/verify-ui-consumer.mjs`、`sync/ui-lockfile-integrity.mjs`、`sync/ui-upgrade-pr.mjs` 的规范仓库/主机/路径校验切到 `cnb.cool` 与 `/-/releases/download/`；tamper 夹具保留外域 URL 以继续验证拒收。
+- **闸门踩坑**：CNB 用 `sh`(dash) 执行脚本，不支持 `pipefail`；`.cnb.yml` 里写 DB 连接串字面量会被基座秘密扫描拦截，故统一从 `.env` 读取（子仓用安全解析循环，不 `source`，避免注释里的 `<32` 触发重定向）。
+- **子仓安装**：`postinstall` 被剥离导致 `packages/industry-contract` 无 `dist` → typecheck 解析失败；已恢复为 `pnpm -C packages/industry-contract build && (node scripts/postinstall-note.js || true)`。
+- **子仓种子**：多数仓 `seed.ts` 默认使用 `bundles/hotel` 演示夹具；andromeda 默认 `ai-pm`，其演示数据需要 `BUNDLE_DIR=bundles/hotel`。
+- **视觉基线**：在 CNB 同镜像内跑 `pnpm ui:e2e:update` 重生成 Linux 基线并回推分支，随后把 `ui-gate` 由 `allowFailure` 转为必需（实测 4m0s 全绿）。
 
-## 2. 仓库标识迁移（与 §1 同一批做）
+## 4. 收尾清理
 
-单独改会红（已实测）：`runtime:deps:verify` 与载荷身份策略把下列文件强绑定，必须一起改：
-
-- `product.manifest.json#repository`、`.workloom-runtime-deps/metadata.json#product.repository`
-- `sync/child-repos.json#baseRepo` 与 `children[].repo`
-- `.workloom-client-foundation.json`（各仓）
-- README / `apps/site/*.html` 的跳转链接（shields.io 徽章图片 URL 不动）
-- 夹具：`sync/*.test.mjs`、`scripts/verify-ui-consumer.test.mjs`
-
-## 3. ui-gate 转必需（视觉基线）
-
-1. 在 CNB 环境跑 `pnpm ui:e2e:update`（同一镜像、同一 Playwright 版本）生成基线；
-2. 把新基线提交回基座（`tests/ui/` 下的快照）；
-3. 把 `.cnb.yml` 里 `.ui-gate` 的 `allowFailure: true` 删除，加入必需检查。
-
-## 4. 分支保护（需要仓库设置权限）
-
-CNB API：`POST /{repo}/-/settings/branch-protections`（本令牌返回 400，疑似缺少设置类 scope）。
-在网页 **设置 → 保护分支** 为 `main` 勾选：
-
-- 必须通过合并请求推送（`required_must_push_via_pull_request`）
-- 需要通过状态检查（`required_status_checks`）
-- 禁止强制推送 / 禁止删除
-- 建议：禁止 NPC 批准自己创建的 PR（`forbid_approve_pull_created_by_own_npc`）
-
-必需检查名（CNB 生成）：`cnb/pull_request/pipeline-1(static-gate)`、`cnb/pull_request/pipeline-2(db-gate)`。
-
-## 5. 完成后
-
-- 八个行业仓闸门 PR 转绿并合并；
-- 删除临时分支 `ci/cnb-gates`、`chore/cnb-migration-and-ui-gate`、`docs/*`；
-- 吊销本轮使用过的 CNB 令牌（已在会话中出现过）。
+- 临时分支可删除：`feat/cnb-ui-artifact`、`chore/cnb-migration-and-ui-gate`、`ci/cnb-gates`、`ci/ui-baseline-linux`、`ci/ui-gate-required`、`docs/*`；
+- 吊销本轮会话中出现过的 CNB 令牌，改用带仓库设置权限的令牌或直接在网页配置保护规则。
