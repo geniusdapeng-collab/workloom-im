@@ -1,0 +1,176 @@
+{
+  "schemaVersion": "workloom.bundle/v1",
+  "name": "@workloom/hotel",
+  "version": "1.0.0",
+  "workloom": {
+    "industry": "hotel",
+    "displayName": "WorkLoom for Hotels · 未来前台（演示 Bundle）",
+    "description": "酒店版行业差异资产包：7 个数字员工预设 + 基线围栏包 + 对象/阶段枚举 + 一店一档数据结构 + 官方技能（需求文档 V2.5 §2.2/§2.3）",
+    "status": "candidate",
+    "owner": "WorkLoom 酒店产品组",
+    "example": true,
+    "compatibility": {
+      "base": ">=0.1.0 <1.0.0",
+      "ui": ">=0.1.0 <1.0.0",
+      "contract": "2.0.0"
+    },
+    "provides": {
+      "presets": [
+        "presets/pricing-agent.yml",
+        "presets/review-agent.yml",
+        "presets/reconcile-agent.yml",
+        "presets/inspection-agent.yml",
+        "presets/content-agent.yml",
+        "presets/competitor-agent.yml",
+        "presets/desktop-agent.yml"
+      ],
+      "fences": [
+        "fences/hotel-baseline.yml"
+      ],
+      "skills": [
+        "skills/revenue-manager/SKILL.md",
+        "skills/review-crisis/SKILL.md",
+        "skills/channel-reconciler/SKILL.md"
+      ],
+      "schemas": [
+        "schemas/objects.json",
+        "schemas/stages.json",
+        "schemas/archive.schema.json"
+      ],
+      "ui": [
+        "ui/cases.json"
+      ],
+      "floorScene": "floor-scene.json",
+      "modelPolicy": "model-policy.yml",
+      "feedbackEnums": "feedback-enums.yml",
+      "evalQuestions": "eval/questions.json",
+      "serviceFront": [
+        "service-front/faq.json",
+        "service-front/delivery-catalog.json",
+        "service-front/repair-catalog.json"
+      ]
+    },
+    "ui": {
+      "schemaVersion": "workloom.bundle.ui/v1",
+      "terminology": {
+        "businessObject": "门店经营事项",
+        "customer": "住客",
+        "operation": "门店经营",
+        "action.price.adjust": "调整房价",
+        "action.price.query": "查询房价",
+        "action.comment.reply": "回复评论",
+        "action.order.reconcile": "订单对账",
+        "action.order.refund": "订单退款",
+        "action.review.reply": "回复评价",
+        "field.occ": "入住率",
+        "field.revpar": "每间可售房收入",
+        "field.adr": "平均房价"
+      },
+      "navigation": {
+        "slots": []
+      },
+      "home": {
+        "widgets": [
+          {
+            "slot": "home.quick-tasks",
+            "component": "QuickTaskList",
+            "clients": [
+              "pc",
+              "b-mobile"
+            ],
+            "props": {
+              "tasks": [
+                "盘点今日订单",
+                "查看房态异常",
+                "处理住客诉求",
+                "复盘今日房价"
+              ]
+            }
+          }
+        ]
+      },
+      "welcome": {
+        "system": [
+          "这是一套为住宿经营打造的智能经营系统，七位数字员工全天候在岗。日常最操心的几件事，它们各司其职：",
+          "房价不踏空——持续关注房态和市场价格，在预先设定的规则里给出调整建议；",
+          "差评不过夜——各渠道的新评价有人值守，出现问题会带着处理建议请您确认；",
+          "对账不熬夜——订单流水逐笔核对，大额退款和异常订单一定请您过目；",
+          "淡季不缺内容——持续准备宣传内容，让门店在各渠道保持活跃。",
+          "新渠道第一次改价和第一次发布，都必须由您确认。"
+        ],
+        "keywords": [
+          "房价持续关注",
+          "评价及时处理",
+          "账目自动核对",
+          "内容持续更新"
+        ]
+      },
+      "objects": [
+        "住客诉求",
+        "客房任务",
+        "房价策略",
+        "渠道账单"
+      ],
+      "workflows": [
+        "住客服务",
+        "客房协同",
+        "收益管理",
+        "渠道对账"
+      ],
+      "serviceFront": {
+        "enabled": true,
+        "identityPolicy": "order-proof",
+        "adapterId": "hotel.service-front-v1",
+        "tabs": [
+          "对话",
+          "服务",
+          "工单",
+          "消息",
+          "我的"
+        ],
+        "services": [
+          "客需服务",
+          "报修",
+          "查询工单"
+        ]
+      },
+      "inspection": {
+        "enabled": true,
+        "adapterId": "hotel.inspection-v1"
+      },
+      "theme": {
+        "brand": {}
+      },
+      "permissions": [],
+      "experiments": []
+    }
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "digest": "f00fcd3921e31b873ab7d9d5ccede3f3ba520b9ee94b735baf19f7a2421e663f",
+    "assets": {
+      "eval/questions.json": "23044b47e17985da056220cef131e27b6262dab53b036e3750c166d6d337a842",
+      "feedback-enums.yml": "0b64759da7c6a529084b6f56fa4bbeb1527c03f665f3e1d460e0d06045d5b263",
+      "fences/hotel-baseline.yml": "39aee1cad30ba88af4313d024179b4006f2981ecaef7cd6ca4f25d05fc568cfc",
+      "floor-scene.json": "96c2bc3260b769fffe62d51d24e7ae9141aae5e9b5b97ae237271339aff562b7",
+      "model-policy.yml": "dad3e661ad3068caf442bf0774e58d8989996c0a10c7047b923571ca416f3871",
+      "presets/competitor-agent.yml": "7481c3aeb736c778d25a8ab5f0051af28b6de1ca8fb442abd544c15458b0bb65",
+      "presets/content-agent.yml": "ac292f561655411afc4afb99e46d0094bc8457f2ece715b65f708c2b4b6a4370",
+      "presets/desktop-agent.yml": "55b3197cafe26ec5bc8c887fc814c10d643b53ddd808b8525dc2f8f194bb0eb8",
+      "presets/inspection-agent.yml": "1d61f54354f0919c8145e9babfb4fd3df76aed29ee0513496897c7d2fbf22bca",
+      "presets/pricing-agent.yml": "8ea9c9b0dca09dfc4d1f79a601934b128631060a082fe9f6b84913c0b5b733a8",
+      "presets/reconcile-agent.yml": "c9f854d64a1d297eb3643c5d7a61ed4b42c48a37d8c3bff23e0b2fabb0e7fc69",
+      "presets/review-agent.yml": "cc1c6b087f7b1e593b3951f2d56565a3a8b820a221d4742bea82439740061834",
+      "schemas/archive.schema.json": "2a555cd7b966e37731d83d60ffa7282eefe127150765c748e30fab7f94665358",
+      "schemas/objects.json": "551e2043cfad30c401a8ed59fe1b7a681183ddcfb6efa88d69ab2fbc1afa2a23",
+      "schemas/stages.json": "f01f0a3668ee49e2f3946c9dced0f84dcb8faf247c8c6e97ec75b3ff61c0762a",
+      "service-front/delivery-catalog.json": "95787a492b9b5243f25fe7432fcdf89f576af09485dfe5a7cc50e831ee105b40",
+      "service-front/faq.json": "db31c04ddd27d3ac28a20b9a2fbc269f037a9cd17546f412f1f4624cab46a790",
+      "service-front/repair-catalog.json": "00ec90a7d2d1479eea9a7f322a10c83657d37ce5e40021a9dba7d14e49d1b043",
+      "skills/channel-reconciler/SKILL.md": "0295393886cf59b41c9373df9fde463d51b64b5eaa292550f7014f02624dd207",
+      "skills/revenue-manager/SKILL.md": "5e05d1d2571fd3fddd10d608d0fd49a5bd2b39e7bf0fe3fd8090da7c4f4cfbd2",
+      "skills/review-crisis/SKILL.md": "7a160eb5029ac5dc97227cd092e5faca3c117d09a6ddb380dcf30fc274a6c4fa",
+      "ui/cases.json": "7142f13139484b0aa8de9ab6ac516e37beefce6512b4d3f2c51ae2e69d3e5235"
+    }
+  }
+}

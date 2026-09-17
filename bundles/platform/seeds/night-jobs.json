@@ -1,0 +1,15 @@
+{
+  "jobs": [
+    { "time": "00:30", "task": "平台巡检：事件库积压/队列深度/模型路由/存储水位/实例在线率", "owner": "inspector" },
+    { "time": "01:00", "task": "知识保鲜巡检（过期/低命中/高未解决率条目治理）", "owner": "kb-freshness-officer" },
+    { "time": "02:00", "task": "积分三池逐日对账（三方核对，差异即冻结自动赠款）", "owner": "credit-reconciler" },
+    { "time": "02:30", "task": "万级客户健康分全量计算与三级分流", "owner": "customer-health-officer" },
+    { "time": "03:00", "task": "月度账单生成（每月 1 日）与加油包时机候选", "owner": "billing-officer" },
+    { "time": "03:30", "task": "灰度批次观察期数据采集（错误率/工单密度/围栏异常）", "owner": "bundle-version-officer" },
+    { "time": "04:00", "task": "每日洞察：工单热点/知识缺口/健康异动/转化漏斗", "owner": "insight-analyst" },
+    { "time": "04:30", "task": "策略草案编译与在线策略效果归因", "owner": "strategy-engineer" },
+    { "time": "05:00", "task": "关单第 3 天回访调度与反馈三路分流", "owner": "requirement-dispatcher" },
+    { "time": "06:30", "task": "续费 60/30/7 天三级预警与《客户价值报告》生成", "owner": "renewal-watchman" },
+    { "time": "07:00", "task": "清晨决策包三栏生成（昨夜已完成/待审批/需介入）", "owner": "fae-chief" }
+  ]
+}

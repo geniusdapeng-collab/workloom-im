@@ -1,0 +1,463 @@
+# ============================================================
+# WorkLoom IM · 基座同步计划（父仓侧）
+#
+# 父仓的 GITHUB_TOKEN 只对父仓有效，不能安全地跨仓写子仓。本 workflow
+# 先做不含跨仓凭据的密钥闸门与本地测试；启用可选 GitHub App 时，再用其
+# 短期 installation token 做全仓 dry-run，并向清单内子仓发送
+# repository_dispatch。各子仓 heartbeat 仍只使用该子仓自己的最小权限
+# GITHUB_TOKEN 推送同步分支并创建 PR。
+#
+# 外部配置（不得写入源码）：
+#   · Actions variable: WORKLOOM_SYNC_APP_ID
+#   · Actions repository secret 名称 WORKLOOM_SYNC_APP_PRIVATE_KEY
+# GitHub App 只安装到清单内子仓，并只授予 Actions:write、Contents:write；
+# Actions:write 仅用于恢复 GitHub 自动标记为 disabled_inactivity 的 heartbeat，
+# 人工停用的 workflow 不会被越权恢复。父仓自身若也因 60 天无活动而停用，
+# GitHub 内部 schedule 无法自唤醒，须由组织外部 App/OIDC scheduler 负责 enable
+# 并触发本 workflow——这是平台边界，不能由父仓 GITHUB_TOKEN 绕过。
+# 若组织改用 OIDC，须由外部 broker 换取等价的短期 App installation token；
+# 不得退回个人 PAT。App ID 未配置时仅明确提示可靠性增强尚未启用；一旦配置
+# App ID，缺私钥、dispatch 失败或子仓未真正启动 heartbeat 都会使流程失败。
+# ============================================================
+name: base-sync-plan
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "AGENTS.md"
+      - "WORKLOOM_PRODUCT_CONTEXT.md"
+      - "packages/base/**"
+      - "packages/industry-contract/**"
+      - "packages/runtime/**"
+      - "packages/shared/**"
+      - "packages/db/**"
+      - "apps/server/src/**"
+      - "apps/server/package.json"
+      - "apps/desktop/**"
+      - "apps/web/src/lib/**"
+      - "apps/web/package.json"
+      - "scripts/**"
+      - "docker-compose.yml"
+      - "sync/**"
+      - ".github/workflows/base-sync-push.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "AGENTS.md"
+      - "WORKLOOM_PRODUCT_CONTEXT.md"
+      - "packages/base/**"
+      - "packages/industry-contract/**"
+      - "packages/runtime/**"
+      - "packages/shared/**"
+      - "packages/db/**"
+      - "apps/server/src/**"
+      - "apps/server/package.json"
+      - "apps/desktop/**"
+      - "apps/web/src/lib/**"
+      - "apps/web/package.json"
+      - "scripts/**"
+      - "docker-compose.yml"
+      - "sync/**"
+      - ".github/workflows/base-sync-push.yml"
+  schedule:
+    # 子仓不再只依赖各自的 schedule；活跃父仓集中唤醒清单内所有 heartbeat。
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "本次 fan-out 的同步范围"
+        required: true
+        default: required-only
+        type: choice
+        options:
+          - required-only
+          - full
+
+permissions:
+  contents: read
+
+concurrency:
+  group: base-sync-plan-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    if: github.repository == 'geniusdapeng-collab/workloom-im'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GIT_TERMINAL_PROMPT: "0"
+    outputs:
+      sync-mode: ${{ steps.mode.outputs.mode }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.19.0
+
+      - name: Workflow YAML 重复键与语法闸门
+        run: |
+          ruby -rpsych -e '
+            def check(node, file)
+              if node.is_a?(Psych::Nodes::Mapping)
+                seen = {}
+                node.children.each_slice(2) do |key, value|
+                  if key.is_a?(Psych::Nodes::Scalar)
+                    abort("#{file}:#{key.start_line + 1}: duplicate YAML key #{key.value}") if seen[key.value]
+                    seen[key.value] = true
+                  end
+                  check(key, file)
+                  check(value, file)
+                end
+              elsif node.respond_to?(:children)
+                Array(node.children).each { |child| check(child, file) }
+              end
+            end
+            ARGV.each { |file| check(Psych.parse_file(file), file) }
+          ' .github/workflows/base-sync-push.yml sync/heartbeat-template.yml sync/ui-consumer-template.yml
+
+      - name: 判定本次同步范围
+        id: mode
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REQUESTED_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            schedule)
+              MODE=full
+              ;;
+            workflow_dispatch)
+              MODE="$REQUESTED_MODE"
+              ;;
+            push)
+              if [[ ! "$BEFORE_SHA" =~ ^[0-9a-f]{40}$ ]] || [[ "$BEFORE_SHA" =~ ^0+$ ]]; then
+                MODE=full
+              else
+                FROM_SHA="$BEFORE_SHA"
+                TO_SHA="$GITHUB_SHA"
+              fi
+              ;;
+            pull_request)
+              FROM_SHA="$PR_BASE_SHA"
+              TO_SHA="$PR_HEAD_SHA"
+              ;;
+            *)
+              echo "不支持的触发事件：$EVENT_NAME"
+              exit 1
+              ;;
+          esac
+
+          if [ -n "${FROM_SHA:-}" ]; then
+            git rev-parse --verify "$FROM_SHA^{commit}" >/dev/null
+            git rev-parse --verify "$TO_SHA^{commit}" >/dev/null
+            if git diff --no-renames --name-only -z "$FROM_SHA" "$TO_SHA" -- | node -e '
+              const chunks = [];
+              process.stdin.on("data", (chunk) => chunks.push(chunk));
+              process.stdin.on("end", () => {
+                const paths = Buffer.concat(chunks).toString("utf8").split("\0").filter(Boolean);
+                const governanceOnly = paths.every((path) =>
+                  path === "AGENTS.md" ||
+                  path === "AGENTS.repo.md" ||
+                  path === "WORKLOOM_PRODUCT_CONTEXT.md" ||
+                  path === "package.json" ||
+                  path === "scripts/secret-scan.mjs" ||
+                  path === ".github/workflows/base-sync-push.yml" ||
+                  path.startsWith("sync/")
+                );
+                process.exit(governanceOnly ? 0 : 10);
+              });
+            '; then
+              MODE=required-only
+            else
+              CLASSIFY_STATUS=$?
+              if [ "$CLASSIFY_STATUS" -eq 10 ]; then
+                MODE=full
+              else
+                echo "无法可靠读取 changed paths；拒绝降级为 required-only"
+                exit "$CLASSIFY_STATUS"
+              fi
+            fi
+          fi
+
+          case "$MODE" in
+            required-only|full) ;;
+            *) echo "非法同步范围：$MODE"; exit 1 ;;
+          esac
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "同步范围：$MODE"
+
+      - name: 认知文档与 Agent 指令密钥闸门
+        run: node scripts/secret-scan.mjs --files AGENTS.md AGENTS.repo.md WORKLOOM_PRODUCT_CONTEXT.md
+
+      - name: 密钥扫描器自测
+        run: node scripts/secret-scan.mjs --self-test
+
+      - name: pnpm 10.14.0
+        run: corepack enable && corepack prepare pnpm@10.14.0 --activate
+
+      - name: 同步引擎测试依赖
+        run: CI=true pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: 基座同步引擎测试
+        run: node --test sync/base-sync.test.mjs sync/client-foundation.test.mjs sync/set-ui-version.test.mjs sync/ui-upgrade-pr.test.mjs
+
+      - name: 本地验证报告（Job Summary）
+        if: always()
+        run: |
+          echo "## WorkLoom IM 基座本地验证" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 基座提交：$(git rev-parse --short HEAD)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 本次范围：${{ steps.mode.outputs.mode }}" >> "$GITHUB_STEP_SUMMARY"
+          SCOPE_VERSION="$(node -e "process.stdout.write(String(JSON.parse(require('fs').readFileSync('sync/base-scope.json','utf8')).version))")"
+          echo "- 同步范围：sync/base-scope.json v${SCOPE_VERSION}；文件能力与稳定 UI 制品双轨分发" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 产品身份：electron-builder.yml/product.manifest.json 受保护，不做整文件同步" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 三端缺口：先做真实客户端结构迁移，再做 @workloom/ui 稳定版本升级与消费门禁；缺端不计合规" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 订阅子仓：$(node -e "console.log(JSON.parse(require('fs').readFileSync('sync/child-repos.json','utf8')).children.length)") 个" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 跨仓 dry-run：仅在 GitHub App 短期 token 签发后执行；PR 事件不接触跨仓凭据" >> "$GITHUB_STEP_SUMMARY"
+
+  fanout:
+    if: github.repository == 'geniusdapeng-collab/workloom-im' && github.event_name != 'pull_request'
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      GIT_TERMINAL_PROMPT: "0"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.19.0
+
+      - name: 校验 GitHub App 外部配置
+        id: app-config
+        env:
+          WORKLOOM_SYNC_APP_ID: ${{ vars.WORKLOOM_SYNC_APP_ID }}
+          HAS_WORKLOOM_SYNC_APP_PRIVATE_KEY: ${{ secrets.WORKLOOM_SYNC_APP_PRIVATE_KEY != '' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WORKLOOM_SYNC_APP_ID:-}" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=即时 fan-out 未启用::未配置 WORKLOOM_SYNC_APP_ID；九仓公开且子仓 schedule 可独立运行，但即时唤醒、集中监控与 60 日 inactivity 自动恢复尚未启用。"
+            echo "## ⚠️ 可选的中央 fan-out 未启用" >> "$GITHUB_STEP_SUMMARY"
+            echo "九仓公开，子仓 schedule 不依赖外部凭据；如需即时唤醒、集中监控与 inactivity 恢复，请配置最小权限 GitHub App。禁止使用个人 PAT。" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$HAS_WORKLOOM_SYNC_APP_PRIVATE_KEY" != "true" ]; then
+            echo "::error title=基座 fan-out 配置不完整::已配置 WORKLOOM_SYNC_APP_ID，但缺少 WORKLOOM_SYNC_APP_PRIVATE_KEY repository secret。"
+            exit 1
+          fi
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+
+      - name: 解析并约束订阅仓清单
+        if: steps.app-config.outputs.enabled == 'true'
+        id: targets
+        env:
+          EXPECTED_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          REPOSITORIES="$(node -e '
+            const manifest = JSON.parse(require("fs").readFileSync("sync/child-repos.json", "utf8"));
+            const prefix = process.env.EXPECTED_OWNER + "/";
+            const repos = manifest.children.map((item) => item.repo);
+            if (repos.length === 0 || new Set(repos).size !== repos.length) throw new Error("child repo list must be non-empty and unique");
+            for (const repo of repos) {
+              if (!repo.startsWith(prefix) || !/^[-A-Za-z0-9_.]+\/[-A-Za-z0-9_.]+$/.test(repo)) throw new Error("invalid or cross-owner child repo: " + repo);
+            }
+            process.stdout.write(repos.map((repo) => repo.slice(prefix.length)).join(","));
+          ')"
+          if [ -z "$REPOSITORIES" ]; then
+            echo "订阅仓清单为空；拒绝创建无边界 installation token"
+            exit 1
+          fi
+          echo "repositories=$REPOSITORIES" >> "$GITHUB_OUTPUT"
+
+      - name: 签发清单范围内的短期 GitHub App token
+        if: steps.app-config.outputs.enabled == 'true'
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+        with:
+          app-id: ${{ vars.WORKLOOM_SYNC_APP_ID }}
+          private-key: ${{ secrets.WORKLOOM_SYNC_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ steps.targets.outputs.repositories }}
+          permission-actions: write
+          permission-contents: write
+
+      - name: 使用短期 App token 生成全部子仓同步计划（只读）
+        if: steps.app-config.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SYNC_MODE: ${{ needs.plan.outputs.sync-mode }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$SYNC_MODE" = "required-only" ]; then
+            node sync/base-sync.mjs push --base . --dry-run --required-only
+          elif [ "$SYNC_MODE" = "full" ]; then
+            node sync/base-sync.mjs push --base . --dry-run
+          else
+            echo "非法 dry-run 同步范围：$SYNC_MODE"
+            exit 1
+          fi
+
+      - name: 唤醒、确认并监控所有子仓 heartbeat
+        if: steps.app-config.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          EXPECTED_OWNER: ${{ github.repository_owner }}
+          SYNC_MODE: ${{ needs.plan.outputs.sync-mode }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          FANOUT_DIR="$(mktemp -d "$RUNNER_TEMP/workloom-fanout.XXXXXX")"
+          cleanup_fanout() {
+            case "$FANOUT_DIR" in
+              "$RUNNER_TEMP"/workloom-fanout.*) rm -rf -- "$FANOUT_DIR" ;;
+              *) echo "拒绝清理非预期 fan-out 目录"; return 1 ;;
+            esac
+          }
+          trap cleanup_fanout EXIT
+
+          mapfile -t TARGETS < <(node -e '
+            const manifest = JSON.parse(require("fs").readFileSync("sync/child-repos.json", "utf8"));
+            const prefix = process.env.EXPECTED_OWNER + "/";
+            for (const { repo } of manifest.children) {
+              if (!repo.startsWith(prefix) || !/^[-A-Za-z0-9_.]+\/[-A-Za-z0-9_.]+$/.test(repo)) throw new Error("invalid child repo");
+              console.log(repo);
+            }
+          ')
+          if [ "${#TARGETS[@]}" -eq 0 ]; then
+            echo "订阅仓清单为空；拒绝 fan-out"
+            exit 1
+          fi
+          case "$SYNC_MODE" in
+            required-only|full) ;;
+            *) echo "非法 fan-out 同步范围：$SYNC_MODE"; exit 1 ;;
+          esac
+          if [[ ! "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]] || [[ ! "$GITHUB_RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "基座 SHA 或 source run id 格式异常；拒绝 fan-out"
+            exit 1
+          fi
+          FANOUT_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          declare -A DISPATCHED RUN_IDS
+          failures=0
+
+          echo "## WorkLoom 基座中央 fan-out" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 基座提交：${GITHUB_SHA:0:12}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 同步范围：$SYNC_MODE" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 目标仓：${#TARGETS[@]}" >> "$GITHUB_STEP_SUMMARY"
+
+          for repo in "${TARGETS[@]}"; do
+            workflow_api="repos/${repo}/actions/workflows/base-sync-heartbeat.yml"
+            workflow_state="$(gh api --method GET "$workflow_api" --jq .state 2>/dev/null || true)"
+            case "$workflow_state" in
+              active)
+                ;;
+              disabled_inactivity)
+                if gh api --method PUT "${workflow_api}/enable" >/dev/null; then
+                  echo "- ♻️ 已恢复 inactivity 停用：$repo" >> "$GITHUB_STEP_SUMMARY"
+                else
+                  echo "::error title=子仓 heartbeat 恢复失败::$repo"
+                  echo "- ❌ inactivity 恢复失败：$repo" >> "$GITHUB_STEP_SUMMARY"
+                  failures=$((failures + 1))
+                  continue
+                fi
+                ;;
+              disabled_manually)
+                echo "::error title=子仓 heartbeat 被人工停用::$repo；中央 fan-out 不会越权恢复。"
+                echo "- ❌ 人工停用：$repo" >> "$GITHUB_STEP_SUMMARY"
+                failures=$((failures + 1))
+                continue
+                ;;
+              *)
+                echo "::error title=子仓 heartbeat 不可用::$repo workflow state=${workflow_state:-missing}"
+                echo "- ❌ workflow 缺失或状态异常：$repo" >> "$GITHUB_STEP_SUMMARY"
+                failures=$((failures + 1))
+                continue
+                ;;
+            esac
+
+            if gh api --method POST "repos/${repo}/dispatches" \
+              -f event_type=workloom-base-sync \
+              -f "client_payload[base_sha]=$GITHUB_SHA" \
+              -f "client_payload[mode]=$SYNC_MODE" \
+              -f "client_payload[source_run_id]=$GITHUB_RUN_ID" >/dev/null; then
+              DISPATCHED["$repo"]=1
+              echo "已发送：$repo"
+            else
+              echo "::error title=子仓 dispatch 失败::$repo"
+              echo "- ❌ dispatch 失败：$repo" >> "$GITHUB_STEP_SUMMARY"
+              failures=$((failures + 1))
+            fi
+          done
+
+          for attempt in $(seq 1 12); do
+            waiting=0
+            for repo in "${TARGETS[@]}"; do
+              if [ -z "${DISPATCHED[$repo]:-}" ] || [ -n "${RUN_IDS[$repo]:-}" ]; then
+                continue
+              fi
+              run_id="$(gh api --method GET \
+                "repos/${repo}/actions/workflows/base-sync-heartbeat.yml/runs?event=repository_dispatch&per_page=10" \
+                --jq ".workflow_runs | map(select(.created_at >= \"$FANOUT_STARTED_AT\" and .display_title == \"base-sync-heartbeat source-$GITHUB_RUN_ID\")) | sort_by(.created_at) | last | .id // empty" \
+                2>/dev/null || true)"
+              if [[ "$run_id" =~ ^[0-9]+$ ]]; then
+                RUN_IDS["$repo"]="$run_id"
+              else
+                waiting=$((waiting + 1))
+              fi
+            done
+            if [ "$waiting" -eq 0 ]; then
+              break
+            fi
+            sleep 5
+          done
+
+          declare -a WATCH_PIDS WATCH_REPOS
+          for repo in "${TARGETS[@]}"; do
+            run_id="${RUN_IDS[$repo]:-}"
+            if [ -z "$run_id" ]; then
+              if [ -n "${DISPATCHED[$repo]:-}" ]; then
+                echo "::error title=子仓 heartbeat 未启动::$repo 接受了 dispatch，但未出现 workflow run；请检查 workflow 是否存在或被停用。"
+                echo "- ❌ 未观察到运行：$repo" >> "$GITHUB_STEP_SUMMARY"
+                failures=$((failures + 1))
+              fi
+              continue
+            fi
+            gh run watch "$run_id" --repo "$repo" --exit-status --interval 10 >"$FANOUT_DIR/${run_id}.log" 2>&1 &
+            WATCH_PIDS+=("$!")
+            WATCH_REPOS+=("$repo")
+          done
+
+          for index in "${!WATCH_PIDS[@]}"; do
+            repo="${WATCH_REPOS[$index]}"
+            run_id="${RUN_IDS[$repo]}"
+            run_url="https://github.com/${repo}/actions/runs/${run_id}"
+            if wait "${WATCH_PIDS[$index]}"; then
+              echo "- ✅ 完成：[$repo]($run_url)" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "::error title=子仓 heartbeat 失败::$repo：$run_url"
+              echo "- ❌ 失败：[$repo]($run_url)" >> "$GITHUB_STEP_SUMMARY"
+              failures=$((failures + 1))
+            fi
+          done
+
+          if [ "$failures" -ne 0 ]; then
+            echo "fan-out 存在 $failures 个失败；详见 Job Summary"
+            exit 1
+          fi

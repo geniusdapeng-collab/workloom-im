@@ -1,0 +1,919 @@
+# WorkLoom 桌面客户端 · 完全自包含安装包 CI（唯一发行形态，v2.1.0 起）
+# 触发：只允许从默认 main 分支的当前 workflow 手动选择与 main HEAD 完全相同的稳定 tag。
+# 产物：
+#   macOS   WorkLoom-mac-arm64.dmg / WorkLoom-mac-x64.dmg（Electron 自包含）
+#   Windows WorkLoom-win-x64.exe（NSIS，同口径自包含）
+#   证据    WorkLoom-SHA512SUMS.txt / WorkLoom-release-manifest.json
+# 冒烟验收：后端全流程 + 打包后真实 BrowserWindow 双渲染后端验收，
+#   页面、Bundle、团队人数、动态数字人和非黑屏像素全部通过才上传 Release。
+# 重跑恢复：每个平台候选都带 run_id/run_attempt。发布器只在同一 run_id、同一提交内，
+#   选择不晚于当前 attempt 的最近有效候选；支持全量、失败作业和 publisher-only 重跑，绝不跨 run。
+name: desktop-production-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "与当前 origin/main HEAD 完全相同的精确稳定 tag（如 v2.3.0）"
+        required: true
+      platform_signing:
+        description: "平台签名模式；unsigned 仅在没有 Apple/Windows 证书时使用，并会在 Release 中明确披露"
+        required: true
+        type: choice
+        options: [signed, unsigned]
+        default: signed
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-production-release
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      release-tag: ${{ steps.target.outputs.tag }}
+      release-version: ${{ steps.target.outputs.version }}
+      release-sha: ${{ steps.target.outputs.sha }}
+      platform-signing: ${{ steps.target.outputs.platform-signing }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+          ref: ${{ inputs.version }}
+
+      - name: 固定稳定标签、提交与当前 main HEAD
+        id: target
+        shell: bash
+        env:
+          REQUESTED_TAG: ${{ inputs.version }}
+          REQUESTED_PLATFORM_SIGNING: ${{ inputs.platform_signing }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main" || { echo "❌ 必须从默认 main 分支上的当前受审 workflow 手动发行"; exit 1; }
+          TARGET_TAG="$REQUESTED_TAG"
+          PLATFORM_SIGNING="$REQUESTED_PLATFORM_SIGNING"
+          [[ "$TARGET_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "❌ 版本必须是精确 vX.Y.Z tag"; exit 1; }
+          [[ "$PLATFORM_SIGNING" =~ ^(signed|unsigned)$ ]] || { echo "❌ 平台签名模式必须是 signed 或 unsigned"; exit 1; }
+          TARGET_SHA="$(git rev-parse --verify "refs/tags/${TARGET_TAG}^{commit}")"
+          test "$(git rev-parse --verify HEAD^{commit})" = "$TARGET_SHA" || { echo "❌ checkout 未绑定目标标签提交"; exit 1; }
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          MAIN_SHA="$(git rev-parse --verify refs/remotes/origin/main^{commit})"
+          test "$TARGET_SHA" = "$GITHUB_SHA" && test "$TARGET_SHA" = "$MAIN_SHA" || {
+            echo "❌ $TARGET_TAG 必须精确指向本次受审 workflow 所在的 origin/main HEAD，拒绝让历史代码接触生产签名环境"
+            exit 1
+          }
+          REMOTE_SHA="$(git ls-remote origin "refs/tags/${TARGET_TAG}^{}" | awk 'NR==1{print $1}')"
+          if [ -z "$REMOTE_SHA" ]; then
+            REMOTE_SHA="$(git ls-remote origin "refs/tags/${TARGET_TAG}" | awk 'NR==1{print $1}')"
+          fi
+          [[ "$REMOTE_SHA" =~ ^[0-9a-f]{40}$ ]] && test "$REMOTE_SHA" = "$TARGET_SHA" || {
+            echo "❌ 远端标签未唯一绑定已验证提交"
+            exit 1
+          }
+          echo "tag=$TARGET_TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TARGET_TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
+          echo "platform-signing=$PLATFORM_SIGNING" >> "$GITHUB_OUTPUT"
+          echo "✅ 桌面发行对象已固定：$TARGET_TAG @ ${TARGET_SHA:0:12}（当前 origin/main HEAD，platform=$PLATFORM_SIGNING）"
+
+  macos:
+    needs: preflight
+    runs-on: macos-latest
+    timeout-minutes: 90
+    environment: desktop-production
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.preflight.outputs.release-tag }}
+      PLATFORM_SIGNING: ${{ needs.preflight.outputs.platform-signing }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.preflight.outputs.release-sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: 24.19.0, cache: pnpm }
+
+      - name: 安装依赖（无发行密钥）
+        run: pnpm install --frozen-lockfile
+
+      - name: 生成签名 Bundle（最小私钥作用域）
+        env:
+          BUNDLE_SIGNING_PRIVATE_KEY: ${{ secrets.BUNDLE_SIGNING_PRIVATE_KEY }}
+          BUNDLE_SIGNING_KEY_ID: ${{ vars.BUNDLE_SIGNING_KEY_ID || 'workloom-release-v1' }}
+        run: |
+          test -n "$BUNDLE_SIGNING_PRIVATE_KEY" || { echo "❌ 缺少 BUNDLE_SIGNING_PRIVATE_KEY，拒绝生成生产安装包"; exit 1; }
+          pnpm bundle:release
+          test -s build/bundle-trust.json || { echo "❌ 独立 Bundle 公钥环未生成"; exit 1; }
+
+      - name: 生成投影、验证并构建 web（无发行密钥）
+        env:
+          VITE_DEMO_WORKSPACE: ai-pm-demo
+          VITE_DEMO_MEMBER: MEM-001
+        run: |
+          pnpm projections:generate
+          grep -q 'WORKLOOM_SAFE_RENDERING' apps/desktop/electron/main.cjs
+          grep -q 'WORKLOOM_RENDER_SMOKE' apps/desktop/electron/main.cjs
+          grep -q 'previousEnvFile' apps/desktop/electron/bootstrap.cjs
+          grep -q 'validateStoredSession' apps/web/src/lib/trpc.ts
+          grep -q 'speakAndWait' apps/web/src/components/MateWelcome.tsx
+          grep -q 'data-render-mode="vector2d"' apps/web/src/components/loommate/MateLive2D.tsx
+          grep -q 'acquireExclusive' apps/web/src/voice/VoiceEngine.ts
+          grep -q 'transitionTrace' apps/desktop/electron/main.cjs
+          grep -q 'mouthPeak' apps/desktop/electron/main.cjs
+          ! grep -q '__workloomEnterTeam' apps/web/src/components/WelcomeCeremony.tsx
+          pnpm product:verify
+          pnpm bundle:governance
+          pnpm projections:check
+          node --test apps/desktop/electron/bootstrap.test.cjs scripts/desktop-bootstrap-db.test.mjs
+          pnpm exec vitest run apps/web/src/voice/VoiceEngine.test.ts
+          pnpm -C apps/web build
+
+      - name: 装配自包含载荷（darwin-arm64）
+        run: bash scripts/pack-electron-payload.sh --platform mac --arch arm64 --version "$VERSION"
+
+      - name: 打包 DMG（arm64）
+        if: needs.preflight.outputs.platform-signing == 'signed'
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          test -n "$CSC_LINK" && test -n "$CSC_KEY_PASSWORD" || { echo "❌ 缺少 macOS Developer ID 签名证书，拒绝对外发行"; exit 1; }
+          test -n "$APPLE_ID" && test -n "$APPLE_APP_SPECIFIC_PASSWORD" && test -n "$APPLE_TEAM_ID" || { echo "❌ 缺少 Apple 公证凭据，拒绝对外发行"; exit 1; }
+          retry() { local attempt=1; until "$@"; do [ "$attempt" -ge 3 ] && return 1; echo "网络依赖下载失败，准备第 $((attempt + 1))/3 次重试"; attempt=$((attempt + 1)); sleep 8; done; }
+          retry pnpm exec electron-builder --mac dmg --arm64 --publish never -c.extraMetadata.version="${VERSION#v}"
+
+      - name: 打包未签名 DMG（arm64）
+        if: needs.preflight.outputs.platform-signing == 'unsigned'
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          echo "⚠️ 按发布输入生成未签名、未 Apple 公证的 macOS 安装包"
+          retry() { local attempt=1; until "$@"; do [ "$attempt" -ge 3 ] && return 1; echo "网络依赖下载失败，准备第 $((attempt + 1))/3 次重试"; attempt=$((attempt + 1)); sleep 8; done; }
+          retry pnpm exec electron-builder --mac dmg --arm64 --publish never -c.mac.notarize=false -c.extraMetadata.version="${VERSION#v}"
+
+      - name: 拆包验收 + 冒烟（对 .app 内载荷归档跑首启全流程——验证用户拿到的内容）
+        run: |
+          APP="$(find release/mac-arm64 -maxdepth 1 -name '*.app' -print -quit)"
+          test -n "$APP" || { echo "❌ arm64 .app 未生成"; exit 1; }
+          if [ "$PLATFORM_SIGNING" = "signed" ]; then
+            codesign --verify --deep --strict --verbose=2 "$APP"
+            spctl --assess --verbose --type exec "$APP"
+            xcrun stapler validate "$APP"
+          else
+            echo "⚠️ 未签名发行：跳过 Developer ID、Gatekeeper 与公证票据验收"
+          fi
+          RES="$APP/Contents/Resources"
+          test -f "$RES/payload.tar.gz" || { echo "❌ 拆包验收失败：payload.tar.gz 未进包"; exit 1; }
+          test -f "$RES/payload/PAYLOAD_VERSION" || { echo "❌ 拆包验收失败：PAYLOAD_VERSION 未进包（缺失将致每次启动重解压）"; exit 1; }
+          test -s "$RES/bundle-trust.json" || { echo "❌ 拆包验收失败：独立 Bundle 公钥环未进包"; exit 1; }
+          tar -tzf "$RES/payload.tar.gz" > /tmp/wl-pkg-list.txt && grep -q "runtime/node_modules/tsx/package.json" /tmp/wl-pkg-list.txt || { echo "❌ 拆包验收失败：归档内缺 tsx"; exit 1; }
+          grep -q "nats/nats-server" /tmp/wl-pkg-list.txt || { echo "❌ 拆包验收失败：归档内缺 nats"; exit 1; }
+          echo "✅ 拆包验收通过（arm64 .app 载荷归档完整）"
+          node apps/desktop/electron/bootstrap.cjs --smoke --resources "$RES" --support /tmp/wl-smoke
+          BIN="$(find "$APP/Contents/MacOS" -maxdepth 1 -type f -perm -111 -print -quit)"
+          test -n "$BIN" || { echo "❌ arm64 应用主程序未生成"; exit 1; }
+          WORKLOOM_APP_SMOKE=1 WORKLOOM_SUPPORT_DIR=/tmp/wl-app-smoke "$BIN"
+          test -f /tmp/wl-app-smoke/.bootstrapped || { echo "❌ 真实应用首启未完成"; exit 1; }
+          WORKLOOM_RENDER_SMOKE=1 WORKLOOM_SUPPORT_DIR=/tmp/wl-render-default "$BIN"
+          test -f /tmp/wl-render-default/logs/render-default.json || { echo "❌ 默认渲染探针缺失"; exit 1; }
+          WORKLOOM_RENDER_SMOKE=1 WORKLOOM_SAFE_RENDERING=1 WORKLOOM_SUPPORT_DIR=/tmp/wl-render-safe "$BIN"
+          test -f /tmp/wl-render-safe/logs/render-safe.json || { echo "❌ 安全渲染探针缺失"; exit 1; }
+          echo "✅ 真实 .app 后端 + Live2D + 动态矢量双渲染冒烟通过"
+        timeout-minutes: 20
+
+      - name: 上传渲染验收证据
+        if: always()
+        # 截图只是诊断证据；GitHub Artifact 服务偶发超时不应否定已经通过的
+        # 后端、默认渲染与安全渲染产品验收。
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: macos-arm64-render-evidence
+          if-no-files-found: warn
+          path: |
+            /tmp/wl-render-default/logs/render-default.*
+            /tmp/wl-render-safe/logs/render-safe.*
+      - name: 装配自包含载荷（darwin-x64）
+        run: bash scripts/pack-electron-payload.sh --platform mac --arch x64 --version "$VERSION"
+
+      - name: 打包 DMG（x64）
+        if: needs.preflight.outputs.platform-signing == 'signed'
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          test -n "$CSC_LINK" && test -n "$CSC_KEY_PASSWORD" || { echo "❌ 缺少 macOS Developer ID 签名证书，拒绝对外发行"; exit 1; }
+          test -n "$APPLE_ID" && test -n "$APPLE_APP_SPECIFIC_PASSWORD" && test -n "$APPLE_TEAM_ID" || { echo "❌ 缺少 Apple 公证凭据，拒绝对外发行"; exit 1; }
+          retry() { local attempt=1; until "$@"; do [ "$attempt" -ge 3 ] && return 1; echo "网络依赖下载失败，准备第 $((attempt + 1))/3 次重试"; attempt=$((attempt + 1)); sleep 8; done; }
+          retry pnpm exec electron-builder --mac dmg --x64 --publish never -c.extraMetadata.version="${VERSION#v}"
+
+      - name: 打包未签名 DMG（x64）
+        if: needs.preflight.outputs.platform-signing == 'unsigned'
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          echo "⚠️ 按发布输入生成未签名、未 Apple 公证的 macOS 安装包"
+          retry() { local attempt=1; until "$@"; do [ "$attempt" -ge 3 ] && return 1; echo "网络依赖下载失败，准备第 $((attempt + 1))/3 次重试"; attempt=$((attempt + 1)); sleep 8; done; }
+          retry pnpm exec electron-builder --mac dmg --x64 --publish never -c.mac.notarize=false -c.extraMetadata.version="${VERSION#v}"
+
+      - name: 拆包验收（x64 .app 载荷归档完整性；arm64 runner 无法跑 x64 二进制，文件级核验）
+        run: |
+          APP="$(find release/mac -maxdepth 1 -name '*.app' -print -quit)"
+          test -n "$APP" || { echo "❌ x64 .app 未生成"; exit 1; }
+          if [ "$PLATFORM_SIGNING" = "signed" ]; then
+            codesign --verify --deep --strict --verbose=2 "$APP"
+            spctl --assess --verbose --type exec "$APP"
+            xcrun stapler validate "$APP"
+          else
+            echo "⚠️ 未签名发行：跳过 Developer ID、Gatekeeper 与公证票据验收"
+          fi
+          RES="$APP/Contents/Resources"
+          test -f "$RES/payload.tar.gz" || { echo "❌ x64 载荷归档未进包"; exit 1; }
+          test -s "$RES/bundle-trust.json" || { echo "❌ x64 独立 Bundle 公钥环未进包"; exit 1; }
+          tar -tzf "$RES/payload.tar.gz" > /tmp/wl-pkg-list-x64.txt && grep -q "runtime/node_modules/tsx/package.json" /tmp/wl-pkg-list-x64.txt || { echo "❌ x64 归档内缺 tsx"; exit 1; }
+          echo "✅ x64 拆包验收通过"
+      - name: 留存失败诊断（私有 Actions Artifact）
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-macos-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            /tmp/wl-smoke/logs/*.log
+            /tmp/wl-render-default/logs/*
+            /tmp/wl-render-safe/logs/*
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: 封存已验收 macOS 双架构制品
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ needs.preflight.outputs.release-sha }}
+          RELEASE_TAG: ${{ needs.preflight.outputs.release-tag }}
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/desktop-macos"
+          mkdir -p "$OUT"
+          ARM_SOURCE="WorkLoom 织元-mac-arm64.dmg"
+          X64_SOURCE="WorkLoom 织元-mac-x64.dmg"
+          ARM="WorkLoom-mac-arm64.dmg"
+          X64="WorkLoom-mac-x64.dmg"
+          test "$(find release -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d ' ')" -eq 2
+          test -f "release/$ARM_SOURCE" && test -f "release/$X64_SOURCE"
+          cp "release/$ARM_SOURCE" "$OUT/$ARM"
+          cp "release/$X64_SOURCE" "$OUT/$X64"
+          node -e 'const fs=require("fs"),p=require("path"),c=require("crypto");const dir=process.argv[1],sha=process.argv[2],tag=process.argv[3],platformSigning=process.argv[4],names=["WorkLoom-mac-arm64.dmg","WorkLoom-mac-x64.dmg"];const assets=names.map(name=>{const b=fs.readFileSync(p.join(dir,name));return{name,size:b.length,sha512:c.createHash("sha512").update(b).digest("hex")}});fs.writeFileSync(p.join(dir,"desktop-macos-manifest.json"),JSON.stringify({schemaVersion:1,tag,sha,platformSigning,assets},null,2)+"\n")' "$OUT" "$RELEASE_SHA" "$RELEASE_TAG" "$PLATFORM_SIGNING"
+
+      - name: 上传已验收 macOS 候选制品
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          # 名称携带 attempt；publisher 会在同一 run 内选择该平台最近的已验收候选。
+          name: desktop-macos-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/desktop-macos
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  windows:
+    needs: preflight
+    # windows-latest/Windows 2025 预装 PG17，来源不在发行锁内；脚本会 fail-closed。
+    # 固定到不预装 PG17 的镜像，随后只从 release-assets.json 锁定源安装 17.11.0。
+    runs-on: windows-2022
+    timeout-minutes: 90
+    environment: desktop-production
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.preflight.outputs.release-tag }}
+      PLATFORM_SIGNING: ${{ needs.preflight.outputs.platform-signing }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.preflight.outputs.release-sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: 24.19.0, cache: pnpm }
+
+      - name: 编译 pgvector + 同源 PG 运行时（vendor/pg-win + vendor/pgvector-win）
+        shell: pwsh
+        run: scripts/build-pgvector-win.ps1
+
+      - name: 安装依赖（无发行密钥）
+        shell: bash
+        run: pnpm install --frozen-lockfile
+
+      - name: 生成签名 Bundle（最小私钥作用域）
+        shell: bash
+        env:
+          BUNDLE_SIGNING_PRIVATE_KEY: ${{ secrets.BUNDLE_SIGNING_PRIVATE_KEY }}
+          BUNDLE_SIGNING_KEY_ID: ${{ vars.BUNDLE_SIGNING_KEY_ID || 'workloom-release-v1' }}
+        run: |
+          test -n "$BUNDLE_SIGNING_PRIVATE_KEY" || { echo "❌ 缺少 BUNDLE_SIGNING_PRIVATE_KEY，拒绝生成生产安装包"; exit 1; }
+          pnpm bundle:release
+          test -s build/bundle-trust.json || { echo "❌ 独立 Bundle 公钥环未生成"; exit 1; }
+
+      - name: 生成投影、验证并构建 web（无发行密钥）
+        shell: bash
+        env:
+          VITE_DEMO_WORKSPACE: ai-pm-demo
+          VITE_DEMO_MEMBER: MEM-001
+        run: |
+          pnpm projections:generate
+          pnpm product:verify
+          pnpm bundle:governance
+          pnpm projections:check
+          node --test apps/desktop/electron/bootstrap.test.cjs scripts/desktop-bootstrap-db.test.mjs
+          pnpm exec vitest run apps/web/src/voice/VoiceEngine.test.ts
+          pnpm -C apps/web build
+
+      - name: 装配自包含载荷（win-x64）
+        shell: bash
+        run: bash scripts/pack-electron-payload.sh --platform win --arch x64 --version "$VERSION"
+
+      - name: 打包 NSIS 安装包
+        if: needs.preflight.outputs.platform-signing == 'signed'
+        shell: bash  # pwsh 会把 -c.extraMetadata.version="x" 的 -c 吞掉（ENOENT 实证），统一 bash
+        run: |
+          test -n "$WIN_CSC_LINK" && test -n "$WIN_CSC_KEY_PASSWORD" || { echo "❌ 缺少 Windows 代码签名证书，拒绝对外发行"; exit 1; }
+          retry() { local attempt=1; until "$@"; do [ "$attempt" -ge 3 ] && return 1; echo "网络依赖下载失败，准备第 $((attempt + 1))/3 次重试"; attempt=$((attempt + 1)); sleep 8; done; }
+          retry pnpm exec electron-builder --win nsis --x64 --publish never -c.extraMetadata.version="${VERSION#v}"
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+
+      - name: 打包未签名 NSIS 安装包
+        if: needs.preflight.outputs.platform-signing == 'unsigned'
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+        run: |
+          echo "⚠️ 按发布输入生成未 Authenticode 签名的 Windows 安装包"
+          retry() { local attempt=1; until "$@"; do [ "$attempt" -ge 3 ] && return 1; echo "网络依赖下载失败，准备第 $((attempt + 1))/3 次重试"; attempt=$((attempt + 1)); sleep 8; done; }
+          retry pnpm exec electron-builder --win nsis --x64 --publish never -c.extraMetadata.version="${VERSION#v}"
+
+      - name: 拆包验收 + 冒烟（对 win-unpacked 载荷归档跑首启全流程——验证用户拿到的内容）
+        shell: bash
+        env:
+          # pgvector 编译底座会在 Windows runner 上安装 PostgreSQL 服务并占用 5432。
+          # 候选包验收改用隔离端口，避免构建工具链污染安装包首启结果。
+          WORKLOOM_PG_PORT: "55432"
+          WORKLOOM_SERVER_PORT: "58787"
+          WORKLOOM_WEB_PORT: "55173"
+          WORKLOOM_NATS_PORT: "54222"
+        run: |
+          SMOKE_ROOT="$RUNNER_TEMP/wl-smoke"
+          APP_SMOKE_ROOT="$RUNNER_TEMP/wl-app-smoke"
+          RENDER_SMOKE_ROOT="$RUNNER_TEMP/wl-render-default"
+          RES="release/win-unpacked/resources"
+          test -f "$RES/payload.tar.gz" || { echo "❌ 拆包验收失败：payload.tar.gz 未进包"; exit 1; }
+          test -f "$RES/payload/PAYLOAD_VERSION" || { echo "❌ 拆包验收失败：PAYLOAD_VERSION 未进包（缺失将致每次启动重解压）"; exit 1; }
+          test -s "$RES/bundle-trust.json" || { echo "❌ 拆包验收失败：独立 Bundle 公钥环未进包"; exit 1; }
+          tar -tzf "$RES/payload.tar.gz" > /tmp/wl-pkg-list.txt && grep -q "runtime/node_modules/tsx/package.json" /tmp/wl-pkg-list.txt || { echo "❌ 拆包验收失败：归档内缺 tsx"; exit 1; }
+          node apps/desktop/electron/bootstrap.cjs --smoke --resources "$RES" --support "$SMOKE_ROOT"
+          EXE="$(find release/win-unpacked -maxdepth 1 -type f -name '*.exe' ! -iname '*uninstall*' -print -quit)"
+          test -n "$EXE" || { echo "❌ Windows 应用主程序未生成"; exit 1; }
+          INSTALLER="$(find release -maxdepth 1 -type f -name '*.exe' -print -quit)"
+          test -n "$INSTALLER" || { echo "❌ Windows 安装包未生成"; exit 1; }
+          if [ "$PLATFORM_SIGNING" = "signed" ]; then
+            powershell -NoProfile -Command '$s = Get-AuthenticodeSignature -FilePath $args[0]; if ($s.Status -ne "Valid") { Write-Error "应用签名无效：$($s.Status)"; exit 1 }' "$EXE"
+            powershell -NoProfile -Command '$s = Get-AuthenticodeSignature -FilePath $args[0]; if ($s.Status -ne "Valid") { Write-Error "安装包签名无效：$($s.Status)"; exit 1 }' "$INSTALLER"
+          else
+            powershell -NoProfile -Command '$s = Get-AuthenticodeSignature -FilePath $args[0]; if ($s.Status -eq "Valid") { Write-Error "未签名模式不得混入未知正式证书"; exit 1 }; Write-Host "未签名状态：$($s.Status)"' "$INSTALLER"
+          fi
+          node -e 'const {spawnSync}=require("node:child_process"); const r=spawnSync(process.argv[1],[],{stdio:"inherit",env:{...process.env,WORKLOOM_APP_SMOKE:"1",WORKLOOM_SUPPORT_DIR:process.argv[2]}}); process.exit(r.status ?? 1)' "$EXE" "$APP_SMOKE_ROOT"
+          test -f "$APP_SMOKE_ROOT/.bootstrapped" || { echo "❌ 真实应用首启未完成"; exit 1; }
+          node -e 'const {spawnSync}=require("node:child_process"); const r=spawnSync(process.argv[1],[],{stdio:"inherit",env:{...process.env,WORKLOOM_RENDER_SMOKE:"1",WORKLOOM_SUPPORT_DIR:process.argv[2]}}); process.exit(r.status ?? 1)' "$EXE" "$RENDER_SMOKE_ROOT"
+          test -f "$RENDER_SMOKE_ROOT/logs/render-default.json" || { echo "❌ Windows 渲染探针缺失"; exit 1; }
+          echo "✅ 真实 Windows 应用后端 + 页面渲染冒烟通过"
+        timeout-minutes: 20
+      - name: 留存失败诊断（私有 Actions Artifact）
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-windows-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/wl-smoke/logs/*.log
+            ${{ runner.temp }}/wl-smoke/install-state.json
+            ${{ runner.temp }}/wl-app-smoke/logs/*
+            ${{ runner.temp }}/wl-app-smoke/install-state.json
+            ${{ runner.temp }}/wl-render-default/logs/*
+            ${{ runner.temp }}/wl-render-default/install-state.json
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: 封存已验收 Windows 制品
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ needs.preflight.outputs.release-sha }}
+          RELEASE_TAG: ${{ needs.preflight.outputs.release-tag }}
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/desktop-windows"
+          mkdir -p "$OUT"
+          SOURCE="WorkLoom 织元-win-x64.exe"
+          TARGET="WorkLoom-win-x64.exe"
+          test "$(find release -maxdepth 1 -type f -name '*.exe' | wc -l | tr -d ' ')" -eq 1
+          test -f "release/$SOURCE"
+          cp "release/$SOURCE" "$OUT/$TARGET"
+          node -e 'const fs=require("fs"),p=require("path"),c=require("crypto");const dir=process.argv[1],sha=process.argv[2],tag=process.argv[3],platformSigning=process.argv[4],name="WorkLoom-win-x64.exe";const b=fs.readFileSync(p.join(dir,name));fs.writeFileSync(p.join(dir,"desktop-windows-manifest.json"),JSON.stringify({schemaVersion:1,tag,sha,platformSigning,assets:[{name,size:b.length,sha512:c.createHash("sha512").update(b).digest("hex")}]},null,2)+"\n")' "$OUT" "$RELEASE_SHA" "$RELEASE_TAG" "$PLATFORM_SIGNING"
+
+      - name: 上传已验收 Windows 候选制品
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          # 名称携带 attempt；publisher 会在同一 run 内选择该平台最近的已验收候选。
+          name: desktop-windows-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/desktop-windows
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  publish-desktop-release:
+    needs: [preflight, macos, windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: desktop-production
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: 解析同一运行最近的双平台候选
+        id: candidates
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ needs.preflight.outputs.release-sha }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+        run: |
+          set -euo pipefail
+          RESPONSE="$RUNNER_TEMP/desktop-run-artifacts.json"
+          gh api --paginate --slurp \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100&direction=desc" > "$RESPONSE"
+          node - "$RESPONSE" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$RELEASE_SHA" "$REPOSITORY_ID" <<'NODE' >> "$GITHUB_OUTPUT"
+          const fs = require("fs");
+          const [responsePath, runId, attemptText, sha, repositoryIdText] = process.argv.slice(2);
+          const pages = JSON.parse(fs.readFileSync(responsePath));
+          const attempt = Number(attemptText);
+          const repositoryId = Number(repositoryIdText);
+          if (!Array.isArray(pages) || pages.length < 1) throw new Error("候选 Artifact 分页响应非法");
+          if (!Number.isSafeInteger(attempt) || attempt < 1) throw new Error("run_attempt 非法");
+          if (!Number.isSafeInteger(repositoryId) || repositoryId < 1) throw new Error("repository_id 非法");
+          const totals = new Set();
+          const artifacts = [];
+          for (const page of pages) {
+            if (!Number.isSafeInteger(page?.total_count) || !Array.isArray(page?.artifacts)) throw new Error("候选 Artifact 页面非法");
+            totals.add(page.total_count);
+            artifacts.push(...page.artifacts);
+          }
+          if (totals.size !== 1 || artifacts.length !== [...totals][0]) throw new Error("候选 Artifact 列表被截断、重复分页或发生竞态");
+          const ids = new Set();
+          for (const artifact of artifacts) {
+            if (!Number.isSafeInteger(artifact?.id) || artifact.id < 1 || ids.has(artifact.id)) throw new Error("候选 Artifact ID 非法或重复");
+            ids.add(artifact.id);
+          }
+          const byPlatform = { macos: new Map(), windows: new Map() };
+          for (const artifact of artifacts) {
+            const match = /^desktop-(macos|windows)-candidate-(\d+)-([1-9]\d*)$/.exec(String(artifact?.name ?? ""));
+            if (!match) continue;
+            const [, platform, artifactRunId, artifactAttemptText] = match;
+            const artifactAttempt = Number(artifactAttemptText);
+            if (artifactRunId !== runId) throw new Error(`${platform}: 候选名称跨 run`);
+            if (!Number.isSafeInteger(artifactAttempt) || artifactAttempt > attempt) throw new Error(`${platform}: 候选 attempt 超前`);
+            if (byPlatform[platform].has(artifactAttempt)) throw new Error(`${platform}: attempt ${artifactAttempt} 候选不唯一`);
+            const workflowRun = artifact.workflow_run ?? {};
+            if (String(workflowRun.id ?? "") !== runId
+              || workflowRun.repository_id !== repositoryId
+              || workflowRun.head_repository_id !== repositoryId
+              || workflowRun.head_branch !== "main"
+              || workflowRun.head_sha !== sha) throw new Error(`${platform}: 候选来源身份不匹配`);
+            if (typeof artifact.expired !== "boolean") throw new Error(`${platform}: expired 状态缺失`);
+            const expiresAt = Date.parse(String(artifact.expires_at ?? ""));
+            if (!Number.isFinite(expiresAt)) throw new Error(`${platform}: expires_at 非法`);
+            const expired = artifact.expired || expiresAt <= Date.now();
+            if (!expired && (!Number.isSafeInteger(artifact.size_in_bytes)
+              || artifact.size_in_bytes < 1
+              || !/^sha256:[0-9a-f]{64}$/.test(String(artifact.digest ?? "")))) {
+              throw new Error(`${platform}: 有效候选大小或 API digest 非法`);
+            }
+            byPlatform[platform].set(artifactAttempt, { id: artifact.id, attempt: artifactAttempt, expired });
+          }
+          for (const platform of ["macos", "windows"]) {
+            const rows = [...byPlatform[platform].values()].filter((row) => !row.expired).sort((a, b) => b.attempt - a.attempt);
+            if (!rows.length) throw new Error(`${platform}: 同一 run/提交内没有未过期候选`);
+            const row = rows[0];
+            process.stdout.write(`${platform}-id=${row.id}\n${platform}-attempt=${row.attempt}\n`);
+          }
+          NODE
+
+      - name: 下载 macOS 候选制品
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: ${{ steps.candidates.outputs.macos-id }}
+          path: ${{ runner.temp }}/desktop-candidate/macos
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+
+      - name: 下载 Windows 候选制品
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: ${{ steps.candidates.outputs.windows-id }}
+          path: ${{ runner.temp }}/desktop-candidate/windows
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+
+      - name: 原子组装、发布并回读核验桌面端 Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.preflight.outputs.release-tag }}
+          RELEASE_VERSION: ${{ needs.preflight.outputs.release-version }}
+          RELEASE_SHA: ${{ needs.preflight.outputs.release-sha }}
+          PLATFORM_SIGNING: ${{ needs.preflight.outputs.platform-signing }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$RELEASE_TAG" = "v$RELEASE_VERSION"
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$PLATFORM_SIGNING" =~ ^(signed|unsigned)$ ]]
+
+          ROOT="$RUNNER_TEMP/desktop-candidate"
+          MAC="$ROOT/macos"
+          WIN="$ROOT/windows"
+          ASSET_DIR="$ROOT/release-assets"
+          mkdir -p "$ASSET_DIR"
+          INSTALLERS=("WorkLoom-mac-arm64.dmg" "WorkLoom-mac-x64.dmg" "WorkLoom-win-x64.exe")
+          EXPECTED=("${INSTALLERS[@]}" "WorkLoom-SHA512SUMS.txt" "WorkLoom-release-manifest.json")
+          test "$(find "$MAC" -maxdepth 1 -type f | wc -l | tr -d ' ')" -eq 3
+          test "$(find "$WIN" -maxdepth 1 -type f | wc -l | tr -d ' ')" -eq 2
+          cp "$MAC/WorkLoom-mac-arm64.dmg" "$MAC/WorkLoom-mac-x64.dmg" "$WIN/WorkLoom-win-x64.exe" "$ASSET_DIR/"
+
+          node -e 'const fs=require("fs"),p=require("path"),c=require("crypto");const root=process.argv[1],tag=process.argv[2],sha=process.argv[3],platformSigning=process.argv[4];const specs=[["macos","desktop-macos-manifest.json",["WorkLoom-mac-arm64.dmg","WorkLoom-mac-x64.dmg"]],["windows","desktop-windows-manifest.json",["WorkLoom-win-x64.exe"]]];for(const [dir,mf,names] of specs){const m=JSON.parse(fs.readFileSync(p.join(root,dir,mf)));if(m.schemaVersion!==1||m.tag!==tag||m.sha!==sha||m.platformSigning!==platformSigning||!Array.isArray(m.assets)||m.assets.length!==names.length)throw new Error(`${mf}: 版本、tag、SHA、签名模式或数量不匹配`);for(const name of names){const matches=m.assets.filter(a=>a.name===name);if(matches.length!==1)throw new Error(`${mf}: ${name} 必须唯一`);const file=p.join(root,dir,name),b=fs.readFileSync(file),a=matches[0],digest=c.createHash("sha512").update(b).digest("hex");if(a.size!==b.length||a.sha512!==digest)throw new Error(`${mf}: ${name} 大小或 sha512 不匹配`)}}' "$ROOT" "$RELEASE_TAG" "$RELEASE_SHA" "$PLATFORM_SIGNING"
+          node -e 'const fs=require("fs"),p=require("path"),c=require("crypto");const dir=process.argv[1],tag=process.argv[2],sha=process.argv[3],platformSigning=process.argv[4],names=process.argv.slice(5);const assets=names.map(name=>{const b=fs.readFileSync(p.join(dir,name));return{name,size:b.length,sha512:c.createHash("sha512").update(b).digest("hex")}});fs.writeFileSync(p.join(dir,"WorkLoom-release-manifest.json"),JSON.stringify({schemaVersion:1,product:"workloom-desktop",tag,sha,platformSigning,assets},null,2)+"\n");fs.writeFileSync(p.join(dir,"WorkLoom-SHA512SUMS.txt"),assets.map(a=>`${a.sha512}  ${a.name}`).join("\n")+"\n")' "$ASSET_DIR" "$RELEASE_TAG" "$RELEASE_SHA" "$PLATFORM_SIGNING" "${INSTALLERS[@]}"
+          test "$(find "$ASSET_DIR" -maxdepth 1 -type f | wc -l | tr -d ' ')" -eq 5
+
+          resolve_remote_tag() {
+            local tag="${1:-$RELEASE_TAG}" ref_json object_type object_sha tag_json depth=0
+            ref_json="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}")" || return 1
+            object_type="$(node -e 'const r=JSON.parse(process.argv[1]);process.stdout.write(String(r.object?.type??""))' "$ref_json")"
+            object_sha="$(node -e 'const r=JSON.parse(process.argv[1]);process.stdout.write(String(r.object?.sha??""))' "$ref_json")"
+            while [ "$object_type" = "tag" ]; do
+              depth=$((depth + 1))
+              [ "$depth" -le 8 ] || { echo "❌ 标签注解链超过 8 层" >&2; return 1; }
+              tag_json="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${object_sha}")" || return 1
+              object_type="$(node -e 'const r=JSON.parse(process.argv[1]);process.stdout.write(String(r.object?.type??""))' "$tag_json")"
+              object_sha="$(node -e 'const r=JSON.parse(process.argv[1]);process.stdout.write(String(r.object?.sha??""))' "$tag_json")"
+            done
+            [ "$object_type" = "commit" ] && [[ "$object_sha" =~ ^[0-9a-f]{40}$ ]] || return 1
+            printf '%s\n' "$object_sha"
+          }
+
+          verify_tag() {
+            local tag="${1:-$RELEASE_TAG}" expected_sha="${2:-$RELEASE_SHA}" actual
+            actual="$(resolve_remote_tag "$tag")" || return 30
+            [ "$actual" = "$expected_sha" ] || { echo "❌ 远端标签发生漂移" >&2; return 20; }
+          }
+
+          verify_local_asset_set() {
+            local name
+            [ "$(find "$ASSET_DIR" -maxdepth 1 -type f | wc -l | tr -d ' ')" -eq 5 ] || return 1
+            for name in "${EXPECTED[@]}"; do test -s "$ASSET_DIR/$name" || return 1; done
+          }
+
+          verify_tag
+          verify_local_asset_set
+          RELEASE_JSON="$RUNNER_TEMP/desktop-release.json"
+          RELEASE_LIST_JSON="$RUNNER_TEMP/desktop-release-list.json"
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName,isLatest,isDraft,isImmutable,isPrerelease > "$RELEASE_LIST_JSON"
+          node -e 'const fs=require("fs");const rs=JSON.parse(fs.readFileSync(process.argv[1]));if(!Array.isArray(rs)||rs.length>=1000)throw new Error("Release 列表可能被截断，无法证明全局状态")' "$RELEASE_LIST_JSON"
+          TARGET_IS_HIGHEST="$(node -e 'const fs=require("fs");const rs=JSON.parse(fs.readFileSync(process.argv[1])),tag=process.argv[2],parse=s=>{const m=/^v(\d+)\.(\d+)\.(\d+)$/.exec(s);return m?m.slice(1).map(Number):null},cmp=(a,b)=>a[0]-b[0]||a[1]-b[1]||a[2]-b[2],tv=parse(tag);if(!tv)throw new Error("invalid target");const others=rs.filter(r=>!r.isDraft&&!r.isPrerelease&&r.tagName!==tag).map(r=>parse(r.tagName)).filter(Boolean);process.stdout.write(String(others.every(v=>cmp(tv,v)>0)))' "$RELEASE_LIST_JSON" "$RELEASE_TAG")"
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json name,tagName,isDraft,isImmutable,isPrerelease,targetCommitish,assets > "$RELEASE_JSON" 2>/dev/null; then
+            echo "已找到 Release，进入状态机核验"
+          else
+            [ "$TARGET_IS_HIGHEST" = "true" ] || { echo "❌ 新桌面版本必须高于所有已公开稳定桌面版"; exit 1; }
+            CREATE_STATUS=0
+            if [ "$PLATFORM_SIGNING" = "signed" ]; then
+              RELEASE_NOTES="由受保护 desktop-production 环境发布；macOS 双架构与 Windows x64 制品已通过平台签名、公证、自包含载荷、真实首启、渲染冒烟与 sha512/逐字节门禁。"
+            else
+              RELEASE_NOTES="由受保护 desktop-production 环境发布；macOS 双架构与 Windows x64 制品已通过自包含载荷、真实首启、渲染冒烟与 sha512/逐字节门禁。因当前没有 Apple Developer ID 与 Windows Authenticode 证书，本版本明确为未签名、未 Apple 公证安装包；macOS 首次打开需按说明解除隔离，Windows 可能显示 SmartScreen 提示。"
+            fi
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --target "$RELEASE_SHA" \
+              --draft --latest=false \
+              --title "WorkLoom Desktop $RELEASE_TAG" \
+              --notes "$RELEASE_NOTES" || CREATE_STATUS=$?
+            gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json name,tagName,isDraft,isImmutable,isPrerelease,targetCommitish,assets > "$RELEASE_JSON" || {
+              echo "❌ Release 创建/回读状态不确定（create=$CREATE_STATUS），人工阻断"
+              exit 1
+            }
+          fi
+
+          IS_DRAFT="$(node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.argv[1]));process.stdout.write(String(r.isDraft===true))' "$RELEASE_JSON")"
+          IS_IMMUTABLE="$(node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.argv[1]));process.stdout.write(String(r.isImmutable===true))' "$RELEASE_JSON")"
+          node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.argv[1])),tag=process.argv[2],sha=process.argv[3];if(r.tagName!==tag||r.isPrerelease)throw new Error("Release 必须绑定精确稳定标签");if(r.isDraft&&(r.name!==`WorkLoom Desktop ${tag}`||r.targetCommitish!==sha))throw new Error("可恢复草稿必须由当前桌面发布器创建并绑定精确提交")' "$RELEASE_JSON" "$RELEASE_TAG" "$RELEASE_SHA"
+          if [ "$IS_DRAFT" = "true" ] && [ "$IS_IMMUTABLE" = "true" ]; then
+            echo "❌ 不可变 Release 不得处于草稿状态"
+            exit 1
+          fi
+
+          prove_public_candidate_shape() {
+            local tag="$1" candidate_json="$RUNNER_TEMP/desktop-candidate-${tag}.json" candidate_dir candidate_sha name tag_status=30
+            gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json name,tagName,isDraft,isImmutable,isPrerelease,assets > "$candidate_json" || return 30
+            node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.argv[1])),tag=process.argv[2],expected=process.argv.slice(3),assets=Array.isArray(r.assets)?r.assets:[],names=assets.map(a=>a?.name);if(r.name!==`WorkLoom Desktop ${tag}`||r.tagName!==tag||r.isDraft!==false||r.isPrerelease!==false||r.isImmutable!==true)throw new Error("latest 候选不是已证明的不可变桌面稳定版");if(names.length!==expected.length||expected.some(n=>names.filter(x=>x===n).length!==1)||assets.some(a=>a?.state!=="uploaded"||!(Number(a?.size)>0)))throw new Error("latest 候选资产集未通过证明")' "$candidate_json" "$tag" "${EXPECTED[@]}" || return 20
+            candidate_dir="$(mktemp -d)" || return 30
+            for name in "${EXPECTED[@]}"; do
+              gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir "$candidate_dir" || return 30
+              test -s "$candidate_dir/$name" || return 20
+            done
+            candidate_sha="$(node -e 'const fs=require("fs"),p=require("path"),c=require("crypto");const dir=process.argv[1],tag=process.argv[2],expected=process.argv.slice(3),manifest=JSON.parse(fs.readFileSync(p.join(dir,"WorkLoom-release-manifest.json")));if(manifest.schemaVersion!==1||manifest.product!=="workloom-desktop"||manifest.tag!==tag||!(/^[0-9a-f]{40}$/u.test(manifest.sha??""))||!Array.isArray(manifest.assets)||manifest.assets.length!==expected.length)throw new Error("latest 候选 manifest 身份不正确");const lines=fs.readFileSync(p.join(dir,"WorkLoom-SHA512SUMS.txt"),"utf8").trimEnd().split("\n");if(lines.length!==expected.length)throw new Error("latest 候选校验表数量不正确");for(const name of expected){const rows=manifest.assets.filter(a=>a.name===name),bytes=fs.readFileSync(p.join(dir,name)),digest=c.createHash("sha512").update(bytes).digest("hex");if(rows.length!==1||rows[0].size!==bytes.length||rows[0].sha512!==digest||lines.filter(line=>line===`${digest}  ${name}`).length!==1)throw new Error(`latest 候选 ${name} 未通过 sha512 证明`)}process.stdout.write(manifest.sha)' "$candidate_dir" "$tag" "${INSTALLERS[@]}")" || return 20
+            if verify_tag "$tag" "$candidate_sha"; then
+              return 0
+            else
+              tag_status=$?
+              return "$tag_status"
+            fi
+          }
+
+          restore_latest_after_quarantine() {
+            local restore_tag restore_status=0
+            gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName,isLatest,isDraft,isImmutable,isPrerelease > "$RELEASE_LIST_JSON" || return 1
+            node -e 'const fs=require("fs");const rs=JSON.parse(fs.readFileSync(process.argv[1]));if(!Array.isArray(rs)||rs.length>=1000)throw new Error("Release 列表可能被截断")' "$RELEASE_LIST_JSON" || return 1
+            restore_tag="$(node -e 'const fs=require("fs");const rs=JSON.parse(fs.readFileSync(process.argv[1])),target=process.argv[2],parse=s=>{const m=/^v(\d+)\.(\d+)\.(\d+)$/.exec(String(s??""));return m?m.slice(1).map(Number):null},cmp=(a,b)=>a[0]-b[0]||a[1]-b[1]||a[2]-b[2],stable=rs.filter(r=>r.tagName!==target&&r.isDraft===false&&r.isPrerelease===false&&parse(r.tagName));if(stable.length){const max=stable.reduce((a,b)=>cmp(parse(a.tagName),parse(b.tagName))>=0?a:b);process.stdout.write(max.tagName)}' "$RELEASE_LIST_JSON" "$RELEASE_TAG")" || return 1
+            if [ -n "$restore_tag" ]; then
+              prove_public_candidate_shape "$restore_tag" || { echo "❌ 最高候选并非已证明的不可变桌面稳定版，拒绝把 latest 指向它"; return 1; }
+              gh release edit "$restore_tag" --repo "$GITHUB_REPOSITORY" --latest=true || restore_status=$?
+            fi
+            gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName,isLatest,isDraft,isImmutable,isPrerelease > "$RELEASE_LIST_JSON" || return 1
+            node -e 'const fs=require("fs");const rs=JSON.parse(fs.readFileSync(process.argv[1])),target=process.argv[2],expected=process.argv[3];if(!Array.isArray(rs)||rs.length>=1000)throw new Error("Release 列表可能被截断");const targetRows=rs.filter(r=>r.tagName===target),latest=rs.filter(r=>r.isLatest===true);if(targetRows.length!==1||targetRows[0].isDraft!==true||targetRows[0].isLatest===true)throw new Error("隔离后目标必须是非 latest 草稿");if(latest.length>1)throw new Error("隔离后 latest 不唯一");if(expected&&(latest.length!==1||latest[0].tagName!==expected))throw new Error("隔离后未恢复最高健康桌面稳定版");if(!expected&&latest.some(r=>r.tagName===target))throw new Error("隔离后目标仍是 latest")' "$RELEASE_LIST_JSON" "$RELEASE_TAG" "$restore_tag" || return 1
+            [ "$restore_status" -eq 0 ] || echo "⚠️ latest 恢复请求响应异常，但服务端最终状态已回读证明"
+          }
+
+          verify_remote_assets() {
+            local compare_mode="${1:-}" remote_dir name
+            [ "$compare_mode" = "local" ] || { echo "❌ 公开 Release 必须与本次已签名候选逐字节绑定" >&2; return 30; }
+            gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json name,tagName,isDraft,isImmutable,isPrerelease,assets > "$RELEASE_JSON" || return 30
+            ASSET_CLASS="$(node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.argv[1])),tag=process.argv[2],expected=process.argv.slice(3),assets=Array.isArray(r.assets)?r.assets:[],names=assets.map(a=>a?.name),managed=r.name===`WorkLoom Desktop ${tag}`||names.includes("WorkLoom-release-manifest.json"),invalid=names.length!==expected.length||expected.some(n=>names.filter(x=>x===n).length!==1)||assets.some(a=>a?.state!=="uploaded"||!(Number(a?.size)>0));process.stdout.write(invalid?(managed?"managed-corrupt":"legacy-incompatible"):"healthy")' "$RELEASE_JSON" "$RELEASE_TAG" "${EXPECTED[@]}")" || return 30
+            [ "$ASSET_CLASS" = "managed-corrupt" ] && return 20
+            [ "$ASSET_CLASS" = "legacy-incompatible" ] && return 21
+            [ "$ASSET_CLASS" = "healthy" ] || return 30
+            remote_dir="$(mktemp -d)" || return 30
+            for name in "${EXPECTED[@]}"; do
+              gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir "$remote_dir" || return 30
+              test -s "$remote_dir/$name" || return 20
+              if [ "$compare_mode" = "local" ]; then
+                cmp -s "$ASSET_DIR/$name" "$remote_dir/$name" || return 20
+                test "$(sha512sum "$ASSET_DIR/$name" | cut -d' ' -f1)" = "$(sha512sum "$remote_dir/$name" | cut -d' ' -f1)" || return 20
+              fi
+            done
+            node -e 'const fs=require("fs"),p=require("path"),c=require("crypto");const dir=process.argv[1],tag=process.argv[2],sha=process.argv[3],expected=process.argv.slice(4),manifest=JSON.parse(fs.readFileSync(p.join(dir,"WorkLoom-release-manifest.json")));if(manifest.schemaVersion!==1||manifest.product!=="workloom-desktop"||manifest.tag!==tag||manifest.sha!==sha||!Array.isArray(manifest.assets)||manifest.assets.length!==expected.length)throw new Error("Release manifest 身份不匹配");const lines=fs.readFileSync(p.join(dir,"WorkLoom-SHA512SUMS.txt"),"utf8").trimEnd().split("\n");if(lines.length!==expected.length)throw new Error("SHA512SUMS 数量不匹配");for(const name of expected){const matches=manifest.assets.filter(a=>a.name===name);if(matches.length!==1)throw new Error(`${name} manifest 记录必须唯一`);const b=fs.readFileSync(p.join(dir,name)),digest=c.createHash("sha512").update(b).digest("hex"),a=matches[0];if(b.length<=0||a.size!==b.length||a.sha512!==digest)throw new Error(`${name} 大小或 sha512 不匹配`);if(lines.filter(line=>line===`${digest}  ${name}`).length!==1)throw new Error(`${name} 校验表记录不唯一`)}' "$remote_dir" "$RELEASE_TAG" "$RELEASE_SHA" "${INSTALLERS[@]}" || return 20
+          }
+
+          if [ "$IS_DRAFT" = "false" ]; then
+            # 公开版本也必须与本次通过签名、首启和渲染冒烟的候选逐字节一致；禁止只凭
+            # Release 内 manifest/checksum 自洽信任被其他 contents:write 主体抢先创建的版本。
+            if verify_remote_assets local; then
+              :
+            else
+              VERIFY_STATUS=$?
+              if [ "$VERIFY_STATUS" -eq 20 ] && [ "$IS_IMMUTABLE" = "false" ]; then
+                QUARANTINE_STATUS=0
+                gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=true --latest=false || QUARANTINE_STATUS=$?
+                gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isImmutable > "$RELEASE_JSON" || {
+                  echo "❌ 隔离请求后无法回读最终状态，人工阻断"
+                  exit 1
+                }
+                node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.argv[1]));if(!r.isDraft||r.isImmutable)throw new Error("语义错误的可变 Release 未被隔离")' "$RELEASE_JSON"
+                restore_latest_after_quarantine
+                [ "$QUARANTINE_STATUS" -eq 0 ] || echo "⚠️ 隔离请求响应异常，但服务端草稿与 latest 恢复已证明"
+                echo "❌ 已公开 Release 资产不完整或字节不一致，已撤回为草稿；必须发布新补丁版本"
+              elif [ "$VERIFY_STATUS" -eq 20 ]; then
+                echo "❌ 不可变公开 Release 资产错误，无法原地修复；必须人工阻断并发布新版本"
+              elif [ "$VERIFY_STATUS" -eq 21 ]; then
+                echo "❌ 已公开 Release 缺少新版受控 manifest 或资产集不同；为避免误撤历史版本，保持原状并人工阻断"
+              else
+                echo "❌ 无法证明已公开 Release 字节完整；为避免网络误判导致下线，保持原状并人工阻断"
+              fi
+              exit 1
+            fi
+          else
+            [ "$IS_IMMUTABLE" = "false" ]
+            [ "$TARGET_IS_HIGHEST" = "true" ] || { echo "❌ 新桌面版本必须高于所有已公开稳定桌面版"; exit 1; }
+            # 草稿可恢复中断上传。已存在资产相等则复用；不等时只允许在已验证身份的
+            # 私有可变草稿内逐个删除、回读为空后再上传，绝不对公开/不可变 Release clobber。
+            node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.argv[1])),expected=process.argv.slice(2),assets=r.assets??[],names=assets.map(a=>a.name);if(names.some(n=>!expected.includes(n))||new Set(names).size!==names.length)throw new Error("草稿含未知或重复资产");if(assets.some(a=>a.state!=="uploaded"||!(Number(a.size)>0)))throw new Error("草稿资产未完成上传或为空")' "$RELEASE_JSON" "${EXPECTED[@]}"
+            for name in "${EXPECTED[@]}"; do
+              COUNT="$(node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.argv[1])),n=process.argv[2];process.stdout.write(String((r.assets??[]).filter(a=>a.name===n).length))' "$RELEASE_JSON" "$name")"
+              if [ "$COUNT" -eq 1 ]; then
+                CHECK_DIR="$(mktemp -d)"
+                gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir "$CHECK_DIR"
+                if ! cmp -s "$ASSET_DIR/$name" "$CHECK_DIR/$name"; then
+                  DELETE_STATUS=0
+                  gh release delete-asset "$RELEASE_TAG" "$name" --repo "$GITHUB_REPOSITORY" --yes || DELETE_STATUS=$?
+                  gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isImmutable,isPrerelease,assets > "$RELEASE_JSON" || { echo "❌ 草稿资产删除后无法回读"; exit 1; }
+                  REMAINING="$(node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.argv[1])),n=process.argv[2];process.stdout.write(String((r.assets??[]).filter(a=>a.name===n).length))' "$RELEASE_JSON" "$name")"
+                  test "$REMAINING" -eq 0 || { echo "❌ 草稿旧候选未被唯一删除"; exit 1; }
+                  [ "$DELETE_STATUS" -eq 0 ] || echo "⚠️ 草稿旧候选删除响应异常，但服务端空状态已回读证明"
+                  COUNT=0
+                fi
+              fi
+              if [ "$COUNT" -eq 0 ]; then
+                UPLOAD_STATUS=0
+                gh release upload "$RELEASE_TAG" "$ASSET_DIR/$name" --repo "$GITHUB_REPOSITORY" || UPLOAD_STATUS=$?
+                gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isImmutable,isPrerelease,assets > "$RELEASE_JSON" || { echo "❌ 草稿资产上传后无法回读"; exit 1; }
+                node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.argv[1])),n=process.argv[2],rows=(r.assets??[]).filter(a=>a.name===n);if(rows.length!==1||rows[0].state!=="uploaded"||!(Number(rows[0].size)>0))throw new Error("草稿新候选未唯一完成上传")' "$RELEASE_JSON" "$name"
+                [ "$UPLOAD_STATUS" -eq 0 ] || echo "⚠️ 草稿候选上传响应异常，但服务端完成状态已回读证明"
+              else
+                test "$COUNT" -eq 1
+              fi
+              gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isImmutable,isPrerelease,assets > "$RELEASE_JSON"
+            done
+            verify_remote_assets local
+            verify_tag
+          fi
+
+          FINAL_IS_IMMUTABLE="$IS_IMMUTABLE"
+          PREPROMOTION_PROVEN=false
+          verify_public_release() {
+            local final_dir name latest
+            gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json name,tagName,isDraft,isImmutable,isPrerelease,assets > "$RELEASE_JSON" || return 1
+            FINAL_IS_IMMUTABLE="$(node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.argv[1]));if(typeof r.isImmutable!=="boolean")throw new Error("Release 缺少 isImmutable");process.stdout.write(String(r.isImmutable))' "$RELEASE_JSON")" || return 1
+            node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.argv[1])),tag=process.argv[2],expected=process.argv.slice(3),assets=Array.isArray(r.assets)?r.assets:[],names=assets.map(a=>a?.name);if(r.tagName!==tag||r.isDraft!==false||r.isPrerelease!==false)throw new Error("公开 Release 状态不正确");if(r.isImmutable!==true)throw new Error("公开 Release 未进入 GitHub 不可变状态");if(names.length!==expected.length||expected.some(n=>names.filter(x=>x===n).length!==1)||assets.some(a=>a?.state!=="uploaded"||!(Number(a?.size)>0)))throw new Error("公开 Release 资产集、状态或大小不正确")' "$RELEASE_JSON" "$RELEASE_TAG" "${EXPECTED[@]}" || return 1
+            verify_remote_assets local || return 1
+            gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName,isLatest,isDraft,isImmutable,isPrerelease > "$RELEASE_LIST_JSON" || return 1
+            node -e 'const fs=require("fs");const rs=JSON.parse(fs.readFileSync(process.argv[1]));if(!Array.isArray(rs)||rs.length>=1000)throw new Error("Release 列表可能被截断")' "$RELEASE_LIST_JSON" || return 1
+            latest="$(node -e 'const fs=require("fs");const rs=JSON.parse(fs.readFileSync(process.argv[1])),tag=process.argv[2],parse=s=>{const m=/^v(\d+)\.(\d+)\.(\d+)$/.exec(s);return m?m.slice(1).map(Number):null},cmp=(a,b)=>a[0]-b[0]||a[1]-b[1]||a[2]-b[2],pub=rs.filter(r=>!r.isDraft&&!r.isPrerelease&&parse(r.tagName)),target=pub.filter(r=>r.tagName===tag),latest=rs.filter(r=>r.isLatest===true);if(!pub.length||target.length!==1||latest.length!==1)throw new Error("公开稳定桌面版或 latest 不唯一");const max=pub.reduce((a,b)=>cmp(parse(a.tagName),parse(b.tagName))>=0?a:b);if(latest[0].tagName!==max.tagName)throw new Error("仓库 latest 必须指向最高桌面稳定版");process.stdout.write(String(target[0].isLatest===true))' "$RELEASE_LIST_JSON" "$RELEASE_TAG")" || return 1
+            [ "$latest" = "$TARGET_IS_HIGHEST" ] || return 1
+            verify_tag || return 1
+          }
+
+          verify_public_release_with_retry() {
+            local attempt=1 max_attempts=4
+            while [ "$attempt" -le "$max_attempts" ]; do
+              if verify_public_release; then
+                return 0
+              fi
+              if [ "$attempt" -eq "$max_attempts" ]; then
+                echo "❌ 公开 Release 在 ${max_attempts} 次回读后仍无法完成最终证明" >&2
+                return 1
+              fi
+              echo "⚠️ 公开 Release 第 ${attempt} 次回读未完成，等待后重试" >&2
+              sleep $((attempt * 3))
+              attempt=$((attempt + 1))
+            done
+          }
+
+          reprove_target_with_retry() {
+            local attempt=1 max_attempts=4 asset_status=30 tag_status=30
+            while [ "$attempt" -le "$max_attempts" ]; do
+              if verify_remote_assets local; then
+                asset_status=0
+              else
+                asset_status=$?
+              fi
+              if [ "$asset_status" -eq 0 ]; then
+                if verify_tag; then
+                  return 0
+                else
+                  tag_status=$?
+                fi
+              fi
+              # 20/21 是已回读出的确定性资产、字节或标签不一致；30 是 API/下载
+              # 状态不确定。只有确定性不一致才允许调用方清除 latest。
+              if [ "$asset_status" -eq 20 ] || [ "$asset_status" -eq 21 ] || [ "$tag_status" -eq 20 ]; then
+                return 20
+              fi
+              if [ "$attempt" -eq "$max_attempts" ]; then
+                echo "❌ 无法确定目标 Release 的远端字节或标签状态，保持线上状态并人工阻断" >&2
+                return 30
+              fi
+              echo "⚠️ 目标 Release 第 ${attempt} 次重证明遇到远端不确定状态，等待后重试" >&2
+              sleep $((attempt * 3))
+              attempt=$((attempt + 1))
+            done
+          }
+
+          rollback_public_release() {
+            local candidate demote_status=0 reprove_status=30 proof_status=30
+            local -a restore_candidates=()
+            gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isImmutable,isLatest > "$RELEASE_JSON" || return 1
+            FINAL_IS_IMMUTABLE="$(node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.argv[1]));process.stdout.write(String(r.isImmutable===true))' "$RELEASE_JSON")" || return 1
+            if [ "$FINAL_IS_IMMUTABLE" = "false" ]; then
+              ROLLBACK_STATUS=0
+              gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=true --latest=false || ROLLBACK_STATUS=$?
+              gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isImmutable > "$RELEASE_JSON" || return 1
+              node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.argv[1]));if(!r.isDraft||r.isImmutable)throw new Error("发布失败后未恢复可变草稿")' "$RELEASE_JSON" || return 1
+              restore_latest_after_quarantine || return 1
+              [ "$ROLLBACK_STATUS" -eq 0 ] || echo "⚠️ rollback 请求响应异常，但服务端草稿与 latest 恢复已证明"
+            else
+              [ "$PREPROMOTION_PROVEN" = "true" ] || return 1
+              # immutable 生效后若最终回读失败，先重新把目标与本次本地候选和 tag 绑定。
+              # 确定性字节/标签不一致才排除目标；API/下载不确定只重试并阻断，不改线上状态。
+              # 禁止仅凭远端 manifest 自洽把竞态替换过的目标重新选为 latest。
+              TARGET_REPROVEN=false
+              if reprove_target_with_retry; then
+                TARGET_REPROVEN=true
+              else
+                reprove_status=$?
+                [ "$reprove_status" -eq 20 ] || {
+                  echo "❌ 目标重证明仅得到远端不确定状态；拒绝基于不确定性改写 latest" >&2
+                  return 1
+                }
+                # 若目标无法重新绑定本次候选，先清除 latest 身份并回读；即使没有任何
+                # 历史版本满足新版证明规范，也不能把可疑不可变版本留在默认下载入口。
+                gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --latest=false || demote_status=$?
+                gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isImmutable,isLatest > "$RELEASE_JSON" || return 1
+                node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.argv[1]));if(r.isDraft||r.isImmutable!==true||r.isLatest===true)throw new Error("未证明的不可变目标仍占据 latest")' "$RELEASE_JSON" || return 1
+                [ "$demote_status" -eq 0 ] || echo "⚠️ 目标 latest 清除请求响应异常，但服务端终态已回读证明"
+              fi
+              gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName,isLatest,isDraft,isImmutable,isPrerelease > "$RELEASE_LIST_JSON" || return 1
+              node -e 'const fs=require("fs");const rs=JSON.parse(fs.readFileSync(process.argv[1]));if(!Array.isArray(rs)||rs.length>=1000)throw new Error("Release 列表可能被截断")' "$RELEASE_LIST_JSON" || return 1
+              mapfile -t restore_candidates < <(node -e 'const fs=require("fs");const rs=JSON.parse(fs.readFileSync(process.argv[1])),target=process.argv[2],targetReproven=process.argv[3]==="true",parse=s=>{const m=/^v(\d+)\.(\d+)\.(\d+)$/.exec(String(s??""));return m?m.slice(1).map(Number):null},cmp=(a,b)=>a[0]-b[0]||a[1]-b[1]||a[2]-b[2],stable=rs.filter(r=>r.isDraft===false&&r.isPrerelease===false&&parse(r.tagName)&&(targetReproven||r.tagName!==target)).sort((a,b)=>cmp(parse(b.tagName),parse(a.tagName)));process.stdout.write(stable.map(r=>r.tagName).join("\n"))' "$RELEASE_LIST_JSON" "$RELEASE_TAG" "$TARGET_REPROVEN")
+              RESTORE_TAG=""
+              if [ "$TARGET_REPROVEN" = "true" ]; then
+                # reprove_target_with_retry 已把 immutable 目标与本次本地候选及 tag 绑定；
+                # 不重复下载，避免第二次 API 抖动把健康目标错误降级到旧版本。
+                RESTORE_TAG="$RELEASE_TAG"
+              else
+                for candidate in "${restore_candidates[@]}"; do
+                  if prove_public_candidate_shape "$candidate"; then
+                    RESTORE_TAG="$candidate"
+                    break
+                  else
+                    proof_status=$?
+                    if [ "$proof_status" -eq 20 ]; then
+                      continue
+                    fi
+                    echo "❌ 历史候选证明遇到远端不确定状态；拒绝跳过它并选择更低版本" >&2
+                    return 1
+                  fi
+                done
+              fi
+              [ -n "$RESTORE_TAG" ] || { echo "❌ 没有可恢复的已证明不可变桌面稳定版" >&2; return 1; }
+              if [ "$RESTORE_TAG" = "$RELEASE_TAG" ]; then
+                [ "$TARGET_REPROVEN" = "true" ] || return 1
+              fi
+              LATEST_REPAIR_STATUS=0
+              gh release edit "$RESTORE_TAG" --repo "$GITHUB_REPOSITORY" --latest=true || LATEST_REPAIR_STATUS=$?
+              gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName,isLatest,isDraft,isImmutable,isPrerelease > "$RELEASE_LIST_JSON" || return 1
+              node -e 'const fs=require("fs");const rs=JSON.parse(fs.readFileSync(process.argv[1])),expected=process.argv[2],latest=rs.filter(r=>r.isLatest===true);if(!Array.isArray(rs)||rs.length>=1000||latest.length!==1||latest[0].tagName!==expected)throw new Error("不可变失败后 latest 未恢复到最高已证明桌面稳定版")' "$RELEASE_LIST_JSON" "$RESTORE_TAG" || return 1
+              [ "$LATEST_REPAIR_STATUS" -eq 0 ] || echo "⚠️ 不可变失败后的 latest 修复响应异常，但服务端终态已回读证明"
+              if [ "$TARGET_REPROVEN" = "true" ]; then
+                echo "⚠️ 不可变目标已重新绑定本次候选，latest 已恢复，等待最终闭环复验" >&2
+              else
+                echo "⚠️ 不可变目标无法重新证明；latest 已恢复到其他已证明桌面稳定版，必须以前向补丁修复" >&2
+              fi
+            fi
+          }
+
+          if [ "$IS_DRAFT" = "true" ]; then
+            verify_tag
+            verify_remote_assets local
+            gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName,isLatest,isDraft,isImmutable,isPrerelease > "$RELEASE_LIST_JSON"
+            node -e 'const fs=require("fs");const rs=JSON.parse(fs.readFileSync(process.argv[1])),tag=process.argv[2],parse=s=>{const m=/^v(\d+)\.(\d+)\.(\d+)$/.exec(s);return m?m.slice(1).map(Number):null},cmp=(a,b)=>a[0]-b[0]||a[1]-b[1]||a[2]-b[2],tv=parse(tag);if(!Array.isArray(rs)||rs.length>=1000||!tv)throw new Error("发布前 Release 列表不完整");const others=rs.filter(r=>!r.isDraft&&!r.isPrerelease&&r.tagName!==tag).map(r=>parse(r.tagName)).filter(Boolean);if(!others.every(v=>cmp(tv,v)>0))throw new Error("发布前目标已不再是最高桌面稳定版")' "$RELEASE_LIST_JSON" "$RELEASE_TAG"
+            PREPROMOTION_PROVEN=true
+            PROMOTE_STATUS=0
+            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest=true || PROMOTE_STATUS=$?
+            if ! verify_public_release_with_retry; then
+              if rollback_public_release \
+                && [ "$FINAL_IS_IMMUTABLE" = "true" ] \
+                && [ "$TARGET_REPROVEN" = "true" ] \
+                && verify_public_release_with_retry; then
+                echo "⚠️ 首轮最终证明失败；不可变目标重新绑定本次候选并修复 latest 后已通过闭环"
+              else
+                echo "❌ 最终证明失败或无法恢复到可信终态，需要人工阻断" >&2
+                exit 1
+              fi
+            fi
+            [ "$PROMOTE_STATUS" -eq 0 ] || echo "⚠️ publish 请求响应异常，但服务端公开状态与字节闭环已通过"
+          else
+            # 已公开版本重跑全程只读；latest 异常只阻断并报警，不借重跑改写历史元数据。
+            verify_public_release_with_retry || { echo "❌ 已发布桌面版本与本次受信候选的最终证明失败"; exit 1; }
+          fi
+          echo "✅ $RELEASE_TAG @ ${RELEASE_SHA:0:12} 已通过三制品原子发布、sha512、逐字节、latest 与标签闭环核验"

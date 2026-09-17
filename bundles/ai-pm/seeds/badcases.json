@@ -1,0 +1,31 @@
+{
+ "badcases": [
+  {
+   "id": "BC-0091",
+   "source": "user_feedback",
+   "desensitized": true,
+   "summary": "导出 CSV 在 Excel 打开中文乱码（BOM 缺失）",
+   "attribution": "prompt/代码边界",
+   "disposition": "已转化为 eval 案例（ES-002 C-014）",
+   "created_at": "2026-08-28"
+  },
+  {
+   "id": "BC-0092",
+   "source": "approval_reject",
+   "desensitized": true,
+   "summary": "回复草稿把内部成本数据写进了对外说明",
+   "attribution": "prompt 约束缺失",
+   "disposition": "已增补对抗案例（ES-001 C-033）+ R-PM5 样本",
+   "created_at": "2026-08-30"
+  },
+  {
+   "id": "BC-0093",
+   "source": "online_trace",
+   "desensitized": true,
+   "summary": "长文本周报在 4000 字处截断",
+   "attribution": "模型输出上限",
+   "disposition": "prompt v15 修复，回归案例 C-011 持续观察",
+   "created_at": "2026-09-02"
+  }
+ ]
+}

@@ -1,0 +1,69 @@
+# 仙女座运营运维系统 · 平台基线围栏包（PRD V3.0 第八章）
+# 设计原则（与底座围栏瀑布一致：block > review > auto，求值异常按 block）：
+#   auto   = 规则明确、重复执行、可回滚（接单/分诊/查账作答/巡检/聚合）
+#   review = 涉资金、涉客户面、涉对外口径（审批卡必须自带 AI 上下文摘要+建议，3 分钟可裁决）
+#   block  = 合规红线（客户数据导出/触达频控击穿——系统层面无执行权）
+# 兜底纪律：未命中任何规则的动作按 default_level 处理（杜绝"未定义即放行"）
+version: platform-baseline/v1
+default_level: review
+fences:
+  - rule_id: R-PL1
+    name: 资金动作必审
+    level: review
+    match: { object_types: [credit_account], actions: [refund, gift_manual] }
+    action: { result: review }
+    note: 退款、手动赠积分一律人审；对账差异未清零前冻结该租户自动赠款动作
+  - rule_id: R-PL2
+    name: 批量客户操作必审
+    level: review
+    match: { object_types: [tenant_profile], actions: [batch_touch, batch_config] }
+    action: { result: review }
+    note: 涉及 >10 租户的批量触达/配置变更；审批卡附租户圈选清单与预估影响面
+  - rule_id: R-PL3
+    name: 需求注入研发必审
+    level: review
+    match: { object_types: [requirement], actions: [inject_pipeline] }
+    action: { result: review }
+    note: 平台 PM 拍板立项的唯一闸门；驳回需给出理由并回传客户（"暂不做的原因"也是服务）
+  - rule_id: R-PL4
+    name: 客户数据导出红线
+    level: block
+    match: { object_types: [tenant_profile], actions: [data_export] }
+    action: { result: block }
+    note: 合规红线，谁都批不了；客户原始经营数据不出客户库，白名单外字段整批拒收
+  - rule_id: R-PL5
+    name: 行业包灰度发布必审
+    level: review
+    match: { object_types: [bundle_version], actions: [rollout] }
+    action: { result: review }
+    note: 每个灰度批次启动前人审；观察期错误率/工单密度超阈值自动暂停并回滚上一批次
+  - rule_id: R-PL6
+    name: 代客修改配置必审
+    level: review
+    match: { object_types: [tenant_profile], actions: [remote_config] }
+    action: { result: review }
+    note: 远程变更客户实例配置需客户授权记录随行；无授权记录直接打回
+  - rule_id: R-PL7
+    name: 对外故障通报必审
+    level: review
+    match: { object_types: [incident], actions: [announce] }
+    action: { result: review }
+    note: 含受影响租户名单核对；通报发布后与工单关联，逐户送达留痕
+  - rule_id: R-PL8
+    name: 知识条目发布必审
+    level: review
+    match: { object_types: [kb_item], actions: [publish] }
+    action: { result: review }
+    note: 对外口径统一闸门；争议类话术走保守模板；答案必须可溯源到知识条目
+  - rule_id: R-PL9
+    name: 策略上线必审
+    level: review
+    match: { object_types: [strategy], actions: [activate] }
+    action: { result: review }
+    note: 自生长的裁决点；无度量指标的策略草案不许提交审批；全量一步到位需写明理由
+  - rule_id: R-PL10
+    name: 客户触达频控
+    level: block
+    match: { object_types: [tenant_profile], actions: [passive_touch_over_limit] }
+    action: { result: block }
+    note: 同一客户 7 天内被动触达（非其发起）不超过 2 次；全策略共享一个频控计数器

@@ -1,0 +1,28 @@
+# 仙女座运营运维系统 · 模型路由策略（底座 model-router 第⑦槽格式：scenes 覆盖底座默认，未点名场景继承）
+# 档位语义：L1 快省款（确定性/聚合类）/ L2 中档（生成与对话类）/ L3 旗舰（终审类，锁旗舰禁降级）
+version: platform/v1
+scenes:
+  # —— 平台运营场景 ——
+  intent-triage:        { tier: L1, fallback: rule-template }        # 意图六分类（规则先行，LLM 兜底）
+  ticket-ledger:        { tier: L1 }                                  # 状态机驱动与记账（确定性为主）
+  kb-qa-answer:         { tier: L2, escalateOn: [low-confidence, thumbs-down] }  # 知识库作答（有出处地说话）
+  requirement-clarify:  { tier: L2 }                                  # 澄清四问多轮对话
+  confirmation-final:   { tier: L3, noDowngrade: true }               # 《需求确认单》终审——做出来的必须是客户要的
+  kb-harvest:           { tier: L1, window: off-peak-only }           # 关单问答提取
+  kb-fresh:             { tier: L1, window: off-peak-only }           # 知识保鲜巡检
+  health-scan:          { tier: L1, window: off-peak-only }           # 健康分计算与分流摘要
+  care-outreach:        { tier: L2 }                                  # 关怀话术生成
+  credit-reconcile:     { tier: L1, window: off-peak-only }           # 三池对账（确定性）
+  reconcile-analysis:   { tier: L3, noDowngrade: true, billTo: platform }  # 对账差异研判——钱的判断锁旗舰
+  incident-playbook:    { tier: L1, fallback: rule-template }         # playbook 匹配与告警聚合
+  incident-announce:    { tier: L2 }                                  # 对外故障通报草拟（R-PL7 人审）
+  rollout-watch:        { tier: L1, window: off-peak-only }           # 灰度观察期聚合
+  insight-report:       { tier: L2, window: off-peak-only }           # 每日洞察报告
+  strategy-forge:       { tier: L2 }                                  # 策略草案编制
+  strategy-attribution: { tier: L3, noDowngrade: true }               # 策略效果归因终审
+  # —— 底座默认场景显式登记（保持智能版套餐 tierOverrides 引用完整） ——
+  intent-classify:      { tier: L1, fallback: rule-template }
+  nl-translate:         { tier: L1, fallback: rule-template }
+  cs-answer:            { tier: L1, escalateOn: [low-confidence, thumbs-down] }
+  ask-synthesize:       { tier: L1, escalateOn: [thumbs-down] }
+  ceo-decision:         { tier: L2 }

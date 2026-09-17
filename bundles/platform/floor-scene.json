@@ -1,0 +1,12 @@
+{
+  "name": "仙女座运营运维中心（平台服务中枢）",
+  "zones": [
+    { "id": "fae-desk", "label": "FAE 工单组（桥梁与账本）", "pos": [0, 0.6], "roles": ["fae-chief", "ticket-triage-officer", "requirement-dispatcher"] },
+    { "id": "kb-library", "label": "知识管理组（弹药库）", "pos": [-3.4, -1.0], "roles": ["kb-curator", "kb-freshness-officer"] },
+    { "id": "cs-corner", "label": "客户成功组", "pos": [3.4, -1.0], "roles": ["customer-health-officer", "renewal-watchman", "onboarding-guide"] },
+    { "id": "ledger-room", "label": "计费账务组（账房）", "pos": [-3.4, 1.8], "roles": ["credit-reconciler", "billing-officer"] },
+    { "id": "noc", "label": "平台运维组（守夜人）", "pos": [3.4, 1.8], "roles": ["inspector", "incident-responder"] },
+    { "id": "bundle-dock", "label": "行业包运营组（换装坞）", "pos": [-1.2, 3.0], "roles": ["bundle-version-officer", "release-reviewer"] },
+    { "id": "strategy-lab", "label": "策略运营组（自生长引擎）", "pos": [1.2, 3.0], "roles": ["insight-analyst", "strategy-engineer", "effect-evaluator"] }
+  ]
+}

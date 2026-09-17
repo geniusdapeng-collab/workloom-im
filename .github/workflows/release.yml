@@ -1,0 +1,76 @@
+# 【已降级为应急回退线，v2.1.0 起】唯一发行形态为 desktop-production-release.yml 的
+# Electron 完全自包含安装包（DMG/NSIS，客户端窗口即产品）。
+# 本管线（zip 浏览器壳）不再随 tag 触发，仅保留手动 dispatch 应急；产物禁止上传正式 Release。
+# ============================================================
+# WorkLoom macOS 发行管线（W2 / D16）
+# 产物：WorkLoom-macOS.zip + .sha256 → 短期 Actions Artifact（不创建 Release）
+# 验收：macos-14 runner 上以 WORKLOOM_SMOKE=1 跑启动器首航冒烟。
+# ============================================================
+name: release-macos
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "发布版本号（如 v1.1.0，仅手动触发；应急回退，禁止上传正式 Release）"
+        required: false
+        default: "v1.1.0"
+
+permissions:
+  contents: read
+
+jobs:
+  pack-release:
+    runs-on: macos-14
+    timeout-minutes: 60
+    env:
+      VER: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Node 24 + pnpm
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.19.0
+      - run: corepack enable && corepack prepare pnpm@10.14.0 --activate
+
+      - name: 校验应急工件版本
+        run: '[[ "$VER" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "❌ 版本必须是 vX.Y.Z"; exit 1; }'
+
+      - name: 依赖与构建
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm -C apps/web build
+
+      - name: 装配发行包
+        run: bash scripts/pack-macos.sh --version "$VER" --arch arm64
+
+      - name: 首航冒烟（启动器全链：装配→PG→迁移→种子→服务健康）
+        run: |
+          mkdir -p /tmp/wl-smoke && cd /tmp/wl-smoke
+          unzip -q "$GITHUB_WORKSPACE/dist/WorkLoom-macOS.zip"
+          set +e
+          WORKLOOM_SMOKE=1 "./WorkLoom.app/Contents/MacOS/WorkLoom"
+          RC=$?
+          set -e
+          echo "---- 启动器 exit=$RC · 启动日志尾部 ----"
+          tail -80 "$HOME/Library/Logs/WorkLoom/"launch-*.log || true
+          echo "---- pg.log 尾部 ----"
+          tail -60 "$HOME/Library/Logs/WorkLoom/pg.log" || true
+          [ "$RC" -eq 0 ] || exit "$RC"
+          tail -5 "$HOME/Library/Logs/WorkLoom/"launch-*.log | grep -q "首航检查单全绿"
+
+      - name: 上传短期应急工件（不创建 GitHub Release）
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: emergency-macos-${{ inputs.version }}
+          path: |
+            dist/WorkLoom-macOS.zip
+            dist/WorkLoom-macOS.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: 产物摘要
+        run: ls -lh dist/ && cat dist/WorkLoom-macOS.zip.sha256

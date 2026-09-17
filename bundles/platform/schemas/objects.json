@@ -1,0 +1,22 @@
+{
+  "$id": "workloom://bundles/platform/schemas/objects",
+  "description": "仙女座运营运维系统 · 事件 Object 类型枚举（PRD V3.0 §2.3 业务对象模型 / 第九章 Schema）",
+  "objects": [
+    { "type": "tenant_profile", "label": "客户/租户（一户一档全景档案）" },
+    { "type": "service_session", "label": "服务会话" },
+    { "type": "ticket", "label": "工单（账本锚点）" },
+    { "type": "kb_item", "label": "知识条目（平台企业知识库）" },
+    { "type": "requirement", "label": "需求（确认后注入 ai-pm V3 流水线）" },
+    { "type": "requirement_confirmation", "label": "需求确认单（客户显式确认的研发闸门）" },
+    { "type": "delivery", "label": "交付（版本/能力）" },
+    { "type": "credit_account", "label": "积分账本（赠送池/加油包池/本金池）" },
+    { "type": "strategy", "label": "策略（自生长的产物）" },
+    { "type": "health_score", "label": "健康分（五维加权）" },
+    { "type": "incident", "label": "平台事件/故障（P0/P1/P2 分级聚合）" },
+    { "type": "bundle_version", "label": "行业包版本（版本矩阵+灰度批次）" },
+    { "type": "bill_statement", "label": "月度账单" },
+    { "type": "insight_report", "label": "洞察报告（策略上游）" },
+    { "type": "care_task", "label": "关怀任务（CSM 人审后触达）" },
+    { "type": "value_report", "label": "客户价值报告（续费场景）" }
+  ]
+}
