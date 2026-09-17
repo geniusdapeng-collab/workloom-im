@@ -186,12 +186,93 @@
         set -eu
         pnpm suite
 
+# 注意：ui-gate 当前为「显式非阻断」（allowFailure）。
+# 原因：CNB 环境下 15 条用例通过 14 条，仅 `三端静态视觉基线` 因跨环境字体渲染差异失败；
+# 视觉基线需在 CNB 同一环境重新生成后才可转为必需检查。此处不使用静默跳过，失败仍会显红。
+.ui-gate: &ui_gate
+  name: ui-gate
+  allowFailure: true
+  docker:
+    image: pgvector/pgvector:pg17
+    volumes:
+      - /cnb-cache/pnpm-store:copy-on-write
+      - /cnb-cache/node:copy-on-write
+      - /cnb-cache/ms-playwright:copy-on-write
+  env:
+    LLM_PROVIDER: mock
+    IM_DRIVER: mock
+    TOOL_UNVERIFIED_RATE: "0"
+    RUN_DB_TESTS: "1"
+    RELEASE_WORKSPACE_ID: ws-aipm-demo
+    PLAYWRIGHT_BROWSERS_PATH: /cnb-cache/ms-playwright
+  stages:
+    - name: 准备 Node 24 与 pnpm
+      script: |
+        set -eu
+        NODE_VERSION=v24.19.0
+        apt-get update -qq
+        apt-get install -y -qq curl xz-utils ca-certificates git >/dev/null
+        if [ ! -x /cnb-cache/node/bin/node ]; then
+          mkdir -p /cnb-cache/node
+          curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
+          tar -xJf /tmp/node.tar.xz -C /cnb-cache/node --strip-components=1
+        fi
+        for bin in /cnb-cache/node/bin/*; do ln -sf "$bin" /usr/local/bin/; done
+        corepack enable --install-directory /usr/local/bin
+        corepack prepare pnpm@10.14.0 --activate
+        pnpm config set store-dir /cnb-cache/pnpm-store
+        pnpm install --frozen-lockfile
+
+    - name: 启动 PostgreSQL 17 并迁移种子
+      script: |
+        set -eu
+        export PGDATA=/var/lib/postgresql/data
+        if [ ! -s "${PGDATA}/PG_VERSION" ]; then
+          mkdir -p "${PGDATA}"; chown -R postgres:postgres "${PGDATA}"
+          su postgres -c "initdb -D ${PGDATA} -U postgres --auth=trust --encoding=UTF8"
+        fi
+        su postgres -c "pg_ctl -D ${PGDATA} -l /tmp/postgres.log -o '-c listen_addresses=localhost -c port=5432' start"
+        for i in $(seq 1 60); do
+          if pg_isready -h localhost -p 5432 -U postgres >/dev/null 2>&1; then break; fi
+          sleep 1
+        done
+        pg_isready -h localhost -p 5432 -U postgres
+        if ! psql -h localhost -p 5432 -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname='workloom'" | grep -q 1; then
+          psql -h localhost -p 5432 -U postgres -c "CREATE DATABASE workloom OWNER postgres;" >/dev/null
+        fi
+        psql -h localhost -p 5432 -U postgres -d workloom -c "CREATE EXTENSION IF NOT EXISTS vector;" >/dev/null
+        cp .env.example .env
+        set -a; . ./.env; set +a
+        pnpm db:migrate
+        pnpm db:seed:aipm
+        BUNDLE_DIR=bundles/hotel pnpm db:seed
+
+    - name: 三端构建
+      script: |
+        set -eu
+        pnpm -C apps/web build
+        pnpm -C apps/webb build
+        pnpm -C apps/webc build
+
+    - name: 安装 Playwright Chromium
+      script: |
+        set -eu
+        pnpm exec playwright install --with-deps chromium
+
+    - name: 三端响应式、视觉与无障碍门禁
+      script: |
+        set -eu
+        set -a; . ./.env; set +a
+        pnpm ui:e2e
+
 main:
   push:
     - *static_gate
     - *db_gate
+    - *ui_gate
 
 "**":
   pull_request:
     - *static_gate
     - *db_gate
+    - *ui_gate
