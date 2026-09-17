@@ -1,0 +1,198 @@
+# WorkLoom 织元 · CNB 云原生构建闸门
+#
+# 2026-09-17 随仓库迁移到 CNB 落地：把原 GitHub Actions `ci.yml`（ci-gate）的闸门
+# 等价迁移为 CNB 流水线，作为保护分支 main 的必需状态检查。
+#
+# 与 GitHub 版的差异（受 CNB 能力边界约束，README/§13 有登记）：
+#   - CNB services 只支持 docker / vscode，没有 GH Actions 的 service containers；
+#     因此 DB 闸门用 pgvector/pgvector:pg17 作为流水线镜像，在容器内直接拉起 PostgreSQL 17。
+#   - 三端 Playwright 视觉门禁（ui:e2e）暂未纳入 v1，作为后续补入项。
+#   - 签名/公证/发布类流水线保持只读，发布仍在受控人工入口执行。
+
+.static-gate: &static_gate
+  name: static-gate
+  docker:
+    image: node:24.19.0-bookworm
+    volumes:
+      - /cnb-cache/pnpm-store:copy-on-write
+  env:
+    LLM_PROVIDER: mock
+    IM_DRIVER: mock
+    TOOL_UNVERIFIED_RATE: "0"
+  stages:
+    - name: 依赖安装（frozen lockfile）
+      script: |
+        set -eu
+        corepack enable
+        corepack prepare pnpm@10.14.0 --activate
+        pnpm config set store-dir /cnb-cache/pnpm-store
+        pnpm install --frozen-lockfile
+
+    - name: 增量秘密扫描（自检 + 范围扫描）
+      script: |
+        set -eu
+        node scripts/secret-scan.mjs --self-test
+        BASE_SHA="${CNB_BEFORE_SHA:-}"
+        HEAD_SHA="$(git rev-parse HEAD)"
+        if [ -n "$BASE_SHA" ] && git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+          MERGE_BASE="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
+          node scripts/secret-scan.mjs --range "$MERGE_BASE" "$HEAD_SHA" --acceptance-manifest sync/base-scope.json
+        else
+          echo "无可用 base sha（如首次推送），仅执行自检与全量扫描"
+          node scripts/secret-scan.mjs --range "$HEAD_SHA" "$HEAD_SHA" --acceptance-manifest sync/base-scope.json
+        fi
+
+    - name: 桌面运行时锁与载荷边界
+      script: |
+        set -eu
+        pnpm runtime:deps:verify
+        for target in darwin:arm64 darwin:x64 win32:x64; do
+          platform="${target%%:*}"
+          arch="${target##*:}"
+          stage="$(mktemp -d "/tmp/workloom-runtime-${platform}-${arch}.XXXXXX")"
+          node scripts/runtime-deps-lock.mjs stage "$stage" --os "$platform" --cpu "$arch"
+        done
+        pnpm test:payload-boundary
+
+    - name: typecheck 全包
+      script: |
+        set -eu
+        pnpm -r --if-present typecheck
+
+    - name: 产品身份与三端 UI 治理
+      script: |
+        set -eu
+        pnpm product:verify
+        pnpm bundle:governance:test
+        pnpm bundle:governance
+        pnpm projections:check
+        pnpm ui:governance
+        pnpm -C packages/industry-contract test
+        pnpm -C packages/industry-contract build
+        pnpm -C packages/ui test
+        pnpm -C packages/ui build
+
+    - name: 供应链与发布策略门禁
+      script: |
+        set -eu
+        pnpm test:action-trust
+        pnpm test:release-policy
+        pnpm test:release-assets
+        pnpm test:reset-safety
+
+    - name: 基座同步与客户端接入门禁
+      script: |
+        set -eu
+        node --test scripts/verify-ui-consumer.test.mjs sync/base-sync.test.mjs sync/client-foundation.test.mjs sync/set-ui-version.test.mjs sync/ui-upgrade-pr.test.mjs
+        node --test apps/desktop/electron/bootstrap.test.cjs scripts/desktop-bootstrap-db.test.mjs
+
+    - name: 三端生产构建
+      script: |
+        set -eu
+        pnpm -C apps/web build
+        pnpm -C apps/webb build
+        pnpm -C apps/webc build
+
+.db-gate: &db_gate
+  name: db-gate
+  docker:
+    image: pgvector/pgvector:pg17
+    volumes:
+      - /cnb-cache/pnpm-store:copy-on-write
+      - /cnb-cache/node:copy-on-write
+  env:
+    # 与 .github/workflows/ci.yml 的 job env 逐项对齐（DB 集成测试依赖这些连接串与角色口令）
+    DATABASE_URL: postgres://postgres:workloom@localhost:5432/workloom
+    DATABASE_APP_URL: postgres://workloom_app:workloom_dev_app@localhost:5432/workloom
+    DATABASE_GATEWAY_URL: postgres://workloom_gateway:workloom_dev_gateway@localhost:5432/workloom
+    APP_DB_PASSWORD: workloom_dev_app
+    GATEWAY_DB_PASSWORD: workloom_dev_gateway
+    JWT_SECRET: ci-gate-secret
+    LLM_PROVIDER: mock
+    IM_DRIVER: mock
+    RUN_DB_TESTS: "1"
+    TOOL_UNVERIFIED_RATE: "0"
+    RELEASE_WORKSPACE_ID: ws-aipm-demo
+  stages:
+    - name: 准备 Node 24 与 pnpm
+      script: |
+        set -eu
+        NODE_VERSION=v24.19.0
+        apt-get update -qq
+        apt-get install -y -qq curl xz-utils ca-certificates git >/dev/null
+        if [ ! -x /cnb-cache/node/bin/node ]; then
+          mkdir -p /cnb-cache/node
+          curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
+          tar -xJf /tmp/node.tar.xz -C /cnb-cache/node --strip-components=1
+        fi
+        for bin in /cnb-cache/node/bin/*; do ln -sf "$bin" /usr/local/bin/; done
+        node -v
+        corepack enable --install-directory /usr/local/bin
+        corepack prepare pnpm@10.14.0 --activate
+        pnpm config set store-dir /cnb-cache/pnpm-store
+        pnpm install --frozen-lockfile
+
+    - name: 启动 PostgreSQL 17 + pgvector
+      script: |
+        set -eu
+        export PGDATA=/var/lib/postgresql/data
+        if [ ! -s "${PGDATA}/PG_VERSION" ]; then
+          mkdir -p "${PGDATA}"
+          chown -R postgres:postgres "${PGDATA}"
+          su postgres -c "initdb -D ${PGDATA} -U postgres --auth=trust --encoding=UTF8"
+        fi
+        su postgres -c "pg_ctl -D ${PGDATA} -l /tmp/postgres.log -o '-c listen_addresses=localhost -c port=5432' start"
+        for i in $(seq 1 60); do
+          if pg_isready -h localhost -p 5432 -U postgres >/dev/null 2>&1; then break; fi
+          sleep 1
+        done
+        pg_isready -h localhost -p 5432 -U postgres
+        if ! psql -h localhost -p 5432 -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname='workloom'" | grep -q 1; then
+          psql -h localhost -p 5432 -U postgres -c "CREATE DATABASE workloom OWNER postgres;" >/dev/null
+        fi
+        psql -h localhost -p 5432 -U postgres -d workloom -c "CREATE EXTENSION IF NOT EXISTS vector;" >/dev/null
+        psql -h localhost -p 5432 -U postgres -d workloom -tAc "select current_database();"
+
+    - name: 迁移 + 种子（H-1 完整率 100%）
+      script: |
+        set -eu
+        cp .env.example .env
+        pnpm db:migrate
+        pnpm db:seed:aipm
+        pnpm db:seed:aipm:verify-idempotence
+        BUNDLE_DIR=bundles/hotel pnpm db:seed
+        BUNDLE_DIR=bundles/hotel pnpm db:seed
+
+    - name: 哈希链全库验证
+      script: |
+        set -eu
+        pnpm db:verify-chain
+
+    - name: 基座单元与集成测试（DB 集成全开）
+      script: |
+        set -eu
+        pnpm -C packages/shared test
+        pnpm -C packages/base test
+        pnpm -C packages/runtime test
+
+    - name: server 契约与 E2E
+      env:
+        SERVICE_C_TEST_WORKSPACE_ID: ws-yunqi
+      script: |
+        set -eu
+        pnpm -C apps/server test
+
+    - name: 全场景套件
+      script: |
+        set -eu
+        pnpm suite
+
+main:
+  push:
+    - *static_gate
+    - *db_gate
+
+"**":
+  pull_request:
+    - *static_gate
+    - *db_gate
