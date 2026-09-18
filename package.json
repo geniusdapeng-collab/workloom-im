@@ -21,7 +21,7 @@
     "demo": "TOOL_UNVERIFIED_RATE=0 tsx --env-file=.env scripts/demo.ts",
     "doctor": "bash scripts/doctor.sh",
     "typecheck": "pnpm -r --if-present typecheck",
-    "test": "pnpm test:reset-safety && pnpm test:payload-boundary && pnpm test:release-assets && pnpm test:action-trust && pnpm test:release-policy && pnpm test:desktop-bootstrap && pnpm -r --if-present test",
+    "test": "pnpm test:reset-safety && pnpm test:payload-boundary && pnpm test:release-assets && pnpm test:action-trust && pnpm test:release-policy && pnpm test:desktop-bootstrap && pnpm -r --if-present test && pnpm test:oss",
     "test:reset-safety": "node --test scripts/reset-safety.test.mjs",
     "test:payload-boundary": "node --test scripts/product-runtime.test.mjs scripts/payload-policy.test.mjs scripts/pack-nm-merge.test.mjs scripts/runtime-deps-lock.test.mjs",
     "runtime:deps:refresh": "node scripts/runtime-deps-lock.mjs refresh",
@@ -72,7 +72,10 @@
     "app:dist": "electron-builder",
     "setup:lite": "tsx scripts/setup-lite.mts",
     "db:seed:aipm": "tsx --env-file=.env scripts/seed-aipm.ts",
-    "db:seed:aipm:verify-idempotence": "tsx --env-file=.env scripts/verify-seed-aipm-idempotence.ts"
+    "db:seed:aipm:verify-idempotence": "tsx --env-file=.env scripts/verify-seed-aipm-idempotence.ts",
+    "oss:inventory": "bash scripts/oss-watch.sh --inventory",
+    "oss:check": "bash scripts/oss-watch.sh --check",
+    "test:oss": "node --test scripts/oss-inventory.test.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
