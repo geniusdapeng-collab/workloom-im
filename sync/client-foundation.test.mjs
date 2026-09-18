@@ -309,4 +309,23 @@ describe("三端客户端基座稳定分发", () => {
     assert.equal(result.files.has("apps/webc/public/service-front.config.json"), true);
     assert.equal(result.files.has("apps/webc/public/industry/service-front.config.json"), false);
   });
+
+  it("实验车道：仓级扩展路径内的定制不会被判为非法分叉", () => {
+    const repo = createIndustryRepo();
+    applyClientFoundation({ repoRoot: repo, manifest: manifest(), snapshot: makeSnapshot(), mode: "scaffold" });
+    // 实验仓在受管根内新增非全局白名单目录（游戏化赛季引擎）
+    mkdirSync(join(repo, "apps/web/src/campaign"), { recursive: true });
+    writeFileSync(join(repo, "apps/web/src/campaign/campaign.ts"), "export const season = 1;\n");
+
+    const withoutExtra = planClientFoundation({ repoRoot: repo, manifest: manifest(), snapshot: makeSnapshot() });
+    assert.ok(withoutExtra.conflicts.some((item) => item.code === "ILLEGAL_INDUSTRY_APP_PATH"));
+
+    const withExtra = planClientFoundation({
+      repoRoot: repo,
+      manifest: manifest(),
+      snapshot: makeSnapshot(),
+      extraAllowedIndustryExtensionPaths: ["apps/*/src/campaign/**"],
+    });
+    assert.equal(withExtra.conflicts.some((item) => item.code === "ILLEGAL_INDUSTRY_APP_PATH"), false);
+  });
 });

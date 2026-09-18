@@ -39,7 +39,8 @@ import { bindUiLockfileIntegrity } from "./ui-lockfile-integrity.mjs";
 
 const syncDir = dirname(fileURLToPath(import.meta.url));
 const baseDir = resolve(syncDir, "..");
-const EXPECTED_DOWNSTREAM_COUNT = 8;
+// 舰队规模：八行业仓 + WorkLoom-growth；增删舰队成员时同步更新（配合 sync/child-repos.json）
+const EXPECTED_DOWNSTREAM_COUNT = 9;
 const CANONICAL_BASE_REPOSITORY = "workloom-ai/workloom-im";
 const RELEASE_PAYLOAD_SCHEMA = "workloom.ui-release-payload/v1";
 const RELEASE_GOVERNANCE_PAYLOAD_PATHS = Object.freeze([

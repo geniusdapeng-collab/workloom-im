@@ -339,7 +339,26 @@ function validateScope(scope, baseDir) {
       throw new Error(`release artifact capability ${capability.package} 必须通过 stable-github-release-upgrade-pr 分发`);
     }
   }
-  const foundation = scope.clientFoundationCapability;
+    // 仓级实验扩展路径（实验车道）：形状必须与全局白名单同级，否则拒绝同步
+  for (const child of scope?.requiredRootAssets ? [] : []) void child;
+  const childInventory = (() => {
+    try {
+      return JSON.parse(readFileSync(join(baseDir, "sync/child-repos.json"), "utf8"));
+    } catch {
+      return null;
+    }
+  })();
+  for (const child of childInventory?.children ?? []) {
+    for (const pattern of child.industryExtensionPaths ?? []) {
+      if (typeof pattern !== "string" || !pattern.startsWith("apps/") || pattern.includes("..")) {
+        throw new Error(`非法仓级实验扩展路径（${child.repo}）：${pattern}`);
+      }
+    }
+    if (child.lane === "experiment" && !child.experimentNote) {
+      throw new Error(`实验车道仓必须写明 experimentNote：${child.repo}`);
+    }
+  }
+const foundation = scope.clientFoundationCapability;
   if (foundation) {
     if (foundation.distribution !== "stable-tag-upgrade-pr") {
       throw new Error("三端客户端基座必须通过 stable-tag-upgrade-pr 分发");

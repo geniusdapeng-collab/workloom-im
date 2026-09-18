@@ -1,15 +1,62 @@
 {
-  "version": 3,
+  "version": 4,
   "description": "WorkLoom IM 基座同步的子仓订阅清单——父仓 push 模式按本清单逐仓同步；共享 UI 与三端客户端基座作为同一稳定版本按 uiRolloutWaveOrder 分波升级。新仓由 adopt.sh --new-industry 接入 latest stable 后追加。pathPrefix 用于仓内子目录形态（如 workroom-tiger 的前端在 governance/ 下）。extraExclude 为仓级追加排除（该仓的行业化文件，全局 scope 无法表达的按仓差异）。",
   "baseRepo": "workloom-ai/workloom-im",
-  "uiRolloutWaveOrder": ["W1", "W2", "W3A", "W3B", "W4", "W5"],
+  "uiRolloutWaveOrder": [
+    "W1",
+    "W2",
+    "W3A",
+    "W3B",
+    "W4",
+    "W5"
+  ],
   "children": [
-    { "repo": "workloom-ai/workroom-fox",        "pathPrefix": "",            "uiRolloutWave": "W4",  "note": "试验田（其基座演进不回流）", "extraExclude": [] },
-    { "repo": "workloom-ai/workloom-hotel",      "pathPrefix": "",            "uiRolloutWave": "W2",  "note": "酒店行业版", "extraExclude": [] },
-    { "repo": "workloom-ai/hyperreality-system", "pathPrefix": "",            "uiRolloutWave": "W3A", "note": "AI 视频社媒营销", "extraExclude": [] },
-    { "repo": "workloom-ai/workloom",            "pathPrefix": "",            "uiRolloutWave": "W3B", "note": "酒店获客系统", "extraExclude": [] },
     {
-      "repo": "workloom-ai/panda-cineforge", "pathPrefix": "", "uiRolloutWave": "W4", "note": "自主经营电商（service 层与测试已电商化改写）",
+      "repo": "workloom-ai/workroom-fox",
+      "pathPrefix": "",
+      "uiRolloutWave": "W4",
+      "note": "试验田（其基座演进不回流）",
+      "extraExclude": [],
+      "lane": "experiment",
+      "experimentNote": "狐狸先生试验田：3D 数字职场/汇报舞台与实景商业游戏（M2-a）等深度游戏化定制，不属于基座能力，禁止下发覆盖，也不得回流基座（需先抽象提案）。",
+      "experimentPaths": [
+        "apps/web/src/campaign/**",
+        "apps/web/src/components/fox-campaign/**",
+        "apps/web/src/pages/p0/P0.tsx",
+        "docs/fox-business-game-plan.md"
+      ],
+      "industryExtensionPaths": [
+        "apps/*/src/campaign/**",
+        "apps/*/src/components/fox-campaign/**",
+        "apps/*/src/pages/p0/**"
+      ]
+    },
+    {
+      "repo": "workloom-ai/workloom-hotel",
+      "pathPrefix": "",
+      "uiRolloutWave": "W2",
+      "note": "酒店行业版",
+      "extraExclude": []
+    },
+    {
+      "repo": "workloom-ai/hyperreality-system",
+      "pathPrefix": "",
+      "uiRolloutWave": "W3A",
+      "note": "AI 视频社媒营销",
+      "extraExclude": []
+    },
+    {
+      "repo": "workloom-ai/workloom",
+      "pathPrefix": "",
+      "uiRolloutWave": "W3B",
+      "note": "酒店获客系统",
+      "extraExclude": []
+    },
+    {
+      "repo": "workloom-ai/panda-cineforge",
+      "pathPrefix": "",
+      "uiRolloutWave": "W4",
+      "note": "自主经营电商（service 层与测试已电商化改写）",
       "extraExclude": [
         "apps/server/src/service/contract.test.ts",
         "apps/server/src/service/dialog.test.ts",
@@ -32,14 +79,50 @@
       ]
     },
     {
-      "repo": "workloom-ai/workroom-tiger", "pathPrefix": "governance/", "uiRolloutWave": "W5", "note": "AI 股票交易（前端在 governance/ 子目录）",
+      "repo": "workloom-ai/workroom-tiger",
+      "pathPrefix": "governance/",
+      "uiRolloutWave": "W5",
+      "note": "AI 股票交易（前端在 governance/ 子目录）",
       "extraExclude": [
         "apps/server/src/service/contract.test.ts",
         "apps/server/src/service/dialog.test.ts",
         "apps/server/src/service/e2e.test.ts"
       ]
     },
-    { "repo": "workloom-ai/workroom-eagle",      "pathPrefix": "",            "uiRolloutWave": "W1", "note": "鹰眼 AI 咨询", "extraExclude": [] },
-    { "repo": "workloom-ai/workroom-andromeda",  "pathPrefix": "",            "uiRolloutWave": "W1", "note": "仙女座运营运维系统（平台一方自用系统：platform-ops/ 一方工程能力，extraExclude+pollutionGuard 双护栏，永不同步他仓）", "extraExclude": ["platform-ops/**"] }
+    {
+      "repo": "workloom-ai/workroom-eagle",
+      "pathPrefix": "",
+      "uiRolloutWave": "W1",
+      "note": "鹰眼 AI 咨询",
+      "extraExclude": []
+    },
+    {
+      "repo": "workloom-ai/workroom-andromeda",
+      "pathPrefix": "",
+      "uiRolloutWave": "W1",
+      "note": "仙女座运营运维系统（平台一方自用系统：platform-ops/ 一方工程能力，extraExclude+pollutionGuard 双护栏，永不同步他仓）",
+      "extraExclude": [
+        "platform-ops/**"
+      ]
+    },
+    {
+      "repo": "workloom-ai/WorkLoom-growth",
+      "pathPrefix": "",
+      "uiRolloutWave": "W3B",
+      "note": "获客增长新仓（与 workloom 同 productId，2026-09-18 由舰队扫描纳入）",
+      "extraExclude": [],
+      "lane": "experiment",
+      "experimentNote": "获客增长实验仓：在共享壳（hud/star-ring/Floor3D/P0 等）上做游戏化经营定制，属实验语义，不下发覆盖、不回流基座。",
+      "experimentPaths": [
+        "apps/web/src/components/hud/**",
+        "apps/web/src/components/star-ring/**",
+        "apps/web/src/pages/p0/**"
+      ],
+      "industryExtensionPaths": [
+        "apps/*/src/components/hud/**",
+        "apps/*/src/components/star-ring/**",
+        "apps/*/src/pages/p0/**"
+      ]
+    }
   ]
 }

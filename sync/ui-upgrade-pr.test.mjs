@@ -255,7 +255,7 @@ function writeTaggedReleaseSource(root) {
   writeJson(join(root, "sync/base-capabilities.json"), manifest);
   writeJson(join(root, "sync/child-repos.json"), {
     uiRolloutWaveOrder: ["W1"],
-    children: Array.from({ length: 8 }, (_, index) => ({ repo: `org/repo-${index}`, uiRolloutWave: "W1" })),
+    children: Array.from({ length: 9 }, (_, index) => ({ repo: `org/repo-${index}`, uiRolloutWave: "W1" })),
   });
   writeFileSync(join(root, "sync/ui-consumer-template.yml"), "name: consumer\n# __REPO_DIR__\n");
   for (const path of [
@@ -425,7 +425,7 @@ describe("UI 稳定发布门禁", () => {
       const childInventory = execFileSync("git", ["show", "refs/tags/ui-v1.2.3:sync/child-repos.json"], { cwd: root });
       writeJson(childInventoryPath, {
         uiRolloutWaveOrder: ["W1"],
-        children: Array.from({ length: 8 }, (_, index) => ({ repo: `attacker/repo-${index}`, uiRolloutWave: "W1" })),
+        children: Array.from({ length: 9 }, (_, index) => ({ repo: `attacker/repo-${index}`, uiRolloutWave: "W1" })),
       });
       assert.throws(
         () => packTaggedUiArtifact(taggedPackOptions),
@@ -644,11 +644,11 @@ process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", f
     assert.throws(() => resolvePreflightTarget(candidateOnly, { version: "1.2.4" }, "9.9.9"), /未登记/);
   });
 
-  it("必须预检八个且不重复的下游仓", () => {
-    const children = Array.from({ length: 8 }, (_, index) => ({ repo: `org/repo-${index}`, uiRolloutWave: index < 2 ? "W1" : "W2" }));
+  it("必须预检九个且不重复的下游仓", () => {
+    const children = Array.from({ length: 9 }, (_, index) => ({ repo: `org/repo-${index}`, uiRolloutWave: index < 2 ? "W1" : "W2" }));
     assert.equal(validateChildInventory(children, waveOrder), true);
-    assert.throws(() => validateChildInventory(children.slice(0, 7), waveOrder), /8 个仓库/);
-    assert.throws(() => validateChildInventory([...children.slice(0, 7), children[0]], waveOrder), /重复仓库/);
+    assert.throws(() => validateChildInventory(children.slice(0, 8), waveOrder), /9 个仓库/);
+    assert.throws(() => validateChildInventory([...children.slice(0, 8), children[0]], waveOrder), /重复仓库/);
     assert.throws(() => validateChildInventory(children.map((child, index) => index ? child : { ...child, uiRolloutWave: undefined }), waveOrder), /uiRolloutWave/);
   });
 
@@ -787,7 +787,7 @@ process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", f
   });
 
   it("存量迁移缺口会结构化报告，但不反向阻断基座稳定制品", () => {
-    const children = Array.from({ length: 8 }, (_, index) => ({ repo: `org/repo-${index}`, pathPrefix: "", uiRolloutWave: index < 2 ? "W1" : "W2" }));
+    const children = Array.from({ length: 9 }, (_, index) => ({ repo: `org/repo-${index}`, pathPrefix: "", uiRolloutWave: index < 2 ? "W1" : "W2" }));
     let cloneCalls = 0;
     const cloneRoots = [];
     const report = preflightChildren({
@@ -801,23 +801,23 @@ process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", f
         initializeMainRepository(target);
       },
     });
-    assert.equal(cloneCalls, 8);
+    assert.equal(cloneCalls, 9);
     assert.ok(cloneRoots.every((target) => !existsSync(target)), "成功预检的临时工作树也必须全部清理");
     assert.equal(report.schemaVersion, "workloom.ui-downstream-preflight/v1");
     assert.equal(report.targetChannel, "stable");
-    assert.equal(report.requiredRepositoryCount, 8);
+    assert.equal(report.requiredRepositoryCount, 9);
     assert.equal(report.targetArtifacts.sharedUi, "@workloom/ui@1.2.3");
     assert.equal(report.targetArtifacts.clientFoundation, "ui-v1.2.3");
     assert.equal(report.ready, true);
     assert.equal(report.baseReleaseReady, true);
     assert.equal(report.allMigrationsCurrent, false);
-    assert.deepEqual(report.summary, { accessible: 8, unreachable: 0, stageOneReady: 0, phaseOneBlocked: 8, current: 0 });
-    assert.equal(report.repositories.length, 8);
+    assert.deepEqual(report.summary, { accessible: 9, unreachable: 0, stageOneReady: 0, phaseOneBlocked: 9, current: 0 });
+    assert.equal(report.repositories.length, 9);
     assert.ok(report.repositories.every((item) => item.blockers.some((entry) => entry.code === "MISSING_CLIENT_PACKAGE")));
   });
 
   it("仓库不可访问仍会阻断基座发布资格", () => {
-    const children = Array.from({ length: 8 }, (_, index) => ({ repo: `org/repo-${index}`, pathPrefix: "", uiRolloutWave: "W1" }));
+    const children = Array.from({ length: 9 }, (_, index) => ({ repo: `org/repo-${index}`, pathPrefix: "", uiRolloutWave: "W1" }));
     let failedTemp;
     const report = preflightChildren({
       children,
@@ -836,10 +836,10 @@ process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", f
     assert.equal(report.baseReleaseReady, false);
     assert.equal(report.summary.unreachable, 1);
     assert.equal(existsSync(failedTemp), false, "preflight 最终路径必须在失败后清理");
-    assert.ok(report.repositories.at(-1).blockers.some((entry) => entry.code === "CLONE_FAILED"
+    assert.ok(report.repositories.some((item) => item.blockers.some((entry) => entry.code === "CLONE_FAILED"
       && entry.phase === "access"
       && entry.failureClass === "unknown"
-      && entry.attempts === 1));
+      && entry.attempts === 1)));
   });
 
   it("默认只选择最早未完成波次，显式选择也不得越级", () => {

@@ -45,7 +45,9 @@
     - name: 协议门禁（提交规范 + 并发冲突）
       script: |
         set -eu
-        node --test scripts/ci/protocol-rules.test.mjs
+        node --test scripts/ci/protocol-rules.test.mjs scripts/tools/fleet-rules.test.mjs scripts/tools/experiment-rules.test.mjs
+        node scripts/tools/experiment-guard.mjs --self-test
+        node scripts/tools/experiment-guard.mjs --check
         node scripts/ci/verify-commit-msg.mjs --self-test
         node scripts/ci/verify-lock-conflict.mjs --self-test
         node scripts/ci/verify-commit-msg.mjs
@@ -334,7 +336,24 @@ main:
     - *db_gate
     - *ui_gate
 
-# 发布共享 UI 制品：由 API 触发（event: api_trigger_ui_release），也可页面触发
+# 手动/定时触发的流水线（合并进同一个 $ 兜底键，避免重复顶层键导致配置解析失败）
 $:
+  # 发布共享 UI 制品：由 API 触发（event: api_trigger_ui_release），也可页面触发
   api_trigger_ui_release:
     - *ui_release
+  # 每日舰队扫描（09:00 Asia/Shanghai = UTC 01:00；CNB crontab，最小间隔 5 分钟）：
+  #   发现新的 WorkLoom 仓 → 开扫描任务卡 + 自动创建纳管 PR，合并仍由人执行。
+  "crontab: 0 1 * * *":
+    - name: fleet-scan
+      docker:
+        image: node:24.19.0-bookworm
+      env:
+        FLEET_ORG: workloom-ai
+        FLEET_BASE_REPO: workloom-ai/workloom-im
+      stages:
+        - name: 扫描新仓并纳管
+          script: |
+            set -eu
+            node scripts/tools/fleet-scan.mjs --self-test
+            node scripts/tools/experiment-guard.mjs --check
+            node scripts/tools/fleet-scan.mjs --org "$FLEET_ORG" --base-repo "$FLEET_BASE_REPO" --issue --provision

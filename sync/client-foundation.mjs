@@ -189,7 +189,26 @@ function readGitJson(baseDir, ref, path) {
 }
 
 /** 从不可变稳定标签读取三端源，不读取当前工作树。 */
-export function loadStableFoundationSnapshot(baseDir, manifest, requestedVersion) {
+/**
+ * 仓级"实验扩展路径"（实验车道）：与全局 allowedIndustryExtensionPaths 合并后生效。
+ * 用途：fox / growth 等实验仓在 apps/* 内的深度定制（游戏化等）不属于基座能力，
+ * 升级三端基座时不得被判为 ILLEGAL_INDUSTRY_APP_PATH，也不得被覆盖。
+ */
+export function normalizeExtraExtensionPaths(paths = []) {
+  const list = Array.isArray(paths) ? paths : [];
+  for (const pattern of list) {
+    if (typeof pattern !== "string" || !pattern.startsWith("apps/") || pattern.includes("..")) {
+      throw new Error(`非法实验扩展路径：${pattern}`);
+    }
+  }
+  return list;
+}
+
+export function effectiveExtensionPaths(config, extra = []) {
+  return [...(config.allowedIndustryExtensionPaths ?? []), ...normalizeExtraExtensionPaths(extra)];
+}
+
+export function loadStableFoundationSnapshot(baseDir, manifest, requestedVersion, options = {}) {
   const root = realpathSync(resolve(baseDir));
   const config = validateFoundationConfig(manifest);
   const version = resolveStableFoundationVersion(manifest, requestedVersion);
@@ -232,7 +251,7 @@ export function loadStableFoundationSnapshot(baseDir, manifest, requestedVersion
     if (matchesAny(path, config.ignoredRuntimePaths ?? [])) continue;
     // 基座仓自身可为默认示例 Bundle 保留行业投影，但稳定客户端快照必须过滤
     // 这些文件，确保下游只保留/生成自己的行业资产而不会继承基座示例品牌。
-    if (matchesAny(path, config.allowedIndustryExtensionPaths ?? [])) continue;
+    if (matchesAny(path, effectiveExtensionPaths(config, options?.extraAllowedIndustryExtensionPaths))) continue;
     if ((config.protectedRootFiles ?? []).includes(path)) throw new Error(`稳定基座包含受保护身份资产：${path}`);
     const content = run("git", ["show", `${sourceRef}:${path}`], root, null);
     files.set(path, { content, mode: mode === "100755" ? 0o755 : 0o644 });
@@ -307,7 +326,7 @@ function validateProductIdentity(repoRoot) {
   return { path: productPath, hash: sha256(readFileSync(productPath)), product };
 }
 
-function readFoundationState(targetRoot, config, { required = false } = {}) {
+function readFoundationState(targetRoot, config, { required = false, extraAllowedIndustryExtensionPaths = [] } = {}) {
   const stateFile = config.stateFile;
   const statePath = assertNoSymlinkPath(targetRoot, join(targetRoot, stateFile), "客户端基座 state");
   if (!existsSync(statePath)) {
@@ -340,7 +359,7 @@ function readFoundationState(targetRoot, config, { required = false } = {}) {
     if (!config.managedRoots.some((root) => path.startsWith(`${root}/`))) {
       throw new Error(`${stateFile} 的受管文件逃逸出三端根：${path}`);
     }
-    if (matchesAny(path, config.allowedIndustryExtensionPaths ?? [])) {
+    if (matchesAny(path, effectiveExtensionPaths(config, extraAllowedIndustryExtensionPaths))) {
       throw new Error(`${stateFile} 不得把行业扩展登记成基座受管文件：${path}`);
     }
     if (!/^[0-9a-f]{64}$/.test(entry?.sha256 ?? "") || ![420, 493].includes(entry?.mode)) {
@@ -388,7 +407,7 @@ function makeState(snapshot, manifest) {
   };
 }
 
-function validateSnapshot(snapshot, manifest) {
+function validateSnapshot(snapshot, manifest, extraAllowedIndustryExtensionPaths = []) {
   const config = validateFoundationConfig(manifest);
   if (!/^\d+\.\d+\.\d+$/.test(snapshot?.version ?? "")) throw new Error("客户端基座快照版本必须是精确稳定 semver");
   resolveStableFoundationVersion(manifest, snapshot.version);
@@ -411,7 +430,7 @@ function validateSnapshot(snapshot, manifest) {
       throw new Error(`客户端基座快照逃逸出三端受管根：${path}`);
     }
     if ((config.protectedRootFiles ?? []).includes(path)) throw new Error(`客户端基座快照不得包含受保护身份资产：${path}`);
-    if (matchesAny(path, config.allowedIndustryExtensionPaths ?? [])) throw new Error(`客户端基座快照不得占用行业扩展路径：${path}`);
+    if (matchesAny(path, effectiveExtensionPaths(config, extraAllowedIndustryExtensionPaths))) throw new Error(`客户端基座快照不得占用行业扩展路径：${path}`);
     if (!Buffer.isBuffer(file?.content) || ![0o644, 0o755].includes(file?.mode)) throw new Error(`客户端基座快照文件无效：${path}`);
   }
   for (const entry of config.requiredEntries) {
@@ -439,15 +458,15 @@ function resolvePhysicalTarget(root, targetRoot) {
  * 生成完整升级计划。先收集全部冲突，只有零冲突时 apply 才会写入，因此不会
  * 出现“覆盖一半才发现行业定制”的不完整迁移。
  */
-export function planClientFoundation({ repoRoot, targetRoot = repoRoot, manifest, snapshot, mode = "upgrade" }) {
+export function planClientFoundation({ repoRoot, targetRoot = repoRoot, manifest, snapshot, mode = "upgrade", extraAllowedIndustryExtensionPaths = [] }) {
   if (!['scaffold', 'upgrade'].includes(mode)) throw new Error(`未知客户端基座模式：${mode}`);
   const config = validateFoundationConfig(manifest);
-  validateSnapshot(snapshot, manifest);
+  validateSnapshot(snapshot, manifest, extraAllowedIndustryExtensionPaths);
   const root = realpathSync(resolve(repoRoot));
   const target = resolvePhysicalTarget(root, targetRoot);
   if (!lstatSync(target).isDirectory()) throw new Error("行业基座目录必须存在");
   const identity = validateProductIdentity(root);
-  const state = readFoundationState(target, config);
+  const state = readFoundationState(target, config, { extraAllowedIndustryExtensionPaths });
   if (state && state.baseRepository !== manifest.baseRepository) {
     throw new Error(`客户端基座来源不一致：${state.baseRepository ?? "未登记"}`);
   }
@@ -519,7 +538,7 @@ export function planClientFoundation({ repoRoot, targetRoot = repoRoot, manifest
   for (const managedRoot of config.managedRoots) {
     for (const diskPath of walkFiles(target, managedRoot, config.ignoredRuntimePaths ?? [])) {
       if (known.has(diskPath)) continue;
-      if (matchesAny(diskPath, config.allowedIndustryExtensionPaths ?? [])) continue;
+      if (matchesAny(diskPath, effectiveExtensionPaths(config, extraAllowedIndustryExtensionPaths))) continue;
       if (matchesAny(diskPath, config.ignoredRuntimePaths ?? [])) continue;
       conflicts.push({
         code: "ILLEGAL_INDUSTRY_APP_PATH",
@@ -564,10 +583,10 @@ function restoreFile(path, backup) {
   chmodSync(path, backup.mode);
 }
 
-export function applyClientFoundation({ repoRoot, targetRoot = repoRoot, manifest, snapshot, mode = "upgrade", dryRun = false }) {
+export function applyClientFoundation({ repoRoot, targetRoot = repoRoot, manifest, snapshot, mode = "upgrade", dryRun = false, extraAllowedIndustryExtensionPaths = [] }) {
   const root = realpathSync(resolve(repoRoot));
   const target = resolvePhysicalTarget(root, targetRoot);
-  const plan = planClientFoundation({ repoRoot: root, targetRoot: target, manifest, snapshot, mode });
+  const plan = planClientFoundation({ repoRoot: root, targetRoot: target, manifest, snapshot, mode, extraAllowedIndustryExtensionPaths });
   if (!plan.ready) {
     const summary = plan.conflicts.slice(0, 8).map((item) => `${item.code}:${item.path}`).join("、");
     const error = new Error(`客户端基座存在 ${plan.conflicts.length} 个冲突，拒绝覆盖：${summary}`);
@@ -603,7 +622,7 @@ export function applyClientFoundation({ repoRoot, targetRoot = repoRoot, manifes
     if (identityAfter !== identityBefore || identityAfter !== plan.identitySha256) {
       throw new Error("product.manifest.json 身份在客户端基座应用期间发生变化；已回滚");
     }
-    const verification = planClientFoundation({ repoRoot: root, targetRoot: target, manifest, snapshot, mode });
+    const verification = planClientFoundation({ repoRoot: root, targetRoot: target, manifest, snapshot, mode, extraAllowedIndustryExtensionPaths });
     if (!verification.ready || verification.operations.length !== 0) {
       throw new Error("客户端基座落盘后验真失败；已回滚");
     }
@@ -615,7 +634,7 @@ export function applyClientFoundation({ repoRoot, targetRoot = repoRoot, manifes
 }
 
 /** 不需要目标稳定源即可验证现有 state 是否仍可信，供发布前盘点使用。 */
-export function inspectClientFoundationState({ repoRoot, targetRoot = repoRoot, manifest }) {
+export function inspectClientFoundationState({ repoRoot, targetRoot = repoRoot, manifest, extraAllowedIndustryExtensionPaths = [] }) {
   const config = validateFoundationConfig(manifest);
   const root = realpathSync(resolve(repoRoot));
   const target = resolvePhysicalTarget(root, targetRoot);
@@ -628,7 +647,7 @@ export function inspectClientFoundationState({ repoRoot, targetRoot = repoRoot, 
   }
   let state;
   try {
-    state = readFoundationState(target, config);
+    state = readFoundationState(target, config, { extraAllowedIndustryExtensionPaths });
   } catch (error) {
     issues.push({ code: "INVALID_CLIENT_FOUNDATION_STATE", path: config.stateFile, message: String(error.message) });
   }
@@ -655,7 +674,7 @@ export function inspectClientFoundationState({ repoRoot, targetRoot = repoRoot, 
   for (const managedRoot of config.managedRoots) {
     for (const diskPath of walkFiles(target, managedRoot, config.ignoredRuntimePaths ?? [])) {
       if (known.has(diskPath)) continue;
-      if (matchesAny(diskPath, config.allowedIndustryExtensionPaths ?? [])) continue;
+      if (matchesAny(diskPath, effectiveExtensionPaths(config, extraAllowedIndustryExtensionPaths))) continue;
       if (matchesAny(diskPath, config.ignoredRuntimePaths ?? [])) continue;
       issues.push({
         code: "ILLEGAL_INDUSTRY_APP_PATH",
