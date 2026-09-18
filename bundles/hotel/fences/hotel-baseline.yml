@@ -65,3 +65,16 @@ rules:
       actions: [review.reply]
     when: "params.rating <= 3"
     note: 差评 ≤3 分必审
+
+  # HP-02 补：写类动作注册接通后，未命中的写类动作会按 default_level=review 保守挂起。
+  # 夜班例行对账（无担保异常）属于「正常就该自动跑」的动作，必须显式声明 auto；
+  # 担保异常仍由 R5 熔断（deny 优先并集，block > auto），未知写动作继续走 default_level=review。
+  - rule_id: R7
+    name: 例行对账自动执行
+    level: auto
+    is_baseline: true
+    match:
+      object_types: [order]
+      actions: [order.reconcile]
+    when: "params.guarantee_anomaly != true"
+    note: 无担保异常的例行对账自动执行；异常走 R5 熔断，未知写动作仍按 default_level 保守处理

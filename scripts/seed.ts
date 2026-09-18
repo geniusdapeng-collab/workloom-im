@@ -3,7 +3,7 @@
  * 用法：pnpm db:seed（读取 .env；幂等，可重复执行）
  *
  * 内容：demo 租户 / 云栖酒店工作区 / 3 人类成员 / 7 Agent preset 实例 /
- *      一店一档（含 forbidden 硬约束）/ 基线围栏 R1–R6 装载 / 3 官方技能 /
+ *      一店一档（含 forbidden 硬约束）/ 基线围栏 R1–R7 装载 / 3 官方技能 /
  *      2 触发器 / 昨夜夜班班次 / 100 条五元事件（哈希链）/ 审批样例 / 组织记忆
  *
  * 纪律：
@@ -570,7 +570,7 @@ async function main(): Promise<void> {
   );
   console.log("✓ 一店一档（含 forbidden 硬约束 ×2，保底价 ¥380 与 R2 同源）");
 
-  // 基线围栏装载（R1–R6，active；单调守卫 F2.3 由阶段二 B4 判定器执行）
+  // 基线围栏装载（R1–R7，active；单调守卫 F2.3 由阶段二 B4 判定器执行）
   for (const r of fences) {
     await q(
       `INSERT INTO fence_rules (id, rule_id, version, workspace_id, name, level, match_spec, action, is_baseline, status, created_by)

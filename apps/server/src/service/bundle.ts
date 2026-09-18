@@ -22,6 +22,7 @@ import {
   staffingDraftHash,
   type ExamBinding,
 } from "./onboarding-truth.js";
+import { registerWriteActions } from "@workloom/base/workdata";
 
 const newId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${randomUUID().slice(0, 6)}`;
 
@@ -801,6 +802,9 @@ export async function confirmAndAssembleStaffing(
          JSON.stringify(fence.match_spec), JSON.stringify(fence.action), fence.is_baseline, actor.id],
       );
     }
+    // HP-02：装配即登记本 bundle 围栏声明的写类动作（gateway 段①权限校验与 judge default_level 的识别前提）。
+    // 之前 registerWriteActions 只有测试调用，行业写类动作在网关被当读类放行（F2.10 失守）。
+    registerWriteActions(assets.candidate.fences.flatMap((fence) => fence.match_spec.actions));
     await client.query(
       `INSERT INTO bundle_installs
          (id, workspace_id, bundle_id, assets, status, draft_id, assembly_version, assembly_hash)

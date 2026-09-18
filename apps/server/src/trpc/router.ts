@@ -2312,10 +2312,15 @@ const rosterRouter = router({
         const fences = agent.fence_bindings.length === 0 ? [] : (await client.query<{
           rule_id: string; name: string; level: string; version: string; is_baseline: boolean;
         }>(
+          // HP-02：同一 rule_id 可能同时存在全局基线与工作区版本，运行时按 deny 优先并集求值（judge 取最严），
+          // 展示口径必须取"实际生效的最严级别"，不能按 created_at 取最新行——否则界面/航道许可
+          // 会把被基线压住的宽松版本显示为生效规则，与真实拦截不一致（证据保真）。
           `SELECT DISTINCT ON (rule_id) rule_id, name, level, version, is_baseline
            FROM fence_rules
            WHERE (workspace_id=$1 OR workspace_id='*') AND status='active' AND rule_id = ANY($2)
-           ORDER BY rule_id, created_at DESC`,
+           ORDER BY rule_id,
+                    CASE level WHEN 'block' THEN 2 WHEN 'review' THEN 1 ELSE 0 END DESC,
+                    is_baseline DESC, created_at DESC`,
           [scope.workspaceId, agent.fence_bindings],
         )).rows;
 

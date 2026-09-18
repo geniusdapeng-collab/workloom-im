@@ -20,6 +20,45 @@ export interface DryRunReport {
   wouldReview: string[];
   unchanged: number;
   impact: string; // 人读摘要
+  /** 与现行规则集的差量（提供 baseline 时给出；HP-02 补 F2.5 证据缺口） */
+  delta?: DryRunDelta;
+}
+
+/**
+ * HP-02：dry-run 差量。原实现只回放候选规则，报告里没有"相对现行规则发生了什么"，
+ * 于是「原本 block、候选放行」的宽松化补丁与「无影响」补丁在报告里长得一模一样，
+ * 人工确认（L2.4）失去判断依据。newlyAuto 是必须人工确认的危险方向。
+ */
+export interface DryRunDelta {
+  newlyAuto: string[]; // 原非 auto → 候选 auto（放宽，须人工确认）
+  newlyBlocked: string[]; // 原非 block → 候选 block（加严）
+  newlyReview: string[]; // 原非 review → 候选 review（新增挂起）
+  summary: string;
+}
+
+/** HP-02：dry-run 差量（纯函数，可单测）：按 event_id 对齐现行与候选判定，归三联。 */
+export function diffDryRunVerdicts(
+  baseline: Array<{ eventId: string; verdict: JudgeVerdict }>,
+  candidate: Array<{ eventId: string; verdict: JudgeVerdict }>,
+): DryRunDelta {
+  const beforeById = new Map(baseline.map((v) => [v.eventId, v.verdict.level]));
+  const newlyAuto: string[] = [];
+  const newlyBlocked: string[] = [];
+  const newlyReview: string[] = [];
+  for (const v of candidate) {
+    const before = beforeById.get(v.eventId) ?? "auto";
+    const after = v.verdict.level;
+    if (after === before) continue;
+    if (after === "auto") newlyAuto.push(v.eventId);
+    else if (after === "block") newlyBlocked.push(v.eventId);
+    else newlyReview.push(v.eventId);
+  }
+  return {
+    newlyAuto, newlyBlocked, newlyReview,
+    summary:
+      `相对现行规则：放宽 ${newlyAuto.length} · 加严 ${newlyBlocked.length} · 转挂起 ${newlyReview.length}` +
+      (newlyAuto.length > 0 ? "（存在放宽，须人工确认）" : ""),
+  };
 }
 
 /** 从五元事件还原判定输入 */
@@ -59,7 +98,15 @@ export function replayRules(
 export async function createDryRun(
   app: pg.Pool,
   scope: { tenantId: string; workspaceId: string },
-  input: { ruleId: string; ruleVersion: string; rules: RuntimeRule[]; defaultLevel: "auto" | "review" | "block"; createdBy: string },
+  input: {
+    ruleId: string;
+    ruleVersion: string;
+    rules: RuntimeRule[];
+    defaultLevel: "auto" | "review" | "block";
+    createdBy: string;
+    /** 现行生效规则集（提供则产出差量；HP-02） */
+    baseline?: { rules: RuntimeRule[]; defaultLevel: "auto" | "review" | "block" };
+  },
 ): Promise<{ dryRunId: string; report: DryRunReport }> {
   const client = await app.connect();
   try {
@@ -74,6 +121,11 @@ export async function createDryRun(
     );
     const events = rows.rows.map((r) => r.payload);
     const { verdicts } = replayRules(events, input.rules, input.defaultLevel);
+    let delta: DryRunDelta | undefined;
+    if (input.baseline) {
+      const base = replayRules(events, input.baseline.rules, input.baseline.defaultLevel);
+      delta = diffDryRunVerdicts(base.verdicts, verdicts);
+    }
     const report: DryRunReport = {
       ruleId: input.ruleId,
       ruleVersion: input.ruleVersion,
@@ -81,7 +133,12 @@ export async function createDryRun(
       wouldBlock: verdicts.filter((v) => v.verdict.level === "block").map((v) => v.eventId),
       wouldReview: verdicts.filter((v) => v.verdict.level === "review").map((v) => v.eventId),
       unchanged: verdicts.filter((v) => v.verdict.level === "auto").length,
-      impact: `回放最近 ${events.length} 条：熔断 ${verdicts.filter((v) => v.verdict.level === "block").length} · 挂起 ${verdicts.filter((v) => v.verdict.level === "review").length} · 放行 ${verdicts.filter((v) => v.verdict.level === "auto").length}`,
+      impact:
+        `回放最近 ${events.length} 条：熔断 ${verdicts.filter((v) => v.verdict.level === "block").length} · ` +
+        `挂起 ${verdicts.filter((v) => v.verdict.level === "review").length} · ` +
+        `放行 ${verdicts.filter((v) => v.verdict.level === "auto").length}` +
+        (delta ? ` · ${delta.summary}` : ""),
+      delta,
     };
     const dryRunId = `fdr-${input.ruleId.toLowerCase()}-${Date.now().toString(36)}`;
     await client.query(
@@ -89,12 +146,14 @@ export async function createDryRun(
        VALUES ($1,$2,$3,$4,$5,'pending',$6)`,
       [dryRunId, scope.workspaceId, input.ruleId, input.ruleVersion, JSON.stringify(report), input.createdBy],
     );
+    // HP-02：COMMIT 必须走成功路径。原先放在 finally 且 .catch 吞错，提交失败会静默返回"成功"，
+    // 人审依据（dry-run 报告）实际未落库却无人知晓（L2.4 证据失真）。
+    await client.query("COMMIT");
     return { dryRunId, report };
   } catch (err) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw err;
   } finally {
-    await client.query("COMMIT").catch(() => undefined);
     client.release();
   }
 }
@@ -141,11 +200,11 @@ export async function confirmDryRun(
       [dryRunId, scope.workspaceId],
     );
     if (r.rowCount === 0) throw new Error(`dry-run ${dryRunId} 不存在或非 pending（幂等约束）`);
+    await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw err;
   } finally {
-    await client.query("COMMIT").catch(() => undefined);
     client.release();
   }
 }
@@ -203,15 +262,18 @@ export async function withObjectLock<T>(
   objectKey: string,
   fn: (client: pg.PoolClient) => Promise<T>,
   timeoutMs = OBJECT_LOCK_TIMEOUT_MS,
+  /** 进入业务回调后的语句超时（0 = 用数据库默认，不设限；HP-02 起与锁等待超时解耦） */
+  businessTimeoutMs = 0,
 ): Promise<T> {
   const client = await gateway.connect();
   const lockKey = `obj:${objectKey}`;
+  const lockWaitMs = Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.floor(timeoutMs) : OBJECT_LOCK_TIMEOUT_MS;
+  const businessMs = Number.isFinite(businessTimeoutMs) && businessTimeoutMs > 0 ? Math.floor(businessTimeoutMs) : 0;
   try {
-    // 用 statement_timeout 控制锁等待超时，超时后 PG 自动 abort 当前语句
-    // 修复：SET LOCAL 必须在 BEGIN 之后才生效（事务外 SET LOCAL 仅警告且无效果，
-    // 此前锁等待实际无超时兜底，持锁冲突时挂到测试/调用方超时）
+    // 用 statement_timeout 控制锁等待超时，超时后 PG 自动 abort 当前语句。
+    // SET LOCAL 必须在 BEGIN 之后才生效（事务外 SET LOCAL 仅警告且无效果）。
     await client.query("BEGIN");
-    await client.query(`SET LOCAL statement_timeout = ${Math.max(1, Math.floor(timeoutMs))}`);
+    await client.query(`SET LOCAL statement_timeout = ${lockWaitMs}`);
     // 64位确定性 hash key：md5 前 16 位转 bigint，碰撞概率远低于 hashtext 32位
     const r = await client.query<{ k: string }>(
       `SELECT ('x' || substr(md5($1), 1, 16))::bit(64)::bigint AS k`,
@@ -219,16 +281,22 @@ export async function withObjectLock<T>(
     );
     const lockKeyBig = r.rows[0]?.k;
     // 阻塞版 advisory lock：拿不到锁时 PG 内核排队等待，不占用 Node 侧连接轮询
-    await client.query("SELECT pg_advisory_xact_lock($1)", [lockKeyBig]);
+    // HP-02：超时只允许发生在「取锁」这一段；取锁后立即复位，否则 fn 内的业务语句
+    // （批量写 / 长查询）会被锁等待超时误杀，并被误报成 ObjectLockTimeout「对象写锁超时（需介入）」。
+    try {
+      await client.query("SELECT pg_advisory_xact_lock($1)", [lockKeyBig]);
+    } catch (err) {
+      if (err instanceof Error && /statement timeout|canceling statement/i.test(err.message)) {
+        throw new ObjectLockTimeout(objectKey);
+      }
+      throw err;
+    }
+    await client.query(`SET LOCAL statement_timeout = ${businessMs}`);
     const result = await fn(client);
     await client.query("COMMIT");
     return result;
   } catch (err) {
     await client.query("ROLLBACK").catch(() => undefined);
-    // PG 错误码 57014 = query_canceled（statement_timeout 触发）
-    if (err instanceof Error && /statement timeout|canceling statement/i.test(err.message)) {
-      throw new ObjectLockTimeout(objectKey);
-    }
     throw err;
   } finally {
     client.release();
