@@ -5,8 +5,8 @@ import {
   type HTMLAttributes,
   type ReactNode,
 } from "react";
-import { Badge } from "./components";
-import { clientStatusLabel } from "./language";
+import { Badge } from "./components.js";
+import { clientStatusLabel } from "./language.js";
 
 export interface LinkProps extends AnchorHTMLAttributes<HTMLAnchorElement> {
   external?: boolean;

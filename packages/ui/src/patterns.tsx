@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { Badge, Card } from "./components";
-import { clientChineseText, clientIdentifierText } from "./language";
+import { Badge, Card } from "./components.js";
+import { clientChineseText, clientIdentifierText } from "./language.js";
 
 export type RiskLevel = "none" | "low" | "medium" | "high" | "critical";
 

@@ -1,4 +1,4 @@
-import { Button, Overlay } from "./components";
+import { Button, Overlay } from "./components.js";
 
 export const TEXT_SCALE_STEPS = [100, 125, 150, 175, 200] as const;
 export type TextScale = typeof TEXT_SCALE_STEPS[number];

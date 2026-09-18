@@ -4,7 +4,7 @@
  * 业务语义只能通过已验证 Bundle 投影出的显式 presentation 元数据进入；
  * 未提供元数据时仅按稳定标识散列，绝不从岗位名、技能名或行业词猜测外观。
  */
-import type { IconName } from "./navigation";
+import type { IconName } from "./navigation.js";
 
 export const AVATAR_MODELS = ["Knight", "Mage", "Rogue", "Rogue_Hooded", "Barbarian"] as const;
 export type AvatarModel = (typeof AVATAR_MODELS)[number];
