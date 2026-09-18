@@ -5,8 +5,8 @@
   "ui": {
     "package": "@workloom/ui",
     "contractVersion": "2.0.0",
-    "candidateVersion": "0.1.1",
-    "latestStableVersion": "0.1.1",
+    "candidateVersion": "0.1.2",
+    "latestStableVersion": "0.1.2",
     "requiredClientPackages": [
       "apps/web/package.json",
       "apps/webb/package.json",
@@ -24,7 +24,8 @@
       "assetNameTemplate": "workloom-ui-{version}.tgz",
       "integrityByVersion": {
         "0.1.0": "sha512-0O2dJkxvzNoRQcnVH6v8o7qyWW/yYmImrNhaaUWqR/FgovwJI3sHzugAaa4mHeCERWeMihxCRX/jIY93WHW8Vw==",
-        "0.1.1": "sha512-7OXEtRNRknpkd5VTb6SX4j7SZQ1cE1QGHqay7EDNpW40EXuyvJiC5wI6YLTZ4GleFP6lKKItbCLTjoc1SeTrAw=="
+        "0.1.1": "sha512-7OXEtRNRknpkd5VTb6SX4j7SZQ1cE1QGHqay7EDNpW40EXuyvJiC5wI6YLTZ4GleFP6lKKItbCLTjoc1SeTrAw==",
+        "0.1.2": "sha512-+yd0lsTZhVrzTl6gLp1ZPAoPlu54OdJeOxoqQg58OhtUU6J1oDFwGBpgaeuK0etValVQAl38u9Zy8N1CIc7XaA=="
       },
       "comment": "2026-09-17 起 @workloom/ui 制品托管在 CNB Release（cnb.cool/workloom-ai/workloom-im），替代已失效的 GitHub Release tarball；type 枚举保留历史值以兼容各仓 state。"
     }
@@ -32,8 +33,8 @@
   "clientFoundation": {
     "schemaVersion": "workloom.client-foundation/v1",
     "stateFile": ".workloom-client-foundation.json",
-    "candidateVersion": "0.1.1",
-    "latestStableVersion": "0.1.1",
+    "candidateVersion": "0.1.2",
+    "latestStableVersion": "0.1.2",
     "stableSourceRefPattern": "refs/tags/ui-v{version}",
     "distribution": "stable-tag-upgrade-pr",
     "maxManagedFiles": 500,
