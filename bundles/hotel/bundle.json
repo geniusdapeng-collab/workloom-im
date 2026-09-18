@@ -147,11 +147,11 @@
   },
   "integrity": {
     "algorithm": "sha256",
-    "digest": "f00fcd3921e31b873ab7d9d5ccede3f3ba520b9ee94b735baf19f7a2421e663f",
+    "digest": "6da25d8a58b2cc06275e33aa4b2a4f0fb374593830485366a6ce499b3c6588a6",
     "assets": {
       "eval/questions.json": "23044b47e17985da056220cef131e27b6262dab53b036e3750c166d6d337a842",
       "feedback-enums.yml": "0b64759da7c6a529084b6f56fa4bbeb1527c03f665f3e1d460e0d06045d5b263",
-      "fences/hotel-baseline.yml": "39aee1cad30ba88af4313d024179b4006f2981ecaef7cd6ca4f25d05fc568cfc",
+      "fences/hotel-baseline.yml": "402184d03ef30374619d5d5886f29974689bac3646dfa4ca1ea053bbfedee2d5",
       "floor-scene.json": "96c2bc3260b769fffe62d51d24e7ae9141aae5e9b5b97ae237271339aff562b7",
       "model-policy.yml": "dad3e661ad3068caf442bf0774e58d8989996c0a10c7047b923571ca416f3871",
       "presets/competitor-agent.yml": "7481c3aeb736c778d25a8ab5f0051af28b6de1ca8fb442abd544c15458b0bb65",

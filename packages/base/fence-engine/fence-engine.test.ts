@@ -8,7 +8,7 @@ import { judge, judgeSubCall, type RuntimeRule } from "./judge.js";
 import { checkMonotonic, loadFencePack } from "./dsl.js";
 import { fenceActivationFromProposal, fenceRuleRowId } from "./lifecycle.js";
 import { diffDryRunVerdicts } from "./lifecycle.js";
-import { isWriteAction } from "../workdata/gateway.js";
+import { isWriteAction, registerWriteActions } from "../workdata/gateway.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -103,6 +103,33 @@ describe("判定器（F2.1/E2.1/E2.2，真实基线包）", () => {
     expect(b.level).toBe(a.level);
     expect(b.impacts).toEqual(a.impacts);
     expect(a.level).toBe("review"); // R4 大额退款
+  });
+
+  it("HP-02：写类动作注册后，例行对账自动执行、异常仍熔断、未知写动作保守挂起", () => {
+    // R7（auto）覆盖「无担保异常的例行对账」——夜班对账属于正常就该自动跑的动作
+    const normal = judge(
+      { object: { type: "order" }, action: "order.reconcile", params: {} },
+      pack.rules, pack.defaultLevel,
+    );
+    expect(normal.level).toBe("auto");
+    expect(normal.impacts.some((i) => i.rule_id === "R7" && i.result === "pass")).toBe(true);
+
+    // 担保异常仍由 R5 熔断（deny 优先并集：block > auto）
+    const anomaly = judge(
+      { object: { type: "order" }, action: "order.reconcile", params: { guarantee_anomaly: true } },
+      pack.rules, pack.defaultLevel,
+    );
+    expect(anomaly.level).toBe("block");
+    expect(anomaly.impacts.some((i) => i.rule_id === "R5" && i.result === "blocked")).toBe(true);
+
+    // 已登记但没有任何规则命中的写类动作 → default_level（不因为登记而放宽）
+    registerWriteActions(["inventory.adjust"]);
+    expect(isWriteAction("inventory.adjust")).toBe(true);
+    const unknownWrite = judge(
+      { object: { type: "inventory" }, action: "inventory.adjust", params: {} },
+      pack.rules, pack.defaultLevel,
+    );
+    expect(unknownWrite.level).toBe("review");
   });
 });
 
