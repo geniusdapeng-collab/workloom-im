@@ -529,10 +529,14 @@ test("缺少 B 端移动客户端时只报告第一阶段迁移，绝不伪装�
   }
 });
 
-test("v13 scope 明确保护产品身份、仓级发布器、桌面发布封口器、同步认证、产品派生锁、依赖闭包与 Bundle 装配契约", () => {
+test("v14 scope 明确保护产品身份、仓级发布器、桌面发布封口器、同步认证、产品派生锁、依赖闭包与 Bundle 装配契约", () => {
   const scope = JSON.parse(readFileSync(join(REAL_BASE, "sync/base-scope.json"), "utf8"));
   const ci = readFileSync(join(REAL_BASE, ".github/workflows/ci.yml"), "utf8");
-  assert.equal(scope.version, 13);
+  assert.equal(scope.version, 14);
+  // HP-01 收尾边界：单 active 迁移必须随公共分发下发，审计复现脚本只留基座仓
+  assert.ok(scope.publicAppendOnlyFiles.includes("packages/db/migrations/0035_tenant_overlay_single_active.sql"));
+  assert.ok(scope.newIndustryBootstrapFiles.includes("packages/db/migrations/0035_tenant_overlay_single_active.sql"));
+  assert.ok(scope.exclude.includes("scripts/hp01-repro.mts"));
   assert.equal(scope.desktopReleaseCapability.finalizer, "scripts/desktop-release-finalizer.mjs");
   assert.equal(scope.desktopReleaseCapability.consumerWorkflow, ".github/workflows/build-desktop.yml");
   assert.equal(scope.desktopReleaseCapability.publisherTemplate, "sync/downstream-desktop-publisher-job.yml");
@@ -621,6 +625,7 @@ test("v13 scope 明确保护产品身份、仓级发布器、桌面发布封口�
     "packages/db/migrations/0032_remove_cross_industry_hotel_bootstrap.sql",
     "packages/db/migrations/0033_neutral_workspace_industry_default.sql",
     "packages/db/migrations/0034_api_key_rotation.sql",
+    "packages/db/migrations/0035_tenant_overlay_single_active.sql",
   ]);
   for (const publicCaptain of [
     "packages/base/captain/charter.ts",
