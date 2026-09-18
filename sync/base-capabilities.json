@@ -25,7 +25,7 @@
       "integrityByVersion": {
         "0.1.0": "sha512-0O2dJkxvzNoRQcnVH6v8o7qyWW/yYmImrNhaaUWqR/FgovwJI3sHzugAaa4mHeCERWeMihxCRX/jIY93WHW8Vw==",
         "0.1.1": "sha512-7OXEtRNRknpkd5VTb6SX4j7SZQ1cE1QGHqay7EDNpW40EXuyvJiC5wI6YLTZ4GleFP6lKKItbCLTjoc1SeTrAw==",
-        "0.1.2": "sha512-+yd0lsTZhVrzTl6gLp1ZPAoPlu54OdJeOxoqQg58OhtUU6J1oDFwGBpgaeuK0etValVQAl38u9Zy8N1CIc7XaA=="
+        "0.1.2": "sha512-WAIB3xtbV32T2x7C88eA7z3/pRqY8fOHvS9ce6yMbyqGCsae1xNcF4dWr88T4DWHe/9R+qPjkgZMCw1z//rLgw=="
       },
       "comment": "2026-09-17 起 @workloom/ui 制品托管在 CNB Release（cnb.cool/workloom-ai/workloom-im），替代已失效的 GitHub Release tarball；type 枚举保留历史值以兼容各仓 state。"
     }
