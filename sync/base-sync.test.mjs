@@ -537,6 +537,8 @@ test("v14 scope 明确保护产品身份、仓级发布器、桌面发布封口�
   assert.ok(scope.publicAppendOnlyFiles.includes("packages/db/migrations/0035_tenant_overlay_single_active.sql"));
   assert.ok(scope.newIndustryBootstrapFiles.includes("packages/db/migrations/0035_tenant_overlay_single_active.sql"));
   assert.ok(scope.exclude.includes("scripts/hp01-repro.mts"));
+  // HP-02：围栏引擎审计复现脚本同样只留基座仓，不下发客户仓
+  assert.ok(scope.exclude.includes("scripts/hp02-repro.mts"));
   assert.equal(scope.desktopReleaseCapability.finalizer, "scripts/desktop-release-finalizer.mjs");
   assert.equal(scope.desktopReleaseCapability.consumerWorkflow, ".github/workflows/build-desktop.yml");
   assert.equal(scope.desktopReleaseCapability.publisherTemplate, "sync/downstream-desktop-publisher-job.yml");

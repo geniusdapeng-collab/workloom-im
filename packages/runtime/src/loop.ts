@@ -12,7 +12,7 @@
  */
 import type pg from "pg";
 import { judge, type RuntimeRule } from "@workloom/base/fence-engine";
-import { gatewayAppend, gatewayAppendOnClient } from "@workloom/base/workdata";
+import { gatewayAppend, gatewayAppendOnClient, registerWriteActions } from "@workloom/base/workdata";
 
 /** D16（#1/A）：步骤内「事件 + 线程状态」单事务封装（双 GUC 齐备） */
 async function inTx<T>(
@@ -174,14 +174,16 @@ async function loadActiveRules(app: pg.Pool, scope: { tenantId: string; workspac
        FROM fence_rules WHERE (workspace_id=$1 OR workspace_id='*') AND status='active'`,
       [scope.workspaceId],
     );
-    return {
-      rules: r.rows.map((row) => ({
+    const rules: RuntimeRule[] = r.rows.map((row) => ({
         rule_id: row.rule_id, version: row.version, name: row.name, level: row.level,
         is_baseline: row.is_baseline, objectTypes: row.match_spec.object_types,
         actions: row.match_spec.actions, when: row.match_spec.when,
-      })),
-      defaultLevel: "review", // 活动围栏包未命中时的保守默认
-    };
+      }));
+    // HP-02：本工作区围栏包声明的写类动作在判定与执行前完成登记——
+    // 否则行业写类动作（如 inventory.adjust / order.reconcile）被网关段①当读类放行，
+    // 且 judge 无命中时不走 default_level（E2.1），形成静默放宽。
+    registerWriteActions(rules.flatMap((rule) => rule.actions));
+    return { rules, defaultLevel: "review" }; // 活动围栏包未命中时的保守默认
   } catch (err) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw err;

@@ -332,6 +332,7 @@
     "scripts/audit-scan.ts",
     "scripts/hardcode-scan.mjs",
     "scripts/hp01-repro.mts",
+    "scripts/hp02-repro.mts",
     "scripts/bundle-governance.test.ts",
     "scripts/hotel-seed-preflight.ts",
     "scripts/hotel-seed-preflight.test.ts",

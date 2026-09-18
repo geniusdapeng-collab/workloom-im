@@ -7,6 +7,8 @@ import { evalCondition, FenceEvalError } from "./expr.js";
 import { judge, judgeSubCall, type RuntimeRule } from "./judge.js";
 import { checkMonotonic, loadFencePack } from "./dsl.js";
 import { fenceActivationFromProposal, fenceRuleRowId } from "./lifecycle.js";
+import { diffDryRunVerdicts } from "./lifecycle.js";
+import { isWriteAction } from "../workdata/gateway.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -126,6 +128,99 @@ describe("单调守卫（F2.3/H-3）", () => {
     );
     expect(stricter.ok).toBe(true);
   });
+
+  /* ---- HP-02：守卫语义补强 ---- */
+
+  it("收窄基线 match 作用域被拒（静默失效面）", () => {
+    const narrowed = pack.rules.map((r) => (r.rule_id === "R2" ? { ...r, actions: ["never.matches"] } : r));
+    const res = checkMonotonic(pack.rules, narrowed);
+    expect(res.ok).toBe(false);
+    expect(res.violations.map((v) => v.reason).join("；")).toContain("actions 被收窄");
+
+    const narrowedTypes = pack.rules.map((r) =>
+      r.rule_id === "R3" ? { ...r, objectTypes: ["room_price"] } : r,
+    );
+    const res2 = checkMonotonic(pack.rules, narrowedTypes);
+    expect(res2.ok).toBe(false);
+    expect(res2.violations.map((v) => v.reason).join("；")).toContain("objectTypes 被收窄");
+  });
+
+  it("基线 when 改写默认被拒；allowWhenChange 显式放行（须 dry-run 证据）", () => {
+    const weakened = pack.rules.map((r) => (r.rule_id === "R2" ? { ...r, when: "1 == 2" } : r));
+    expect(checkMonotonic(pack.rules, weakened).ok).toBe(false);
+    expect(checkMonotonic(pack.rules, weakened, { allowWhenChange: true }).ok).toBe(true);
+  });
+
+  it("match 作用域扩大（新增对象类型/动作）放行", () => {
+    const widened = pack.rules.map((r) =>
+      r.rule_id === "R2" ? { ...r, objectTypes: [...r.objectTypes, "package_price"], actions: [...r.actions, "price.publish"] } : r,
+    );
+    expect(checkMonotonic(pack.rules, widened).ok).toBe(true);
+  });
+});
+
+/* ================= HP-02：装载期校验与写类动作登记 ================= */
+
+describe("装载期校验与写类动作登记（HP-02）", () => {
+  it("重复 rule_id 在装载期被拒（L2.5）", () => {
+    const dup = `
+version: dup/v1
+default_level: review
+rules:
+  - rule_id: R1
+    name: 真规则
+    level: block
+    is_baseline: true
+    match: { object_types: [room_price], actions: [price.adjust] }
+    when: "after.price < 380"
+  - rule_id: R1
+    name: 影子规则
+    level: auto
+    is_baseline: false
+    match: { object_types: [room_price], actions: [price.adjust] }
+    when: "true"
+`;
+    expect(() => loadFencePack(dup)).toThrow(/rule_id 重复/);
+  });
+
+  it("装载即登记写类动作：未被硬编码前缀覆盖的行业动作也按写类处理", () => {
+    // order.reconcile 属于酒店基线 R5，但不在 gateway 的硬编码写类前缀表里；
+    // 装载围栏包后必须被识别为写类，否则：网关段①放行未声明 fence_bindings 的 Agent（F2.10），
+    // 且 judge 无命中时不走 default_level（误判 auto，E2.1）。
+    expect(isWriteAction("order.reconcile")).toBe(true);
+    const verdict = judge(
+      { object: { type: "order" }, action: "order.reconcile", params: {} },
+      [],
+      "review",
+    );
+    expect(verdict.level).toBe("review");
+  });
+});
+
+/* ================= HP-02：dry-run 差量（纯函数） ================= */
+
+describe("dryRun 差量（HP-02）", () => {
+  const mk = (id: string, level: "auto" | "review" | "block") => ({
+    eventId: id,
+    verdict: { level, impacts: [], triggeredBy: [], evalErrors: [] },
+  });
+
+  it("按 event_id 对齐，归放宽/加严/转挂起三联", () => {
+    const baseline = [mk("E-1", "block"), mk("E-2", "review"), mk("E-3", "auto"), mk("E-4", "review")];
+    const candidate = [mk("E-1", "auto"), mk("E-2", "block"), mk("E-3", "review"), mk("E-4", "review")];
+    const delta = diffDryRunVerdicts(baseline, candidate);
+    expect(delta.newlyAuto).toEqual(["E-1"]);
+    expect(delta.newlyBlocked).toEqual(["E-2"]);
+    expect(delta.newlyReview).toEqual(["E-3"]);
+    expect(delta.summary).toContain("放宽 1");
+    expect(delta.summary).toContain("须人工确认");
+  });
+
+  it("无差量时摘要不含放宽告警", () => {
+    const delta = diffDryRunVerdicts([mk("E-1", "review")], [mk("E-1", "review")]);
+    expect(delta.newlyAuto).toEqual([]);
+    expect(delta.summary).not.toContain("须人工确认");
+  });
 });
 
 /* ================= PG 集成（RUN_DB_TESTS=1） ================= */
@@ -151,6 +246,24 @@ d("PG 集成（dry-run / 激活门禁 / 对象写锁）", async () => {
     expect(r.report.wouldBlock.length + r.report.wouldReview.length + r.report.unchanged).toBe(10);
   });
 
+  it("HP-02：带 baseline 的 dry-run 产出差量（放宽可见）", async () => {
+    const weakened = [
+      ...pack.rules.filter((r) => r.rule_id !== "R2"),
+      {
+        rule_id: "R9", version: "v-next", name: "放宽放行", level: "auto" as const, is_baseline: false,
+        objectTypes: ["room_price"], actions: ["price.adjust"], when: "true",
+      },
+    ];
+    const r = await createDryRun(appPool, scope, {
+      ruleId: "R9", ruleVersion: "v-next", rules: weakened, defaultLevel: "auto", createdBy: "MEM-001",
+      baseline: { rules: pack.rules, defaultLevel: pack.defaultLevel },
+    });
+    expect(r.report.delta).toBeDefined();
+    expect(Array.isArray(r.report.delta!.newlyAuto)).toBe(true);
+    expect(Array.isArray(r.report.delta!.newlyBlocked)).toBe(true);
+    expect(Array.isArray(r.report.delta!.newlyReview)).toBe(true);
+  });
+
   it("未确认 dry-run 禁止激活（L2.4）", async () => {
     const dr = await createDryRun(appPool, scope, {
       ruleId: "R2", ruleVersion: "hotel-baseline/v1", rules: pack.rules,
@@ -172,6 +285,15 @@ d("PG 集成（dry-run / 激活门禁 / 对象写锁）", async () => {
         await hold.query("SELECT 1");
       }),
     ).resolves.toBeUndefined();
+  });
+
+  it("HP-02：无锁竞争时，业务语句不受锁等待超时约束", async () => {
+    // 锁等待超时 300ms 只约束「取锁」；业务语句 600ms 必须正常完成。
+    // 原实现把 statement_timeout 留在整个事务上 → 业务语句被误杀并误报 ObjectLockTimeout。
+    const key = `hp02-lock-decouple-${Date.now().toString(36)}`;
+    await expect(
+      withObjectLock(gwPool, key, async (c) => { await c.query("SELECT pg_sleep(0.6)"); return "ok"; }, 300),
+    ).resolves.toBe("ok");
   });
 
   it("confirmDryRun 幂等约束：重复确认报错", async () => {
