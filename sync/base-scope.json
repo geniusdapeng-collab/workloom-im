@@ -1,19 +1,21 @@
 {
   "version": 15,
   "description": "WorkLoom IM 基座能力同步范围声明——base-sync 引擎的唯一事实源。文件型公共能力按 include/exclude 受控分发；三端组件/视觉语言通过与 ui-v* 同版的 GitHub Release @workloom/ui tarball 下发，三端应用壳/导航/布局/状态/API 接线通过同一稳定标签和逐文件指纹升级 PR 下发。行业属性与演示能力永不同步。requiredRootAssets 无视行业代码的 pathPrefix，始终安装并校验在 Git 仓库根目录。修改本文件即修改同步边界，需基座 owner 评审。",
-
   "registryCapabilities": [
     {
       "package": "@workloom/ui",
       "source": "packages/ui/**",
-      "consumers": ["apps/web", "apps/webb", "apps/webc"],
+      "consumers": [
+        "apps/web",
+        "apps/webb",
+        "apps/webc"
+      ],
       "distribution": "stable-github-release-upgrade-pr",
       "consumerGate": "scripts/verify-ui-consumer.mjs",
       "migration": "two-phase-required",
       "comment": "第一阶段先补齐三个真实生产客户端与产品身份配置，第二阶段再锁定同标签 GitHub Release tarball 并运行消费门禁；缺少 apps/webb 等客户端时必须报告迁移未完成，禁止按三端合规处理。"
     }
   ],
-
   "clientFoundationCapability": {
     "source": "apps/web/** + apps/webb/** + apps/webc/**",
     "configuration": "sync/base-capabilities.json#clientFoundation",
@@ -30,7 +32,6 @@
     ],
     "comment": "这些路径仍显式排除普通 base-sync，避免双通道覆盖。新行业用 adopt.sh --new-industry 从 latest stable 一次生成三端；存量仓只经 ui-upgrade-pr 波次 PR 更新。"
   },
-
   "uiGovernanceCapability": {
     "installer": "sync/install-ui-governance.mjs",
     "stateFile": ".workloom-ui-governance.json",
@@ -43,7 +44,6 @@
     "distribution": "stable-upgrade-pr-only",
     "comment": "消费 verifier、AST 规则和固定解析器是同一个稳定治理单元；不得再由普通 base-sync 提前覆盖，否则治理 state 会与实际脚本失配，并阻断后续稳定升级。"
   },
-
   "protectedChildAssets": {
     "files": [
       "electron-builder.yml",
@@ -59,7 +59,6 @@
     ],
     "comment": "桌面应用标识、产品名、端口和发布身份属于部署实例资产；base-sync 不得整文件覆盖。新行业应由 product.manifest.json 显式配置，存量仓先完成身份迁移再接收稳定基座升级。"
   },
-
   "desktopReleaseCapability": {
     "consumerWorkflow": ".github/workflows/build-desktop.yml",
     "finalizer": "scripts/desktop-release-finalizer.mjs",
@@ -71,17 +70,27 @@
       "npmSource": ".workloom-runtime-deps/metadata.json",
       "setupNodePolicy": "exact-version-only"
     },
-    "platformCandidates": ["macos", "windows"],
-    "installerDiscovery": ["*-mac-arm64.dmg", "*-mac-x64.dmg", "*-win-x64.exe"],
-    "evidenceAssets": ["WorkLoom-SHA512SUMS.txt", "WorkLoom-release-manifest.json"],
+    "platformCandidates": [
+      "macos",
+      "windows"
+    ],
+    "installerDiscovery": [
+      "*-mac-arm64.dmg",
+      "*-mac-x64.dmg",
+      "*-win-x64.exe"
+    ],
+    "evidenceAssets": [
+      "WorkLoom-SHA512SUMS.txt",
+      "WorkLoom-release-manifest.json"
+    ],
     "distribution": "base-sync-script-plus-reviewed-workflow-upgrade-pr",
     "publisherInvariant": "platform jobs are read-only; one publisher seals a draft, verifies five assets, then promotes Latest",
     "comment": "桌面正式发布封口器从各仓 electron-builder.yml 已生成的真实 artifactName 发现三平台安装包，不维护产品名称表。行业身份由 github.repository、稳定 tag、精确提交和签名模式注入；平台 job 只能上传同一 run 的候选，唯一发布 job 才能写 Release。setup-node 必须使用 buildRuntime.nodeVersion 精确值，禁止 24 等浮动主版本，否则 Node 随附 npm 会与 runtime lock 漂移。"
   },
-
   "requiredRootAssets": {
     "files": [
-      "WORKLOOM_PRODUCT_CONTEXT.md"
+      "WORKLOOM_PRODUCT_CONTEXT.md",
+      "docs/DEVELOPMENT-PROTOCOL.md"
     ],
     "copiedFiles": {
       ".github/workflows/base-sync-heartbeat.yml": {
@@ -104,97 +113,170 @@
     },
     "comment": "copiedFiles 与 files 均整文件验真；AGENTS.md 只按受控区块合并。legacyGitBlobOids 仅供审计，迁移判定只使用逐字节 SHA-256 allowlist。"
   },
-
   "preCommitSecretScanner": "scripts/secret-scan.mjs",
-
   "perProductDerivedAssets": [
     {
       "directory": ".workloom-runtime-deps",
-      "files": ["package.json", "package-lock.json", "metadata.json"],
+      "files": [
+        "package.json",
+        "package-lock.json",
+        "metadata.json"
+      ],
       "generator": "scripts/runtime-deps-lock.mjs",
-      "refreshArgs": ["refresh"],
-      "verifyArgs": ["verify"],
+      "refreshArgs": [
+        "refresh"
+      ],
+      "verifyArgs": [
+        "verify"
+      ],
       "strategy": "preserve-and-regenerate-after-product-lockfile",
       "comment": "桌面运行时锁由每仓自身产品身份、依赖清单与 pnpm-lock 派生；普通 base-sync 只下发生成器，绝不把 workloom-im 的锁覆盖到仙女座或行业仓。"
     }
   ],
-
   "acceptedBaseSecretScanFindings": {
     ".env.example": {
       "sha256": "860df8059d1d37289d4c333e0ad8dc603c927753eae11a8c9c45c88954a91817",
-      "findings": [{ "rule": "private-key", "line": 31 }],
+      "findings": [
+        {
+          "rule": "private-key",
+          "line": 31
+        }
+      ],
       "reason": "环境示例仅展示带省略号的 Ed25519 PEM 结构，并明确要求私钥只能进入密钥库；不含可用私钥。"
     },
     ".github/workflows/ui-release.yml": {
       "sha256": "2c10bcbd92d7b1b880f8859bb55d4b7c2d1d9aef28ecb484aeec81c891871f89",
       "findings": [
-        { "rule": "credential-in-url", "line": 56 },
-        { "rule": "literal-sensitive-assignment", "line": 56 },
-        { "rule": "credential-in-url", "line": 57 },
-        { "rule": "credential-in-url", "line": 58 }
+        {
+          "rule": "credential-in-url",
+          "line": 56
+        },
+        {
+          "rule": "literal-sensitive-assignment",
+          "line": 56
+        },
+        {
+          "rule": "credential-in-url",
+          "line": 57
+        },
+        {
+          "rule": "credential-in-url",
+          "line": 58
+        }
       ],
       "reason": "UI 发布门禁连接串是临时 GitHub Actions PostgreSQL 服务的公开测试值，不用于任何外部或生产数据库。"
     },
     "apps/server/src/service/adapters/business-registry.pg.test.ts": {
       "sha256": "d8d66b9414ef7c29de5eea4d6a34f31eadd5a0bbf2a2d35f9ca731be0a5f7889",
       "findings": [
-        { "rule": "credential-in-url", "line": 8 },
-        { "rule": "credential-in-url", "line": 9 },
-        { "rule": "credential-in-url", "line": 10 }
+        {
+          "rule": "credential-in-url",
+          "line": 8
+        },
+        {
+          "rule": "credential-in-url",
+          "line": 9
+        },
+        {
+          "rule": "credential-in-url",
+          "line": 10
+        }
       ],
       "reason": "活库适配器契约仅使用仓库 docker-compose 的本机测试库默认值，不用于任何外部或生产数据库。"
     },
     "apps/server/src/service/channels-state.test.ts": {
       "sha256": "226b697a961afc3237e3cec3ae99144a5f099a7122c79139dff0a1c57a82027f",
-      "findings": [{ "rule": "literal-sensitive-assignment", "line": 14 }],
+      "findings": [
+        {
+          "rule": "literal-sensitive-assignment",
+          "line": 14
+        }
+      ],
       "reason": "C 端 H5 签名负向测试使用明确标记为 test 的固定夹具，不是运行凭据。"
     },
     "apps/server/src/service/eval-source.pg.test.ts": {
       "sha256": "afbfaa543b54db948ec41d0802aacb9b1ed85b07ac3fbf32863b2c97d0dfcc70",
       "findings": [
-        { "rule": "credential-in-url", "line": 8 },
-        { "rule": "credential-in-url", "line": 9 }
+        {
+          "rule": "credential-in-url",
+          "line": 8
+        },
+        {
+          "rule": "credential-in-url",
+          "line": 9
+        }
       ],
       "reason": "仅用于可选 PG 契约测试的仓库内公开本机开发库默认连接串；生产值仍只能来自环境变量。"
     },
     "apps/server/src/service/h5-session-auth.test.ts": {
       "sha256": "de726630d410434cd02bab6094a3dd35d356c4b2cc4537d386f26c88e597256a",
-      "findings": [{ "rule": "literal-sensitive-assignment", "line": 4 }],
+      "findings": [
+        {
+          "rule": "literal-sensitive-assignment",
+          "line": 4
+        }
+      ],
       "reason": "H5 正式鉴权负向测试使用明确标记为 production-test 的固定夹具，不是运行凭据。"
     },
     "apps/server/src/service/onboarding-continuity.pg.test.ts": {
       "sha256": "b3a750faa5e89890143dce8d72f1d8140d463d91a857e56faa1f024833c07834",
-      "findings": [{ "rule": "literal-sensitive-assignment", "line": 117 }],
+      "findings": [
+        {
+          "rule": "literal-sensitive-assignment",
+          "line": 117
+        }
+      ],
       "reason": "落地向导秘密不落库测试使用 sk-never-store 负向哨兵，验证该字段会被剔除。"
     },
     "apps/server/src/service/onboarding-continuity.test.ts": {
       "sha256": "0873f0fedc697713b16038a6ac804bac9b9d5f9fda96c854751666b1d8c3ceda",
-      "findings": [{ "rule": "literal-sensitive-assignment", "line": 44 }],
+      "findings": [
+        {
+          "rule": "literal-sensitive-assignment",
+          "line": 44
+        }
+      ],
       "reason": "落地向导秘密不持久化单测使用 sk-must-not-persist 负向哨兵，验证该字段会被剔除。"
     },
     "scripts/hotel-seed-preflight.test.ts": {
       "sha256": "a26d099d842fce9431613451decab4bda0240f5dac04a6d8f859626ffb3d5692",
-      "findings": [{ "rule": "literal-sensitive-assignment", "line": 22 }],
+      "findings": [
+        {
+          "rule": "literal-sensitive-assignment",
+          "line": 22
+        }
+      ],
       "reason": "种子预检负向测试连接固定的 127.0.0.1:1 不可达地址，用户名和密码均为 invalid。"
     },
     "scripts/seed-aipm.ts": {
       "sha256": "8af195789effd5e975f0deb841f4dbbde79bf84218a18d9e551948bda6ff37f8",
       "findings": [
-        { "rule": "credential-in-url", "line": 30 },
-        { "rule": "credential-in-url", "line": 32 }
+        {
+          "rule": "credential-in-url",
+          "line": 30
+        },
+        {
+          "rule": "credential-in-url",
+          "line": 32
+        }
       ],
       "reason": "AI 产品经理示例种子只使用仓库 docker-compose 的本机 owner / gateway 测试默认值；生产值只能来自环境变量。"
     },
     "scripts/release-gate.ts": {
       "sha256": "7607c5730a95e6dee0ba7dd335bba776a7a17d1148a5fa375127eb0eaaa0e982",
       "findings": [
-        { "rule": "credential-in-url", "line": 21 },
-        { "rule": "credential-in-url", "line": 22 }
+        {
+          "rule": "credential-in-url",
+          "line": 21
+        },
+        {
+          "rule": "credential-in-url",
+          "line": 22
+        }
       ],
       "reason": "发布门禁的 app / owner 连接串均为仓库 docker-compose 中公开的本机测试库默认值；生产连接仍只能来自环境变量。"
     }
   },
-
   "adoptMigrations": {
     "AGENTS.repo.md": {
       "strategy": "replace-if-identical-to-base",
@@ -204,7 +286,6 @@
       "strategy": "remove-if-identical-to-base"
     }
   },
-
   "dependencyClosure": {
     "relativeImports": "fail-closed",
     "allowedExcludedTargets": [
@@ -256,7 +337,6 @@
     ],
     "comment": "所有随 base-sync 下发的 JS/TS 文件，其相对 import/export/require 目标也必须下发；确需由子仓保留实现的缝必须逐对登记并说明原因。"
   },
-
   "include": [
     "packages/base/**",
     "packages/industry-contract/**",
@@ -269,7 +349,6 @@
     "scripts/**",
     "docker-compose.yml"
   ],
-
   "exclude": [
     "bundles/**",
     "demo/**",
@@ -281,10 +360,8 @@
     "apps/web/**",
     "apps/webb/**",
     "apps/webc/**",
-
     "electron-builder.yml",
     "product.manifest.json",
-
     "apps/web/src/App.tsx",
     "apps/web/src/shell/**",
     "apps/web/src/pages/**",
@@ -296,7 +373,6 @@
     "apps/web/public/**",
     "apps/web/src/lib/display.ts",
     "apps/web/src/lib/demo-conversation.ts",
-
     "apps/server/src/trpc/router.ts",
     "apps/server/src/service/router.ts",
     "apps/server/src/service/dialog.ts",
@@ -310,18 +386,14 @@
     "apps/server/src/service/adapters/**",
     "apps/server/src/service/aipm.ts",
     "apps/server/src/industry/**",
-
     "packages/base/bundles/bundles.test.ts",
     "packages/base/bundles/eval-questions.test.ts",
     "packages/base/fence-engine/fence-engine.test.ts",
     "packages/base/overlay/overlay.test.ts",
     "packages/db/src/schema.ts",
     "packages/db/migrations/**",
-
     "apps/desktop/WorkLoom.app/**",
-
     "skills/**",
-
     "scripts/seed*.ts",
     "scripts/demo.ts",
     "scripts/reset.sh",
@@ -356,7 +428,6 @@
     "scripts/skill-dist-demo.mts",
     "scripts/build-sales-pptx.py",
     "scripts/eval/report/**",
-
     "package.json",
     "pnpm-workspace.yaml",
     "pnpm-lock.yaml",
@@ -369,29 +440,35 @@
     ".oss-watch-state.json",
     "core.*",
     "PREVIEW_CHECKLIST.md",
-
     ".github/workflows/**",
     "sync/**"
   ],
-
   "anchorMerge": {
     "packages/base/package.json": {
       "strategy": "json-merge-keep-child-extra",
-      "mergeKeys": ["exports", "dependencies", "devDependencies"],
+      "mergeKeys": [
+        "exports",
+        "dependencies",
+        "devDependencies"
+      ],
       "comment": "基座版为底；子仓独有的 exports（如 asset-cms/publish-rpa 等行业模块）与依赖必须保留——2026-09-05 八仓对齐时整体覆盖曾致 ERR_PACKAGE_PATH_NOT_EXPORTED 服务瘫痪"
     },
     "packages/base/tsconfig.json": {
       "strategy": "json-merge-keep-child-extra",
-      "mergeKeys": ["include"],
+      "mergeKeys": [
+        "include"
+      ],
       "comment": "基座版为底；子仓独有的 include 目录（如 audit-core 试验田）必须保留"
     },
     "apps/server/package.json": {
       "strategy": "json-merge-keep-child-extra",
-      "mergeKeys": ["dependencies", "devDependencies"],
+      "mergeKeys": [
+        "dependencies",
+        "devDependencies"
+      ],
       "comment": "基座版为底；子仓独有依赖（如 segment 接线需要的 yaml）保留"
     }
   },
-
   "publicAppendOnlyFiles": [
     "packages/db/migrations/0026_tenant_overlay.sql",
     "packages/db/migrations/0028_onboarding_truth_gate.sql",
@@ -403,7 +480,6 @@
     "packages/db/migrations/0034_api_key_rotation.sql",
     "packages/db/migrations/0035_tenant_overlay_single_active.sql"
   ],
-
   "newIndustryBootstrapFiles": [
     "packages/db/migrations/0001_init.sql",
     "packages/db/migrations/0002_bugfix.sql",
@@ -440,9 +516,7 @@
     "packages/db/migrations/0034_api_key_rotation.sql",
     "packages/db/migrations/0035_tenant_overlay_single_active.sql"
   ],
-
   "appendOnlyDirs": [],
-
   "pollutionGuard": {
     "pathBlacklist": [
       "^bundles/",

@@ -47,7 +47,7 @@ function parseArgs(argv) {
     repo: opt("--repo"),
     base: opt("--base"),
     baseDir: opt("--base-dir"),
-    baseUrl: opt("--base-url", "https://github.com"),
+    baseUrl: opt("--base-url", "https://cnb.cool"),
     extraExclude: opt("--extra-exclude") ? opt("--extra-exclude").split(",").filter(Boolean) : [],
     dryRun: has("--dry-run"),
     json: has("--json"),

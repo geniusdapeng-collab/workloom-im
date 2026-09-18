@@ -42,6 +42,15 @@
           node scripts/secret-scan.mjs --range "$HEAD_SHA" "$HEAD_SHA" --acceptance-manifest sync/base-scope.json
         fi
 
+    - name: 协议门禁（提交规范 + 并发冲突）
+      script: |
+        set -eu
+        node --test scripts/ci/protocol-rules.test.mjs
+        node scripts/ci/verify-commit-msg.mjs --self-test
+        node scripts/ci/verify-lock-conflict.mjs --self-test
+        node scripts/ci/verify-commit-msg.mjs
+        node scripts/ci/verify-lock-conflict.mjs
+
     - name: 桌面运行时锁与载荷边界
       script: |
         set -eu
