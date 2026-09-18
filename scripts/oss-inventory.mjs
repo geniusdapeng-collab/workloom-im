@@ -642,7 +642,10 @@ function shortRepos(paths, limit = 3) {
 export function renderMarkdown({ root, repo, registry, inventory, state, planFile = PLAN_FILE }) {
   const scannedAt = state?.last_full_scan ? state.last_full_scan : "尚未扫描（运行 `pnpm oss:watch`）";
   const hasNodeStack = existsSync(join(root, "package.json"));
-  const cmd = (task) => (hasNodeStack ? `pnpm ${task}` : `bash scripts/oss-watch.sh ${task.replace("oss:", "--")}`);
+  const cmd = (task) =>
+    hasNodeStack
+      ? `pnpm ${task}`
+      : { "oss:watch": "bash scripts/oss-watch.sh", "oss:plan": "bash scripts/oss-watch.sh --show" }[task];
   const cache = state?.registry_cache ?? {};
   const probes = probeVersions(root, registry.components);
   const lines = [];
