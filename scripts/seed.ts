@@ -3,7 +3,7 @@
  * 用法：pnpm db:seed（读取 .env；幂等，可重复执行）
  *
  * 内容：demo 租户 / 云栖酒店工作区 / 3 人类成员 / 7 Agent preset 实例 /
- *      一店一档（含 forbidden 硬约束）/ 基线围栏 R1–R7 装载 / 3 官方技能 /
+ *      一店一档（含 forbidden 硬约束）/ 基线围栏 R1–R6 装载 / 3 官方技能 /
  *      2 触发器 / 昨夜夜班班次 / 100 条五元事件（哈希链）/ 审批样例 / 组织记忆
  *
  * 纪律：
@@ -31,6 +31,7 @@ import {
   reconcileEventStorageSequenceForSeed,
   safeParseReplayAwareEvent,
 } from "@workloom/base/workdata";
+import { loadFencePack } from "@workloom/base/fence-engine";
 import { resolveHotelSeedBundle } from "./hotel-seed-preflight.js";
 import {
   loadVerifiedBundleManifest,
@@ -123,13 +124,22 @@ interface FenceRule {
   match: { object_types: string[]; actions: string[] };
   when: string;
   note?: string;
+  /** 规则所属围栏包版本（HP-02：入库版本可追溯，不再一律写死 v1） */
+  version?: string;
 }
 
+/**
+ * HP-02：围栏包读取统一走 fence-engine 的 DSL 装载器（`rules ?? fences` 双形态 + zod 校验 + 重复 id 拒绝）。
+ * 此前这里只认 `rules:`，与 ai-pm 种子（认 `fences ?? rules`）和 DSL 装载器（只认 `rules`）三套口径并存。
+ */
 function loadFences(): FenceRule[] {
-  return BUNDLE_MANIFEST.workloom.provides.fences.flatMap((assetPath) => {
-    const doc = YAML.parse(readFileSync(join(BUNDLE_DIR, assetPath), "utf-8"));
-    return (doc?.rules ?? []) as FenceRule[];
-  });
+  return BUNDLE_MANIFEST.workloom.provides.fences.flatMap((assetPath) =>
+    loadFencePack(readFileSync(join(BUNDLE_DIR, assetPath), "utf-8")).rules
+      .map((r) => ({
+        rule_id: r.rule_id, name: r.name, level: r.level, is_baseline: r.is_baseline,
+        match: { object_types: r.objectTypes, actions: r.actions }, when: r.when,
+        version: r.version,
+      })));
 }
 
 interface SkillDoc {
@@ -570,7 +580,7 @@ async function main(): Promise<void> {
   );
   console.log("✓ 一店一档（含 forbidden 硬约束 ×2，保底价 ¥380 与 R2 同源）");
 
-  // 基线围栏装载（R1–R7，active；单调守卫 F2.3 由阶段二 B4 判定器执行）
+  // 基线围栏装载（R1–R6，active；单调守卫 F2.3 由阶段二 B4 判定器执行）
   for (const r of fences) {
     await q(
       `INSERT INTO fence_rules (id, rule_id, version, workspace_id, name, level, match_spec, action, is_baseline, status, created_by)
@@ -579,7 +589,7 @@ async function main(): Promise<void> {
       [
         `fr-${r.rule_id.toLowerCase()}-v1-${WS_ID}`,
         r.rule_id,
-        FENCE_VERSION,
+        r.version ?? FENCE_VERSION,
         WS_ID,
         r.name,
         r.level,
