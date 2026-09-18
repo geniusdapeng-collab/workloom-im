@@ -61,3 +61,14 @@ describe("并发冲突规则", () => {
   });
 });
 
+describe("路径解析与误判防护", () => {
+  it("不同目录的同名文件不算冲突", () => {
+    assert.deepEqual(findFileOverlaps(["apps/web/package.json"], ["apps/webb/package.json"]), []);
+    assert.deepEqual(findModuleConflicts(["apps/web/package.json"], ["apps/webb/package.json"]), []);
+  });
+
+  it("根级 package.json 属于互斥模块，子目录 package.json 不属于", () => {
+    assert.equal(exclusiveModuleOf("package.json"), "root:package.json");
+    assert.equal(exclusiveModuleOf("apps/web/package.json"), null);
+  });
+});

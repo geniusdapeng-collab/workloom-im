@@ -36,7 +36,7 @@
 
 - **模块级互斥**（同一时刻全网仅一个任务可动）：`sync/**`、`protocol/**`、`**/migrations/**`、根 `package.json`、`AGENTS.md`、`.cnb.yml`、`docs/DEVELOPMENT-PROTOCOL.md`。
 - **普通路径**：同一文件被两个 open PR 同时修改 → 后到者拒（`LOCK_OVERLAP_MODE=warn` 可临时降级为告警）。
-- 检测由 `scripts/ci/verify-lock-conflict.mjs` 在 PR 流水线自动执行，无需手工维护锁表。
+- 检测由 `scripts/ci/verify-lock-conflict.mjs` 在 PR 流水线自动执行，无需手工维护锁表；脚本按「PR 编号 / 分支名 / 源分支提交 SHA」三重排除自身 PR。
 - 冲突处置：排队等待先到者合并；紧急任务转人工调度。
 
 ## 5. 提交规范（放宽版）
@@ -50,6 +50,25 @@
 - **豁免**（无需任务号）：`Merge` / `Revert` 提交、`sync(...)` 同步器产出、`chore(ci)`、`rescue:`、`HP-<数字>` 审计批次、`chore(deps)`。
 - 过渡开关：`PROTOCOL_TASK_ID_OPTIONAL=1` 时只校格式、不强制任务号。
 - body 建议附：四问的 q1/q3 摘要 + Issue 链接。本地 hook 可选（`core.hooksPath`），**CI 才是真闸门**。
+
+## 5.1 任务卡标签体系（CNB 实测上限：每仓 10 个标签）
+
+CNB 每仓**最多 10 个标签**（实测：创建第 11 个返回 201 但不落库），因此采用压缩标签集：
+
+| 标签 | 含义 |
+|---|---|
+| `t/draft` | 已建卡，四问未答全 |
+| `t/doing` | 已派发/已领/执行中（合并原 clarified/dispatched/leased/in-progress） |
+| `t/review` | 待人审或待评审 |
+| `t/done` | 已合并且有回执 |
+| `t/blocked` | 阻塞或取消（须在 Issue 写明原因） |
+| `risk/review` | 风险等级：人审 |
+| `risk/block` | 风险等级：禁止（红线） |
+| `src/human` | 来源：人 |
+| `src/auto` | 来源：漂移报告 / 事故 / 考试失败（自动生成） |
+| `protocol` | 协议类任务 |
+
+配套：九仓均已创建这 10 个标签；任务集看板按 `t/*` 分列即可（无需 18 个细粒度状态）。
 
 ## 6. 交接与恢复
 

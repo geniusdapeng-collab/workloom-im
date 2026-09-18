@@ -26,6 +26,7 @@ function git(args) {
 function changedFiles(base) {
   const candidates = [];
   if (base) candidates.push([`${base}...HEAD`]);
+  candidates.push(["origin/main...HEAD"], ["main...HEAD"]);
   if (process.env.CNB_BEFORE_SHA) candidates.push([`${process.env.CNB_BEFORE_SHA}...HEAD`]);
   candidates.push(["HEAD~1...HEAD"], ["HEAD"]);
   for (const [range] of candidates) {
@@ -51,7 +52,17 @@ async function apiJson(url) {
   return text ? JSON.parse(text) : null;
 }
 
-async function openPrFiles(repoSlug, selfNumber, selfBranch) {
+/**
+ * CNB 的 pulls/{n}/files 只返回基名（如 apps/web/package.json 会返回 "package.json"），
+ * 完整路径要从 blob_url / raw_url 中解出，否则不同目录的同名文件会被误判为冲突。
+ */
+function fullPathOf(entry) {
+  const url = String(entry?.blob_url ?? entry?.raw_url ?? "");
+  const match = /\/blob\/[0-9a-f]{7,40}\/(.+)$/.exec(url) ?? /\/raw\/[^/]+\/(.+)$/.exec(url);
+  return match ? decodeURIComponent(match[1]) : String(entry?.filename ?? "");
+}
+
+async function openPrFiles(repoSlug, selfNumber, selfBranch, selfHeadSha) {
   const pulls = await apiJson(`${API}/${repoSlug}/-/pulls?state=open`);
   const list = Array.isArray(pulls) ? pulls : (pulls?.data ?? []);
   const result = [];
@@ -59,11 +70,20 @@ async function openPrFiles(repoSlug, selfNumber, selfBranch) {
     const number = String(pull?.number ?? "");
     if (!number) continue;
     const headRef = String(pull?.head?.ref ?? "").replace(/^refs\/heads\//, "");
-    const isSelf = number === String(selfNumber ?? "") || (selfBranch && headRef === selfBranch);
-    if (isSelf) continue;
+    const headSha = String(pull?.head?.sha ?? "");
+    const isSelf =
+      number === String(selfNumber ?? "")
+      || (selfBranch && headRef === selfBranch)
+      || (selfHeadSha && headSha === selfHeadSha)
+      || (selfHeadSha && headSha && headSha.startsWith(selfHeadSha.slice(0, 12)))
+      || (selfHeadSha && headSha && selfHeadSha.startsWith(headSha.slice(0, 12)));
+    if (isSelf) {
+      console.log(`- 跳过自身 PR #${number}（head=${headSha.slice(0, 12)} ref=${headRef}）`);
+      continue;
+    }
     const files = await apiJson(`${API}/${repoSlug}/-/pulls/${number}/files`);
     const paths = (Array.isArray(files) ? files : (files?.data ?? []))
-      .map((entry) => entry?.filename ?? entry?.path)
+      .map(fullPathOf)
       .filter(Boolean);
     result.push({ number, title: pull?.title ?? "", paths });
   }
@@ -91,18 +111,31 @@ async function main() {
   if (process.argv.includes("--self-test")) return selfTest();
 
   const repoSlug = arg("--repo") ?? process.env.CNB_REPO_SLUG ?? null;
-  const selfNumber = arg("--pr") ?? process.env.CNB_PULL_REQUEST ?? null;
+  const selfNumber = arg("--pr") ?? (process.env.CNB_PULL_REQUEST !== "true" ? process.env.CNB_PULL_REQUEST : null);
   const strict = process.argv.includes("--strict");
   const overlapMode = process.env.LOCK_OVERLAP_MODE === "warn" ? "warn" : "fail";
   const base = arg("--base");
-  let selfBranch = process.env.CNB_BRANCH ?? null;
+  // CNB 实测语义（2026-09-18，pull_request 构建）：
+  //   CNB_BRANCH=main（目标分支）、CNB_BRANCH_SHA=<目标分支提交>、CNB_PULL_REQUEST=true（仅标记）
+  //   检出目录的 HEAD 就是源分支 tip —— 自比对以 HEAD 为准；push 构建才用 CNB_BRANCH_SHA。
+  let selfHeadSha = null;
   try {
-    selfBranch = selfBranch || git(["rev-parse", "--abbrev-ref", "HEAD"]);
+    if (process.env.CNB_EVENT === "push" && process.env.CNB_BRANCH_SHA) {
+      selfHeadSha = String(process.env.CNB_BRANCH_SHA).trim();
+    } else {
+      selfHeadSha = git(["rev-parse", "HEAD"]).trim();
+    }
   } catch {
-    /* 忽略：无 git 上下文时仅按编号排除自己 */
+    selfHeadSha = null;
   }
-  if (selfBranch === "HEAD") selfBranch = null;
-
+  let selfBranch = null;
+  if (process.env.CNB_EVENT === "push") selfBranch = (process.env.CNB_BRANCH ?? "").trim() || null;
+  if (process.env.PROTOCOL_DEBUG === "1") {
+    for (const key of ["CNB_EVENT", "CNB_BRANCH", "CNB_BRANCH_SHA", "CNB_PULL_REQUEST", "CNB_REPO_SLUG"]) {
+      console.log(`  [debug] ${key}=${process.env[key] ?? "<unset>"}`);
+    }
+    console.log(`  [debug] resolved selfHeadSha=${selfHeadSha ?? "<none>"}`);
+  }
   const { files: mine, range } = changedFiles(base);
   if (!mine.length) {
     console.log("✓ 锁冲突检测：分支无改动文件，跳过");
@@ -122,7 +155,7 @@ async function main() {
 
   let others;
   try {
-    others = await openPrFiles(repoSlug, selfNumber, selfBranch);
+    others = await openPrFiles(repoSlug, selfNumber, selfBranch, selfHeadSha);
   } catch (error) {
     console.warn(`! 查询 open PR 失败，跳过冲突检测：${String(error).slice(0, 200)}`);
     if (strict) process.exit(1);
