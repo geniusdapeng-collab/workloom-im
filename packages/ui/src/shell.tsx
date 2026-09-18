@@ -8,16 +8,16 @@ import {
   useId,
   useRef,
 } from "react";
-import { IconButton, Select } from "./forms";
-import { Icon } from "./icons";
-import { clientChineseText } from "./language";
+import { IconButton, Select } from "./forms.js";
+import { Icon } from "./icons.js";
+import { clientChineseText } from "./language.js";
 import {
   isNavigationActive,
   NAVIGATION_GROUP_LABELS,
   NAVIGATION_GROUP_ORDER,
   type IconName,
   type NavigationEntry,
-} from "./navigation";
+} from "./navigation.js";
 
 export interface TopContextBarProps extends Omit<HTMLAttributes<HTMLElement>, "title"> {
   eyebrow?: ReactNode;

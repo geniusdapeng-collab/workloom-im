@@ -7,9 +7,9 @@ import {
   type TextareaHTMLAttributes,
   useId,
 } from "react";
-import { Icon } from "./icons";
-import type { IconName } from "./navigation";
-import type { ButtonVariant } from "./components";
+import { Icon } from "./icons.js";
+import type { IconName } from "./navigation.js";
+import type { ButtonVariant } from "./components.js";
 
 function joinIds(...ids: Array<string | undefined>): string | undefined {
   const value = [...new Set(ids.filter((id): id is string => Boolean(id)))].join(" ");

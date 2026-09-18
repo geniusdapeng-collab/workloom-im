@@ -1,4 +1,4 @@
-import { clientChineseText } from "./language";
+import { clientChineseText } from "./language.js";
 
 export type WorkLoomClient = "b-pc" | "b-mobile" | "c-mobile";
 export type NavigationGroup = "today" | "collaboration" | "operations" | "trust" | "automation" | "organization" | "mine";

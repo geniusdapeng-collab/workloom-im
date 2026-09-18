@@ -1,7 +1,7 @@
 import { useId, type CSSProperties, type HTMLAttributes, type ReactNode } from "react";
-import { AsyncState, Button } from "./components";
-import { IconButton } from "./forms";
-import { Icon } from "./icons";
+import { AsyncState, Button } from "./components.js";
+import { IconButton } from "./forms.js";
+import { Icon } from "./icons.js";
 
 export interface DemoBannerProps extends HTMLAttributes<HTMLElement> {
   title?: string;

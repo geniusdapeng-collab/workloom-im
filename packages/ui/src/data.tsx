@@ -8,10 +8,10 @@ import {
   useRef,
   useState,
 } from "react";
-import { Badge, Button } from "./components";
-import { Radio } from "./forms";
-import { clientChineseText } from "./language";
-import { Dialog } from "./overlays";
+import { Badge, Button } from "./components.js";
+import { Radio } from "./forms.js";
+import { clientChineseText } from "./language.js";
+import { Dialog } from "./overlays.js";
 
 function clientNodeText(value: ReactNode, fallback: string): ReactNode {
   return typeof value === "string" ? clientChineseText(value, fallback) : value;

@@ -1,5 +1,5 @@
 import type { SVGProps } from "react";
-import type { IconName } from "./navigation";
+import type { IconName } from "./navigation.js";
 
 const PATHS: Readonly<Record<IconName, readonly string[]>> = {
   home: ["M3 20h18", "M5 20V9l7-5 7 5v11", "M9 20v-6h6v6"],

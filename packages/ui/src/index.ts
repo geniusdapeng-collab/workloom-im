@@ -8,7 +8,7 @@ export {
   isKnownClientField,
   type ClientFieldEntry,
   type ClientFieldOptions,
-} from "./language";
+} from "./language.js";
 export {
   AVATAR_MODELS,
   SKILL_ICON_NAMES,
@@ -18,7 +18,7 @@ export {
   type AvatarModel,
   type AvatarPresentation,
   type SkillIconName,
-} from "./entity-presentation";
+} from "./entity-presentation.js";
 export {
   BASE_NAVIGATION,
   NAVIGATION_GROUP_LABELS,
@@ -33,14 +33,14 @@ export {
   type NavigationEntry,
   type NavigationGroup,
   type WorkLoomClient,
-} from "./navigation";
-export { Icon, type IconProps } from "./icons";
+} from "./navigation.js";
+export { Icon, type IconProps } from "./icons.js";
 export {
   useManagedSurface,
   type ManagedSurfaceBindings,
   type ManagedSurfaceKind,
   type ManagedSurfaceOptions,
-} from "./managed-surface";
+} from "./managed-surface.js";
 export {
   accessibleForeground,
   colorContrastRatio,
@@ -48,13 +48,13 @@ export {
   parseHexColor,
   validateLightBrandTheme,
   type LightBrandTheme,
-} from "./color-contrast";
+} from "./color-contrast.js";
 export {
   LayoutControls,
   TEXT_SCALE_STEPS,
   type LayoutControlsProps,
   type TextScale,
-} from "./layout-controls";
+} from "./layout-controls.js";
 export {
   AsyncState,
   Badge,
@@ -69,7 +69,7 @@ export {
   type ButtonProps,
   type ButtonVariant,
   type OverlayProps,
-} from "./components";
+} from "./components.js";
 export {
   Avatar,
   Grid,
@@ -85,7 +85,7 @@ export {
   type StatusChipProps,
   type StatusChipTone,
   type TagProps,
-} from "./primitives";
+} from "./primitives.js";
 export {
   Checkbox,
   Combobox,
@@ -105,7 +105,7 @@ export {
   type SelectProps,
   type SwitchProps,
   type TextareaProps,
-} from "./forms";
+} from "./forms.js";
 export {
   ConfirmDialog,
   Dialog,
@@ -126,7 +126,7 @@ export {
   type ToastProps,
   type ToastTone,
   type TooltipProps,
-} from "./overlays";
+} from "./overlays.js";
 export {
   DemoBanner,
   EmptyState,
@@ -143,7 +143,7 @@ export {
   type PermissionStateProps,
   type ProgressProps,
   type SkeletonProps,
-} from "./states";
+} from "./states.js";
 export {
   AppShell,
   BottomTabs,
@@ -168,7 +168,7 @@ export {
   type TopContextBarProps,
   type WorkspaceOption,
   type WorkspaceSwitcherProps,
-} from "./shell";
+} from "./shell.js";
 export {
   AgentWorkCard,
   DecisionPackage,
@@ -189,7 +189,7 @@ export {
   type ReceiptLinkProps,
   type RiskLevel,
   type TenantScopeProps,
-} from "./patterns";
+} from "./patterns.js";
 export {
   Chart,
   Confidence,
@@ -212,4 +212,4 @@ export {
   type TableSortDirection,
   type TimelineItem,
   type TimelineProps,
-} from "./data";
+} from "./data.js";

@@ -1,7 +1,7 @@
 import { type RefObject, useEffect, useId, useRef } from "react";
-import { acquireModalDocumentState, restoreOverlayFocus } from "./modal-document-state";
-import { useOverlayEnvironment } from "./overlay-manager";
-import { activateOverlayLayer, isTopOverlayLayer } from "./overlay-stack";
+import { acquireModalDocumentState, restoreOverlayFocus } from "./modal-document-state.js";
+import { useOverlayEnvironment } from "./overlay-manager.js";
+import { activateOverlayLayer, isTopOverlayLayer } from "./overlay-stack.js";
 
 export type ManagedSurfaceKind =
   | "dialog"

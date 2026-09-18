@@ -7,10 +7,10 @@ import {
   useId,
 } from "react";
 import { createPortal } from "react-dom";
-import { Icon } from "./icons";
-import type { IconName } from "./navigation";
-import { useManagedSurface } from "./managed-surface";
-import { useOverlayEnvironment } from "./overlay-manager";
+import { Icon } from "./icons.js";
+import type { IconName } from "./navigation.js";
+import { useManagedSurface } from "./managed-surface.js";
+import { useOverlayEnvironment } from "./overlay-manager.js";
 
 export type ButtonVariant = "primary" | "secondary" | "danger" | "quiet";
 

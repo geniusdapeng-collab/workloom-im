@@ -7,12 +7,12 @@ import {
   useId,
   useRef,
 } from "react";
-import { Button, Overlay, type ButtonVariant, type OverlayProps } from "./components";
-import { useManagedSurface } from "./managed-surface";
-import { acquireModalDocumentState, restoreOverlayFocus } from "./modal-document-state";
-import { activateOverlayLayer, isTopOverlayLayer } from "./overlay-stack";
+import { Button, Overlay, type ButtonVariant, type OverlayProps } from "./components.js";
+import { useManagedSurface } from "./managed-surface.js";
+import { acquireModalDocumentState, restoreOverlayFocus } from "./modal-document-state.js";
+import { activateOverlayLayer, isTopOverlayLayer } from "./overlay-stack.js";
 
-export { OverlayManager, type OverlayManagerProps } from "./overlay-manager";
+export { OverlayManager, type OverlayManagerProps } from "./overlay-manager.js";
 
 export type DialogProps = Omit<OverlayProps, "kind">;
 

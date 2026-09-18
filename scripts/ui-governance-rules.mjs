@@ -2063,7 +2063,9 @@ export function findUnmanagedSurfaceRisks(source, fileName = "client.tsx", { tru
   const shadowedSurfaceImports = shadowedImportNames(sourceFile, sharedSurfaceImportNames);
   for (const [localName, binding] of imports) {
     const trustedHookSource = binding.sourceName === "@workloom/ui"
-      || (sharedUiFile && /^(?:\.\.\/)*\.\/?managed-surface$/u.test(binding.sourceName));
+      // 相对导入在本仓遵循 TypeScript ESM 约定带 `.js` 后缀（构建产物需扩展名）；
+      // 判定时先剥离扩展名再比对，避免把 `./managed-surface.js` 误判为不可信来源。
+      || (sharedUiFile && /^(?:\.\.\/)*\.\/?managed-surface$/u.test(binding.sourceName.replace(/\.js$/u, "")));
     if (trustedHookSource && binding.original === "useManagedSurface") managedHookNames.add(localName);
   }
   const managedBindings = new Set();
