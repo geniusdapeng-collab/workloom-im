@@ -24,7 +24,110 @@
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import YAML from "yaml";
+
+/**
+ * YAML 解析：优先用仓库依赖 `yaml`（pnpm install 后可用）；在 Python 仓或无依赖环境
+ * 退化为内置子集解析（仅覆盖本脚本需要的四类结构：workspace globs、lockfile importers、
+ * compose/cnb 镜像行）。降级时结果标记 `yamlFallback=true`，不谎报全量解析。
+ */
+let YAML = null;
+try {
+  ({ default: YAML } = await import("yaml"));
+} catch {
+  YAML = null;
+}
+export const YAML_AVAILABLE = Boolean(YAML);
+
+/** 子集解析：workspace globs / lockfile importers / 镜像行。 */
+function parseYamlSubset(text, kind) {
+  if (kind === "workspace") {
+    return {
+      packages: [...text.matchAll(/^\s*-\s*["']?([^"'\s#]+)["']?\s*$/gm)].map((match) => match[1]),
+    };
+  }
+  if (kind === "lockfile") {
+    const importers = {};
+    const packages = {};
+    let importer = null;
+    let section = null;
+    let dep = null;
+    let inPackages = false;
+    for (const raw of text.split("\n")) {
+      if (!raw.trim() || raw.trim().startsWith("#")) continue;
+      const indent = raw.length - raw.trimStart().length;
+      const line = raw.trim();
+      if (indent === 0 && line === "packages:") {
+        inPackages = true;
+        importer = null;
+        section = null;
+        dep = null;
+        continue;
+      }
+      if (indent === 0 && line.endsWith(":")) inPackages = false;
+      if (inPackages) {
+        if (indent === 2 && line.endsWith(":")) {
+          const key = line.slice(0, -1).replace(/^["']|["']$/g, "");
+          packages[key] = packages[key] ?? {};
+        }
+        continue;
+      }
+      if (indent === 2 && line.endsWith(":") && !line.startsWith("-")) {
+        importer = line.slice(0, -1).replace(/^["']|["']$/g, "");
+        importers[importer] = importers[importer] ?? {};
+        section = null;
+        dep = null;
+        continue;
+      }
+      if (!importer) continue;
+      if (indent === 4 && /^(dependencies|devDependencies|optionalDependencies):$/.test(line)) {
+        section = line.slice(0, -1);
+        importers[importer][section] = importers[importer][section] ?? {};
+        dep = null;
+        continue;
+      }
+      if (!section) continue;
+      const nameMatch = line.match(/^["']?((?:@[^/]+\/)?[^"':]+)["']?:$/);
+      if (indent === 6 && nameMatch) {
+        dep = nameMatch[1];
+        importers[importer][section][dep] = {};
+        continue;
+      }
+      if (indent === 8 && dep && line.startsWith("version:")) {
+        importers[importer][section][dep].version = line.slice("version:".length).trim().replace(/^["']|["']$/g, "");
+        continue;
+      }
+      if (indent === 8 && dep && line.startsWith("specifier:")) {
+        importers[importer][section][dep].specifier = line.slice("specifier:".length).trim().replace(/^["']|["']$/g, "");
+      }
+    }
+    return { importers, packages };
+  }
+  if (kind === "images") {
+    return { images: [...text.matchAll(/^\s*image:\s*["']?([^"'\s#]+)["']?\s*$/gm)].map((m) => m[1]) };
+  }
+  if (kind === "services") {
+    const services = {};
+    let current = null;
+    for (const raw of text.split("\n")) {
+      const serviceMatch = raw.match(/^  ([A-Za-z0-9_.-]+):\s*$/);
+      if (serviceMatch) {
+        current = serviceMatch[1];
+        services[current] = {};
+        continue;
+      }
+      const imageMatch = raw.match(/^\s{4}image:\s*["']?([^"'\s#]+)["']?\s*$/);
+      if (current && imageMatch) services[current].image = imageMatch[1];
+    }
+    return { services };
+  }
+  return null;
+}
+
+function readYamlSubset(path, kind) {
+  const text = readText(path, "");
+  if (!text) return null;
+  return parseYamlSubset(text, kind);
+}
 
 export const REGISTRY_FILE = "oss-components.json";
 export const STATE_FILE = ".oss-watch-state.json";
@@ -157,7 +260,8 @@ function matchesWorkspacePattern(pattern, path) {
 }
 
 export function readWorkspacePatterns(root) {
-  const doc = readYaml(join(root, "pnpm-workspace.yaml"));
+  const file = join(root, "pnpm-workspace.yaml");
+  const doc = YAML_AVAILABLE ? readYaml(file) : readYamlSubset(file, "workspace");
   const patterns = doc?.packages;
   return Array.isArray(patterns) ? patterns : [];
 }
@@ -167,7 +271,8 @@ export function readLockfile(root) {
 }
 
 export function readLockfileAt(root, file) {
-  const doc = readYaml(join(root, file));
+  const target = join(root, file);
+  const doc = YAML_AVAILABLE ? readYaml(target) : readYamlSubset(target, "lockfile");
   const importers = doc?.importers ?? {};
   const result = {};
   for (const [path, entry] of Object.entries(importers)) {
@@ -187,7 +292,9 @@ export function readLockfileAt(root, file) {
 
 /** lockfile 的 packages 段：包名 → 已解析的全部版本（升序），用于取「实际解析版本」。 */
 export function readLockPackagesAt(root, file) {
-  const doc = readYaml(join(root, file));
+  const target = join(root, file);
+  const doc = YAML_AVAILABLE ? readYaml(target) : readYamlSubset(target, "lockfile");
+  if (!doc) return {};
   const versions = {};
   for (const key of Object.keys(doc?.packages ?? {})) {
     const match = key.match(/^(@[^/]+\/[^@]+|[^@][^@]*)@(.+)$/);
@@ -206,18 +313,44 @@ export function readLockPackagesAt(root, file) {
 /** 全仓直接依赖（按 manifest 分组 + 去重汇总）。 */
 export function collectNpmInventory(root) {
   const manifests = walkFiles(root, { filter: (path) => path.endsWith("package.json") });
-  const lock = readLockfile(root);
   const patterns = readWorkspacePatterns(root);
   const entries = [];
   const packages = {};
+  const lockCache = new Map();
+  const workspaceMembers = new Set();
+
+  /** 就近锁定文件：支持嵌套工程（如子仓 governance/ 自带 pnpm-lock.yaml）。 */
+  const nearestLock = (manifestDir) => {
+    if (lockCache.has(manifestDir)) return lockCache.get(manifestDir);
+    let dir = manifestDir;
+    let found = null;
+    for (;;) {
+      const candidate = dir === "." ? "pnpm-lock.yaml" : `${dir}/pnpm-lock.yaml`;
+      if (existsSync(join(root, candidate))) {
+        found = { file: candidate, dir, importers: readLockfileAt(root, candidate) };
+        break;
+      }
+      if (dir === ".") break;
+      const parent = dirname(dir);
+      dir = parent === "." ? "." : parent;
+    }
+    lockCache.set(manifestDir, found);
+    return found;
+  };
 
   for (const manifestPath of manifests.sort()) {
     const dir = dirname(manifestPath) === "." ? "." : dirname(manifestPath);
     const manifest = readJson(join(root, manifestPath));
     if (!manifest) continue;
-    const importer = lock[dir] ?? {};
+    const lock = nearestLock(dir);
+    const relativeToLock = lock ? (dir === lock.dir ? "." : dir.slice(lock.dir.length + 1)) : dir;
+    const importer = lock?.importers?.[relativeToLock] ?? {};
     const workspace =
-      dir === "." || patterns.some((pattern) => matchesWorkspacePattern(pattern, dir)) || Boolean(lock[dir]);
+      dir === "." ||
+      patterns.some((pattern) => matchesWorkspacePattern(pattern, dir)) ||
+      Boolean(lock?.importers?.[relativeToLock]) ||
+      (lock?.dir === "." ? false : patterns.some((pattern) => matchesWorkspacePattern(pattern, relativeToLock)));
+    if (workspace) workspaceMembers.add(manifestPath);
     const kindOf = (section) => {
       if (section === "optionalDependencies") return "optional";
       return section === "devDependencies" ? "dev" : "prod";
@@ -277,7 +410,7 @@ export function collectNpmInventory(root) {
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  return { entries, packages: packageList, workspaceMembers: Object.keys(lock).sort() };
+  return { entries, packages: packageList, workspaceMembers: [...workspaceMembers].sort() };
 }
 
 /** Python 依赖：requirements.txt / pyproject 声明的第三方包。 */
@@ -335,7 +468,8 @@ export function collectContainerInventory(root) {
     if (!images.has(key)) images.set(key, { image: key, sources: new Set() });
     images.get(key).sources.add(source);
   };
-  const compose = readYaml(join(root, "docker-compose.yml"));
+  const composePath = join(root, "docker-compose.yml");
+  const compose = YAML_AVAILABLE ? readYaml(composePath) : readYamlSubset(composePath, "services");
   for (const [name, service] of Object.entries(compose?.services ?? {})) {
     add(service?.image, `docker-compose.yml#${name}`);
   }
@@ -352,7 +486,11 @@ export function collectContainerInventory(root) {
         else visit(value, `${path}.${key}`);
       }
     };
-    visit(readYaml(cnbPath, {}));
+    if (YAML_AVAILABLE) {
+      visit(readYaml(cnbPath, {}));
+    } else {
+      for (const image of readYamlSubset(cnbPath, "images")?.images ?? []) add(image, ".cnb.yml");
+    }
   }
   for (const file of walkFiles(root, { filter: (path) => /(^|\/)Dockerfile(\.|$)/.test(path) })) {
     for (const line of readText(join(root, file)).split("\n")) {

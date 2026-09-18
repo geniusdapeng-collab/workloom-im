@@ -63,9 +63,9 @@
 | 40 | electron-builder | [github.com/electron-userland/electron-builder](https://github.com/electron-userland/electron-builder) · MIT | 26.15.3 | 26.15.3 | 开发/构建 | apps/desktop（打包/签名） | 安装包与签名链路；升级后过 app:pack / app:dist 与发布资产校验 |
 | 41 | Playwright | [github.com/microsoft/playwright](https://github.com/microsoft/playwright) · Apache-2.0 | 1.63.0 | 1.63.0 | 开发/构建 | 三端 E2E（apps/*）、packages/base/computer-use/toolkit（Python 版，随工具链安装） | E2E 与 computer-use 浏览器驱动共用；升级必须重建 Linux 视觉基线（CNB ui-gate 在同一镜像内跑）；Python 侧版本由 toolkit/requirements.txt 约束 |
 | 42 | @axe-core/playwright | [github.com/dequelabs/axe-core-npm](https://github.com/dequelabs/axe-core-npm) · MPL-2.0 | 4.13.0 | 4.13.0 | 开发/构建 | 三端无障碍门禁 | 与 @playwright/test 版本矩阵敏感，同批升级 |
-| 43 | Vitest | [github.com/vitest-dev/vitest](https://github.com/vitest-dev/vitest) · MIT | 3.2.7 / 4.1.11 | **5.0.1** ⬆ | 开发/构建 | packages/*、apps/server | 各 workspace 版本需对齐（历史存在 v3/v4 混用）；升级后全量跑 pnpm test |
-| 44 | tsx | [github.com/privatenumber/tsx](https://github.com/privatenumber/tsx) · MIT | 4.23.12 | **4.23.13** ⬆ | 开发/构建 | 根脚本、apps/server | TS 直跑器；升级后过 db:migrate/db:seed 与 server 启动 |
-| 45 | TypeScript | [github.com/microsoft/TypeScript](https://github.com/microsoft/TypeScript) · Apache-2.0 | 5.9.3 / 7.0.2 | **7.0.2** ⬆ | 开发/构建 | 全仓 typecheck | 7.0 原生化工具链；部分包仍锁 5.9（治理/UI 消费校验），升级按包分批，避免一次全仓 |
+| 43 | Vitest | [github.com/vitest-dev/vitest](https://github.com/vitest-dev/vitest) · MIT | 3.2.0 / 4.1.11 | **5.0.1** ⬆ | 开发/构建 | packages/*、apps/server | 各 workspace 版本需对齐（历史存在 v3/v4 混用）；升级后全量跑 pnpm test |
+| 44 | tsx | [github.com/privatenumber/tsx](https://github.com/privatenumber/tsx) · MIT | 4.19.0 / 4.23.12 | **4.23.13** ⬆ | 开发/构建 | 根脚本、apps/server | TS 直跑器；升级后过 db:migrate/db:seed 与 server 启动 |
+| 45 | TypeScript | [github.com/microsoft/TypeScript](https://github.com/microsoft/TypeScript) · Apache-2.0 | 5.9.0 / 7.0.2 | **7.0.2** ⬆ | 开发/构建 | 全仓 typecheck | 7.0 原生化工具链；部分包仍锁 5.9（治理/UI 消费校验），升级按包分批，避免一次全仓 |
 | 46 | typescript-governance（别名固定解析器） | [github.com/microsoft/TypeScript](https://github.com/microsoft/TypeScript) · Apache-2.0 | 5.9.3 | —（未扫描） | CI/流水线 | UI 治理/消费校验固定解析器（npm:typescript@5.9.3） | 治理脚本的固定解析器，不随主 TypeScript 升级；改动需与 sync/install-ui-governance.mjs 的 dependency 声明同步 |
 | 47 | yaml-governance（别名固定解析器） | [github.com/eemeli/yaml](https://github.com/eemeli/yaml) · ISC | 2.9.0 | —（未扫描） | CI/流水线 | UI 治理脚本固定 YAML 解析器（npm:yaml@2.9.0） | 与 sync/base-scope.json#uiGovernanceCapability.yamlDependency 保持同版 |
 | 48 | concurrently | [github.com/open-cli-tools/concurrently](https://github.com/open-cli-tools/concurrently) · MIT | 9.2.4 | **10.0.5** ⬆ | 开发/构建 | pnpm dev（多进程编排） | 开发编排；升级不影响生产载荷 |
@@ -125,7 +125,7 @@
 | `@deepseek-ai/cordis-plugin-include` | 1.0.7（声明） | ^1.0.7 | 生产 | vendor/dsh/package.json | 1.0.7 |
 | `@deepseek-ai/cordis-plugin-loader` | 1.0.3（声明） | ^1.0.3 | 生产 | vendor/dsh/package.json | 1.0.3 |
 | `@deepseek-ai/cordis-plugin-timer` | 1.1.4（声明） | ^1.1.4 | 生产 | vendor/dsh/package.json | 1.1.4 |
-| `@deepseek-ai/dsh` | 0.1.2-rc.1（声明） | 0.1.2-rc.1 | 生产 | packages/runtime/dsh-gate/package.json | **0.1.5-rc.2** ⬆ |
+| `@deepseek-ai/dsh` | 0.1.2-rc.1 | 0.1.2-rc.1 | 生产 | packages/runtime/dsh-gate/package.json | **0.1.5-rc.2** ⬆ |
 | `@deepseek-ai/dsh-acp` | 0.1.2-rc.1（声明） | ^0.1.2-rc.1 | 开发 | vendor/dsh/package.json | 0.0.1-rc.1 |
 | `@deepseek-ai/dsh-acp-app` | 0.1.2-rc.1（声明） | ^0.1.2-rc.1 | 生产 | vendor/dsh/package.json | 0.1.2-alpha.2 |
 | `@deepseek-ai/dsh-agent` | 0.1.2-rc.1（声明） | ^0.1.2-rc.1 | 开发 | vendor/dsh/package.json | 0.1.0-rc.6 |
@@ -226,52 +226,52 @@
 | `@deepseek-ai/dsh-webhook-github` | 0.1.2-rc.1（声明） | ^0.1.2-rc.1 | 生产 | vendor/dsh/package.json | 0.1.2-alpha.2 |
 | `@deepseek-ai/dsh-workflow-worker-thread` | 0.1.2-rc.1（声明） | ^0.1.2-rc.1 | 生产 | vendor/dsh/package.json | 0.0.1-rc.3 |
 | `@deepseek-ai/schemastery` | 3.18.2（声明） | ^3.18.2 | 生产 | vendor/dsh/package.json | 3.18.2 |
-| `@hono/node-server` | 2.1.1 | 2.1.1 | 生产 | .workloom-runtime-deps/package.json、apps/server/package.json | 2.1.1 |
+| `@hono/node-server` | 2.1.1（声明） | 2.1.1 | 生产 | .workloom-runtime-deps/package.json、apps/server/package.json | 2.1.1 |
 | `@playwright/test` | 1.63.0 | 1.63.0 | 开发 | apps/web/package.json、package.json | 1.63.0 |
-| `@react-three/drei` | 10.7.8 | ^10.7.8 | 生产 | apps/web/package.json | 10.7.8 |
-| `@react-three/fiber` | 9.7.0 | ^9.7.0 | 生产 | apps/web/package.json | 9.7.0 |
-| `@react-three/postprocessing` | 3.1.1 | ^3.1.1 | 生产 | apps/web/package.json | 3.1.1 |
-| `@tailwindcss/vite` | 4.3.3 | 4.3.3 | 开发/生产 | .workloom-runtime-deps/package.json、apps/web/package.json、apps/webc/package.json | 4.3.3 |
-| `@tanstack/react-query` | 5.102.5 | 5.102.5 | 生产 | apps/web/package.json | **5.103.1** ⬆ |
-| `@trpc/client` | 11.18.0 | 11.18.0 | 生产 | apps/web/package.json、apps/webb/package.json | **11.19.0** ⬆ |
-| `@trpc/server` | 11.18.0 | 11.18.0 | 生产 | .workloom-runtime-deps/package.json、apps/server/package.json | **11.19.0** ⬆ |
+| `@react-three/drei` | 10.7.8（声明） | ^10.7.8 | 生产 | apps/web/package.json | 10.7.8 |
+| `@react-three/fiber` | 9.7.0（声明） | ^9.7.0 | 生产 | apps/web/package.json | 9.7.0 |
+| `@react-three/postprocessing` | 3.1.1（声明） | ^3.1.1 | 生产 | apps/web/package.json | 3.1.1 |
+| `@tailwindcss/vite` | 4.3.3（声明） | 4.3.3 | 开发/生产 | .workloom-runtime-deps/package.json、apps/web/package.json、apps/webc/package.json | 4.3.3 |
+| `@tanstack/react-query` | 5.102.5（声明） | 5.102.5 | 生产 | apps/web/package.json | **5.103.1** ⬆ |
+| `@trpc/client` | 11.18.0（声明） | 11.18.0 | 生产 | apps/web/package.json、apps/webb/package.json | **11.19.0** ⬆ |
+| `@trpc/server` | 11.18.0（声明） | 11.18.0 | 生产 | .workloom-runtime-deps/package.json、apps/server/package.json | **11.19.0** ⬆ |
 | `@types/js-yaml` | 4.0.9（声明） | ^4.0.9 | 开发 | vendor/dsh/package.json | 4.0.9 |
-| `@types/node` | 24.13.3 | ^24.0.0 | 开发 | apps/server/package.json、package.json | **26.6.1** ⬆ |
-| `@types/pg` | 8.21.0 | ^8.11.0 | 开发 | apps/server/package.json、packages/base/package.json、packages/db/package.json 等 4 处 | **8.23.1** ⬆ |
-| `@types/react` | 19.2.18 | ^19.2.0 | 开发 | apps/web/package.json、apps/webb/package.json、apps/webc/package.json 等 4 处 | **19.3.0** ⬆ |
-| `@types/react-dom` | 19.2.4 | ^19.2.0 | 开发 | apps/web/package.json、apps/webb/package.json、apps/webc/package.json 等 4 处 | **19.3.0** ⬆ |
-| `@types/three` | 0.185.4 | ^0.185.4 | 开发 | apps/web/package.json | **0.186.0** ⬆ |
+| `@types/node` | 24.0.0 / 24.13.3 | ^24.0.0 | 开发 | apps/server/package.json、package.json | **26.6.1** ⬆ |
+| `@types/pg` | 8.11.0（声明） | ^8.11.0 | 开发 | apps/server/package.json、packages/base/package.json、packages/db/package.json 等 4 处 | **8.23.1** ⬆ |
+| `@types/react` | 19.2.0（声明） | ^19.2.0 | 开发 | apps/web/package.json、apps/webb/package.json、apps/webc/package.json 等 4 处 | **19.3.0** ⬆ |
+| `@types/react-dom` | 19.2.0（声明） | ^19.2.0 | 开发 | apps/web/package.json、apps/webb/package.json、apps/webc/package.json 等 4 处 | **19.3.0** ⬆ |
+| `@types/three` | 0.185.4（声明） | ^0.185.4 | 开发 | apps/web/package.json | **0.186.0** ⬆ |
 | `@types/ws` | 8.18.1（声明） | 8.18.1 | 开发 | vendor/dsh/package.json | 8.18.1 |
-| `@vitejs/plugin-react` | 6.1.0 | 6.1.0 | 开发/生产 | .workloom-runtime-deps/package.json、apps/web/package.json、apps/webb/package.json 等 4 处 | **6.1.1** ⬆ |
+| `@vitejs/plugin-react` | 6.1.0（声明） | 6.1.0 | 开发/生产 | .workloom-runtime-deps/package.json、apps/web/package.json、apps/webb/package.json 等 4 处 | **6.1.1** ⬆ |
 | `commander` | 15.0.0（声明） | ^15.0.0 | 生产 | vendor/dsh/package.json | 15.0.0 |
 | `concurrently` | 9.2.4 | ^9.1.0 | 开发 | package.json | **10.0.5** ⬆ |
-| `drizzle-orm` | 0.45.2 | 0.45.2 / ^0.45.2 | 生产 | .workloom-runtime-deps/package.json、packages/db/package.json | 0.45.2 |
+| `drizzle-orm` | 0.45.2（声明） | 0.45.2 / ^0.45.2 | 生产 | .workloom-runtime-deps/package.json、packages/db/package.json | 0.45.2 |
 | `electron` | 44.1.1 | ^44.1.1 | 开发 | package.json | **44.4.2** ⬆ |
 | `electron-builder` | 26.15.3 | ^26.15.3 | 开发 | package.json | 26.15.3 |
 | `execa` | 10.0.0（声明） | ^10.0.0 | 开发 | vendor/dsh/package.json | **10.0.1** ⬆ |
-| `hono` | 4.13.5 | 4.13.5 | 生产 | .workloom-runtime-deps/package.json、apps/server/package.json | **4.13.8** ⬆ |
-| `jose` | 6.2.10 | 6.2.10 | 生产 | .workloom-runtime-deps/package.json、apps/server/package.json、packages/base/package.json | **6.2.12** ⬆ |
+| `hono` | 4.13.5（声明） | 4.13.5 | 生产 | .workloom-runtime-deps/package.json、apps/server/package.json | **4.13.8** ⬆ |
+| `jose` | 6.2.10（声明） | 6.2.10 | 生产 | .workloom-runtime-deps/package.json、apps/server/package.json、packages/base/package.json | **6.2.12** ⬆ |
 | `js-yaml` | 4.2.0（声明） | ^4.2.0 | 生产 | vendor/dsh/package.json | **5.4.2** ⬆ |
-| `jsdom` | 30.0.1 | ^30.0.1 | 开发 | apps/web/package.json、apps/webc/package.json、packages/ui/package.json | **30.1.0** ⬆ |
+| `jsdom` | 30.0.1（声明） | ^30.0.1 | 开发 | apps/web/package.json、apps/webc/package.json、packages/ui/package.json | **30.1.0** ⬆ |
 | `node-addon-require-builtin` | 0.1.4（声明） | ^0.1.4 | 生产 | vendor/dsh/package.json | **0.1.6** ⬆ |
 | `pg` | 8.23.0 | 8.23.0 | 生产 | .workloom-runtime-deps/package.json、package.json、packages/base/package.json 等 5 处 | 8.23.0 |
-| `pixi-live2d-display` | 0.4.0 | ^0.4.0 | 生产 | apps/web/package.json | 0.4.0 |
-| `pixi.js` | 6.5.10 | ^6.5.10 | 生产 | apps/web/package.json | **8.21.0** ⬆ |
-| `react` | 19.2.8 | 19.2.8 | 开发/生产 | apps/web/package.json、apps/webb/package.json、apps/webc/package.json 等 4 处 | **19.3.0** ⬆ |
-| `react-dom` | 19.2.8 | 19.2.8 | 开发/生产 | apps/web/package.json、apps/webb/package.json、apps/webc/package.json 等 4 处 | **19.3.0** ⬆ |
-| `react-router` | 8.3.0 | 8.3.0 | 生产 | apps/web/package.json | **8.4.0** ⬆ |
-| `tailwindcss` | 4.3.3 | 4.3.3 | 开发 | apps/web/package.json、apps/webc/package.json | 4.3.3 |
-| `three` | 0.185.1 | ^0.185.1 | 生产 | apps/web/package.json | **0.186.0** ⬆ |
-| `three-stdlib` | 2.36.1 | ^2.36.1 | 生产 | apps/web/package.json | 2.36.1 |
-| `tsx` | 4.23.12 | 4.23.12 / ^4.19.0 / ^4.23.12 | 开发/生产 | .workloom-runtime-deps/package.json、apps/server/package.json、package.json 等 4 处 | **4.23.13** ⬆ |
-| `typescript` | 5.9.3 / 7.0.2 | ^5.9.0 / ^7.0.2 | 开发 | apps/server/package.json、apps/web/package.json、apps/webb/package.json 等 11 处 | 7.0.2 |
+| `pixi-live2d-display` | 0.4.0（声明） | ^0.4.0 | 生产 | apps/web/package.json | 0.4.0 |
+| `pixi.js` | 6.5.10（声明） | ^6.5.10 | 生产 | apps/web/package.json | **8.21.0** ⬆ |
+| `react` | 19.2.8（声明） | 19.2.8 | 开发/生产 | apps/web/package.json、apps/webb/package.json、apps/webc/package.json 等 4 处 | **19.3.0** ⬆ |
+| `react-dom` | 19.2.8（声明） | 19.2.8 | 开发/生产 | apps/web/package.json、apps/webb/package.json、apps/webc/package.json 等 4 处 | **19.3.0** ⬆ |
+| `react-router` | 8.3.0（声明） | 8.3.0 | 生产 | apps/web/package.json | **8.4.0** ⬆ |
+| `tailwindcss` | 4.3.3（声明） | 4.3.3 | 开发 | apps/web/package.json、apps/webc/package.json | 4.3.3 |
+| `three` | 0.185.1（声明） | ^0.185.1 | 生产 | apps/web/package.json | **0.186.0** ⬆ |
+| `three-stdlib` | 2.36.1（声明） | ^2.36.1 | 生产 | apps/web/package.json | 2.36.1 |
+| `tsx` | 4.19.0 / 4.23.12 | 4.23.12 / ^4.19.0 / ^4.23.12 | 开发/生产 | .workloom-runtime-deps/package.json、apps/server/package.json、package.json 等 4 处 | **4.23.13** ⬆ |
+| `typescript` | 5.9.0 / 7.0.2 | ^5.9.0 / ^7.0.2 | 开发 | apps/server/package.json、apps/web/package.json、apps/webb/package.json 等 11 处 | 7.0.2 |
 | `typescript-governance → npm:typescript` | 5.9.3 | npm:typescript@5.9.3 | 开发 | package.json | **7.0.2** ⬆ |
-| `vite` | 8.2.2 | 8.2.2 | 开发/生产 | .workloom-runtime-deps/package.json、apps/web/package.json、apps/webb/package.json 等 4 处 | **8.3.0** ⬆ |
-| `vitest` | 3.2.7 / 4.1.11 | 4.1.11 / ^3.2.0 / ^4.1.11 | 开发 | apps/webb/package.json、package.json、packages/base/package.json 等 7 处 | **5.0.1** ⬆ |
+| `vite` | 8.2.2（声明） | 8.2.2 | 开发/生产 | .workloom-runtime-deps/package.json、apps/web/package.json、apps/webb/package.json 等 4 处 | **8.3.0** ⬆ |
+| `vitest` | 3.2.0 / 4.1.11 | 4.1.11 / ^3.2.0 / ^4.1.11 | 开发 | apps/webb/package.json、package.json、packages/base/package.json 等 7 处 | **5.0.1** ⬆ |
 | `ws` | 8.21.0（声明） | 8.21.0 | 开发 | vendor/dsh/package.json | **8.21.3** ⬆ |
 | `yaml` | 2.9.0 | 2.9.0 | 开发/生产 | .workloom-runtime-deps/package.json、package.json、packages/base/package.json | **2.9.1** ⬆ |
 | `yaml-governance → npm:yaml` | 2.9.0 | npm:yaml@2.9.0 | 开发 | package.json | **2.9.1** ⬆ |
-| `zod` | 4.4.3 | 4.4.3 / ^4.4.3 | 生产 | .workloom-runtime-deps/package.json、apps/server/package.json、packages/base/package.json 等 6 处 | **4.6.5** ⬆ |
+| `zod` | 4.4.3（声明） | 4.4.3 / ^4.4.3 | 生产 | .workloom-runtime-deps/package.json、apps/server/package.json、packages/base/package.json 等 6 处 | **4.6.5** ⬆ |
 
 ### 2.2 Python 依赖（1 个）
 
@@ -319,9 +319,9 @@
 - `three.js` 0.185.1 → **0.186.0**（门禁 full）
 - `pixi.js` 6.5.10 → **8.21.0**（门禁 full）
 - `Electron` 44.1.1 → **44.4.2**（门禁 full）
-- `Vitest` 3.2.7 / 4.1.11 → **5.0.1**（门禁 standard）
-- `tsx` 4.23.12 → **4.23.13**（门禁 standard）
-- `TypeScript` 5.9.3 / 7.0.2 → **7.0.2**（门禁 smoke）
+- `Vitest` 3.2.0 / 4.1.11 → **5.0.1**（门禁 standard）
+- `tsx` 4.19.0 / 4.23.12 → **4.23.13**（门禁 standard）
+- `TypeScript` 5.9.0 / 7.0.2 → **7.0.2**（门禁 smoke）
 - `concurrently` 9.2.4 → **10.0.5**（门禁 smoke）
 - `jsdom` 30.0.1 → **30.1.0**（门禁 standard）
 - `Node.js` 24.19.0 → **v26.9.0**（门禁 full）

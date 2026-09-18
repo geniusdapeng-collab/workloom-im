@@ -74,7 +74,7 @@ test("npm 清单：优先采用 lockfile 解析版本，并保留 npm 别名行"
     assert.equal(byName["typescript-governance"].package, "typescript");
     assert.equal(byName["typescript-governance"].versions[0], "5.9.3");
     assert.equal(byName.typescript.versions[0], "7.0.2");
-    assert.ok(inventory.workspaceMembers.includes("apps/web"));
+    assert.ok(inventory.workspaceMembers.includes("apps/web/package.json"));
     assert.equal(inventory.packages.find((entry) => entry.name === "react").resolution, "lockfile");
   } finally {
     rmSync(root, { recursive: true, force: true });
