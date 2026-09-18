@@ -16,14 +16,19 @@ function arg(name, fallback) {
 }
 
 function nextTaskId(existing) {
-  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const today = new RegExp(`T-${date}-(\\d{4})`);
+  // 任务号格式由 docs/DEVELOPMENT-PROTOCOL.md §5 与 scripts/ci/protocol-rules.mjs#TASK_ID_RE 定义：
+  // T-YYYY-MMDD-XXXX（四段八位→四段），此前按 T-YYYYMMDD-XXXX 生成会被提交信息门禁判为「缺少任务号」。
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const monthDay = `${String(now.getUTCMonth() + 1).padStart(2, "0")}${String(now.getUTCDate()).padStart(2, "0")}`;
+  const prefix = `T-${year}-${monthDay}`;
+  const today = new RegExp(`${prefix}-(\\d{4})`);
   let max = 0;
   for (const issue of existing) {
     const match = today.exec(issue.title ?? "");
     if (match) max = Math.max(max, Number(match[1]));
   }
-  return `T-${date}-${String(max + 1).padStart(4, "0")}`;
+  return `${prefix}-${String(max + 1).padStart(4, "0")}`;
 }
 
 async function commandNew() {
@@ -100,4 +105,3 @@ run().catch((error) => {
   console.error(`任务卡命令失败：${error?.message ?? error}`);
   process.exit(1);
 });
-
