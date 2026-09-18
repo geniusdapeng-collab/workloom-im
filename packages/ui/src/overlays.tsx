@@ -8,6 +8,7 @@ import {
   useRef,
 } from "react";
 import { Button, Overlay, type ButtonVariant, type OverlayProps } from "./components.js";
+import { Icon } from "./icons.js";
 import { useManagedSurface } from "./managed-surface.js";
 import { acquireModalDocumentState, restoreOverlayFocus } from "./modal-document-state.js";
 import { activateOverlayLayer, isTopOverlayLayer } from "./overlay-stack.js";
@@ -102,6 +103,8 @@ export interface PopoverProps extends Omit<HTMLAttributes<HTMLDivElement>, "chil
   children: ReactNode;
   triggerLabel?: string;
   title?: string;
+  /** 面板内可见关闭按钮的名称；非模态浮层也必须给出可见出口（Esc / 点击外部之外）。 */
+  closeLabel?: string;
   placement?: "start" | "end";
   disabled?: boolean;
   dismissOnEscape?: boolean;
@@ -116,6 +119,7 @@ export function Popover({
   children,
   triggerLabel = "打开更多选项",
   title,
+  closeLabel = "关闭",
   placement = "start",
   disabled = false,
   dismissOnEscape = true,
@@ -164,7 +168,18 @@ export function Popover({
       </Button>
       {open && (
         <div {...popoverSurface} className="wl-popover__surface" id={id} role="dialog" aria-label={title ?? triggerLabel}>
-          {title && <strong className="wl-popover__title">{title}</strong>}
+          <div className="wl-popover__header">
+            {title && <strong className="wl-popover__title">{title}</strong>}
+            <Button
+              variant="quiet"
+              className="wl-popover__close"
+              aria-label={closeLabel}
+              title={closeLabel}
+              onClick={() => onOpenChange(false)}
+            >
+              <Icon name="close" />
+            </Button>
+          </div>
           <div className="wl-popover__body">{children}</div>
         </div>
       )}

@@ -431,6 +431,8 @@
   .wl-popover__surface { background: var(--wl-color-surface-raised); border: 1px solid var(--wl-color-border); border-radius: var(--wl-radius-md); box-shadow: 0 14px 36px rgb(0 0 0 / 0.24); color: var(--wl-color-text); display: grid; gap: var(--wl-space-2); inset-block-start: calc(100% + var(--wl-space-1)); max-block-size: min(70dvh, 560px); min-inline-size: min(280px, calc(100vw - 2 * var(--wl-space-4))); overflow: auto; padding: var(--wl-space-3); position: absolute; width: max-content; z-index: var(--wl-z-floating); }
   .wl-popover--start .wl-popover__surface { inset-inline-start: 0; }
   .wl-popover--end .wl-popover__surface { inset-inline-end: 0; }
+  .wl-popover__header { align-items: center; display: flex; gap: var(--wl-space-2); justify-content: flex-end; }
+  .wl-popover__title { margin-inline-end: auto; }
   .wl-popover__title, .wl-popover__body { max-inline-size: 100%; min-width: 0; overflow-wrap: anywhere; }
 
   .wl-tooltip { display: inline-flex; max-inline-size: 100%; position: relative; }

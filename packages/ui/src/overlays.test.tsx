@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ConfirmDialog, Drawer, Sheet } from "./overlays";
+import { ConfirmDialog, Drawer, Popover, Sheet } from "./overlays";
 
 vi.mock("react-dom", () => ({
   createPortal: (children: ReactNode) => children,
@@ -30,5 +30,25 @@ describe("共享弹层原语", () => {
     expect(sheetHtml).toContain("wl-overlay--sheet");
     expect(drawerHtml).toContain('role="dialog"');
     expect(sheetHtml).toContain('role="dialog"');
+  });
+
+  // 非模态浮层也要有可见出口：Esc / 点击外部之外，面板内必须有「关闭」按钮。
+  it("浮层工具面板提供可见关闭按钮（含无标题形态）", () => {
+    vi.stubGlobal("document", {});
+    const titled = renderToStaticMarkup(
+      <Popover open onOpenChange={() => undefined} trigger="更多" title="可用操作">
+        <button type="button">查看详情</button>
+      </Popover>,
+    );
+    expect(titled).toContain("wl-popover__close");
+    expect(titled).toContain('aria-label="关闭"');
+    expect(titled).toContain("可用操作");
+
+    const untitled = renderToStaticMarkup(
+      <Popover open onOpenChange={() => undefined} trigger="更多" closeLabel="收起筛选">
+        <button type="button">查看详情</button>
+      </Popover>,
+    );
+    expect(untitled).toContain('aria-label="收起筛选"');
   });
 });
