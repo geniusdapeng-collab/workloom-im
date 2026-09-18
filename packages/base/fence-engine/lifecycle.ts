@@ -9,6 +9,7 @@
 import type pg from "pg";
 import { DRY_RUN_REPLAY_LIMIT, OBJECT_LOCK_TIMEOUT_MS, type BusinessEvent } from "@workloom/shared";
 import { judge, type JudgeVerdict, type RuntimeRule } from "./judge.js";
+import { checkCandidateAgainstBaseline } from "./dsl.js";
 
 /* ---------- dry-run 回放（F2.5） ---------- */
 
@@ -214,7 +215,7 @@ export async function activateRuleVersion(
   app: pg.Pool,
   scope: { tenantId: string; workspaceId: string },
   input: { ruleRowId: string; dryRunId: string; approvalEventId: string },
-): Promise<void> {
+): Promise<{ version: string }> {
   const client = await app.connect();
   try {
     await client.query("BEGIN");
@@ -227,19 +228,106 @@ export async function activateRuleVersion(
     if (dr.rows[0]?.status !== "confirmed") {
       throw new Error(`dry-run ${input.dryRunId} 未确认，禁止激活（L2.4）`);
     }
+    // ① 审批绑定验真（HP-02）：approvalEventId 必须指向本工作区真实的 approval.gesture 事件，
+    //    其 after.approvalId 对应的审批行已 approved，且被审事件正是本规则的 fence.rule.propose。
+    //    修复前该字段只被原样写库（伪造 event id 也能过），审批与规则行没有绑定关系。
+    const gesture = await client.query<{ proposal_event_id: string }>(
+      `SELECT a.event_id AS proposal_event_id
+         FROM biz_events g
+         JOIN approvals a
+           ON a.workspace_id = g.workspace_id
+          AND a.approval_id = g.payload->'decision'->'after'->>'approvalId'
+         JOIN biz_events p ON p.event_id = a.event_id AND p.workspace_id = a.workspace_id
+        WHERE g.workspace_id=$1 AND g.event_id=$2
+          AND g.payload->'decision'->>'action' = 'approval.gesture'
+          AND a.status = 'approved'
+          AND p.payload->'decision'->>'action' = 'fence.rule.propose'`,
+      [scope.workspaceId, input.approvalEventId],
+    );
+    if (!gesture.rows[0]) {
+      throw new Error(`审批事件 ${input.approvalEventId} 与围栏变更提案未绑定（伪造/未绑定引用，拒绝激活）`);
+    }
+    // ② 候选行 + 基线单调守卫（HP-02：checkMonotonic 此前只在测试里被调用）
+    const cand = await client.query<{
+      rule_id: string; name: string; level: RuntimeRule["level"]; is_baseline: boolean;
+      match_spec: { object_types?: string[]; actions?: string[]; when?: string };
+    }>(
+      `SELECT rule_id, name, level, is_baseline, match_spec FROM fence_rules
+        WHERE id=$1 AND workspace_id=$2 AND status IN ('draft','pending_approval')`,
+      [input.ruleRowId, scope.workspaceId],
+    );
+    const row = cand.rows[0];
+    if (!row) throw new Error(`规则 ${input.ruleRowId} 状态不允许激活`);
+    const current = await loadActiveRulesInTx(client, scope, input.ruleRowId);
+    const verdict = checkCandidateAgainstBaseline(current, {
+      rule_id: row.rule_id,
+      version: "v-next",
+      name: row.name,
+      level: row.level,
+      is_baseline: row.is_baseline,
+      objectTypes: row.match_spec.object_types ?? [],
+      actions: row.match_spec.actions ?? [],
+      when: row.match_spec.when ?? "",
+    });
+    if (!verdict.ok) {
+      throw new Error(`基线规则只可加严，本次变更被拒：${verdict.violations.map((v) => v.reason).join("；")}`);
+    }
+    // ③ 版本可追溯（HP-02）：按该 rule_id 历史最大版本递增；同 rule_id 旧 active 行转 rolled_back，
+    //    保证"每个 rule_id 同一时刻只有一条 active"（修复前一律 v-next，且旧版永远留在 active 集合里）。
+    const hist = await client.query<{ version: string }>(
+      `SELECT version FROM fence_rules WHERE workspace_id=$1 AND rule_id=$2`,
+      [scope.workspaceId, row.rule_id],
+    );
+    const maxVersion = hist.rows.reduce((max, r) => {
+      const m = /(\d+)\s*$/.exec(r.version);
+      return m ? Math.max(max, Number(m[1])) : max;
+    }, 0);
+    const version = `v${maxVersion + 1}`;
+    await client.query(
+      `UPDATE fence_rules SET status='rolled_back'
+        WHERE workspace_id=$1 AND rule_id=$2 AND status='active' AND id<>$3`,
+      [scope.workspaceId, row.rule_id, input.ruleRowId],
+    );
     const r = await client.query(
-      `UPDATE fence_rules SET status='active', approved_event_id=$3
+      `UPDATE fence_rules SET status='active', version=$4, approved_event_id=$3
        WHERE id=$1 AND workspace_id=$2 AND status IN ('draft','pending_approval')`,
-      [input.ruleRowId, scope.workspaceId, input.approvalEventId],
+      [input.ruleRowId, scope.workspaceId, input.approvalEventId, version],
     );
     if (r.rowCount === 0) throw new Error(`规则 ${input.ruleRowId} 状态不允许激活`);
     await client.query("COMMIT");
+    return { version };
   } catch (err) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw err;
   } finally {
     client.release();
   }
+}
+
+/**
+ * 载入工作区当前生效规则（含全局 '*' 基线），可排除指定行（激活中的候选行）。
+ * 供激活路径与提案路径（router）复用，保证两处判定输入口径一致。
+ */
+export async function loadActiveRulesInTx(
+  client: Pick<pg.PoolClient, "query">,
+  scope: { tenantId: string; workspaceId: string },
+  excludeRowId?: string,
+): Promise<RuntimeRule[]> {
+  const r = await client.query<{
+    rule_id: string; version: string; name: string; level: RuntimeRule["level"];
+    is_baseline: boolean; match_spec: { object_types?: string[]; actions?: string[]; when?: string };
+  }>(
+    `SELECT rule_id, version, name, level, is_baseline, match_spec
+       FROM fence_rules
+      WHERE (workspace_id=$1 OR workspace_id='*') AND status='active'
+        AND ($2::text IS NULL OR id <> $2)`,
+    [scope.workspaceId, excludeRowId ?? null],
+  );
+  return r.rows.map((row) => ({
+    rule_id: row.rule_id, version: row.version, name: row.name, level: row.level,
+    is_baseline: row.is_baseline, objectTypes: row.match_spec.object_types ?? [],
+    actions: row.match_spec.actions ?? [], when: row.match_spec.when ?? "",
+  }));
 }
 
 /* ---------- 对象写锁（E2.5） ---------- */
