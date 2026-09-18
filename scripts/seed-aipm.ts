@@ -21,6 +21,7 @@ import {
   loadVerifiedBundleEvalQuestions,
   loadVerifiedBundleWorkforcePresets,
 } from "@workloom/base/bundles";
+import { loadFencePack } from "@workloom/base/fence-engine";
 
 import { fileURLToPath } from "node:url";
 const REPO_ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..");
@@ -35,14 +36,24 @@ const WS_ID = "ws-aipm-demo";
 const WS_SLUG = "ai-pm-demo";
 const WS_NAME = "织元产品部（AI 产品经理示例团队）";
 
-interface FenceRule { rule_id: string; name: string; level: string; match: Record<string, unknown>; when?: Record<string, unknown>; note?: string }
+interface FenceRule {
+  rule_id: string; name: string; level: string; is_baseline?: boolean;
+  match: Record<string, unknown>; when?: string | Record<string, unknown>; note?: string;
+}
 interface SkillDoc { name: string; description: string; body: string; fenceBindings: string[] }
 
+/**
+ * HP-02：围栏包读取统一走 fence-engine 的 DSL 装载器（`rules ?? fences` 双形态 + zod 校验）。
+ * 修复点：此前本脚本自己判 `fences ?? rules`，且入库时把 is_baseline 写死为 false ——
+ * ai-pm 的 14 条基线规则因此全部失去"只可加严"保护。
+ */
 function loadFences(): FenceRule[] {
-  return BUNDLE_MANIFEST.workloom.provides.fences.flatMap((assetPath) => {
-    const doc = YAML.parse(readFileSync(join(BUNDLE_DIR, assetPath), "utf-8")) as { fences?: FenceRule[]; rules?: FenceRule[] };
-    return doc.fences ?? doc.rules ?? [];
-  });
+  return BUNDLE_MANIFEST.workloom.provides.fences.flatMap((assetPath) =>
+    loadFencePack(readFileSync(join(BUNDLE_DIR, assetPath), "utf-8")).rules
+      .map((r) => ({
+        rule_id: r.rule_id, name: r.name, level: r.level, is_baseline: r.is_baseline,
+        match: { object_types: r.objectTypes, actions: r.actions }, when: r.when,
+      })));
 }
 function loadSkills(): SkillDoc[] {
   return BUNDLE_MANIFEST.workloom.provides.skills.map((assetPath) => {
@@ -180,10 +191,14 @@ export async function seedAiPm(): Promise<void> {
   for (const r of fences) {
     await q(
       `INSERT INTO fence_rules (id, rule_id, version, workspace_id, name, level, match_spec, action, is_baseline, status, created_by)
-       VALUES ($1,$2,'v1',$3,$4,$5,$6,$7,false,'active','system:seed')
-       ON CONFLICT (rule_id, version, workspace_id) DO NOTHING`,
+       VALUES ($1,$2,'v1',$3,$4,$5,$6,$7,$8,'active','system:seed')
+       ON CONFLICT (rule_id, version, workspace_id) DO UPDATE
+         SET is_baseline=EXCLUDED.is_baseline, match_spec=EXCLUDED.match_spec,
+             level=EXCLUDED.level, name=EXCLUDED.name`,
       [`fr-${r.rule_id.toLowerCase()}-v1-${WS_ID}`, r.rule_id, WS_ID, r.name, r.level,
-       JSON.stringify(r.match), JSON.stringify({ result: r.level === "auto" ? "pass" : r.level === "review" ? "review" : "blocked" })],
+       JSON.stringify({ ...r.match, when: typeof r.when === "string" ? r.when : "" }),
+       JSON.stringify({ result: r.level === "auto" ? "pass" : r.level === "review" ? "review" : "blocked" }),
+       r.is_baseline !== false],
     );
   }
   console.log(`✓ 基线围栏 ×${fences.length}（active）`);

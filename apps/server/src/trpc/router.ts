@@ -72,10 +72,12 @@ import {
 } from "@workloom/base/night-shift";
 import {
   activateRuleVersion,
+  checkCandidateAgainstBaseline,
   confirmDryRun,
   createDryRun,
   fenceActivationFromProposal,
   fenceRuleRowId,
+  loadActiveRulesInTx,
 } from "@workloom/base/fence-engine";
 import { MAX_CONCURRENT_THREADS, PLAN_TIERS } from "@workloom/shared";
 import {
@@ -2097,6 +2099,21 @@ const fenceRouter = router({
         await client.query("BEGIN");
         await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
         await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+        // HP-02：提案入口即做基线单调守卫——同 rule_id 的基线规则只可加严
+        //（level 不降 / when 不变 / 覆盖集不收窄）。修复前该守卫只在测试里被调用，
+        // 工作区可以把一条 block 基线规则"升级"成 review/恒假条件。
+        const activeBaseline = await loadActiveRulesInTx(client, scope);
+        const guard = checkCandidateAgainstBaseline(activeBaseline, {
+          rule_id: input.rule.ruleId, version: "v-next", name: input.rule.name,
+          level: input.rule.level, is_baseline: false,
+          objectTypes: input.rule.objectTypes, actions: input.rule.actions, when: input.rule.when,
+        });
+        if (!guard.ok) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `围栏基线只可加严，本次变更被拒：${guard.violations.map((v) => v.reason).join("；")}`,
+          });
+        }
         const rowId = fenceRuleRowId(input.rule.ruleId, scope.workspaceId);
         await client.query(
           `INSERT INTO fence_rules (id, rule_id, version, workspace_id, name, level, match_spec, action, is_baseline, status, created_by)
@@ -2313,7 +2330,7 @@ const rosterRouter = router({
           rule_id: string; name: string; level: string; version: string; is_baseline: boolean;
         }>(
           // HP-02：同一 rule_id 可能同时存在全局基线与工作区版本，运行时按 deny 优先并集求值（judge 取最严），
-          // 展示口径必须取"实际生效的最严级别"，不能按 created_at 取最新行——否则界面/航道许可
+          // 展示口径必须取「实际生效的最严级别」，不能按 created_at 取最新行——否则界面/航道许可
           // 会把被基线压住的宽松版本显示为生效规则，与真实拦截不一致（证据保真）。
           `SELECT DISTINCT ON (rule_id) rule_id, name, level, version, is_baseline
            FROM fence_rules
