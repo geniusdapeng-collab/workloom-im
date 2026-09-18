@@ -24,7 +24,7 @@ CSS 必须按上述顺序引入。组件不依赖 `react-router`；导航、路�
 | 范围 | 导出 | 接入约束 |
 | --- | --- | --- |
 | 操作与表单 | `Button`、`IconButton`、`Link`、`Input`、`Select`、`Combobox`、`Textarea`、`Checkbox`、`Radio`、`Switch`、`Badge`、`Tag`、`Avatar` | 表单控件必须传中文 `label`；纯图标操作必须传可访问名称；新窗口链接自动补安全属性 |
-| 弹层 | `Dialog`、`ConfirmDialog`、`Drawer`、`Sheet`、`Popover`、`Tooltip`、`Toast`、`OverlayManager`、`FullscreenSurface` | 三端根节点必须各有且仅有一个 `OverlayManager`；阻断浮层统一包含焦点圈定、恢复、Esc、背景 inert 与引用计数滚动锁 |
+| 弹层 | `Dialog`、`ConfirmDialog`、`Drawer`、`Sheet`、`Popover`、`Tooltip`、`Toast`、`OverlayManager`、`FullscreenSurface` | 三端根节点必须各有且仅有一个 `OverlayManager`；阻断浮层统一包含焦点圈定、恢复、Esc、背景 inert 与引用计数滚动锁；`Popover` 等非模态浮层同样必须自带可见关闭按钮（`closeLabel` 缺省「关闭」），不得只依赖 Esc 或点击外部 |
 | 运行状态 | `AsyncState`、`EmptyState`、`ErrorState`、`DemoBanner`、`OfflineState`、`PermissionState`、`Skeleton`、`Progress` | 错误、无权限和离线不可伪装为空数据；动态文案必须使用用户可理解的中文 |
 | 导航与框架 | `TopContextBar`、`SideNav`（`SideNavigation` 兼容名）、`BottomTabs`、`AppShell`、`Grid`、`ResizablePanel`、`SplitView`、`WorkspaceSwitcher` | PC 使用左侧导航，移动端使用底部导航；不得再叠加第二套顶部主导航 |
 | 协作与数据 | `Confidence`、`Delta`、`Table`、`FilterBar`、`Timeline`、`Chart`、`ExportDialog` 及既有治理模式 | 颜色不得成为唯一状态编码；图表必须带读屏数据表；导出继续受账号权限约束 |
