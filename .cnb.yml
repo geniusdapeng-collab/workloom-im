@@ -102,7 +102,7 @@
     - name: 基座同步与客户端接入门禁
       script: |
         set -eu
-        node --test scripts/verify-ui-consumer.test.mjs sync/base-sync.test.mjs sync/client-foundation.test.mjs sync/set-ui-version.test.mjs sync/ui-upgrade-pr.test.mjs
+        node --test scripts/verify-ui-consumer.test.mjs sync/base-sync.test.mjs sync/client-foundation.test.mjs sync/set-ui-version.test.mjs sync/ui-upgrade-pr.test.mjs sync/fanout-rules.test.mjs
         node --test apps/desktop/electron/bootstrap.test.cjs scripts/desktop-bootstrap-db.test.mjs
 
     - name: 三端生产构建
@@ -391,6 +391,50 @@
           exit 1
         fi
 
+# 基座 → 子仓 fanout（云端自动更新的主通道）
+#
+# 职责：把 workloom-im 的根级受控资产（全景认知 / 开发协议 / AGENTS 受控区块 / 同步登记）
+# 的最新版本，开成每个子仓里的一条 `sync/base-*` 同步 PR；门禁全绿后由
+# `scripts/tools/merge-sync-prs.mjs` 自动合并**纯同步 PR**。
+# 运行时代码升级（packages/**、apps/**）不在此通道内，仍走人工合并。
+#
+# 跨仓前提（一次性）：CNB「组织设置 → 仓库管控 → 允许定时任务跨仓操作」。
+# 未开启时定时任务会以“权限不足”告警收尾（不红），可改用 API 触发
+# （调用者令牌自带跨仓权限）或本地兜底：~/.codex/skills/workloom-context/scripts/fleet-cloud-sync.sh
+.base-sync-fanout: &base_sync_fanout
+  name: base-sync-fanout
+  docker:
+    image: node:24.19.0-bookworm
+  env:
+    BASE_SYNC_MODE: required-only
+  stages:
+    - name: 准备 Node.js 运行时
+      script: |
+        set -eu
+        corepack enable >/dev/null 2>&1 || true
+        node -v
+        git --version
+
+    - name: 舰队 fanout（只对真漂移子仓开同步 PR）
+      script: |
+        set -eu
+        MODE="${BASE_SYNC_MODE:-required-only}"
+        DRY=""
+        if [ "${BASE_SYNC_DRY_RUN:-0}" = "1" ]; then DRY="--dry-run"; fi
+        # shellcheck disable=SC2086
+        node sync/fanout-cnb.mjs --mode "$MODE" $DRY --tolerate-scope-error --json > /tmp/fanout.json
+        cat /tmp/fanout.json
+
+    - name: 自动合并纯同步 PR（全部门禁 success 才合并）
+      script: |
+        set -eu
+        if [ "${BASE_SYNC_DRY_RUN:-0}" = "1" ]; then
+          node scripts/tools/merge-sync-prs.mjs --dry-run --json > /tmp/merge.json
+        else
+          node scripts/tools/merge-sync-prs.mjs --json > /tmp/merge.json
+        fi
+        cat /tmp/merge.json
+
 main:
   push:
     - *static_gate
@@ -408,9 +452,18 @@ $:
   # 发布共享 UI 制品：由 API 触发（event: api_trigger_ui_release），也可页面触发
   api_trigger_ui_release:
     - *ui_release
-  # 每日舰队扫描（09:00 Asia/Shanghai = UTC 01:00；CNB crontab，最小间隔 5 分钟）：
+  # 基座 fanout（云端自动更新的主通道）：
+  #   · API 触发：event=api_trigger_base_sync，可用 env 覆盖 BASE_SYNC_MODE（required-only|full）
+  #     与 BASE_SYNC_DRY_RUN=1（只报告不落地）；
+  #   · 每 30 分钟自愈一次（幂等：只对真漂移子仓开门，已有在途同步 PR 的子仓跳过）。
+  api_trigger_base_sync:
+    - *base_sync_fanout
+  "crontab: */30 * * * *":
+    - *base_sync_fanout
+
+  # 每日舰队扫描（09:00 Asia/Shanghai；CNB crontab 使用 Asia/Shanghai 系统时区，最小间隔 5 分钟）：
   #   发现新的 WorkLoom 仓 → 开扫描任务卡 + 自动创建纳管 PR，合并仍由人执行。
-  "crontab: 0 1 * * *":
+  "crontab: 0 9 * * *":
     - name: fleet-scan
       docker:
         image: node:24.19.0-bookworm
