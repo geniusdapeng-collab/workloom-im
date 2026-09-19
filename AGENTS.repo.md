@@ -80,7 +80,8 @@ WorkLoom 的正式产品形态是桌面客户端；浏览器三端用于开发�
 
 ## 开源组件更新
 
-- 查看计划：pnpm oss:plan
-- 主动扫描并更新计划：pnpm oss:watch
+- 全量清单（组件 / 开源地址 / 许可 / 当前版本 / 上游最新 / 注意事项）：`docs/OPEN_SOURCE_COMPONENTS.md`（自动生成，勿手改）。
+- 查看计划：`pnpm oss:plan`；主动扫描并刷新清单与计划：`pnpm oss:watch`；依赖变更后离线刷新清单：`pnpm oss:inventory`。
+- CI 门禁：`pnpm oss:check`（依赖一变而清单未刷新即红灯）；CNB 每周一 07:00 定时扫描并自动开 `chore/oss-watch-*` PR。
 - 扫描可以自动，依赖升级必须分批、评测并通过对应门禁；高风险依赖单独成批。
-- 新增依赖时同步维护 oss-components.json；详细流程见 skills/oss-watch/SKILL.md。
+- 新增依赖时同步维护 `oss-components.json`（含 repo 地址与 license）；详细流程见 `skills/oss-watch/SKILL.md`。

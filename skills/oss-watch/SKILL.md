@@ -16,19 +16,32 @@ allowed-tools: Read, Write, Bash, Grep, WebFetch
 
 本仓库属于 WorkLoom 织元开源底座家族（Agent IM 通用底座及行业发行版）。本技能只管**当前这一个仓库**的组件健康——你不需要、也无权限关心其他仓库。
 
-## 一、机制四件套（仓库内）
+## 一、机制五件套（仓库内）
 
 | 件 | 路径 | 作用 |
 |---|---|---|
-| **组件清单** | `oss-components.json`（仓库根） | 受监测组件：name / **repo（GitHub 地址）** / channel / current / cadence / gate / notes |
-| **扫描器** | `scripts/oss-watch.sh` | 按周期到期性检查上游最新版，产出更新计划；只读不写依赖 |
+| **组件登记表** | `oss-components.json`（仓库根） | 受监测组件：name / repo / license / channel / **current / latest** / usage / cadence / gate / notes；current 由扫描器从锁定事实（vendor、lockfile、引脚脚本）自动探测，不许手抄 |
+| **全量清单** | `docs/OPEN_SOURCE_COMPONENTS.md`（自动生成） | 登记组件 + 本仓全部直接依赖（npm/Python/容器镜像/工具链），每条都有「当前版本 + 上游最新」 |
+| **扫描器** | `scripts/oss-watch.sh` → `scripts/oss-watch.mjs` / `scripts/oss-inventory.mjs` | 联网刷新上游最新版本（npm / PyPI / GitHub）；离线生成全量清单；只读依赖 |
 | **更新计划** | `docs/oss-update-plan.md`（扫描产物） | 「谁有新版、差多少、怎么升、过什么门禁、新能力评估」执行单 |
-| **状态账本** | `.oss-watch-state.json`（git 跟踪） | 上次扫描时间/上次发现版本，保证周期纪律跨会话连续 |
+| **状态账本** | `.oss-watch-state.json`（git 跟踪） | 每次扫描时间 + 各包上游版本缓存（TTL 7 天），保证周期纪律跨会话连续 |
 
 ```bash
-pnpm oss:watch    # 一键触发：扫描到期组件 → 生成/刷新《开源组件更新计划》
-pnpm oss:plan     # 只看当前计划（不扫描）
+pnpm oss:watch        # 一键触发：扫描到期组件与过期缓存 → 刷新清单 + 更新计划
+pnpm oss:plan         # 只看当前计划（不扫描）
+pnpm oss:inventory    # 只重算全量清单（离线，依赖变更后跑）
+pnpm oss:check        # CI 门禁：清单与仓库事实不一致即失败（离线）
 ```
+
+## 一·二、什么时候扫描（触发机制）
+
+| 时机 | 触发者 | 动作 | 失败后果 |
+|---|---|---|---|
+| **依赖变更**（`package.json` / `pnpm-lock.yaml` / `requirements.txt`） | CNB PR 流水线 `static-gate` | `pnpm oss:check` 离线比对清单 | 清单未同步 → **红灯**，合并被拦 |
+| **每周一 07:00（Asia/Shanghai）** | CNB crontab 流水线 `oss-watch-weekly` | `node scripts/oss-watch-ci.mjs`：刷新上游最新版本 → 有变化开 `chore/oss-watch-*` PR | 只提议不合并；查询失败项进计划附录待人核 |
+| **每天 01:00 基座审计（task1）** | Codex 应用自动化 | 审计依赖风险时顺带 `pnpm oss:watch`（到期才联网） | 计划与清单随审计报告一起提交 |
+| **安全事件**（CVE / 供应链投毒） | 人 | `pnpm oss:watch --all` 立即全量扫描 | 不等周期（litellm 等 `cadence=event` 组件） |
+| **发布前** | 人 | `pnpm oss:plan` 复核清单新鲜度 | README/清单漂移属发布阻断项 |
 
 ## 二、组件仓库地址的登记纪律（回答「不列地址有没有影响」）
 
@@ -124,6 +137,8 @@ pkill -f "[t]sx.*src/index"; pkill -f "[v]ite"
 
 ## 七、登记纪律
 
-- 新装运行时依赖必须同步登记进 `oss-components.json`（含 repo 地址）；AGPL 仅独立进程并注明。
-- 归档/停更上游每季度复核活性；供应链/CVE 事件走 event 通道即时查。
+- 新装运行时依赖必须同步登记进 `oss-components.json`（含 repo 地址与 license）；AGPL 仅独立进程并注明；登记后跑 `pnpm oss:inventory` 刷新全量清单。
+- `current` 由扫描器从锁定事实探测（vendor / lockfile / 引脚脚本）；只有「停车场 / 观察项」允许写人工说明文字。
+- 归档/停更上游每季度复核活性；供应链/CVE 事件走 event 通道即时查，并把结论写进 `notes`。
+- 清单是**派生资产**：依赖一变就 `pnpm oss:check` 会红灯——先 `pnpm oss:inventory`（或 `pnpm oss:watch`）再提交；不要手改 `docs/OPEN_SOURCE_COMPONENTS.md`。
 - 本机制随仓库开源分发：你在自己 fork/clone 里改清单、调周期、跑升级，都只需要管这一仓。
