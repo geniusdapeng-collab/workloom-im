@@ -395,8 +395,9 @@
 #
 # 职责：把 workloom-im 的根级受控资产（全景认知 / 开发协议 / AGENTS 受控区块 / 同步登记）
 # 的最新版本，开成每个子仓里的一条 `sync/base-*` 同步 PR；门禁全绿后由
-# `sync/merge-sync-prs.mjs` 自动合并**纯同步 PR**。
-# 运行时代码升级（packages/**、apps/**）不在此通道内，仍走人工合并。
+# `sync/merge-sync-prs.mjs` 自动合并：纯同步 PR 走免审通道；携带运行时代码的
+# `-full` 波次与代码类 PR 走 §9.5 代码车道（门禁全绿 + 10 分钟冷却期 + 无风险标签 +
+# 治理路径拦截，同仓每轮串行合并一条）。人保留叫停 / 回滚 / 高风险裁决权。
 #
 # 跨仓前提（一次性）：CNB「组织设置 → 仓库管控 → 允许定时任务跨仓操作」。
 # 未开启时定时任务会以“权限不足”告警收尾（不红），可改用 API 触发
@@ -425,7 +426,7 @@
         node sync/fanout-cnb.mjs --mode "$MODE" $DRY --tolerate-scope-error --json > /tmp/fanout.json
         cat /tmp/fanout.json
 
-    - name: 自动合并纯同步 PR（全部门禁 success 才合并）
+    - name: 门禁全绿即合（纯同步 + 代码车道；同仓每轮一条，治理路径除外）
       script: |
         set -eu
         if [ "${BASE_SYNC_DRY_RUN:-0}" = "1" ]; then
@@ -462,7 +463,7 @@ $:
     - *base_sync_fanout
 
   # 每日舰队扫描（09:00 Asia/Shanghai；CNB crontab 使用 Asia/Shanghai 系统时区，最小间隔 5 分钟）：
-  #   发现新的 WorkLoom 仓 → 开扫描任务卡 + 自动创建纳管 PR，合并仍由人执行。
+  #   发现新的 WorkLoom 仓 → 开扫描任务卡 + 自动创建纳管 PR；门禁全绿后由 AI/合并器执行合并。
   "crontab: 0 9 * * *":
     - name: fleet-scan
       docker:

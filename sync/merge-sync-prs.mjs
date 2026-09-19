@@ -1,30 +1,49 @@
 #!/usr/bin/env node
 /**
- * 纯同步 PR 自动合并器（舰队级）。
+ * 舰队级合并执行器：门禁全绿即合，不等人工点击（协议 §1「合并在机器、串行执行、人保留叫停权」）。
  *
- * 只合并同时满足以下条件的 PR（判定逻辑在 sync/fanout-rules.mjs，可单测）：
- *   ① 源分支是 `sync/base-*`（fanout 产出，或人工按同规范手工同步）；
- *   ② 改动文件全部落在根级受控资产白名单（全景认知 / 开发协议 / AGENTS / 同步登记）；
- *   ③ 该 PR 的**全部**状态检查都是 success，且平台可合并状态为 mergeable。
- *
- * 运行时代码升级（packages/**、apps/** 等）按协议 §1「合并在机器」同样由 AI 在门禁全绿后
- * 串行合并；本工具负责其中"文档与根级登记文件搬运"这一类 PR 的免人工自动合并。
+ * 两条车道，判定逻辑都在 sync/fanout-rules.mjs（纯函数、可单测）：
+ *   ① 纯同步 PR（`autoMergeEligibility`）：源分支 `sync/base-*`（或存量 `docs/context-*`），
+ *      改动文件全部落在根级受控资产白名单，全部门禁 success 且平台可合并；
+ *   ② 代码类 PR（`codeMergeEligibility`）：分支在任务/行业/实验/维护车道，全部门禁 success、
+ *      平台可合并、非 WIP、无 `risk/review` / `risk/block` 标签、避开治理路径、且分支最近提交
+ *      已过冷却期（默认 10 分钟，避免合并"会话仍在写"的 PR）。
+ * 两条车道都遵守**串行**：同一仓库每轮最多合并一条代码类 PR，其余留待下一轮（先 rebase 再合）。
  *
  * 用法：
- *   node scripts/tools/merge-sync-prs.mjs [--only <slug[,slug]>] [--repo <slug>] [--dry-run]
- *                                          [--merge-style squash|merge|rebase] [--json]
- *                                          [--legacy-doc-sync]
+ *   node sync/merge-sync-prs.mjs [--only <slug[,slug]>] [--repo <slug>] [--dry-run]
+ *                                [--merge-style squash|merge|rebase] [--json]
+ *                                [--legacy-doc-sync] [--no-code]
+ *                                [--min-head-age-minutes 10]
  *   --legacy-doc-sync：额外接受 2026-09-19 之前 `docs/context-*` 的文档分发分支，
  *   仅用于存量波次收口；新流程一律用 `sync/base-*`。
+ *   --no-code：只跑同步车道（排障/回滚用）。
  * 环境：CNB_TOKEN（需对目标仓有合并权限）
- * 退出码：0 无失败；1 存在合并失败（门禁红/冲突不算失败，只跳过）。
+ * 退出码：0 无失败；1 存在合并失败（门禁红/冲突/WIP/冷却期不算失败，只跳过）。
  */
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { autoMergeEligibility, LEGACY_SYNC_BRANCH_PREFIXES, SYNC_BRANCH_PREFIX } from "./fanout-rules.mjs";
-import { compareCommits, getPull, getPullCommitStatuses, listPulls, mergePull, requireToken } from "../scripts/tools/cnb-api.mjs";
+import {
+  AUTO_MERGE_ALLOWLIST,
+  CODE_MERGE_BRANCH_PREFIXES,
+  CODE_MERGE_MIN_HEAD_AGE_MS,
+  autoMergeEligibility,
+  codeMergeEligibility,
+  LEGACY_SYNC_BRANCH_PREFIXES,
+  SYNC_BRANCH_PREFIX,
+  normalizeBranchRef,
+} from "./fanout-rules.mjs";
+import {
+  api,
+  compareCommits,
+  getPull,
+  getPullCommitStatuses,
+  listPulls,
+  mergePull,
+  requireToken,
+} from "../scripts/tools/cnb-api.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("../", import.meta.url));
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
@@ -64,6 +83,74 @@ export async function inspect(slug, pull, acceptPrefixes) {
   };
 }
 
+/** 取 PR 分支最近一次提交距今的毫秒数；取不到返回 null（冷却期判定会 fail-closed 拒绝）。 */
+export function headAgeMsFromCommits(payload, now = Date.now()) {
+  const list = Array.isArray(payload) ? payload : (payload?.data ?? []);
+  let newest = 0;
+  for (const item of list) {
+    const iso = item?.commit?.committer?.date
+      ?? item?.commit?.author?.date
+      ?? item?.committer?.date
+      ?? item?.created_at;
+    const parsed = Date.parse(String(iso ?? ""));
+    if (Number.isFinite(parsed)) newest = Math.max(newest, parsed);
+  }
+  return newest ? Math.max(0, now - newest) : null;
+}
+
+export async function inspectCode(slug, pull, options = {}) {
+  const compare = await compareCommits(slug, `main...${pull.head?.ref ?? ""}`);
+  const files = compare.files.map((file) => file.path);
+  const statuses = normalizeStatuses(await getPullCommitStatuses(slug, pull.number));
+  const headAgeMs = headAgeMsFromCommits(await api(slug, `/-/pulls/${Number(pull.number)}/commits`));
+  const verdict = codeMergeEligibility({ pull, files, statuses, headAgeMs }, options);
+  return {
+    number: Number(pull.number),
+    title: pull.title,
+    head: pull.head?.ref,
+    mergeable: pull.mergeable_state,
+    lane: "code",
+    commits: compare.totalCommits,
+    files,
+    statuses: statuses.map((status) => `${status.context ?? status.name}=${status.state ?? status.status}`),
+    headAgeMinutes: Number.isFinite(headAgeMs) ? Math.round(headAgeMs / 60000) : null,
+    ...verdict,
+  };
+}
+
+/** 串行合并单条 PR：合并前重读状态，合并后校验 is_merged。 */
+async function mergeNow(report, slug, number, title, mergeStyle, lane) {
+  try {
+    const latest = await getPull(slug, number);
+    if (latest?.state !== "open") {
+      report.skipped.push({ repo: slug, number, title, lane, reasons: [`PR 状态已变为 ${latest?.state}`] });
+      return;
+    }
+    const result = await mergePull(slug, number, {
+      mergeStyle,
+      // CNB 合并接口要求显式 commit_title；沿用舰队习惯的 `标题 (#编号)` 形式。
+      commitTitle: `${String(title).trim()} (#${number})`,
+    });
+    const after = await getPull(slug, number);
+    // CNB 的合并结果是 state=closed + is_merged=true（不是 state=merged），三选一判定。
+    const merged = after?.is_merged === true || after?.state === "merged" || after?.mergeable_state === "merged";
+    if (!merged) {
+      report.failed.push({ repo: slug, number, lane, stage: "verify-merge", error: `合并后状态仍为 state=${after?.state ?? "unknown"} is_merged=${after?.is_merged}` });
+      return;
+    }
+    report.merged.push({
+      repo: slug,
+      number,
+      title,
+      lane,
+      mergedBy: (after?.merged_by ?? result?.merged_by)?.username ?? null,
+      state: after?.mergeable_state ?? after?.state,
+    });
+  } catch (error) {
+    report.failed.push({ repo: slug, number, lane, stage: "merge", error: String(error?.message ?? error).slice(0, 300) });
+  }
+}
+
 async function main() {
   requireToken();
   const fleet = JSON.parse(readFileSync(join(REPO_ROOT, "sync/child-repos.json"), "utf8"));
@@ -73,14 +160,29 @@ async function main() {
   const json = has("--json");
   const mergeStyle = arg("--merge-style", "squash");
   const legacyDocSync = has("--legacy-doc-sync");
+  const skipCode = has("--no-code");
+  const minHeadAgeArg = Number(arg("--min-head-age-minutes", String(CODE_MERGE_MIN_HEAD_AGE_MS / 60000)));
+  const minHeadAgeMs = Number.isFinite(minHeadAgeArg) && minHeadAgeArg >= 0
+    ? minHeadAgeArg * 60000
+    : CODE_MERGE_MIN_HEAD_AGE_MS;
   const acceptPrefixes = legacyDocSync ? [SYNC_BRANCH_PREFIX, ...LEGACY_SYNC_BRANCH_PREFIXES] : [SYNC_BRANCH_PREFIX];
 
+  const matchOnly = (repo) => !only.length || only.includes(repo);
+  // 覆盖基座仓自身 + 全部子仓（同步车道历史上只扫子仓，代码车道两者都要）。
   const targets = single
     ? [single]
-    : fleet.children.map((child) => child.repo).filter((repo) => !only.length || only.includes(repo));
+    : [fleet.baseRepo, ...fleet.children.map((child) => child.repo)].filter(matchOnly);
   if (!targets.length) throw new Error("没有匹配到任何目标仓");
 
-  const report = { mergeStyle, dryRun, merged: [], skipped: [], failed: [] };
+  const report = {
+    mergeStyle,
+    dryRun,
+    skipCode,
+    minHeadAgeMinutes: minHeadAgeMs / 60000,
+    merged: [],
+    skipped: [],
+    failed: [],
+  };
 
   for (const slug of targets) {
     let pulls = [];
@@ -91,61 +193,84 @@ async function main() {
       continue;
     }
 
+    // ---- 车道 ① 纯同步 PR：立即合；非纯同步（如 -full 波次携带运行时代码）回落车道 ② ----
+    const codeCandidates = [];
     for (const pull of pulls) {
+      const headRef = normalizeBranchRef(pull?.head?.ref);
       const number = Number(pull.number);
-      let verdict;
-      try {
-        verdict = await inspect(slug, pull, acceptPrefixes);
-      } catch (error) {
-        report.failed.push({ repo: slug, number, stage: "inspect", error: String(error?.message ?? error).slice(0, 300) });
-        continue;
-      }
-      if (!verdict.eligible) {
-        report.skipped.push({ repo: slug, ...verdict });
+      const isSyncLane = acceptPrefixes.some((prefix) => headRef.startsWith(prefix));
+
+      if (isSyncLane) {
+        let verdict;
+        try {
+          verdict = await inspect(slug, pull, acceptPrefixes);
+        } catch (error) {
+          report.failed.push({ repo: slug, number, stage: "inspect-sync", error: String(error?.message ?? error).slice(0, 300) });
+          continue;
+        }
+        if (verdict.eligible) {
+          if (dryRun) {
+            report.merged.push({ repo: slug, number, title: verdict.title, dryRun: true, lane: "sync" });
+          } else {
+            await mergeNow(report, slug, number, verdict.title, mergeStyle, "sync");
+          }
+          continue;
+        }
+        if (skipCode) {
+          report.skipped.push({ repo: slug, lane: "sync", ...verdict });
+          continue;
+        }
+        // 非纯同步：按代码车道规则复核（门禁全绿 + 冷却期 + 风险标签 + 治理路径）
+        try {
+          const codeVerdict = await inspectCode(slug, pull, {
+            minHeadAgeMs,
+            branchPrefixes: [...CODE_MERGE_BRANCH_PREFIXES, SYNC_BRANCH_PREFIX, ...LEGACY_SYNC_BRANCH_PREFIXES],
+            // 受控资产（白名单文件）允许随波次分发；.cnb.yml / 迁移 / platform-ops 等仍拦截。
+            allowPaths: AUTO_MERGE_ALLOWLIST,
+          });
+          if (codeVerdict.eligible) {
+            codeCandidates.push({ ...codeVerdict, lane: "code", fromSyncLane: true });
+          } else {
+            report.skipped.push({
+              repo: slug,
+              ...codeVerdict,
+              reasons: [`非纯同步（${verdict.reasons[0] ?? "白名单外路径"}）`, ...codeVerdict.reasons],
+            });
+          }
+        } catch (error) {
+          report.failed.push({ repo: slug, number, stage: "inspect-code", error: String(error?.message ?? error).slice(0, 300) });
+        }
         continue;
       }
 
-      if (dryRun) {
-        report.merged.push({ repo: slug, number, title: verdict.title, dryRun: true });
-        continue;
-      }
-
+      // ---- 车道 ② 代码类 PR：门禁全绿即合（同仓每轮最多一条，保持串行）----
+      if (skipCode) continue;
       try {
-        const latest = await getPull(slug, number);
-        if (latest?.state !== "open") {
-          report.skipped.push({ repo: slug, number, title: verdict.title, reasons: [`PR 状态已变为 ${latest?.state}`] });
-          continue;
-        }
-        const result = await mergePull(slug, number, {
-          mergeStyle,
-          // CNB 合并接口要求显式 commit_title；沿用舰队习惯的 `标题 (#编号)` 形式。
-          commitTitle: `${String(verdict.title).trim()} (#${number})`,
-        });
-        const after = await getPull(slug, number);
-        // CNB 的合并结果是 state=closed + is_merged=true（不是 state=merged），三选一判定。
-        const merged = after?.is_merged === true || after?.state === "merged" || after?.mergeable_state === "merged";
-        if (!merged) {
-          report.failed.push({ repo: slug, number, stage: "verify-merge", error: `合并后状态仍为 state=${after?.state ?? "unknown"} is_merged=${after?.is_merged}` });
-          continue;
-        }
-        report.merged.push({
-          repo: slug,
-          number,
-          title: verdict.title,
-          mergedBy: (after?.merged_by ?? result?.merged_by)?.username ?? null,
-          state: after?.mergeable_state ?? after?.state,
-        });
+        const codeVerdict = await inspectCode(slug, pull, { minHeadAgeMs });
+        if (codeVerdict.eligible) codeCandidates.push(codeVerdict);
+        else report.skipped.push({ repo: slug, ...codeVerdict });
       } catch (error) {
-        report.failed.push({ repo: slug, number, stage: "merge", error: String(error?.message ?? error).slice(0, 300) });
+        report.failed.push({ repo: slug, number, stage: "inspect-code", error: String(error?.message ?? error).slice(0, 300) });
       }
     }
+    const queue = codeCandidates.sort((a, b) => a.number - b.number);
+    for (const item of queue.slice(1)) {
+      report.skipped.push({ repo: slug, ...item, reasons: [`串行队列：本仓本轮轮到 #${queue[0].number}，其余等下一轮（先 rebase 再合）`] });
+    }
+    if (!queue.length) continue;
+    const pick = queue[0];
+    if (dryRun) {
+      report.merged.push({ repo: slug, number: pick.number, title: pick.title, dryRun: true, lane: pick.lane ?? "code" });
+      continue;
+    }
+    await mergeNow(report, slug, pick.number, pick.title, mergeStyle, pick.lane ?? "code");
   }
 
   if (json) {
     console.log(JSON.stringify(report, null, 2));
   } else {
-    for (const item of report.merged) console.log(`✅ 合并 ${item.repo} #${item.number}${item.dryRun ? "（dry-run）" : ""}：${String(item.title).slice(0, 60)}`);
-    for (const item of report.skipped) console.log(`⏭️ 跳过 ${item.repo} #${item.number}：${item.reasons.join("；")}`);
+    for (const item of report.merged) console.log(`✅ 合并 ${item.repo} #${item.number}${item.dryRun ? "（dry-run）" : ""}${item.lane ? `［${item.lane}］` : ""}：${String(item.title).slice(0, 60)}`);
+    for (const item of report.skipped) console.log(`⏭️ 跳过 ${item.repo} #${item.number}${item.lane ? `［${item.lane}］` : ""}：${item.reasons.join("；")}`);
     for (const item of report.failed) console.log(`❌ 失败 ${item.repo}${item.number ? ` #${item.number}` : ""}（${item.stage}）：${item.error}`);
     console.log(`\n合计：合并 ${report.merged.length} · 跳过 ${report.skipped.length} · 失败 ${report.failed.length}`);
   }

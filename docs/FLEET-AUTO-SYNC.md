@@ -10,7 +10,7 @@
 |---|---|---|---|---|
 | 云端 · 资产分发 | 基座根级资产 → 每个子仓一条 `sync/base-*` PR → 门禁全绿后自动合并 | `sync/fanout-cnb.mjs` + `sync/merge-sync-prs.mjs`（`.cnb.yml#base-sync-fanout`） | 每 30 分钟 cron；`api_trigger_base_sync`；本地兜底脚本 | 无需（纯同步 PR） |
 | 云端 · 新仓纳管 | 扫描组织发现新 WorkLoom 仓 → 开扫描任务卡 + 纳管 PR（标签/分支保护/协议资产/门禁 stage） | `scripts/tools/fleet-scan.mjs --issue --provision` | 每日 09:00（Asia/Shanghai）cron | 审合并 PR |
-| 云端 · 代码基线 | `packages/**`、`apps/**` 等运行时代码升级 | `sync/base-sync.mjs push` / fanout `--mode full` | 人工/API 触发（默认不跑） | 人合并（协议 §1） |
+| 云端 · 代码基线 | `packages/**`、`apps/**` 等运行时代码升级 | `sync/base-sync.mjs push` / fanout `--mode full` | 人工/API 触发（默认不跑） | AI 合并（门禁全绿 + 冷却期，协议 §1/§9.5） |
 | 本地 · 文档副本 | 全景认知 + 开发协议落到 `~/.codex/workloom-context/`，供 WorkLoom 会话直接引用 | `~/.codex/skills/workloom-context/scripts/sync-context.sh` | Codex automation `workloom`（每日 09:00）+ 手动 | 无需 |
 | 本地 · 代码克隆 | `~/WorkLoom-fleet/` 十仓跟随云端；新仓自动克隆 | `~/.codex/skills/workloom-context/scripts/sync-fleet-local.sh` | 同上 | 无需（脏树自动跳过） |
 | 本地 · 云端兜底 | 用本机令牌触发云端 fanout 流水线（跨仓开关未开时的替代通道） | `~/.codex/skills/workloom-context/scripts/fleet-cloud-sync.sh` | 手动 / automation | 无需 |
@@ -25,7 +25,7 @@
 ```bash
 # 基座仓内（CI 或本地干净克隆）
 node sync/fanout-cnb.mjs --mode required-only            # 只处理根级受控资产
-node sync/merge-sync-prs.mjs                    # 门禁全绿的纯同步 PR 自动合并
+node sync/merge-sync-prs.mjs                             # 门禁全绿即合：纯同步 + 代码车道（同仓每轮一条）
 ```
 
 ### 1.2 幂等与“不打扰”规则
@@ -53,7 +53,12 @@ node sync/merge-sync-prs.mjs                    # 门禁全绿的纯同步 PR �
 注意 `GET /pulls/{n}/files` 的 `filename` 会丢目录（实测把 `docs/DEVELOPMENT-PROTOCOL.md` 报成
 `DEVELOPMENT-PROTOCOL.md`），不能用于白名单判定。
 
-任何动到 `packages/**`、`apps/**`、`bundles/**` 的 PR —— 也就是**运行时代码与行业语义** —— 永远不会被自动合并。
+任何动到 `packages/**`、`apps/**`、`bundles/**` 的 PR —— 也就是**运行时代码与行业语义** —— 不进
+"纯同步"免审通道，但按协议 §1 / §9.5 走**代码车道**：全部门禁 success、平台可合并、非 WIP、
+无 `risk/review` / `risk/block` 标签、分支最近提交已过 10 分钟冷却期，且不落在治理/高风险路径
+（`.cnb.yml`、迁移、`platform-ops/**`、`bundles/platform/**` 等）时，由 `merge-sync-prs.mjs`
+串行合并（同仓每轮最多一条）。非纯同步的 `sync/base-*-full` 波次按同一规则处理；
+受控资产（本文件 §1.3 白名单）在波次里放行。
 
 ### 1.4 权限模型（谁给谁开权限）
 
@@ -72,7 +77,7 @@ node sync/merge-sync-prs.mjs                    # 门禁全绿的纯同步 PR �
 |---|---|---|
 | `🔒 权限不足` | 定时任务跨仓开关未开 | 开组织开关；或改用 API 触发 / 本地兜底 |
 | `CNB 429 Too many requests` | 舰队级巡检触发限流 | 已在 `scripts/tools/cnb-api.mjs` 内置指数退避重试（尊重 `Retry-After`），无需人工 |
-| 子仓 PR 门禁红 | 代码漂移、行业化改动冲突 | fanout **不会**自动合并；PR 留在子仓由对应责任人处理 |
+| 子仓 PR 门禁红 | 代码漂移、行业化改动冲突 | fanout 与合并器都会跳过；修复至门禁全绿后由 §9.5 车道自动合并 |
 | `verify-lock-conflict` 拒绝 | 同仓另有 open PR 改了同一路径（例如 `.workloom-base-sync.json`） | 先合并/关闭在途 PR；fanout 下次巡检会重开一条干净 PR |
 | 子仓 state 显示“已漂移”但无内容变更 | 基座 sha 变了、资产没变 | `required-only` 不产生 PR，属预期 |
 
@@ -106,11 +111,12 @@ sh ~/.codex/skills/workloom-context/scripts/fleet-cloud-sync.sh [--mode required
 
 Codex automation `workloom`（每日 09:00）按顺序跑前两条，**无变化不通知**。
 
-## 4. 仍然必须由人按的按钮
+## 4. 人的角色：裁决与叫停（不再逐 PR 点合并）
 
-- 运行时代码 / 行业语义 PR 的合并（协议 §1）；
-- 新仓纳管 PR 的合并（涉及身份与端口，见协议 §9.3 注意事项）；
-- 高风险裁决、协议版本发布、Tiger 实盘边界（协议 §3、§8）。
+- 合并执行：AI / 流水线（门禁全绿 + 串行，一次一个）；人保留随时叫停、要求回滚的权利；
+- 高风险裁决：真实资金 / 实盘、生产秘密与生产配置、协议文本语义变更（协议 §3）——PR 必须显著标注并提供回滚路径；
+- `risk/review` 放行：由人移除标签或在 Issue / 会话里给出明确指令，放行后仍由 AI 执行合并；
+- `risk/block` 与治理路径（`.cnb.yml`、迁移、`platform-ops/**`、`bundles/platform/**`）不经无人值守通道。
 
 ## 5. 验证与排障命令
 
@@ -118,7 +124,8 @@ Codex automation `workloom`（每日 09:00）按顺序跑前两条，**无变化
 node --test sync/fanout-rules.test.mjs                       # 白名单/合并判定/漂移判定单测
 node sync/fanout-cnb.mjs --dry-run --json                     # 只报告：谁漂移、谁在途、谁对齐
 node sync/fanout-cnb.mjs --only workloom-ai/workroom-tiger    # 只处理单仓
-node sync/merge-sync-prs.mjs --dry-run --json        # 只报告：哪些纯同步 PR 会被合并
+node sync/merge-sync-prs.mjs --dry-run --json                 # 只报告：两条车道各自会合谁、为什么不合
+node sync/merge-sync-prs.mjs --no-code                        # 只跑纯同步车道（排障/回滚用）
 ```
 
 CI 内可手动触发同一流水线（`BASE_SYNC_DRY_RUN=1` 只报告不落地）：

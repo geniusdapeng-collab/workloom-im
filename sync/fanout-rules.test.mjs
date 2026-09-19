@@ -6,6 +6,7 @@ import { join, dirname } from "node:path";
 
 import {
   autoMergeEligibility,
+  codeMergeEligibility,
   hasInFlightSyncPull,
   isAllowlistedPath,
   matchesGlob,
@@ -94,6 +95,131 @@ test("存量文档分发分支只在显式开启 legacy 时才可自动合并", 
   const legacy = { pull: pull({ head: { ref: "docs/context-2026-09-19" } }), files: ["WORKLOOM_PRODUCT_CONTEXT.md"], statuses: ok };
   assert.equal(autoMergeEligibility(legacy).eligible, false);
   assert.equal(autoMergeEligibility(legacy, { acceptPrefixes: ["sync/base-", "docs/context-"] }).eligible, true);
+});
+
+const codePull = (overrides = {}) => ({
+  number: "12",
+  state: "open",
+  mergeable_state: "mergeable",
+  is_wip: false,
+  labels: [],
+  head: { ref: "task/T-2026-0919-0001" },
+  ...overrides,
+});
+const oneHour = 60 * 60 * 1000;
+
+test("代码 PR：门禁全绿 + 冷却期已过 + 无风险标签 → 允许串行合并", () => {
+  const verdict = codeMergeEligibility({
+    pull: codePull(),
+    files: ["apps/server/src/service/eval.ts", "docs/exam-playbook.md"],
+    statuses: ok,
+    headAgeMs: oneHour,
+  });
+  assert.deepEqual(verdict, { eligible: true, reasons: [] });
+});
+
+test("代码 PR 拒绝：risk/review、risk/block、WIP", () => {
+  const review = codeMergeEligibility({
+    pull: codePull({ labels: [{ name: "risk/review" }] }),
+    files: ["apps/web/src/App.tsx"],
+    statuses: ok,
+    headAgeMs: oneHour,
+  });
+  assert.equal(review.eligible, false);
+  assert.match(review.reasons.join("；"), /risk\/review 标签/);
+
+  const blocked = codeMergeEligibility({
+    pull: codePull({ labels: ["risk/block"] }),
+    files: ["apps/web/src/App.tsx"],
+    statuses: ok,
+    headAgeMs: oneHour,
+  });
+  assert.equal(blocked.eligible, false);
+  assert.match(blocked.reasons.join("；"), /risk\/block 标签/);
+
+  const wip = codeMergeEligibility({
+    pull: codePull({ is_wip: true }),
+    files: ["apps/web/src/App.tsx"],
+    statuses: ok,
+    headAgeMs: oneHour,
+  });
+  assert.equal(wip.eligible, false);
+  assert.match(wip.reasons.join("；"), /WIP/);
+});
+
+test("代码 PR 拒绝：门禁红 / 无门禁结果 / 冲突 / 冷却期内 / 非任务车道", () => {
+  const red = codeMergeEligibility({
+    pull: codePull(),
+    files: ["apps/web/src/App.tsx"],
+    statuses: [{ context: "static-gate", state: "error" }],
+    headAgeMs: oneHour,
+  });
+  assert.match(red.reasons.join("；"), /门禁未通过：static-gate=error/);
+
+  const noGate = codeMergeEligibility({ pull: codePull(), files: ["apps/web/src/App.tsx"], statuses: [], headAgeMs: oneHour });
+  assert.match(noGate.reasons.join("；"), /没有状态检查结果/);
+
+  const conflicted = codeMergeEligibility({
+    pull: codePull({ mergeable_state: "conflict" }),
+    files: ["apps/web/src/App.tsx"],
+    statuses: ok,
+    headAgeMs: oneHour,
+  });
+  assert.match(conflicted.reasons.join("；"), /平台可合并状态=conflict/);
+
+  const hot = codeMergeEligibility({ pull: codePull(), files: ["apps/web/src/App.tsx"], statuses: ok, headAgeMs: 60_000 });
+  assert.match(hot.reasons.join("；"), /冷却期 10 分钟/);
+
+  const unknownAge = codeMergeEligibility({ pull: codePull(), files: ["apps/web/src/App.tsx"], statuses: ok, headAgeMs: null });
+  assert.match(unknownAge.reasons.join("；"), /无法确认分支最近提交时间/);
+
+  const wrongLane = codeMergeEligibility({
+    pull: codePull({ head: { ref: "release/v1" } }),
+    files: ["apps/web/src/App.tsx"],
+    statuses: ok,
+    headAgeMs: oneHour,
+  });
+  assert.match(wrongLane.reasons.join("；"), /不在代码合并车道/);
+});
+
+test("代码 PR 拒绝：治理与高风险路径不由无人值守扫描合并", () => {
+  for (const path of ["sync/fanout-rules.mjs", "docs/DEVELOPMENT-PROTOCOL.md", ".cnb.yml", "platform-ops/deploy.yml", "packages/db/migrations/0001_init.sql", "AGENTS.md"]) {
+    const verdict = codeMergeEligibility({
+      pull: codePull(),
+      files: [path],
+      statuses: ok,
+      headAgeMs: oneHour,
+    });
+    assert.equal(verdict.eligible, false, `${path} 应被治理路径拦截`);
+    assert.match(verdict.reasons.join("；"), /治理\/高风险路径/);
+  }
+  const normal = codeMergeEligibility({
+    pull: codePull(),
+    files: ["packages/base/tenancy/index.ts"],
+    statuses: ok,
+    headAgeMs: oneHour,
+  });
+  assert.equal(normal.eligible, true);
+});
+
+test("同步回落车道：受控资产（allowPaths 命中）不算治理路径，其余治理路径仍拦截", () => {
+  const allowPaths = ["WORKLOOM_PRODUCT_CONTEXT.md", "AGENTS.md", "docs/DEVELOPMENT-PROTOCOL.md", "sync/**"];
+  const controlled = codeMergeEligibility({
+    pull: codePull({ head: { ref: "sync/base-af278afd-full" } }),
+    files: ["docs/DEVELOPMENT-PROTOCOL.md", "AGENTS.md", "sync/base-scope.json", ".workloom-runtime-deps/package.json"],
+    statuses: ok,
+    headAgeMs: oneHour,
+  }, { branchPrefixes: ["sync/"], allowPaths });
+  assert.equal(controlled.eligible, true, controlled.reasons.join("；"));
+
+  const stillBlocked = codeMergeEligibility({
+    pull: codePull({ head: { ref: "sync/base-af278afd-full" } }),
+    files: ["docs/DEVELOPMENT-PROTOCOL.md", ".cnb.yml"],
+    statuses: ok,
+    headAgeMs: oneHour,
+  }, { branchPrefixes: ["sync/"], allowPaths });
+  assert.equal(stillBlocked.eligible, false);
+  assert.match(stillBlocked.reasons.join("；"), /治理\/高风险路径：.cnb.yml/);
 });
 
 test("required-only 漂移只看资产摘要，full 还看基座发布点", () => {
