@@ -1296,7 +1296,13 @@ export function packTaggedUiArtifact({
     // 只属于这个子进程，不会污染后续 JSON。随后 npm pack 必须 --ignore-scripts，
     // 防止 prepack 二次执行并保证 stdout 只含 pack 元数据。依赖来自调用方刚以固定
     // lockfile 安装的工作区；链接仅存在于即将销毁的临时目录且不会进入 files 白名单。
-    for (const relativeDependencyPath of ["node_modules", "packages/ui/node_modules"]) {
+    // packages/ui 的测试链会解析到 packages/industry-contract（其源码 import zod），
+    // 因此隔离源需要把该包的依赖树一并链接进来，否则 prepack 的 `pnpm test` 解析失败。
+    for (const relativeDependencyPath of [
+      "node_modules",
+      "packages/ui/node_modules",
+      "packages/industry-contract/node_modules",
+    ]) {
       const dependencyPath = join(repositoryRoot, relativeDependencyPath);
       if (!existsSync(dependencyPath)) continue;
       const linkPath = join(sourceRoot, relativeDependencyPath);
