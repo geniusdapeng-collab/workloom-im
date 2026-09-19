@@ -227,6 +227,21 @@ In one sentence: **general AI office tools make an employee's 8 hours more effic
 
 All data lives in the company's own PostgreSQL 17 + pgvector, multi-tenant isolation via RLS, uploaded nowhere.
 
+### 4.4 Digital workforce roster & the digital human (LoomMate)
+
+Two shipped capabilities turn "an AI squad" into "colleagues who are always present":
+
+**① Digital workforce (`/agents`)** — one mixed human-agent contact list. Human cards (owner / manager / read-only) and digital-employee cards sit side by side with rank, version badge, bound guardrails, skill packs and a 30-day record (actions, adoption rate, credits, off-peak share). Each employee has a profile page: identity & provenance (agent id / version / workspace / source bundle) → guardrail authorization reconciled against declared permissions → skills → runtime constraints → 30-day performance → **dispatch** (start a task thread right there). Night-shift employees come online automatically between 22:00–08:00; read-only presets are green (no write tools at all).
+
+**② The digital human — LoomMate (织伴)** — a Live2D avatar that lives in the corner of every PC page: lip-sync driven by speech boundary events, mood → expression, gesture → motion, gaze that follows your pointer (and wanders on its own when you are away). Three states: small corner / large presence / full-screen screensaver. It aggregates non-P0 items during quiet hours, speaks the morning briefing, answers questions, dispatches tasks — and shows exactly what it remembers in a transparent memory panel where any entry can be deleted.
+
+<p align="center">
+  <img src="docs/images/shots/pc-mate-chat.png" alt="LoomMate digital human: Live2D avatar with chat / settings / memory panel" width="72%"/><br/>
+  <sub>LoomMate: Live2D avatar + chat / persona &amp; voice settings / transparent memory panel — running in the seeded demo workspace</sub>
+</p>
+
+**Three rules it never breaks:** never decide for a human (aggregate and remind only), never interrupt (quiet hours + batching), never pretend to be online (state always comes from real receipts).
+
 ---
 
 ## 5. The skill marketplace: how a goal decomposes into steps, and steps assemble skills

@@ -1,7 +1,7 @@
 # workloom-im · 能力导览（人类版）
 
 > WorkLoom IM · 企业级 Agent IM 底座（智能班组 + 围栏 + 人审 + 夜班）
-> 本文件由 `node scripts/generate-capabilities.mjs` 从代码事实**自动生成**（2026-09-18），
+> 本文件由 `node scripts/generate-capabilities.mjs` 从代码事实**自动生成**（2026-09-19），
 > 请勿手改——能力变更后重跑生成器即可。Agent 版机器清单见 docs/capability-map.md。
 
 ## 🚀 5 分钟体验路径
@@ -18,7 +18,7 @@ pnpm install && pnpm preview:all
 
 无需任何真实后端或密钥：Mock 数据（种子 + 离线确定性模型 + 演示直登）已固化，详见 mock/README.md。
 
-## 📦 能力总览（29 项）
+## 📦 能力总览（33 项）
 
 ### 🖥 三端应用（开箱即看）
 
@@ -35,6 +35,15 @@ pnpm install && pnpm preview:all
 | **bundles/ai-pm/** | 围栏/技能/员工/对象/管线一键装配 | 见 bundles/ai-pm/ 目录 |
 | **bundles/hotel/** | 围栏/技能/员工/对象/管线一键装配 | 见 bundles/hotel/ 目录 |
 | **bundles/platform/** | 围栏/技能/员工/对象/管线一键装配 | 见 bundles/platform/ 目录 |
+
+### 🧑‍💼 数字员工与数字人（本仓自带）
+
+| 能力 | 一句话 | 怎么体验 |
+|---|---|---|
+| **数字员工中心（`/agents`）** | 人机混编通讯录：员工档案 / 围栏绑定 / 30 天战绩 / 段位 / 派遣 / 夜班 22:00-08:00 自动上线 | `pnpm preview:all` → http://localhost:3000/agents |
+| **织伴数字人（Live2D 常驻浮层）** | 全页面常驻数字人：语音播报 + 口型/表情/动作 + 三态（小角落 / 大形象 / 屏保）+ 记忆透明面板 | 打开任一 PC 页面右下角；`pnpm preview:all` |
+| **语音与口型引擎** | TTS 音色映射 + 中文逐字开口度时间线 + 音频振幅驱动口型；人设/音色可切换 | docs/voice-and-avatar-delivery-contract.md |
+| **Live2D 渲染后端与资产** | pixi-live2d-display + Cubism core（MIT/官方 SDK）；换形象=换模型文件，驱动链路零改动 | apps/web/public/live2d/ |
 
 ### 🖐 操作电脑能力（本仓自带 · 可装生产工作站）
 
