@@ -1,7 +1,7 @@
 ---
 name: github-pulse
 version: 1.0.0
-description: gh API 读取 issue/PR/提交节奏，LLM 分析产品健康度。
+description: 仓库脉搏。gh API 读取 issue/PR/提交节奏，LLM 分析产品健康度。
 ---
 
 # GitHub 仓库脉搏

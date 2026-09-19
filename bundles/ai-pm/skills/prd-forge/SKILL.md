@@ -1,7 +1,7 @@
 ---
 name: prd-forge
 version: 1.0.0
-description: 按「背景/目标/方案/边界/验收」骨架起草 PRD 初稿，可导出 MD。
+description: 需求锻造。按「背景/目标/方案/边界/验收」骨架起草 PRD 初稿，可导出 MD。
 ---
 
 # PRD 结构化起草

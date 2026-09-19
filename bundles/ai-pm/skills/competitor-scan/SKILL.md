@@ -1,7 +1,7 @@
 ---
 name: competitor-scan
 version: 1.0.0
-description: 真实联网抓取竞品站点/更新日志，LLM 对比摘要与威胁评级。
+description: 竞品侦察。真实联网抓取竞品站点/更新日志，LLM 对比摘要与威胁评级。
 ---
 
 # 竞品扫描对比

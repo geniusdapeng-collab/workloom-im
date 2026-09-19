@@ -1,7 +1,7 @@
 ---
 name: eval-forge
 version: 3.0.0
-description: 从 PRD/需求自动生成可执行 eval 集（30-40 案例起步 + golden answer + 双轨评分 rubric），让验收标准从散文档变为可运行的测试。
+description: 评测集锻造。从 PRD/需求自动生成可执行 eval 集（30-40 案例起步 + golden answer + 双轨评分 rubric），让验收标准从散文档变为可运行的测试。
 ---
 
 # eval 集锻造（eval 即 PRD）

@@ -1,7 +1,7 @@
 ---
 name: badcase-harvest
 version: 3.0.0
-description: 从用户反馈、线上 trace、审批驳回记录中挖掘失败案例，脱敏后人审归入 eval 集——失败即生产资料，同样的坑不踩第二次。
+description: 坏例回收。从用户反馈、线上 trace、审批驳回记录中挖掘失败案例，脱敏后人审归入 eval 集——失败即生产资料，同样的坑不踩第二次。
 ---
 
 # badcase 采撷回流

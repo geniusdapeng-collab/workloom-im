@@ -1,7 +1,7 @@
 ---
 name: prompt-regression
 version: 3.0.0
-description: prompt 新旧版本 eval 回归 diff——通过率变化、退化案例 Top3、成本 delta；未通过阻断、通过转人审（R-PM8 双段门禁的执行器）。
+description: 提示词回归。prompt 新旧版本 eval 回归 diff——通过率变化、退化案例 Top3、成本 delta；未通过阻断、通过转人审（R-PM8 双段门禁的执行器）。
 ---
 
 # prompt 变更回归
