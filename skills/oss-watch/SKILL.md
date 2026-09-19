@@ -38,7 +38,7 @@ pnpm oss:check        # CI 门禁：清单与仓库事实不一致即失败（�
 | 时机 | 触发者 | 动作 | 失败后果 |
 |---|---|---|---|
 | **依赖变更**（`package.json` / `pnpm-lock.yaml` / `requirements.txt`） | CNB PR 流水线 `static-gate` | `pnpm oss:check` 离线比对清单 | 清单未同步 → **红灯**，合并被拦 |
-| **每周一 07:00（Asia/Shanghai）** | CNB crontab 流水线 `oss-watch-weekly` | `node scripts/oss-watch-ci.mjs`：刷新上游最新版本 → 有变化开 `chore/oss-watch-*` PR | 只提议不合并；查询失败项进计划附录待人核 |
+| **每周一 07:00（Asia/Shanghai）** | CNB crontab 流水线 `oss-watch-weekly` | `node scripts/oss-watch-ci.mjs`：刷新上游最新版本 → 有变化开 `chore/oss-watch-*` PR | 计划 PR 由 AI 按 §1/§9.5 合并（破坏性升级按 §3 人审放行）；查询失败项进计划附录复核 |
 | **每天 01:00 基座审计（task1）** | Codex 应用自动化 | 审计依赖风险时顺带 `pnpm oss:watch`（到期才联网） | 计划与清单随审计报告一起提交 |
 | **安全事件**（CVE / 供应链投毒） | 人 | `pnpm oss:watch --all` 立即全量扫描 | 不等周期（litellm 等 `cadence=event` 组件） |
 | **发布前** | 人 | `pnpm oss:plan` 复核清单新鲜度 | README/清单漂移属发布阻断项 |
