@@ -80,7 +80,14 @@
     "acceptance:matrix": "tsx --env-file=.env scripts/acceptance/matrix.mts",
     "acceptance:ui": "node scripts/acceptance/ui-probe.mjs",
     "acceptance:experience": "node scripts/acceptance/experience.mjs",
-    "acceptance:report": "node scripts/acceptance/report.mjs"
+    "acceptance:ux": "node scripts/acceptance/ux.mjs",
+    "acceptance:outcome": "node scripts/acceptance/outcome.mjs",
+    "acceptance:autonomy": "node scripts/acceptance/autonomy.mjs",
+    "acceptance:redteam": "node scripts/acceptance/redteam.mjs",
+    "acceptance:soak": "node scripts/acceptance/soak.mjs",
+    "acceptance:coverage": "node scripts/acceptance/coverage.mjs",
+    "acceptance:report": "node scripts/acceptance/report-v3.mjs",
+    "acceptance:report:v2": "node scripts/acceptance/report.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
