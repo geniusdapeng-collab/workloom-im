@@ -282,6 +282,13 @@ function writeTaggedReleaseSource(root) {
     files: ["index.js"],
   });
   writeFileSync(join(root, "packages/ui/index.js"), "export const source = 'stable-tag';\n");
+  // packages/ui 的测试依赖同仓 packages/industry-contract；隔离打包源必须能归档它。
+  writeJson(join(root, "packages/industry-contract/package.json"), {
+    name: "@workloom/industry-contract",
+    version: "1.2.3",
+    private: true,
+  });
+  writeFileSync(join(root, "packages/industry-contract/index.js"), "export const contract = 'stable-tag';\n");
   for (const client of ["web", "webb", "webc"]) {
     writeJson(join(root, `apps/${client}/package.json`), { dependencies: { "@workloom/ui": "workspace:*" } });
     mkdirSync(join(root, `apps/${client}/src`), { recursive: true });

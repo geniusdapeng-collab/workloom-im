@@ -1262,7 +1262,10 @@ export function packTaggedUiArtifact({
   });
   assertReleasePayloadIntegrity(payload, { version: stableVersion, sourceRef, sourceCommit });
 
-  const archivedPaths = ["package.json", "pnpm-workspace.yaml", "tsconfig.base.json", "packages/ui"];
+  // packages/ui 的测试依赖同仓 packages/industry-contract（导航常量与契约类型），
+  // 隔离源必须一并带入，否则 prepack 的 `pnpm test` 会因 CANNOT_FIND_MODULE 失败；
+  // npm pack 仍只按 packages/ui 的 files 白名单产出制品，依赖不进入 tarball。
+  const archivedPaths = ["package.json", "pnpm-workspace.yaml", "tsconfig.base.json", "packages/ui", "packages/industry-contract"];
   const tree = run("git", ["ls-tree", "-rz", sourceRef, "--", ...archivedPaths], repositoryRoot);
   for (const record of tree.split("\0").filter(Boolean)) {
     const mode = record.match(/^(\d+)\s/u)?.[1];
