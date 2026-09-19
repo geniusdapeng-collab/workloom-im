@@ -24,7 +24,7 @@
   "inputs": [
     {
       "path": "apps/server/package.json",
-      "sha256": "4af770ba3d401752bc5f9e4f346accf966d7395d01bffebc37bc6589c55f6754"
+      "sha256": "1cdbc0ad2980975fd2efe3bf59c4028b5950ec4dbb6737c3aeee02a73785231e"
     },
     {
       "path": "apps/web/package.json",
@@ -32,35 +32,35 @@
     },
     {
       "path": "package.json",
-      "sha256": "8742956220071a3c4a9ba3111c1ad5ce7312ba2631273ada54f85cb7a7a46056"
+      "sha256": "9b1b3803cc6320836f40b40f6cd239c62bd7299f02df544fc80941fb47787753"
     },
     {
       "path": "packages/base/package.json",
-      "sha256": "0e577810f57761b325b39a48a2b9e90179fb3f39d8ff96146fea746b826d53ca"
+      "sha256": "14f84384bddf2e6833b329f441aa887ff638498fee610f30ce7537a0d547c167"
     },
     {
       "path": "packages/db/package.json",
-      "sha256": "6aaebdd66cfba4996efb7b74fda27e453958e9a5af4a2f6f086949d43d5a0a1c"
+      "sha256": "fea6bfee0ea381b1341fdfff6b31cb4b4a3f2b48329db2af610dfaa185e7d9c2"
     },
     {
       "path": "packages/industry-contract/package.json",
-      "sha256": "bd21ee1c58e618051105a46fe08c772eb736f28658d184f26f105564a4862d2c"
+      "sha256": "02b574622c2cd26aa5f1fff3a94c4d45fe4900240943ec38f0c94de6a9c699d5"
     },
     {
       "path": "packages/runtime/package.json",
-      "sha256": "929bc982782463300bfb5879fd0b876bb3dd05b95561e5afc65ac7c5e2a2721c"
+      "sha256": "9baceab0f88d9fd75de5690e2474dcbe1c9a6b56af74e80794a8ac2daebd349a"
     },
     {
       "path": "packages/shared/package.json",
-      "sha256": "26ed5c3a560c35730fe8f84343a83f5e7c3d7d2c488468584acfc524699b4cb2"
+      "sha256": "c9f5275a1929d3c576e5f484c15303c90824ad0e42ea3bfdb3432053c9ba668b"
     },
     {
       "path": "packages/ui/package.json",
-      "sha256": "ae5c32bc187e0f3fc9bbb213540a203729c34d93e8f6e2a5dbd5c139228efb4e"
+      "sha256": "88e2321a6283614fb6b73953747d30b54ac758872a62bcfa631b71321cfd8e27"
     },
     {
       "path": "pnpm-lock.yaml",
-      "sha256": "dcf7fd358c43b76b71370af0307e8fb15780c51544ab0a50aaa4eb49dc1f56dc"
+      "sha256": "0e918e517b8c7338cd254bfadc24251542b4bd800b2db5e989c1cd4da91e853a"
     },
     {
       "path": "product.manifest.json",

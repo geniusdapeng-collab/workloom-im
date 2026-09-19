@@ -86,14 +86,14 @@
     "@axe-core/playwright": "4.13.0",
     "@playwright/test": "1.63.0",
     "@types/node": "^24.0.0",
-    "concurrently": "^9.1.0",
-    "electron": "^44.1.1",
+    "concurrently": "^10.0.5",
+    "electron": "^44.4.3",
     "electron-builder": "^26.15.3",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2",
     "typescript-governance": "npm:typescript@5.9.3",
     "yaml-governance": "npm:yaml@2.9.0",
-    "vitest": "^4.1.11",
+    "vitest": "^5.0.1",
     "yaml": "2.9.0"
   },
   "description": "WorkLoom IM · 企业级 Agent IM 底座（智能班组 + 围栏 + 人审 + 夜班）"
