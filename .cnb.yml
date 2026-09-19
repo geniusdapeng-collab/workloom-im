@@ -321,7 +321,7 @@
       script: |
         set -eu
         META=/workspace/dist/release-metadata.json
-        node -e '
+        META_FILE="$META" node -e '
           const fs=require("fs");
           const meta=JSON.parse(fs.readFileSync(process.env.META_FILE,"utf8"));
           const path="sync/base-capabilities.json";
@@ -334,7 +334,7 @@
           manifest.ui.distribution.integrityByVersion[ver]=meta.sha512;
           fs.writeFileSync(path, JSON.stringify(manifest,null,2)+"\n");
           console.log("registered", ver, meta.sha512);
-        ' META_FILE=$META
+        '
         git config user.name "cnb-ui-release"
         git config user.email "ui-release@cnb.cool"
         git add sync/base-capabilities.json
@@ -344,7 +344,7 @@
         # 标签必须指向登记了真实摘要的这个提交；同一版本重跑时强制对齐（制品内容即上面打包的字节）。
         git tag -f "ui-v${UI_VERSION}" "$RELEASE_SHA"
         git push -f -q "https://cnb:${CNB_TOKEN}@cnb.cool/workloom-ai/workloom-im" "refs/tags/ui-v${UI_VERSION}"
-        node -e 'require("fs").writeFileSync("/workspace/dist/release-commit.txt", process.env.RELEASE_SHA + "\n")' RELEASE_SHA="$RELEASE_SHA"
+        RELEASE_SHA="$RELEASE_SHA" node -e 'require("fs").writeFileSync("/workspace/dist/release-commit.txt", process.env.RELEASE_SHA + "\n")'
         echo "RELEASE_SHA=$RELEASE_SHA"
     - name: 发布到 CNB Release
       script: |
