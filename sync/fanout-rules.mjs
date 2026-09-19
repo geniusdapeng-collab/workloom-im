@@ -30,6 +30,10 @@ export const AUTO_MERGE_ALLOWLIST = Object.freeze([
   "WORKLOOM_PRODUCT_CONTEXT.md",
   "AGENTS.md",
   "docs/DEVELOPMENT-PROTOCOL.md",
+  // 真机验收规范与执行契约（RDAS v1）：纯文档 + 检查单 + 模板 + 执行器，不含运行时代码
+  "docs/REAL-DEVICE-ACCEPTANCE-SPEC.md",
+  "docs/acceptance/**",
+  "scripts/acceptance/**",
   ".workloom-base-sync.json",
   ".github/workflows/base-sync-heartbeat.yml",
   "sync/**",

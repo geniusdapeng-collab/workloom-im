@@ -75,7 +75,12 @@
     "db:seed:aipm:verify-idempotence": "tsx --env-file=.env scripts/verify-seed-aipm-idempotence.ts",
     "oss:inventory": "bash scripts/oss-watch.sh --inventory",
     "oss:check": "bash scripts/oss-watch.sh --check",
-    "test:oss": "node --test scripts/oss-inventory.test.mjs"
+    "test:oss": "node --test scripts/oss-inventory.test.mjs",
+    "acceptance:profile:check": "node scripts/acceptance/profile-check.mjs",
+    "acceptance:matrix": "tsx --env-file=.env scripts/acceptance/matrix.mts",
+    "acceptance:ui": "node scripts/acceptance/ui-probe.mjs",
+    "acceptance:experience": "node scripts/acceptance/experience.mjs",
+    "acceptance:report": "node scripts/acceptance/report.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
