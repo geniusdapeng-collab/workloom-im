@@ -1287,16 +1287,23 @@ function syncToChild(baseDir, childDir, scope, report, extraExclude = [], option
       // `.workloom-runtime-deps` 也当作事实源，因此必须排在上面派生锁刷新**之后**、
       // 写 state/提交**之前**重算；生成器离线、确定性，产物与 `yaml` 解析器是否
       // 可用逐字节一致（实测），可在无 node_modules 的子仓克隆中安全执行。
-      const inventoryGenerator = join(childDir, "scripts/oss-inventory.mjs");
-      const inventoryDoc = join(childDir, "docs/OPEN_SOURCE_COMPONENTS.md");
-      if (lockfileInputsChanged && existsSync(inventoryGenerator) && existsSync(inventoryDoc)) {
-        try {
-          sh(process.execPath, [inventoryGenerator, "--write"], childDir);
+      // pathPrefix 仓（如 Tiger：WorkLoom 壳在 governance/）可能在**仓库根**另有一套
+      // 同源工具链，其 CI 的 oss:check 校验根级清单；两处都要按各自事实重算。
+      const inventoryRoots = [childDir];
+      if (resolve(childDir) !== resolve(repoRoot)) inventoryRoots.push(repoRoot);
+      if (lockfileInputsChanged) {
+        for (const inventoryRoot of inventoryRoots) {
+          const inventoryGenerator = join(inventoryRoot, "scripts/oss-inventory.mjs");
+          const inventoryDoc = join(inventoryRoot, "docs/OPEN_SOURCE_COMPONENTS.md");
+          if (!existsSync(inventoryGenerator) || !existsSync(inventoryDoc)) continue;
           const docRel = relative(repoRoot, inventoryDoc).split(sep).join("/");
-          if (!stagedPaths.includes(docRel)) stagedPaths.push(docRel);
-          report.ossInventoryRefreshed = true;
-        } catch (error) {
-          throw new Error(`开源组件清单刷新失败；未写 state、未提交：${redact(error?.message).slice(0, 300)}`);
+          try {
+            sh(process.execPath, [inventoryGenerator, "--write"], inventoryRoot);
+            if (!stagedPaths.includes(docRel)) stagedPaths.push(docRel);
+            report.ossInventoryRefreshed = true;
+          } catch (error) {
+            throw new Error(`开源组件清单刷新失败（${docRel}）；未写 state、未提交：${redact(error?.message).slice(0, 300)}`);
+          }
         }
       }
     }
