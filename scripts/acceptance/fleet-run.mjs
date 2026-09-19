@@ -188,7 +188,7 @@ if (!SKIP_SEED || has("--start-preview")) {
     killPorts();
     const logPath = join(REPO_DIR, "outputs", "acceptance", "preview.log");
     mkdirSync(join(REPO_DIR, "outputs", "acceptance"), { recursive: true });
-    preview = spawn("pnpm", ["preview:all"], {
+    preview = spawn("pnpm", ["--config.verify-deps-before-run=false", "preview:all"], {
       cwd: REPO_DIR,
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
