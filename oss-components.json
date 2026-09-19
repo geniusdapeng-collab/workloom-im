@@ -2,7 +2,7 @@
   "meta": {
     "schema": "workloom.oss-components/v2",
     "name": "WorkLoom 开源组件登记表（oss-watch）",
-    "updated": "2026-09-18",
+    "updated": "2026-09-19",
     "doc": "docs/OPEN_SOURCE_COMPONENTS.md",
     "plan": "docs/oss-update-plan.md",
     "state": ".oss-watch-state.json",
@@ -37,7 +37,7 @@
       "gate": "runtime-gate",
       "notes": "Agent 运行时地基：锁版 + 内部 fork 镜像，任何新版本（含 rc 预发布）即触发升级；永远单独一批，必过 E6 回归与 H-5 kill -9 重放；升级前必须 diff 依赖树（0.1.2-rc.1 已移除 node-pty；rc.2 起要求 Node ≥24 的 zstd API）",
       "latest": "0.1.5-rc.2",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Cordis（插件元框架）",
@@ -59,7 +59,7 @@
       "gate": "runtime-gate",
       "notes": "插件可撤销效果是技能绑定围栏、插件卸载即撤销的运行时保证；实际版本以 dsh 锁定树为准（上游独立仓为 4.0.0-rc 线，跟随 dsh 升级）",
       "latest": "4.0.2",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Schemastery",
@@ -80,7 +80,7 @@
       "gate": "standard",
       "notes": "配置文件校验引擎；随 dsh 锁定树升级，不单独升级",
       "latest": "3.18.2",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "node-addon-require-builtin",
@@ -101,7 +101,7 @@
       "gate": "standard",
       "notes": "dsh 原生插件加载依赖；随 dsh 锁定树升级",
       "latest": "0.1.6",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "dsh-im 多平台 IM 接入插件",
@@ -123,7 +123,7 @@
       "gate": "standard",
       "notes": "钉钉/企微/飞书官方通道首批启用；安装走 pin 版本 + integrity 校验；观察名单（微信 iLink、WhatsApp baileys 等非官方协议）不启用；Slack 枚举位保留未接线",
       "latest": "4.21.2",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Hono",
@@ -139,7 +139,7 @@
       "gate": "full",
       "notes": "HTTP 服务层；与 @hono/node-server 同批升级",
       "latest": "4.13.8",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "@hono/node-server",
@@ -155,7 +155,7 @@
       "gate": "full",
       "notes": "随 hono 同批升级；服务端启动路径变更需过 server 契约与 E2E",
       "latest": "2.1.1",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "tRPC",
@@ -172,7 +172,7 @@
       "gate": "full",
       "notes": "server/client 必须同版同批升级，跨版本混用会直接破坏三端类型契约",
       "latest": "11.19.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Drizzle ORM",
@@ -188,7 +188,7 @@
       "gate": "full",
       "notes": "类型源与查询构造；DDL 事实源仍是手写 SQL migrations（D5 纪律：schema.ts 只做类型映射，禁止用 drizzle-kit 生成迁移）",
       "latest": "0.45.2",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "node-postgres（pg）",
@@ -206,7 +206,7 @@
       "gate": "full",
       "notes": "PG 驱动；每个 workspace 必须同版，避免多实例连接池语义漂移",
       "latest": "8.23.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Zod",
@@ -224,7 +224,7 @@
       "gate": "standard",
       "notes": "事件与契约校验；v4 与 v3 API 差异大，升级必须全量跑契约测试",
       "latest": "4.6.5",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "jose（JWT/JWS）",
@@ -241,7 +241,7 @@
       "gate": "full",
       "notes": "会话与租户令牌签发/校验；升级后必须过登录、跨租户越权（RLS）用例",
       "latest": "6.2.12",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "yaml",
@@ -257,9 +257,9 @@
       ],
       "cadence": "monthly",
       "gate": "standard",
-      "notes": "bundle 与技能 YAML 解析器；与 yaml-governance（治理固定解析器）保持 2.9.0 同版",
+      "notes": "bundle 与技能 YAML 解析器；与 yaml-governance（治理固定解析器）同版。【2026-09-19 暂缓 2.9.1】治理单元由 base-scope.json#uiGovernanceCapability + verify-ui-consumer + install-ui-governance 精确校验（npm:yaml@2.9.0），单独升主 yaml 会与治理单元失配；需与治理单元同批走 stable-upgrade-pr 波次迁移",
       "latest": "2.9.1",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "js-yaml",
@@ -273,9 +273,9 @@
       ],
       "cadence": "monthly",
       "gate": "standard",
-      "notes": "dsh CLI 配置解析依赖；随 dsh 锁定树升级",
+      "notes": "dsh CLI 配置解析依赖；随 dsh 锁定树升级。【2026-09-19】dsh 0.1.5-rc.2 声明 ^4.2.0，实测解析 4.3.2；上游 latest 5.4.2 不在 dsh 兼容范围，不单独跟版",
       "latest": "5.4.2",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Commander",
@@ -291,7 +291,7 @@
       "gate": "standard",
       "notes": "dsh CLI 参数解析；随 dsh 锁定树升级",
       "latest": "15.0.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Execa",
@@ -305,9 +305,9 @@
       ],
       "cadence": "monthly",
       "gate": "standard",
-      "notes": "子进程调用封装；升级注意 ESM-only 与 Node 版本要求",
+      "notes": "子进程调用封装（随 dsh vendor 基线声明，非本仓直接依赖）；【2026-09-19】dsh 锁定树实测仍为 10.0.0，随 dsh 升级，不单独跟 10.0.1",
       "latest": "10.0.1",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "ws",
@@ -323,7 +323,7 @@
       "gate": "full",
       "notes": "WebSocket 服务端；升级后过实时通道与重连用例",
       "latest": "8.21.3",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Agent Client Protocol SDK",
@@ -340,7 +340,7 @@
       "gate": "full",
       "notes": "外部客户端（编辑器）接入协议；协议字段演进需与 dsh 的 acp 形态联调",
       "latest": "1.4.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "PostgreSQL",
@@ -380,7 +380,7 @@
       "gate": "full",
       "notes": "向量检索扩展；扩展版本与 PG 主版本绑定，升级必须同时更新镜像与桌面载荷并跑检索用例",
       "latest": "v0.8.6",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "NATS Server（内嵌事件总线）",
@@ -402,7 +402,7 @@
       "gate": "full",
       "notes": "官方二进制 pin 版本 + 校验下载；桌面端以 JetStream 形态拉起；二进制缺失时显式降级 memory 形态（事件总线不是启动阻断项）；升级需复核事件重放与 outbox 语义",
       "latest": "v2.15.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "SQLite（经 dsh 会话索引）",
@@ -434,7 +434,7 @@
       "gate": "full",
       "notes": "⚠ 许可证非 OSI 标准许可：只允许独立服务进程形态，不得链接进分发包；实现走自研 RESP2（node:net），不引入第三方 redis 客户端；启用前必须过崩溃恢复（PEL/XPENDING）与延迟队列用例",
       "latest": "8.10.2",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "React",
@@ -451,9 +451,9 @@
       ],
       "cadence": "monthly",
       "gate": "full",
-      "notes": "React 19；与 react-dom、@types/react 同批升级；升级后必须过三端视觉与交互门禁",
+      "notes": "React 19；与 react-dom、@types/react 同批升级；升级后必须过三端视觉与交互门禁。【2026-09-19 暂缓 19.3.0】@react-three/fiber（9.7.0 latest 与 10.0.0-canary 同）peer 仍为 react >=19 <19.3，等上游放开后整批升级",
       "latest": "19.3.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "react-dom",
@@ -471,7 +471,7 @@
       "gate": "full",
       "notes": "必须与 react 严格同版",
       "latest": "19.3.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "React Router",
@@ -487,7 +487,7 @@
       "gate": "full",
       "notes": "路由与数据加载；大版本升级需核对路由表与深链（含 bare 路由返回出口）",
       "latest": "8.4.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "TanStack Query",
@@ -503,7 +503,7 @@
       "gate": "full",
       "notes": "服务端状态缓存；升级复核轮询失效策略（心跳类页面）",
       "latest": "5.103.1",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Vite",
@@ -521,7 +521,7 @@
       "gate": "standard",
       "notes": "构建工具链；与 @vitejs/plugin-react、@tailwindcss/vite 同批联动；v8 走 rolldown 内核，升级后必须过三端生产构建",
       "latest": "8.3.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "@vitejs/plugin-react",
@@ -539,7 +539,7 @@
       "gate": "standard",
       "notes": "与 vite 同批升级",
       "latest": "6.1.1",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Tailwind CSS",
@@ -558,7 +558,7 @@
       "gate": "standard",
       "notes": "v4 令牌制；升级后必须过 Candy 设计系统纯色验证与三端视觉基线",
       "latest": "4.3.3",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "@tailwindcss/vite",
@@ -576,7 +576,7 @@
       "gate": "standard",
       "notes": "必须与 tailwindcss 严格同版",
       "latest": "4.3.3",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "three.js",
@@ -592,7 +592,7 @@
       "gate": "full",
       "notes": "3D 渲染；与 @react-three/fiber、drei、postprocessing、three-stdlib 同批升级（版本矩阵敏感），升级后必须过真实渲染截图",
       "latest": "0.186.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "@react-three/fiber",
@@ -608,7 +608,7 @@
       "gate": "full",
       "notes": "React 19 适配线；与 three 主版本绑定，同批升级",
       "latest": "9.7.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "@react-three/drei",
@@ -624,7 +624,7 @@
       "gate": "full",
       "notes": "随 fiber/three 同批升级",
       "latest": "10.7.8",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "@react-three/postprocessing",
@@ -640,7 +640,7 @@
       "gate": "full",
       "notes": "后处理特效；随 three 同批升级",
       "latest": "3.1.1",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "three-stdlib",
@@ -656,7 +656,7 @@
       "gate": "standard",
       "notes": "three 官方 examples 的 TS 移植；与 three 主版本对齐",
       "latest": "2.36.1",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "pixi.js",
@@ -670,9 +670,9 @@
       ],
       "cadence": "monthly",
       "gate": "full",
-      "notes": "当前锁 v6 线（pixi-live2d-display 兼容上限）；升级 v7/v8 必须同步替换 live2d 显示层",
+      "notes": "当前锁 v6 线（pixi-live2d-display 兼容上限）；升级 v7/v8 必须同步替换 live2d 显示层。【2026-09-19 复核暂缓】上游已到 8.21.0，v6 线显示层无适配新版本，需先定 live2d 替换方案（产品裁决）再升",
       "latest": "8.21.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "pixi-live2d-display",
@@ -688,7 +688,7 @@
       "gate": "full",
       "notes": "0.4.0 仅支持 pixi v6 线；升级前先确认上游是否已适配 pixi v7+，否则锁版不动",
       "latest": "0.4.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Electron",
@@ -703,8 +703,8 @@
       "cadence": "monthly",
       "gate": "full",
       "notes": "桌面壳（正式产品形态）；升级必须过打包载荷校验、真实窗口响应式与托盘/夜班行为验收",
-      "latest": "44.4.2",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest": "44.4.3",
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "electron-builder",
@@ -720,7 +720,7 @@
       "gate": "full",
       "notes": "安装包与签名链路；升级后过 app:pack / app:dist 与发布资产校验",
       "latest": "26.15.3",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Playwright",
@@ -737,7 +737,7 @@
       "gate": "full",
       "notes": "E2E 与 computer-use 浏览器驱动共用；升级必须重建 Linux 视觉基线（CNB ui-gate 在同一镜像内跑）；Python 侧版本由 toolkit/requirements.txt 约束",
       "latest": "1.63.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "@axe-core/playwright",
@@ -753,7 +753,7 @@
       "gate": "standard",
       "notes": "与 @playwright/test 版本矩阵敏感，同批升级",
       "latest": "4.13.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Vitest",
@@ -769,7 +769,7 @@
       "gate": "standard",
       "notes": "各 workspace 版本需对齐（历史存在 v3/v4 混用）；升级后全量跑 pnpm test",
       "latest": "5.0.1",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "tsx",
@@ -786,7 +786,7 @@
       "gate": "standard",
       "notes": "TS 直跑器；升级后过 db:migrate/db:seed 与 server 启动",
       "latest": "4.23.13",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "TypeScript",
@@ -802,7 +802,7 @@
       "gate": "smoke",
       "notes": "7.0 原生化工具链；部分包仍锁 5.9（治理/UI 消费校验），升级按包分批，避免一次全仓",
       "latest": "7.0.2",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "typescript-governance（别名固定解析器）",
@@ -848,7 +848,7 @@
       "gate": "smoke",
       "notes": "开发编排；升级不影响生产载荷",
       "latest": "10.0.5",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "jsdom",
@@ -864,7 +864,7 @@
       "gate": "standard",
       "notes": "DOM 测试环境；升级后跑三端单测",
       "latest": "30.1.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "esbuild",
@@ -880,7 +880,7 @@
       "gate": "full",
       "notes": "传递依赖（vite/tsx 链路）随包分发；桌面载荷锁三平台二进制，升级必须重跑 runtime:deps:refresh + 载荷边界校验",
       "latest": "0.28.2",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "rolldown",
@@ -896,7 +896,7 @@
       "gate": "standard",
       "notes": "随 vite 升级；桌面载荷含三平台绑定，注意 onlyBuiltDependencies 白名单",
       "latest": "1.2.9",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "lightningcss",
@@ -912,7 +912,7 @@
       "gate": "standard",
       "notes": "随 vite 升级；MPL 属弱 copyleft，仅构建期使用，不分发源码",
       "latest": "1.33.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "@tailwindcss/oxide",
@@ -928,7 +928,7 @@
       "gate": "standard",
       "notes": "与 tailwindcss 同批升级；三平台二进制进载荷白名单",
       "latest": "4.3.3",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "LiteLLM Proxy",
@@ -945,8 +945,8 @@
       "cadence": "event",
       "gate": "full",
       "notes": "⚠ 2026-03 PyPI 供应链投毒（1.82.7/1.82.8）+ CVE-2026-42208 SQL 注入（修复于 1.83.7，CISA KEV 在列）：接入时强制镜像哈希 pin + cosign 验签 + 仅内网监听 + 虚拟密钥分域轮换；安全告警即查不等周期",
-      "latest": "1.43.10",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest": "1.43.0",
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "mem0",
@@ -963,8 +963,8 @@
       "cadence": "monthly",
       "gate": "standard",
       "notes": "★ 当前组织记忆由自研 workdata 实现；若引入，必须保留自有归因/脱敏层，且只作独立服务进程",
-      "latest": "0.0.18",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest": "0.0.14",
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Microsoft Presidio",
@@ -982,7 +982,7 @@
       "gate": "full",
       "notes": "★ 现网走自研中文 PII 正则（零出站）；引入 Presidio 时必须作为独立服务进程，且出站脱敏强制段保持不变",
       "latest": "2.2.355",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Langfuse",
@@ -999,7 +999,7 @@
       "gate": "standard",
       "notes": "2026-01 被 ClickHouse 收购；v3 自托管 footprint 重（PG+ClickHouse+Redis+S3），边缘节点只按轻量导出契约对接；ee/ 目录为商业许可，不得使用",
       "latest": "v4.38.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "DeepEval",
@@ -1016,8 +1016,8 @@
       "cadence": "monthly",
       "gate": "standard",
       "notes": "长期预留：审批手势/驳回原因/轨迹回放已沉淀在消息流，按导出契约接评测，不提前建设管道",
-      "latest": "1.0.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest": "0.21.74",
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Promptfoo",
@@ -1035,7 +1035,7 @@
       "gate": "standard",
       "notes": "仅作 CI 评测工具（devDependency 形态），不进运行时载荷",
       "latest": "0.123.1",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Stagehand",
@@ -1053,7 +1053,7 @@
       "gate": "standard",
       "notes": "L3 主路径：确定性代码 + LLM 局部决策；接入时须走 PlatformAdapter 统一抽象，禁止业务直接 import",
       "latest": "4.1.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "browser-use",
@@ -1071,7 +1071,7 @@
       "gate": "standard",
       "notes": "只用于新平台冷启动，探明后必须固化为 L3 剧本；不得直接进生产主路径",
       "latest": "0.13.10",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Skyvern",
@@ -1089,7 +1089,7 @@
       "gate": "standard",
       "notes": "⚠ AGPL-3.0：只允许独立进程形态，禁止链接进分发包；启用前过法务与出站声明",
       "latest": "1.0.48",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "computer-use（vendored 工具箱）",
@@ -1136,7 +1136,7 @@
       "gate": "smoke",
       "notes": "只作对照评估，暂不入运行时；publish-rpa 真机发布的权限模型参照对象",
       "latest": "cli-v0.3.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Scrapling",
@@ -1153,7 +1153,7 @@
       "gate": "standard",
       "notes": "纯本地零出站采集技能；经 skill:forge 集成，随技能市场分发",
       "latest": "v0.4.15",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "OpenAdapt",
@@ -1170,7 +1170,7 @@
       "gate": "standard",
       "notes": "与意识系统构成「检测高频任务→建议固化→录制编译→剧本上线」管道，未接运行时",
       "latest": "v1.16.0",
-      "latest_checked_at": "2026-09-18T15:58:36.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Agent-S3（gui-agents）",
@@ -1187,7 +1187,7 @@
       "gate": "standard",
       "notes": "与自有 computer-use 能力对照复核；若引入只作独立进程，虚拟输入通道不得劫持真实鼠标",
       "latest": "v0.3.2",
-      "latest_checked_at": "2026-09-18T15:58:36.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "WrenAI",
@@ -1204,7 +1204,7 @@
       "gate": "standard",
       "notes": "只允许使用其 governed text-to-SQL 引擎能力，且必须独立进程；现网结构回归由薄自译实现承担",
       "latest": "wren-core-py-v0.8.0",
-      "latest_checked_at": "2026-09-18T15:58:36.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Lago",
@@ -1221,7 +1221,7 @@
       "gate": "standard",
       "notes": "⚠ AGPL-3.0 独立部署；现网计量=自研遥测 seam 逐消息 + 账单投影，未引入",
       "latest": "v1.53.0",
-      "latest_checked_at": "2026-09-18T15:58:36.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "E2B（执行沙箱 SDK）",
@@ -1238,7 +1238,7 @@
       "gate": "full",
       "notes": "若启用 SaaS 形态，客户代码外发必须经出站声明与审批；首选仍是本地沙箱策略",
       "latest": "e2b@2.51.0",
-      "latest_checked_at": "2026-09-18T15:58:36.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Daytona",
@@ -1255,7 +1255,7 @@
       "gate": "full",
       "notes": "⚠ AGPL-3.0 独立进程；仅在客户 VPC 内自托管形态评估",
       "latest": "v0.190.0",
-      "latest_checked_at": "2026-09-18T15:58:36.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Tauri",
@@ -1273,7 +1273,7 @@
       "gate": "standard",
       "notes": "双轨 tag（tauri-v2.x / v1.x）需 tag_prefix 收敛；当前桌面形态为 Electron，Tauri 仅保留为低配门店候选",
       "latest": "tauri-v3.0.0-alpha.1",
-      "latest_checked_at": "2026-09-18T15:58:36.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Taro",
@@ -1291,7 +1291,7 @@
       "gate": "standard",
       "notes": "若启用需一套 React 码出小程序（只读+审批+一键暂停），当前未接入",
       "latest": "4.2.1",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "CopilotKit",
@@ -1308,8 +1308,8 @@
       "cadence": "monthly",
       "gate": "standard",
       "notes": "仅作组件库复用（AG-UI 协议），消息流必须由 dsh 承接；引入前核对与自有 review-console 的边界",
-      "latest": "1.72.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest": "1.73.0",
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "ECharts",
@@ -1327,7 +1327,7 @@
       "gate": "standard",
       "notes": "体积较大（需按需引入）；若引入需过三端视觉门禁与首屏预算",
       "latest": "6.1.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "TipTap",
@@ -1345,7 +1345,7 @@
       "gate": "standard",
       "notes": "编辑器事务→防抖合并→事件流的约定在引入时必须保留（文档即事件）",
       "latest": "3.31.3",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "SheetJS",
@@ -1363,7 +1363,7 @@
       "gate": "standard",
       "notes": "npm 上的 xlsx 为旧版快照，官方已迁至自建源（cdn.sheetjs.com）；引入时从官方源锁定版本",
       "latest": "0.18.5",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "PptxGenJS",
@@ -1381,7 +1381,7 @@
       "gate": "standard",
       "notes": "若引入，与 python-pptx 二选一，避免两套 PPT 生成链路",
       "latest": "4.0.1",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Fabric.js",
@@ -1399,7 +1399,7 @@
       "gate": "standard",
       "notes": "注意与自研 dev-bridge/devfabric 命名区分（同名非同一组件）；Canvas 性能需在低配门店 PC 验证",
       "latest": "7.4.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "WeasyPrint",
@@ -1417,7 +1417,7 @@
       "gate": "standard",
       "notes": "引入前提：确定性渲染 ≤30s、仅独立进程（依赖系统 libpango/cairo）",
       "latest": "62.3",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Litestream",
@@ -1434,7 +1434,7 @@
       "gate": "standard",
       "notes": "边缘/社区版形态未启用；启用前定义恢复演练与保留策略",
       "latest": "v0.5.17",
-      "latest_checked_at": "2026-09-18T15:58:36.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "sqlite-vec",
@@ -1451,7 +1451,7 @@
       "gate": "standard",
       "notes": "与 pgvector 保留同一检索契约，避免双实现语义漂移",
       "latest": "v0.1.9",
-      "latest_checked_at": "2026-09-18T15:58:36.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "SeaweedFS",
@@ -1468,7 +1468,7 @@
       "gate": "standard",
       "notes": "SaaS 形态默认走云 OSS/S3；自托管仅在客户 VPC 方案中评估",
       "latest": "4.47",
-      "latest_checked_at": "2026-09-18T15:58:36.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "KayKit Adventurers（3D 素材）",
@@ -1501,9 +1501,9 @@
       ],
       "cadence": "monthly",
       "gate": "full",
-      "notes": "引擎下限 >=24（dsh 的 zstd 会话持久化要求）；桌面载荷内嵌 24.19.0，升级需重建载荷并过 app 冒烟",
+      "notes": "引擎下限 >=24（dsh 的 zstd 会话持久化要求）；桌面载荷内嵌 24.19.0，升级需重建载荷并过 app 冒烟。【2026-09-19 复核暂缓 26.9.0】宿主/CI/桌面三平台载荷与 release-assets 摘要锁需整批迁移，另立任务",
       "latest": "v26.9.0",
-      "latest_checked_at": "2026-09-18T15:58:36.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "pnpm",
@@ -1522,9 +1522,9 @@
       ],
       "cadence": "monthly",
       "gate": "standard",
-      "notes": "lockfile v9 格式；升级必须九仓同步（packageManager 字段），否则 frozen-lockfile 安装失败",
+      "notes": "lockfile v9 格式；升级必须九仓同步（packageManager 字段），否则 frozen-lockfile 安装失败。【2026-09-19 复核暂缓 12.4.2】与九仓 packageManager、fanout 子仓 lock 重算（pnpm 10 口径）、CI 镜像绑定，需全舰队同批迁移",
       "latest": "12.4.2",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "npm（桌面载荷安装器）",
@@ -1543,9 +1543,9 @@
       ],
       "cadence": "monthly",
       "gate": "standard",
-      "notes": "载荷安装器版本与 package-lock.json 绑定；升级需重跑 runtime:deps:refresh/verify",
+      "notes": "载荷安装器版本与 package-lock.json 绑定；升级需重跑 runtime:deps:refresh/verify。【2026-09-19 复核暂缓 12.0.2】与 .workloom-runtime-deps/metadata.json 和桌面载荷安装器绑定，需重跑 refresh/verify + 桌面冒烟",
       "latest": "12.0.2",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "python-pptx",
@@ -1562,8 +1562,8 @@
       "cadence": "monthly",
       "gate": "smoke",
       "notes": "本地工具链依赖，不随产品分发；版本未锁定属已知缺口（建议后续补 requirements 引脚）",
-      "latest": "1.0.2",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest": "1.0.1",
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
       "name": "Playwright（Python · computer-use 工具链）",
@@ -1582,10 +1582,10 @@
       ],
       "cadence": "monthly",
       "gate": "standard",
-      "notes": "与 Node 侧 @playwright/test 独立版本线；浏览器二进制由 playwright install 管理，升级需同步预检脚本断言",
+      "notes": "与 Node 侧 @playwright/test 独立版本线；浏览器二进制由 playwright install 管理，升级需同步预检脚本断言。【2026-09-19 复核暂缓 1.45.1】随 computer-use toolkit/requirements.txt，升级需同步预检断言 + 浏览器二进制预装",
       "currentSource": "packages/base/computer-use/toolkit/requirements.txt",
-      "latest": "1.46.0",
-      "latest_checked_at": "2026-09-18T16:00:21.000Z"
+      "latest": "1.45.1",
+      "latest_checked_at": "2026-09-19T10:15:16.000Z"
     }
   ]
 }

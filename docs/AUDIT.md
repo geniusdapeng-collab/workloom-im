@@ -402,3 +402,18 @@ npm 最新 rc.7（latest）/ rc.8（next），与锁定 rc.8 一致——**无�
 - **动作**：vendor/dsh 换基线 0.1.5-rc.2（integrity `sha512-8Xc8hCQH…fOxw==` 与 registry 逐字符一致 ✅）；dsh-gate pin 0.1.5-rc.2 + **清 lock 重装**（564 包全量重算）；README 中英 + VENDOR.md 同步；oss 台账随扫描刷新。
 - **坑位**：本次锁定树内 `js-yaml` 仍由 dsh 声明 `^4.2.0` 决定（实测 4.3.2），**不跟 npm latest 5.x**；`node-pty` 仍在树内（`onlyBuiltDependencies` 放行预构建）；Node 24 仍是硬要求（zstd 会话持久化）。
 - **验证**：E6 dsh-gate 全绿（Node v24.19.0）：用例一全链（围栏瀑布 deny 优先 + 哈希链 24 条验链）+ 用例二 H-5（kill -9 → 链完整 20 条 + 重放零重复）。
+
+## 开源组件升级批次（2026-09-19，oss-watch 全量扫描；任务卡 T-2026-0919-0021）
+
+- **触发**：十仓 `oss-watch --all` 全量扫描（基座登记组件 29 项 + 直接依赖 34 项落后）。本轮在基座执行升级，其余九仓按 base-sync fanout / ui-v* 稳定波次承接。
+- **已升级（分支 task/T-2026-0919-0021，五个批次提交，待人合并）**：
+  1. `0b32197` dsh 0.1.2-rc.1 → 0.1.5-rc.2（清 lock 重装 + vendor 基线换新 + E6/H-5 全绿）；
+  2. `c436f61` 运行时依赖：hono 4.13.5→4.13.8、@trpc/server+client 11.18.0→11.19.0、zod 4.4.3→4.6.5（五包）、jose 6.2.10→6.2.12、tsx 4.23.12→4.23.13（含 db 对齐）；
+  3. `17e2171` 前端/构建：vite 8.2.2→8.3.0（三端）、@vitejs/plugin-react 6.1.0→6.1.1、three 0.185.1→0.186.0、react-router 8.3.0→8.4.0、@tanstack/react-query 5.102.5→5.103.1、jsdom 30.0.1→30.1.0、postprocessing 6.39.4→6.39.5（显式声明以放开 three<0.187 peer）；
+  4. `c1b79d8` 开发/桌面：vitest 4.1.11/3.2.0→5.0.1（七处对齐，移除 describe.sequential）、concurrently 9.2.4→10.0.5、electron 44.1.1→44.4.3、@types/pg 8.11.0→8.23.1；
+  5. `096653d` dsh-im 0.2.2→4.21.2（pin+integrity 更新；挂载冒烟通过）。
+  随 dsh 锁定树同步：js-yaml 4.3.2、ws 8.21.3、node-addon-require-builtin 0.1.6。
+- **门禁证据**：`pnpm typecheck` 全绿；`pnpm test` 全绿（base 679 / server 133 / web 67 / webb 6 / webc 21 + 脚本门禁 5+30）；`pnpm suite` **459/459**（净库单跑：迁移 34 文件 + 种子）；`bash scripts/dsh-gate.sh` E6+H-5 全绿；三端 `vite build` 全绿；`pnpm ui:governance` 34/34；`pnpm oss:check` 清单一致；`runtime:deps:refresh/verify` 通过。
+- **存量红灯（升级前已存在，本轮以回退依赖复现证明无关）**：`pnpm ui:e2e` 2 项失败（PC 200% 文字溢出 4px、darwin 视觉基线差 50px/5% 像素）；`pnpm pc-shell:verify` 4 项失败（PC 导航身份/版本映射与 404 态）。两者对应实现文件与 main 完全一致（`git diff main -- apps/web/src scripts/verify-pc-shell.mjs` 为空）。
+- **暂缓项与理由（同批写入 oss-components.json#notes，扫描可继承）**：yaml 2.9.1（须与 uiGovernance 治理单元同批走 stable-upgrade-pr）；react/react-dom/@types/react 19.3.0（@react-three/fiber peer `>=19 <19.3`，含 10.0.0-canary 仍未放开）；pixi.js 8.21.0（pixi-live2d-display 仅支持 v6 线，需先定 live2d 替换方案）；Node.js 26.9.0 / pnpm 12.4.2 / npm 12.0.2（工具链三件套与九仓 packageManager、fanout lock 重算、桌面载荷绑定，另立整批迁移）；Playwright Python 1.45.1（随 computer-use toolkit/requirements.txt，需同步预检断言与浏览器二进制）。
+- **未执行项**：桌面 Electron 打包冒烟（`pnpm app:pack` 需先跑 `scripts/pack-electron-payload.sh` 装配 dist-payload，且需下载 44.4.3 二进制；桌面发行由 CNB desktop 流水线把关，签名 secrets 仍缺 BLK-B-01-003）；真实 IM 通道端到端（无凭据，维持 mock 口径）。
