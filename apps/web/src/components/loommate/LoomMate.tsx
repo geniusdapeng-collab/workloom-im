@@ -107,9 +107,7 @@ export function LoomMate() {
     try { const v = localStorage.getItem("loommate.pos"); return v ? JSON.parse(v) as { x: number; y: number } : null; } catch { return null; }
   });
   const [hidden, setHidden] = useState(() => { try { return localStorage.getItem("loommate.hidden") === "1"; } catch { return false; } });
-  // RDAS v3.0 T-02/T-11：默认最小打扰形态（64px 小球），避免 480px 数字人命中区压住审批动作栏。
-  // 显式展开过的用户（loommate.mini === "0"）保持展开；未设置过的首次用户默认收起。
-  const [mini, setMini] = useState(() => { try { return localStorage.getItem("loommate.mini") !== "0"; } catch { return true; } });
+  const [mini, setMini] = useState(() => { try { return localStorage.getItem("loommate.mini") === "1"; } catch { return false; } });
   const dragRef = useRef<{ startX: number; startY: number; baseX: number; baseY: number; moved: boolean } | null>(null);
   const persistLocal = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } };
   const availableWidth = Math.max(96, viewport.width - railW - navW - 32);
@@ -469,7 +467,21 @@ export function LoomMate() {
         </button>
       ) : (
       <div className="flex flex-col items-center">
+        {/* RDAS v3.0 T-02/T-11：视觉保持原样，但把 480px 方框的指针命中区缩小到角色上半身，
+            避免数字人命中区压住审批动作栏；透明区域不拦截点击。 */}
         <div
+          className="relative block"
+          style={{ pointerEvents: "none" }}
+        >
+          {webglOk
+            ? <MateLive2D size={dim} mood={mood} gesture={mateGesture} />
+            : <MateAvatar size={dim} excited={unread > 0} />}
+          {unread > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-6 min-w-6 items-center justify-center rounded-full bg-alert px-1 text-body font-bold text-white shadow-lg">
+              {unread}
+            </span>
+          )}
+          <div
           role="button" tabIndex={0}
           aria-label={`${personaName}助手；回车打开对话，方向键移动，按住 Shift 可加速移动`}
           aria-keyshortcuts="Enter Space ArrowUp ArrowDown ArrowLeft ArrowRight"
@@ -481,17 +493,10 @@ export function LoomMate() {
               void openPanel("chat");
             }
           }}
-          className="relative block cursor-grab touch-none select-none transition-transform hover:scale-105 active:cursor-grabbing"
+          className="absolute cursor-grab touch-none select-none active:cursor-grabbing"
+          style={{ left: "25%", top: "6%", width: "50%", height: "44%", pointerEvents: "auto", borderRadius: 9999 }}
           title={`${personaName}（拖拽挪位置 · 点击聊聊）`}
-        >
-          {webglOk
-            ? <MateLive2D size={dim} mood={mood} gesture={mateGesture} />
-            : <MateAvatar size={dim} excited={unread > 0} />}
-          {unread > 0 && (
-            <span className="absolute -right-1 -top-1 flex h-6 min-w-6 items-center justify-center rounded-full bg-alert px-1 text-body font-bold text-white shadow-lg">
-              {unread}
-            </span>
-          )}
+          />
         </div>
         <div className="mt-0.5 flex items-center gap-1.5">
             <span className="rounded-full bg-bg900/90 px-2.5 py-0.5 text-body text-ink shadow">
