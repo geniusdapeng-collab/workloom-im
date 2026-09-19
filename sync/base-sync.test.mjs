@@ -1523,12 +1523,15 @@ test("full 同步在依赖变更后重算子仓开源组件清单并纳入提交
     write(join(fx.child, "docs/OPEN_SOURCE_COMPONENTS.md"), "stale-inventory\n");
     commitAll(fx.child, "stale derived inventory before sync");
 
+    // 生成器读取 runtime 依赖锁（fixture 的 runtime-deps 桩会在刷新阶段写它），
+    // 从而锁定「清单生成必须晚于派生锁刷新」这一顺序要求。
     write(join(fx.base, "scripts/oss-inventory.mjs"), `#!/usr/bin/env node
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 const target = join(process.cwd(), "docs/OPEN_SOURCE_COMPONENTS.md");
+const runtimeLock = JSON.parse(readFileSync(join(process.cwd(), ".workloom-runtime-deps/package.json"), "utf8"));
 mkdirSync(dirname(target), { recursive: true });
-writeFileSync(target, "regenerated-inventory\\n");
+writeFileSync(target, "regenerated-inventory:" + runtimeLock.product + "\\n");
 `);
     write(join(fx.base, "shared/package.json"), `${JSON.stringify({
       name: "@example/shared",
@@ -1537,6 +1540,15 @@ writeFileSync(target, "regenerated-inventory\\n");
     // 本用例关注清单刷新，放宽 fixture 的 2 文件同步上限（首轮对齐本身就有多项变更）。
     const scope = readScope(fx.base);
     scope.pollutionGuard.maxFilesPerSync = 40;
+    // 真实仓库把 runtime 依赖锁登记为产品派生资产；清单把它当作事实源之一。
+    scope.perProductDerivedAssets = [{
+      directory: ".workloom-runtime-deps",
+      files: ["package.json", "package-lock.json", "metadata.json"],
+      generator: "scripts/runtime-deps-lock.mjs",
+      refreshArgs: ["refresh"],
+      verifyArgs: ["verify"],
+      strategy: "preserve-and-regenerate-after-product-lockfile",
+    }];
     writeScope(fx.base, scope);
     commitAll(fx.base, "inventory generator and dependency source");
 
@@ -1560,7 +1572,11 @@ if (process.argv.includes("--lockfile-only")) {
     const report = JSON.parse(result.stdout);
     assert.equal(report.lockfileRefreshed, true);
     assert.equal(report.ossInventoryRefreshed, true);
-    assert.equal(readFileSync(join(fx.child, "docs/OPEN_SOURCE_COMPONENTS.md"), "utf8"), "regenerated-inventory\n");
+    // fixture 的 runtime-deps 桩把 product 写成子仓目录名（tiger），说明清单是在派生锁刷新之后生成的。
+    assert.equal(
+      readFileSync(join(fx.child, "docs/OPEN_SOURCE_COMPONENTS.md"), "utf8"),
+      "regenerated-inventory:tiger\n",
+    );
     const committed = git(fx.child, "show", "--pretty=format:", "--name-only", "HEAD");
     assert.match(committed, /docs\/OPEN_SOURCE_COMPONENTS\.md/u);
     assert.equal(git(fx.child, "status", "--porcelain"), "");

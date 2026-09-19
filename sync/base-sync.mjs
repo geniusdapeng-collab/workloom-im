@@ -1264,22 +1264,6 @@ function syncToChild(baseDir, childDir, scope, report, extraExclude = [], option
       } catch (error) {
         throw new Error(`lockfile 刷新失败；未写 state、未提交：${redact(error?.message).slice(0, 300)}`);
       }
-      // 依赖一变，子仓的派生清单 docs/OPEN_SOURCE_COMPONENTS.md 就与仓库事实漂移，
-      // 其 static-gate 的 `pnpm oss:check` 会直接判红（九仓波次实测）。生成器离线、
-      // 确定性，且产物与 `yaml` 解析器是否可用无关（实测逐字节一致），
-      // 因此在写 state、提交之前就地重算并把清单纳入本次变更。
-      const inventoryGenerator = join(childDir, "scripts/oss-inventory.mjs");
-      const inventoryDoc = join(childDir, "docs/OPEN_SOURCE_COMPONENTS.md");
-      if (existsSync(inventoryGenerator) && existsSync(inventoryDoc)) {
-        try {
-          sh(process.execPath, [inventoryGenerator, "--write"], childDir);
-          const docRel = relative(repoRoot, inventoryDoc).split(sep).join("/");
-          if (!stagedPaths.includes(docRel)) stagedPaths.push(docRel);
-          report.ossInventoryRefreshed = true;
-        } catch (error) {
-          throw new Error(`开源组件清单刷新失败；未写 state、未提交：${redact(error?.message).slice(0, 300)}`);
-        }
-      }
     }
 
     // 新行业 adopt 会在三端客户端与最终 pnpm-lock 全部就位后统一生成；此处过早
@@ -1296,6 +1280,23 @@ function syncToChild(baseDir, childDir, scope, report, extraExclude = [], option
           report.perProductDerivedAssets.push({ directory: asset.directory, refreshed: true, verified: true });
         } catch (error) {
           throw new Error(`产品派生资产 ${asset.directory} 刷新/验真失败；未写 state、未提交：${redact(error?.message).slice(0, 500)}`);
+        }
+      }
+      // 依赖一变，子仓的派生清单 docs/OPEN_SOURCE_COMPONENTS.md 就与仓库事实漂移，
+      // 其 static-gate 的 `pnpm oss:check` 会直接判红（九仓波次实测）。清单把
+      // `.workloom-runtime-deps` 也当作事实源，因此必须排在上面派生锁刷新**之后**、
+      // 写 state/提交**之前**重算；生成器离线、确定性，产物与 `yaml` 解析器是否
+      // 可用逐字节一致（实测），可在无 node_modules 的子仓克隆中安全执行。
+      const inventoryGenerator = join(childDir, "scripts/oss-inventory.mjs");
+      const inventoryDoc = join(childDir, "docs/OPEN_SOURCE_COMPONENTS.md");
+      if (lockfileInputsChanged && existsSync(inventoryGenerator) && existsSync(inventoryDoc)) {
+        try {
+          sh(process.execPath, [inventoryGenerator, "--write"], childDir);
+          const docRel = relative(repoRoot, inventoryDoc).split(sep).join("/");
+          if (!stagedPaths.includes(docRel)) stagedPaths.push(docRel);
+          report.ossInventoryRefreshed = true;
+        } catch (error) {
+          throw new Error(`开源组件清单刷新失败；未写 state、未提交：${redact(error?.message).slice(0, 300)}`);
         }
       }
     }
