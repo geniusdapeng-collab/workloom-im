@@ -41,10 +41,10 @@
     "@workloom/db": "workspace:*",
     "@workloom/industry-contract": "workspace:*",
     "@workloom/shared": "workspace:*",
-    "jose": "6.2.10",
+    "jose": "6.2.12",
     "pg": "8.23.0",
     "yaml": "2.9.0",
-    "zod": "^4.4.3"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/pg": "^8.11.0",

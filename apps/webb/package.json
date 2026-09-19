@@ -11,7 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@trpc/client": "11.18.0",
+    "@trpc/client": "11.19.0",
     "@workloom/server": "workspace:*",
     "@workloom/ui": "workspace:*",
     "react": "19.2.8",
