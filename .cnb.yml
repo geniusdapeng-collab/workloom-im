@@ -291,7 +291,7 @@
     volumes:
       - /cnb-cache/pnpm-store:copy-on-write
   env:
-    UI_VERSION: "0.1.5"
+    UI_VERSION: "0.1.6"
   stages:
     - name: 构建并打包 @workloom/ui
       script: |
@@ -301,8 +301,13 @@
         pnpm config set store-dir /cnb-cache/pnpm-store
         pnpm install --frozen-lockfile
         mkdir -p dist
-        pnpm -C packages/ui build
-        (cd packages/ui && pnpm pack --pack-destination /workspace/dist)
+        # 制品必须与 rollout（sync/ui-upgrade-pr.mjs#packTaggedUiArtifact）逐字节同源：
+        # 那里固定「pnpm run prepack + npm pack --ignore-scripts」，npm pack 会归一 mtime，
+        # 因此跨机器可复现；`pnpm pack` 保留工作树 mtime，同尺寸不同哈希，会让 rollout 的
+        # 三方核对（本地复算 == 登记 SRI == Release 下载字节）永远失败（DEF：0.1.5 实测）。
+        pnpm -C packages/ui run prepack
+        (cd packages/ui && npm pack --ignore-scripts --json --pack-destination /workspace/dist > /workspace/dist/npm-pack.json)
+        ls -l /workspace/dist
         ls -l /workspace/dist
         # 制品自证：包版本必须等于 UI_VERSION，并记录**本次上传字节**的 sha512。
         # 该摘要随后写回 sync/base-capabilities.json 并由同一次发布打标签 —— 消灭
