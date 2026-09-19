@@ -90,10 +90,11 @@
   "requiredRootAssets": {
     "files": [
       "WORKLOOM_PRODUCT_CONTEXT.md",
-    "AI-AUTONOMOUS-OPERATIONS.md",
+      "AI-AUTONOMOUS-OPERATIONS.md",
       "docs/DEVELOPMENT-PROTOCOL.md",
       "docs/REAL-DEVICE-ACCEPTANCE-SPEC.md",
       "docs/acceptance/checklist.v1.json",
+      "docs/acceptance/checklist.v2.json",
       "docs/acceptance/report-template.md",
       "docs/acceptance/profile.example.json",
       "scripts/acceptance/README.md",
