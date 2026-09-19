@@ -27,6 +27,9 @@ dist/
 # preview:all 运行时产物
 docs/demo/.manifest.json
 
+# 真机验收产物（RDAS v1：矩阵/走查/截图/报告；按仓本地留存，不入库）
+outputs/
+
 # Python（computer-use toolkit 运行缓存）
 __pycache__/
 *.pyc
