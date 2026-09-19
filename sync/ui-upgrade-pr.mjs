@@ -883,7 +883,7 @@ export function renderConsumerWorkflow(pathPrefix = "") {
 
 async function createPullRequest({ repo, token, branch, version }) {
   assertIndependentUpgradeBranch(branch);
-  const title = `chore(base): 升级 WorkLoom 三端客户端基座至 ${version}`;
+  const title = `sync(ui): 三端客户端基座升级至 ${version}`;
   const payload = {
     title,
     head: branch,
@@ -899,7 +899,11 @@ async function createPullRequest({ repo, token, branch, version }) {
     if (listResponse.ok) {
       const listed = await listResponse.json();
       const items = Array.isArray(listed) ? listed : (listed?.data ?? []);
-      const existing = items.find((item) => (item?.head?.ref ?? item?.sourceBranch) === branch);
+      // CNB 返回的 head.ref 是完整 refs/heads/<branch>，必须归一后比较。
+      const normalizeRef = (value) => String(value ?? "").replace(/^refs\/heads\//u, "");
+      const existing = items.find((item) => normalizeRef(
+        item?.head?.ref ?? item?.sourceBranch ?? item?.source_branch ?? item?.head_ref,
+      ) === normalizeRef(branch));
       if (existing) return { html_url: "已存在", number: existing.number ?? existing.id };
     }
   } catch {
@@ -918,7 +922,10 @@ async function createPullRequest({ repo, token, branch, version }) {
   const detail = await response.text();
   // 422/409 通常代表相同 head/base 的 PR 已存在；保持幂等并交给现有 PR 继续验证。
   if ((response.status === 422 || response.status === 409)
-    && /already exists|已存在/iu.test(detail)) return { html_url: "已存在" };
+    && /already exists|already have open pull|已存在/iu.test(detail)) {
+    const number = /"number":(\d+)/u.exec(detail)?.[1];
+    return { html_url: "已存在", number: number ? Number(number) : undefined };
+  }
   throw new Error(`创建 PR 失败 ${response.status}: ${detail.slice(0, 500)}`);
 }
 
@@ -1454,7 +1461,9 @@ async function upgradeChild(child, manifest, version, token, dryRun, foundationS
     const stagedPaths = stageExactUpgradeChanges({ repoRoot: checkout, allowedPaths: allowedUpgradePaths });
     if (!stagedPaths.length) return { repo: child.repo, status: "already-current", touched, foundationTouched };
     if (dryRun) return { repo: child.repo, status: "planned", touched, foundationTouched };
-    run("git", ["-c", "user.name=WorkLoom Base Release", "-c", "user.email=base-release@workloom.im", "commit", "-m", `chore(base): 升级三端客户端基座至 ${version}`], checkout);
+    // 提交标题走 `sync(...)`：协议 §5 把"同步器产出"登记为豁免项（无需任务号）；
+    // `chore(base)` 不在豁免清单里，会在下级仓的协议门禁被拒（W1 实测）。
+    run("git", ["-c", "user.name=WorkLoom Base Release", "-c", "user.email=base-release@workloom.im", "commit", "-m", `sync(ui): 三端客户端基座升级至 ${version}`], checkout);
     const remoteHead = run("git", ["ls-remote", "--heads", "origin", `refs/heads/${branch}`], checkout, canonicalGitEnvironment(token)).split(/\s+/)[0] || "";
     const lease = remoteHead ? `--force-with-lease=refs/heads/${branch}:${remoteHead}` : "--force-with-lease";
     run("git", ["push", lease, "origin", `HEAD:refs/heads/${branch}`], checkout, canonicalGitEnvironment(token));
