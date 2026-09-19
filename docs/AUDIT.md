@@ -394,3 +394,11 @@ npm 最新 rc.7（latest）/ rc.8（next），与锁定 rc.8 一致——**无�
 - **动作**：vendor/dsh 换基线 0.1.2-rc.1（integrity `sha512-RPq48Tzx…QrnVA==` 与 registry 逐字符一致 ✅）；dsh-gate pin 0.1.2-rc.1 + **清 lock 重装**（混版坑：ImageVariantId 导出缺失）；README 中英 + oss 台账同步。
 - **坑位**：Node ≥22.15 硬要求（zstd）——gate/生产须 Node 24；sharp 原生走 @img 可选依赖链，净装即就位。
 - **验证**：E6 dsh-gate 全绿（Node v24.9.0）：用例一全链（围栏瀑布 deny 优先 + 哈希链 38 条验链）+ 用例二 H-5（kill -9 → 链完整 26 条 + 重放零重复）。
+
+## dsh 0.1.5-rc.2 升级登记（2026-09-19，随发布即升纪律）
+
+- **触发**：官方 npm `latest`/`next` 双 tag 同指 `0.1.5-rc.2`（发布 2026-09-10T14:57Z；中间经历 0.1.3-alpha.1/2、0.1.5-alpha.1/2、0.1.5-rc.1；`alpha` tag 另有 0.1.6-alpha.1/2，不在本批）。
+- **变更面**：全家桶子包统一 bump 0.1.5-rc.2（新增 `dsh-http-proxy`、`dsh-tool-present` 子包）；`deepseek-flash`（DeepSeek-V41-Flash）模型适配器；Web 任意类型文件上传；子代理消息排队/编辑/Steer 与反馈弹窗（rc.2 为体验修复）；出站请求遵循 `HTTP(S)_PROXY/ALL_PROXY/NO_PROXY`。
+- **动作**：vendor/dsh 换基线 0.1.5-rc.2（integrity `sha512-8Xc8hCQH…fOxw==` 与 registry 逐字符一致 ✅）；dsh-gate pin 0.1.5-rc.2 + **清 lock 重装**（564 包全量重算）；README 中英 + VENDOR.md 同步；oss 台账随扫描刷新。
+- **坑位**：本次锁定树内 `js-yaml` 仍由 dsh 声明 `^4.2.0` 决定（实测 4.3.2），**不跟 npm latest 5.x**；`node-pty` 仍在树内（`onlyBuiltDependencies` 放行预构建）；Node 24 仍是硬要求（zstd 会话持久化）。
+- **验证**：E6 dsh-gate 全绿（Node v24.19.0）：用例一全链（围栏瀑布 deny 优先 + 哈希链 24 条验链）+ 用例二 H-5（kill -9 → 链完整 20 条 + 重放零重复）。

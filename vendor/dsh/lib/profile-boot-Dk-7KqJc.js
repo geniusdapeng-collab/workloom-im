@@ -1,8 +1,9 @@
-import { writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { PROFILE_PATCH_FILENAME, boot, composeEntries, healProfilesModuleFallback, installFailLoud, loadOptionalPatches, loadOverlayPatches, loadProfile, watchUserPatches } from "@deepseek-ai/dsh-app-boot";
-import { join, resolve } from "node:path";
+import { PROFILE_PATCH_FILENAME, PROFILE_TEMPLATES, boot, composeEntries, healProfilesModuleFallback, initProfile, installFailLoud, loadOptionalPatches, loadOverlayPatches, loadProfile, resolveProfileDir, watchUserPatches } from "@deepseek-ai/dsh-app-boot";
+import { dirname, join, resolve } from "node:path";
 import { resolveDshHome } from "@deepseek-ai/dsh-home-paths";
+import { installProxyFromEnvironment } from "@deepseek-ai/dsh-http-proxy";
 import { DSH_LAUNCH_ENVIRONMENT_KEY } from "@deepseek-ai/dsh-launch-environment";
 import { provideCmdline } from "@deepseek-ai/dsh-cmdline";
 //#region lib/types/process-shutdown.js
@@ -128,6 +129,48 @@ const PROFILE_ROOT_CONFIG = `# dsh profile root — an empty entry list. The tre
 /** Root config filename inside a profile directory. */
 const PROFILE_ROOT_FILENAME = "cordis.yml";
 /**
+* Initialize a missing profile from one shipped template. This copies only
+* the template's bundle list and patch-reload policy; local state from the
+* same-named shipped profile is not read, and no inheritance metadata is
+* persisted. Shipped profile names are reserved, and the target directory is
+* claimed exclusively so existing or concurrent state is never reused.
+* @param name - the new profile name.
+* @param fromDefaultProfile - shipped profile template to copy.
+* @param home - Harness home containing the profile directory.
+* @throws when the template is unknown, the target name is shipped, or the target directory exists.
+*/
+function initializeProfileFromDefault(name, fromDefaultProfile, home = resolveDshHome()) {
+	const dir = resolveProfileDir(name, home);
+	const template = Object.hasOwn(PROFILE_TEMPLATES, fromDefaultProfile) ? PROFILE_TEMPLATES[fromDefaultProfile] : void 0;
+	if (template === void 0) {
+		const expected = Object.keys(PROFILE_TEMPLATES).sort().map((value) => JSON.stringify(value)).join(", ");
+		throw new Error(`${NAME}: unknown default profile ${JSON.stringify(fromDefaultProfile)}; expected one of ${expected}`);
+	}
+	if (Object.hasOwn(PROFILE_TEMPLATES, name)) throw new Error(`${NAME}: profile ${JSON.stringify(name)} is shipped and cannot be a custom profile target; omit --from-default-profile to use it`);
+	mkdirSync(dirname(dir), { recursive: true });
+	try {
+		mkdirSync(dir);
+	} catch (error) {
+		if (error.code !== "EEXIST") throw error;
+		const manifestPath = join(dir, "package.json");
+		if (existsSync(manifestPath)) throw new Error(`${NAME}: profile ${JSON.stringify(name)} already exists at ${manifestPath}; omit --from-default-profile to use it`);
+		throw new Error(`${NAME}: profile directory ${dir} already exists; choose an unused profile name`);
+	}
+	try {
+		initProfile(dir, template.bundles, template.patchReload);
+	} catch (error) {
+		try {
+			rmSync(dir, {
+				recursive: true,
+				force: true
+			});
+		} catch (cleanupError) {
+			throw new AggregateError([error, cleanupError], `${NAME}: profile initialization failed and ${dir} could not be removed`);
+		}
+		throw error;
+	}
+}
+/**
 * Resolve the telemetry opt-out switch into its boot patch. ANY non-empty
 * value (including `'0'`/`'false'`) disables: a privacy switch prefers
 * off-by-mistake over on-by-mistake. A composition without the telemetry row
@@ -156,9 +199,12 @@ function resolveTelemetryPatch(disabledEnv, hasRow) {
 * the identical base).
 * @param name - the profile name.
 * @param userLayer - `false` skips parsing `cordis.patch.yml` (the default dump).
+* @param fromDefaultProfile - shipped template used once to initialize a missing profile.
 * @returns the loaded profile.
+* @throws when explicit initialization names an unknown template or an existing profile.
 */
-function prepareProfile(name, userLayer = true) {
+function prepareProfile(name, userLayer = true, fromDefaultProfile) {
+	if (fromDefaultProfile !== void 0) initializeProfileFromDefault(name, fromDefaultProfile);
 	const profile = loadProfile(NAME, name, INSTALL_ANCHOR, void 0, { userLayer });
 	writeFileSync(join(profile.dir, PROFILE_ROOT_FILENAME), PROFILE_ROOT_CONFIG);
 	return profile;
@@ -183,8 +229,8 @@ function allPatches(composed) {
 * @param patchFiles - `--patch` overlay paths, in argv order.
 * @returns the profile and its patch layers.
 */
-async function composeProfile(name, patchFiles) {
-	const profile = prepareProfile(name);
+async function composeProfile(name, patchFiles, fromDefaultProfile) {
+	const profile = prepareProfile(name, true, fromDefaultProfile);
 	await healProfilesModuleFallback({
 		installAnchor: INSTALL_ANCHOR,
 		profile
@@ -231,11 +277,15 @@ function suppressShutdownError(ctx, signal, error) {
 * @returns the settled root context and the shutdown controller.
 */
 async function runProfile(options) {
-	const composed = await composeProfile(options.profile, options.patchFiles);
+	const disposeProxy = await installProxyFromEnvironment(options.environment, (message) => {
+		process.stderr.write(`${NAME}: ${message}\n`);
+	});
+	const composed = await composeProfile(options.profile, options.patchFiles, options.fromDefaultProfile);
 	const app = {};
 	const appReady = createAppReady();
 	const shutdown = createProcessShutdown(async () => {
 		await app.current?.fiber.dispose();
+		await disposeProxy();
 	});
 	const signalShutdown = new AbortController();
 	const interrupt = (code) => {
@@ -296,4 +346,4 @@ async function runProfile(options) {
 	};
 }
 //#endregion
-export { resolveTelemetryPatch as a, prepareProfile as i, PROFILE_ROOT_FILENAME as n, runProfile as o, homePatchPath as r, INSTALL_ANCHOR as t };
+export { prepareProfile as a, initializeProfileFromDefault as i, PROFILE_ROOT_FILENAME as n, resolveTelemetryPatch as o, homePatchPath as r, runProfile as s, INSTALL_ANCHOR as t };
