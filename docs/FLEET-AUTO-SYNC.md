@@ -8,7 +8,7 @@
 
 | 层 | 做什么 | 载体 | 触发 | 人工介入 |
 |---|---|---|---|---|
-| 云端 · 资产分发 | 基座根级资产 → 每个子仓一条 `sync/base-*` PR → 门禁全绿后自动合并 | `sync/fanout-cnb.mjs` + `scripts/tools/merge-sync-prs.mjs`（`.cnb.yml#base-sync-fanout`） | 每 30 分钟 cron；`api_trigger_base_sync`；本地兜底脚本 | 无需（纯同步 PR） |
+| 云端 · 资产分发 | 基座根级资产 → 每个子仓一条 `sync/base-*` PR → 门禁全绿后自动合并 | `sync/fanout-cnb.mjs` + `sync/merge-sync-prs.mjs`（`.cnb.yml#base-sync-fanout`） | 每 30 分钟 cron；`api_trigger_base_sync`；本地兜底脚本 | 无需（纯同步 PR） |
 | 云端 · 新仓纳管 | 扫描组织发现新 WorkLoom 仓 → 开扫描任务卡 + 纳管 PR（标签/分支保护/协议资产/门禁 stage） | `scripts/tools/fleet-scan.mjs --issue --provision` | 每日 09:00（Asia/Shanghai）cron | 审合并 PR |
 | 云端 · 代码基线 | `packages/**`、`apps/**` 等运行时代码升级 | `sync/base-sync.mjs push` / fanout `--mode full` | 人工/API 触发（默认不跑） | 人合并（协议 §1） |
 | 本地 · 文档副本 | 全景认知 + 开发协议落到 `~/.codex/workloom-context/`，供 WorkLoom 会话直接引用 | `~/.codex/skills/workloom-context/scripts/sync-context.sh` | Codex automation `workloom`（每日 09:00）+ 手动 | 无需 |
@@ -25,7 +25,7 @@
 ```bash
 # 基座仓内（CI 或本地干净克隆）
 node sync/fanout-cnb.mjs --mode required-only            # 只处理根级受控资产
-node scripts/tools/merge-sync-prs.mjs                    # 门禁全绿的纯同步 PR 自动合并
+node sync/merge-sync-prs.mjs                    # 门禁全绿的纯同步 PR 自动合并
 ```
 
 ### 1.2 幂等与“不打扰”规则
@@ -41,7 +41,7 @@ node scripts/tools/merge-sync-prs.mjs                    # 门禁全绿的纯同
 
 ### 1.3 自动合并的边界（协议 §9.4）
 
-`scripts/tools/merge-sync-prs.mjs` 只合并同时满足以下条件的 PR：
+`sync/merge-sync-prs.mjs` 只合并同时满足以下条件的 PR：
 
 1. 源分支是 `sync/base-*`（存量 `docs/context-*` 需显式传 `--legacy-doc-sync`，仅用于收口）；
 2. **改动文件全部**落在根级受控白名单：`WORKLOOM_PRODUCT_CONTEXT.md`、`AGENTS.md`、
@@ -118,7 +118,7 @@ Codex automation `workloom`（每日 09:00）按顺序跑前两条，**无变化
 node --test sync/fanout-rules.test.mjs                       # 白名单/合并判定/漂移判定单测
 node sync/fanout-cnb.mjs --dry-run --json                     # 只报告：谁漂移、谁在途、谁对齐
 node sync/fanout-cnb.mjs --only workloom-ai/workroom-tiger    # 只处理单仓
-node scripts/tools/merge-sync-prs.mjs --dry-run --json        # 只报告：哪些纯同步 PR 会被合并
+node sync/merge-sync-prs.mjs --dry-run --json        # 只报告：哪些纯同步 PR 会被合并
 ```
 
 CI 内可手动触发同一流水线（`BASE_SYNC_DRY_RUN=1` 只报告不落地）：

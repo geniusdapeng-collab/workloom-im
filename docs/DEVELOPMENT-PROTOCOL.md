@@ -137,7 +137,7 @@ CNB 每仓**最多 10 个标签**（实测：创建第 11 个返回 201 但不�
 | 任务卡创建/回执/关单 | **半自动** | `scripts/tools/task.mjs new|receipt|close`（一条命令，不再手写 JSON） |
 | 分支创建、提交、提 PR | 由 AI/人执行 | 用任务号命名分支即可 |
 | **合并（代码类 PR）** | **人来**（串行，一次一个） | 协议 §1 硬规则；动到 `packages/**`、`apps/**`、行业语义的 PR 永不自动合并 |
-| **合并（纯同步 PR）** | **自动** | 仅 `sync/base-*` 且改动全在根级受控资产白名单、全部门禁 success 时由 `scripts/tools/merge-sync-prs.mjs` 合并（协议 §9.4） |
+| **合并（纯同步 PR）** | **自动** | 仅 `sync/base-*` 且改动全在根级受控资产白名单、全部门禁 success 时由 `sync/merge-sync-prs.mjs` 合并（协议 §9.4） |
 | 高风险裁决、协议版本发布 | **人来** | 协议 §3/§8 |
 
 结论：门禁、扫描、纳管、**根级资产分发与纯同步 PR 合并**是自动的；
@@ -146,7 +146,7 @@ CNB 每仓**最多 10 个标签**（实测：创建第 11 个返回 201 但不�
 ### 9.4 纯同步 PR 的自动合并（2026-09-19 新增）
 
 - 自动合并的判定逻辑在 `sync/fanout-rules.mjs#autoMergeEligibility`（纯函数、有单测），执行器是
-  `scripts/tools/merge-sync-prs.mjs`；两者与 fanout（`sync/fanout-cnb.mjs`）共同构成"基座改一次、
+  `sync/merge-sync-prs.mjs`；两者与 fanout（`sync/fanout-cnb.mjs`）共同构成"基座改一次、
   舰队跟一次"的闭环，机制说明见 `docs/FLEET-AUTO-SYNC.md`。
 - 白名单只覆盖根级受控资产：`WORKLOOM_PRODUCT_CONTEXT.md`、`AGENTS.md`、
   `docs/DEVELOPMENT-PROTOCOL.md`、`.workloom-base-sync.json`、

@@ -395,7 +395,7 @@
 #
 # 职责：把 workloom-im 的根级受控资产（全景认知 / 开发协议 / AGENTS 受控区块 / 同步登记）
 # 的最新版本，开成每个子仓里的一条 `sync/base-*` 同步 PR；门禁全绿后由
-# `scripts/tools/merge-sync-prs.mjs` 自动合并**纯同步 PR**。
+# `sync/merge-sync-prs.mjs` 自动合并**纯同步 PR**。
 # 运行时代码升级（packages/**、apps/**）不在此通道内，仍走人工合并。
 #
 # 跨仓前提（一次性）：CNB「组织设置 → 仓库管控 → 允许定时任务跨仓操作」。
@@ -429,9 +429,9 @@
       script: |
         set -eu
         if [ "${BASE_SYNC_DRY_RUN:-0}" = "1" ]; then
-          node scripts/tools/merge-sync-prs.mjs --dry-run --json > /tmp/merge.json
+          node sync/merge-sync-prs.mjs --dry-run --json > /tmp/merge.json
         else
-          node scripts/tools/merge-sync-prs.mjs --json > /tmp/merge.json
+          node sync/merge-sync-prs.mjs --json > /tmp/merge.json
         fi
         cat /tmp/merge.json
 

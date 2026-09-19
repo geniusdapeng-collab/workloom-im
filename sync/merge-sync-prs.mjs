@@ -23,10 +23,10 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { autoMergeEligibility, LEGACY_SYNC_BRANCH_PREFIXES, SYNC_BRANCH_PREFIX } from "../../sync/fanout-rules.mjs";
-import { compareCommits, getPull, getPullCommitStatuses, listPulls, mergePull, requireToken } from "./cnb-api.mjs";
+import { autoMergeEligibility, LEGACY_SYNC_BRANCH_PREFIXES, SYNC_BRANCH_PREFIX } from "./fanout-rules.mjs";
+import { compareCommits, getPull, getPullCommitStatuses, listPulls, mergePull, requireToken } from "../scripts/tools/cnb-api.mjs";
 
-const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
+const REPO_ROOT = fileURLToPath(new URL("../", import.meta.url));
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 
 function arg(name, fallback = "") {
