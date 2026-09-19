@@ -4,8 +4,11 @@
  *
  * 边界（与 docs/DEVELOPMENT-PROTOCOL.md §1/§9 一致）：
  *   · fanout 只负责“把基座根级资产的新版本变成子仓里的一条同步 PR”；
- *   · 自动合并只覆盖 **纯同步 PR**：分支名 `sync/base-*`，且改动文件全部落在根级受控
- *     资产白名单内、全部门禁 success。任何动到行业代码/行业语义/平台工程的 PR 都不自动合并。
+ *   · `autoMergeEligibility` 覆盖**纯同步 PR**：分支名 `sync/base-*`，且改动文件全部落在
+ *     根级受控资产白名单内、全部门禁 success；
+ *   · `codeMergeEligibility` 覆盖**代码类 PR**（协议 §1「合并在机器」）：全部门禁 success、
+ *     平台可合并、非 WIP、无 `risk/review` / `risk/block` 标签、避开治理路径、且分支最近
+ *     提交已过冷却期。两条判定都是纯函数，`sync/merge-sync-prs.mjs` 按同一口径串行执行。
  */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -24,7 +27,7 @@ export function normalizeBranchRef(ref) {
 /**
  * 纯同步 PR 允许自动合并的路径白名单。
  * 这里是**根级受控资产 + 同步登记文件**，不含 packages/**、apps/** 等运行时代码：
- * 运行时代码的基座升级仍走“提 PR + 人合并”（协议 §1 硬规则）。
+ * 运行时代码的基座升级按协议 §1 由 AI 在门禁全绿后串行合并（见 codeMergeEligibility）。
  */
 export const AUTO_MERGE_ALLOWLIST = Object.freeze([
   "WORKLOOM_PRODUCT_CONTEXT.md",
@@ -84,6 +87,98 @@ export function autoMergeEligibility(
   }
   if (pull?.mergeable_state && pull.mergeable_state !== "mergeable") {
     reasons.push(`平台可合并状态=${pull.mergeable_state}`);
+  }
+  return { eligible: reasons.length === 0, reasons };
+}
+
+/**
+ * 代码类 PR 参与机器合并的分支车道（协议 §1：一任务一分支；行业 / 实验 / 维护车道）。
+ * 同步分支（sync/base-*、docs/context-*）不在此列表，由 autoMergeEligibility 处理。
+ */
+export const CODE_MERGE_BRANCH_PREFIXES = Object.freeze([
+  "task/",
+  "industry/",
+  "experiment/",
+  "chore/",
+  "docs/",
+  "fix/",
+  "audit/",
+  "rescue/",
+]);
+
+/**
+ * 治理与高风险路径：即使门禁全绿，也不由**无人值守扫描**合并（协议 §3 review/block 边界）。
+ * 仍可由 AI 会话在获得明确指令/放行后显式合并——这里限制的只是"没有任何会话在环"的那条通道。
+ */
+export const CODE_MERGE_SKIP_PATHS = Object.freeze([
+  "platform-ops/**",
+  "bundles/platform/**",
+  "protocol/**",
+  "sync/**",
+  "docs/DEVELOPMENT-PROTOCOL.md",
+  "AGENTS.md",
+  "AGENTS.repo.md",
+  ".cnb.yml",
+  ".github/**",
+  "**/migrations/**",
+]);
+
+/**
+ * 冷却期：分支最近一次提交距今不足该时长的 PR 不参与扫描合并。
+ * 作用：避免把"会话仍在写、只是当下门禁恰好全绿"的 PR 提前合掉；配合 PR 的 WIP 标记使用。
+ */
+export const CODE_MERGE_MIN_HEAD_AGE_MS = 10 * 60 * 1000;
+
+/**
+ * 判定一条代码类 PR 是否可参与机器合并（协议 §1「合并在机器、串行执行、人保留叫停权」）。
+ * @param {{pull: object, files?: string[], statuses?: Array<{state?: string, status?: string}>, headAgeMs?: number|null}} input
+ * @returns {{eligible: boolean, reasons: string[]}}
+ */
+export function codeMergeEligibility(
+  { pull, files = [], statuses = [], headAgeMs = null },
+  {
+    branchPrefixes = CODE_MERGE_BRANCH_PREFIXES,
+    skipPaths = CODE_MERGE_SKIP_PATHS,
+    allowPaths = [],
+    minHeadAgeMs = CODE_MERGE_MIN_HEAD_AGE_MS,
+  } = {},
+) {
+  const reasons = [];
+  const headRef = normalizeBranchRef(pull?.head?.ref);
+  const state = pull?.state ?? "open";
+  const labels = (pull?.labels ?? [])
+    .map((label) => (typeof label === "string" ? label : label?.name))
+    .filter(Boolean);
+
+  if (state !== "open") reasons.push(`PR 状态为 ${state}`);
+  if (labels.includes("risk/block")) reasons.push("带 risk/block 标签（红线，永不合并）");
+  if (labels.includes("risk/review")) reasons.push("带 risk/review 标签（需人审放行后由会话显式合并）");
+  if (pull?.is_wip) reasons.push("PR 处于 WIP / 草稿状态");
+  if (!branchPrefixes.some((prefix) => headRef.startsWith(prefix))) {
+    reasons.push(`分支 ${headRef || "(未知)"} 不在代码合并车道（${branchPrefixes.join(" / ")}）`);
+  }
+  if (!files.length) reasons.push("没有可核对的文件清单");
+  for (const file of files) {
+    const skipped = skipPaths.some((pattern) => matchesGlob(pattern, file));
+    const allowed = allowPaths.some((pattern) => matchesGlob(pattern, file));
+    if (skipped && !allowed) {
+      reasons.push(`改动落在治理/高风险路径：${file}`);
+    }
+  }
+  if (!statuses.length) reasons.push("没有状态检查结果（无门禁结果不得自动合并）");
+  for (const status of statuses) {
+    const value = status?.state ?? status?.status ?? "";
+    if (value !== "success") reasons.push(`门禁未通过：${status?.context ?? status?.name ?? "(未命名)"}=${value || "(空)"}`);
+  }
+  if (pull?.mergeable_state && pull.mergeable_state !== "mergeable") {
+    reasons.push(`平台可合并状态=${pull.mergeable_state}`);
+  }
+  if (minHeadAgeMs > 0) {
+    if (!Number.isFinite(headAgeMs)) {
+      reasons.push("无法确认分支最近提交时间");
+    } else if (headAgeMs < minHeadAgeMs) {
+      reasons.push(`分支最近提交距今 ${Math.round(headAgeMs / 60000)} 分钟（冷却期 ${Math.round(minHeadAgeMs / 60000)} 分钟）`);
+    }
   }
   return { eligible: reasons.length === 0, reasons };
 }

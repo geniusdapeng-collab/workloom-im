@@ -256,7 +256,7 @@ WorkData 事件以五元结构记录业务事实（`packages/shared/src/event-sc
 - **UI 与三端基座**：`@workloom/ui` 与三端客户端基座按同一稳定版本经升级 PR 分波下发；行业扩展只允许落在 `apps/*/src/{extensions,projections,config/industry,theme/industry}/**` 等显式排除路径。
 - **污染守卫**：路径黑名单含 `^bundles/`、`^demo/`、`^docs/demo`、`^scripts/seed`、`^scripts/demo` 与 `hotel-baseline`、`ai-pm`、`yunqi`、`ecommerce`、`panda-cineforge`、`platform-ops` 等子串；单次常规同步上限 200 文件，新行业接入放宽至 450，超限即中止并要求人工核对。
 - **平台工程不出仓**：Andromeda 的 `extraExclude` 显式排除 `platform-ops/**`，与 `safety/` 保护清单、载荷身份策略（B-01.PB-1）形成三重护栏。
-- **实际同步基线**：八个子仓的 `.workloom-base-sync.json` 记录 `lastSyncedBaseSha=4f2296f…`（2026-09-16，基座 `PR #16` 合并点）；`requiredRootAssetsSha256` 随“基座 fanout → 子仓 `sync/base-*` PR → 门禁全绿自动合并”的通道持续收敛（2026-09-19 起，机制见 `docs/FLEET-AUTO-SYNC.md`，运行时代码升级仍由人合并）。
+- **实际同步基线**：八个子仓的 `.workloom-base-sync.json` 记录 `lastSyncedBaseSha=4f2296f…`（2026-09-16，基座 `PR #16` 合并点）；`requiredRootAssetsSha256` 随“基座 fanout → 子仓 `sync/base-*` PR → 门禁全绿自动合并”的通道持续收敛（2026-09-19 起，机制见 `docs/FLEET-AUTO-SYNC.md`；运行时代码按协议 §1/§9.5 走代码车道——门禁全绿 + 冷却期 + 串行，同样由 AI 合并，人保留叫停权）。
 
 后续跨仓开发默认顺序：先判断能力属于公共基座、平台中枢还是行业包；公共机制优先在 `workloom-im` 实现并通过同步下发；行业语义仅在对应 bundle/子仓实现；平台运营工程仅在 Andromeda；同步后逐仓运行类型检查、测试、围栏/评测和打包门禁，不能只看文件复制成功。
 
@@ -448,7 +448,7 @@ WorkData 事件以五元结构记录业务事实（`packages/shared/src/event-sc
 | 任务卡建卡 / 回执 / 关单 | `scripts/tools/task.mjs new|list|receipt` |
 | 实验路径护栏 | 每日 cron `scripts/tools/experiment-guard.mjs --check` |
 | **基座资产分发**（根级受控资产 → 各仓 `sync/base-*` PR → 合并） | 30 分钟 cron + `api_trigger_base_sync`：`sync/fanout-cnb.mjs` + `sync/merge-sync-prs.mjs`（仅纯同步 PR 自动合并，白名单见协议 §9.4） |
-| **代码类 PR 合并 / 高风险裁决 / 协议发布** | **人**（运行时代码与行业语义永不由机器人合并） |
+| **代码类 PR 合并 / 高风险裁决 / 协议发布** | **AI 执行合并**（门禁全绿 + 串行；`risk/review` 放行后合并，`risk/block` 永不合并）；**人**保留高风险裁决与随时叫停 / 回滚权 |
 
 ### 14.3 工具与服务
 
