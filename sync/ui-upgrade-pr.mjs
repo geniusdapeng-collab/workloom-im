@@ -88,11 +88,11 @@ function parseArgs(argv) {
 export function sanitizedSubprocessEnvironment(ambient = process.env, explicit = {}) {
   const subprocessEnvironment = { ...ambient };
   // 跨仓写 token 只留在升级编排器内存中。pnpm/npm/verifier 与普通 git 子进程
-  // 不得继承它；只有显式传入 githubGitEnvironment(token) 的 GitHub 网络操作
+  // 不得继承它；只有显式传入 canonicalGitEnvironment(token) 的 canonical 网络操作
   // 才获得一次性 extraheader，PR API 则直接使用内存中的 token。
   for (const key of Object.keys(subprocessEnvironment)) {
     if (
-      /^(?:SYNC_TOKEN|GH_TOKEN|GITHUB_TOKEN|NPM_TOKEN|NODE_AUTH_TOKEN|AUTHORIZATION|HTTP_AUTHORIZATION)$/iu.test(key)
+      /^(?:SYNC_TOKEN|CNB_TOKEN|GH_TOKEN|GITHUB_TOKEN|NPM_TOKEN|NODE_AUTH_TOKEN|AUTHORIZATION|HTTP_AUTHORIZATION)$/iu.test(key)
       || /^NPM_CONFIG_/iu.test(key)
       || /^GIT_CONFIG(?:_|$)/iu.test(key)
       || /^(?:GIT|SSH)_ASKPASS$/iu.test(key)
@@ -100,7 +100,7 @@ export function sanitizedSubprocessEnvironment(ambient = process.env, explicit =
     ) delete subprocessEnvironment[key];
   }
   for (const [key, value] of Object.entries(explicit)) {
-    if (/^(?:SYNC_TOKEN|GH_TOKEN|GITHUB_TOKEN|NPM_TOKEN|NODE_AUTH_TOKEN|AUTHORIZATION|HTTP_AUTHORIZATION)$/iu.test(key)
+    if (/^(?:SYNC_TOKEN|CNB_TOKEN|GH_TOKEN|GITHUB_TOKEN|NPM_TOKEN|NODE_AUTH_TOKEN|AUTHORIZATION|HTTP_AUTHORIZATION)$/iu.test(key)
       || /^NPM_CONFIG_/iu.test(key)) continue;
     subprocessEnvironment[key] = value;
   }
@@ -210,20 +210,20 @@ export function stageExactUpgradeChanges({ repoRoot, allowedPaths }) {
   return changed;
 }
 
-function githubGitEnvironment(token) {
+function canonicalGitEnvironment(token) {
   const environment = { GIT_TERMINAL_PROMPT: "0" };
   if (!token) return environment;
   // 凭据只经子进程环境传递，绝不写入 remote URL、日志或仓库配置。
   return {
     ...environment,
     GIT_CONFIG_COUNT: "1",
-    GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
-    GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`,
+    GIT_CONFIG_KEY_0: "http.https://cnb.cool/.extraheader",
+    GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${Buffer.from(`cnb:${token}`).toString("base64")}`,
   };
 }
 
 function repositoryUrl(repo) {
-  return `https://github.com/${repo}.git`;
+  return `https://cnb.cool/${repo}.git`;
 }
 
 const READ_ONLY_CLONE_ATTEMPTS = 3;
@@ -651,7 +651,7 @@ export function cloneChildReadOnly(child, attemptRoot, token = "", options = {})
           checkout,
         ],
         cwd: baseDir,
-        env: githubGitEnvironment(token),
+        env: canonicalGitEnvironment(token),
       });
       if (!existsSync(join(checkout, ".git"))) {
         throw new Error("git clone 未生成可验证的工作树");
@@ -883,25 +883,42 @@ export function renderConsumerWorkflow(pathPrefix = "") {
 
 async function createPullRequest({ repo, token, branch, version }) {
   assertIndependentUpgradeBranch(branch);
-  const response = await fetch(`https://api.github.com/repos/${repo}/pulls`, {
+  const title = `chore(base): 升级 WorkLoom 三端客户端基座至 ${version}`;
+  const payload = {
+    title,
+    head: branch,
+    base: "main",
+    body: buildUpgradePullRequestBody(version),
+  };
+  // 同 head/base 的 PR 已存在时保持幂等：先查 open PR，避免把「已在验证」误判为失败。
+  const openListUrl = `https://api.cnb.cool/${repo}/-/pulls?state=open&base_ref=main&page_size=100`;
+  try {
+    const listResponse = await fetch(openListUrl, {
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+    });
+    if (listResponse.ok) {
+      const listed = await listResponse.json();
+      const items = Array.isArray(listed) ? listed : (listed?.data ?? []);
+      const existing = items.find((item) => (item?.head?.ref ?? item?.sourceBranch) === branch);
+      if (existing) return { html_url: "已存在", number: existing.number ?? existing.id };
+    }
+  } catch {
+    // 列表查询失败不阻断创建路径；后续创建会给出更明确的错误。
+  }
+  const response = await fetch(`https://api.cnb.cool/${repo}/-/pulls`, {
     method: "POST",
     headers: {
-      Accept: "application/vnd.github+json",
+      Accept: "application/json",
       Authorization: `Bearer ${token}`,
-      "X-GitHub-Api-Version": "2022-11-28",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      title: `chore(base): 升级 WorkLoom 三端客户端基座至 ${version}`,
-      head: branch,
-      base: "main",
-      body: buildUpgradePullRequestBody(version),
-    }),
+    body: JSON.stringify(payload),
   });
   if (response.ok) return response.json();
   const detail = await response.text();
-  // 422 通常代表相同 head/base 的 PR 已存在；保持幂等并交给现有 PR 继续验证。
-  if (response.status === 422 && detail.includes("already exists")) return { html_url: "已存在" };
+  // 422/409 通常代表相同 head/base 的 PR 已存在；保持幂等并交给现有 PR 继续验证。
+  if ((response.status === 422 || response.status === 409)
+    && /already exists|已存在/iu.test(detail)) return { html_url: "已存在" };
   throw new Error(`创建 PR 失败 ${response.status}: ${detail.slice(0, 500)}`);
 }
 
@@ -1007,7 +1024,7 @@ function gitCommandSucceeds(root, args) {
 export function verifyCanonicalReleaseTag({
   root = baseDir,
   sourceRef,
-  expectedOriginUrl = `https://github.com/${CANONICAL_BASE_REPOSITORY}.git`,
+  expectedOriginUrl = `https://cnb.cool/${CANONICAL_BASE_REPOSITORY}.git`,
 }) {
   const repositoryRoot = resolve(root);
   if (!/^refs\/tags\/ui-v\d+\.\d+\.\d+$/u.test(sourceRef ?? "")) {
@@ -1024,9 +1041,10 @@ export function verifyCanonicalReleaseTag({
   if (actualIdentity !== expectedIdentity) {
     throw new Error(`origin 不是 canonical 基座远端；期望 ${expectedIdentity}，实际 ${actualIdentity}`);
   }
-  if (expectedIdentity === `github.com/${CANONICAL_BASE_REPOSITORY}`
-    && !/^https:\/\/github\.com\//iu.test(originUrl)) {
-    throw new Error("canonical GitHub origin 必须使用无内嵌凭据的 HTTPS 公共只读地址");
+  const expectedHost = expectedIdentity.split("/")[0];
+  if (["github.com", "cnb.cool"].includes(expectedHost)
+    && !new RegExp(`^https://${expectedHost.replaceAll(".", "\\.")}/`, "iu").test(originUrl)) {
+    throw new Error(`canonical ${expectedHost} origin 必须使用无内嵌凭据的 HTTPS 公共只读地址`);
   }
 
   const namespace = `refs/workloom-release-verification/${process.pid}-${randomUUID()}`;
@@ -1192,7 +1210,7 @@ export function packTaggedUiArtifact({
   root = baseDir,
   manifest,
   version,
-  expectedOriginUrl = `https://github.com/${CANONICAL_BASE_REPOSITORY}.git`,
+  expectedOriginUrl = `https://cnb.cool/${CANONICAL_BASE_REPOSITORY}.git`,
   readNpmVersion = () => run("npm", ["--version"], resolve(root)),
   readPnpmVersion = () => run("pnpm", ["--version"], resolve(root)),
   prepack = ({ cwd }) => run("pnpm", ["run", "prepack"], cwd),
@@ -1428,9 +1446,9 @@ async function upgradeChild(child, manifest, version, token, dryRun, foundationS
     if (!stagedPaths.length) return { repo: child.repo, status: "already-current", touched, foundationTouched };
     if (dryRun) return { repo: child.repo, status: "planned", touched, foundationTouched };
     run("git", ["-c", "user.name=WorkLoom Base Release", "-c", "user.email=base-release@workloom.im", "commit", "-m", `chore(base): 升级三端客户端基座至 ${version}`], checkout);
-    const remoteHead = run("git", ["ls-remote", "--heads", "origin", `refs/heads/${branch}`], checkout, githubGitEnvironment(token)).split(/\s+/)[0] || "";
+    const remoteHead = run("git", ["ls-remote", "--heads", "origin", `refs/heads/${branch}`], checkout, canonicalGitEnvironment(token)).split(/\s+/)[0] || "";
     const lease = remoteHead ? `--force-with-lease=refs/heads/${branch}:${remoteHead}` : "--force-with-lease";
-    run("git", ["push", lease, "origin", `HEAD:refs/heads/${branch}`], checkout, githubGitEnvironment(token));
+    run("git", ["push", lease, "origin", `HEAD:refs/heads/${branch}`], checkout, canonicalGitEnvironment(token));
     const pull = await createPullRequest({ repo: child.repo, token, branch, version });
     return { repo: child.repo, status: "pr-opened", url: pull.html_url, touched, foundationTouched };
   } finally {
@@ -1481,7 +1499,7 @@ async function main() {
   const children = childManifest.children;
   const waveOrder = childManifest.uiRolloutWaveOrder;
   validateChildInventory(children, waveOrder);
-  const token = process.env.SYNC_TOKEN || process.env.GH_TOKEN || "";
+  const token = process.env.SYNC_TOKEN || process.env.CNB_TOKEN || process.env.GH_TOKEN || "";
 
   const preflight = preflightChildren({ children, waveOrder, manifest, version, targetChannel: target.channel, token });
   if (options.mode === "preflight") {
@@ -1495,7 +1513,7 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  if (!options.dryRun && !token) throw new Error("缺少 SYNC_TOKEN/GH_TOKEN；拒绝创建无法审计的半成品分支");
+  if (!options.dryRun && !token) throw new Error("缺少 SYNC_TOKEN/CNB_TOKEN 或 GH_TOKEN；拒绝创建无法审计的半成品分支");
   const foundationSnapshot = loadStableFoundationSnapshot(baseDir, manifest, version);
 
   const batch = selectRolloutBatch({

@@ -708,7 +708,7 @@ process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", f
           targets.push(target);
           assert.deepEqual(args.slice(0, 3), ["-c", "http.version=HTTP/1.1", "clone"]);
           assert.deepEqual(args.slice(3, 6), ["--depth", "1", "--no-tags"]);
-          assert.equal(args.at(-2), "https://github.com/org/example.git");
+          assert.equal(args.at(-2), "https://cnb.cool/org/example.git");
           assert.equal(args.at(-1), target);
           if (attempt < 3) {
             mkdirSync(target, { recursive: true });
@@ -744,7 +744,7 @@ process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", f
         sleep() {},
         cloneRunner({ target, args }) {
           attempts += 1;
-          assert.equal(args.at(-2), "https://github.com/org/missing.git");
+          assert.equal(args.at(-2), "https://cnb.cool/org/missing.git");
           assert.doesNotMatch(args.join(" "), /x-access-token|ghp_/u, "认证不得进入 URL 或命令参数");
           mkdirSync(target, { recursive: true });
           writeFileSync(join(target, "partial"), "incomplete\n");
@@ -752,7 +752,7 @@ process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", f
           error.stderr = Buffer.from([
             "error: RPC failed; HTTP/2 stream closed; early EOF",
             `Authorization: Basic ${encodedHeader}`,
-            ["fatal: unable to access '", "https://", `x-access-token:${token}`, "@github.com/org/missing.git'"].join(""),
+            ["fatal: unable to access '", "https://", `cnb:${token}`, "@cnb.cool/org/missing.git'"].join(""),
           ].join("\n"));
           throw error;
         },
@@ -768,7 +768,7 @@ process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", f
     assert.equal(attempts, 3);
     assert.doesNotMatch(caught.message, new RegExp(token, "u"));
     assert.doesNotMatch(caught.message, new RegExp(encodedHeader, "u"));
-    assert.doesNotMatch(caught.message, /https:\/\/x-access-token:/u);
+    assert.doesNotMatch(caught.message, /https:\/\/cnb:/u);
     assert.match(caught.message, /\[REDACTED\]/u);
     assert.deepEqual(readdirSync(root), [], "永久失败不得留下半克隆目录");
     rmSync(root, { recursive: true, force: true });
@@ -1257,7 +1257,7 @@ process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", f
     assert.match(implementation, /installUiGovernance\(\{ repo: workdir, repositoryRoot: checkout, sourceRoot: baseDir \}\)/u);
     assert.match(implementation, /verify-client-foundation-consumer\.mjs/u);
     assert.match(implementation, /ADOPTION_SCRIPTS/u);
-    assert.match(implementation, /SYNC_TOKEN\|GH_TOKEN\|GITHUB_TOKEN\|NPM_TOKEN\|NODE_AUTH_TOKEN/u);
+    assert.match(implementation, /SYNC_TOKEN\|CNB_TOKEN\|GH_TOKEN\|GITHUB_TOKEN\|NPM_TOKEN\|NODE_AUTH_TOKEN/u);
     assert.match(implementation, /resolveUiReleaseArtifact/u);
     assert.match(implementation, /readCanonicalGithubReleaseArtifact/u);
     assert.match(implementation, /assertReleaseArtifactIntegrity/u);
