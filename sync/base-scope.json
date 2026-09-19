@@ -234,11 +234,11 @@
       "reason": "H5 正式鉴权负向测试使用明确标记为 production-test 的固定夹具，不是运行凭据。"
     },
     "apps/server/src/service/onboarding-continuity.pg.test.ts": {
-      "sha256": "b3a750faa5e89890143dce8d72f1d8140d463d91a857e56faa1f024833c07834",
+      "sha256": "bdb9d9abdf7c309fe28ee92c093e82e4f27bfbd8ffa2564edd971a74c7119026",
       "findings": [
         {
           "rule": "literal-sensitive-assignment",
-          "line": 117
+          "line": 118
         }
       ],
       "reason": "落地向导秘密不落库测试使用 sk-never-store 负向哨兵，验证该字段会被剔除。"

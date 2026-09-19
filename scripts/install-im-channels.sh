@@ -4,8 +4,8 @@
 set -euo pipefail
 
 PKG="@xmanrui/dsh-im"
-VERSION="0.2.2"
-INTEGRITY="sha512-o06B3WseVZkkKb6SWcRIzbvlMkoUtsCKmCPDz8okGDtVTdQvPWwOk6XPBrnBKD2MmzThkmA+UNWj+a6cjwe6mQ=="
+VERSION="4.21.2"
+INTEGRITY="sha512-rHwHzbj8eYrYl10NHPdGRLoKr93wkdf/PXhkDSMhx3AYHutDqaDL8s5pd9YueKmu+mLNeNL2o88Huzy5OyVDFw=="
 PROFILE="${DSH_PROFILE:-web}"
 
 echo "==> dsh-im 安装（${PKG}@${VERSION}，profile=${PROFILE}）"

@@ -1,4 +1,4 @@
-import { t as INSTALL_ANCHOR } from "./profile-boot-BTzzdrGY.js";
+import { t as INSTALL_ANCHOR } from "./profile-boot-Dk-7KqJc.js";
 import { existsSync } from "node:fs";
 import { DEFAULT_PROFILE_BUNDLES, PROFILE_TEMPLATES, initProfile, readProfileManifest, resolveBundleDir, resolveProfileDir, writeProfileManifest } from "@deepseek-ai/dsh-app-boot";
 import { join, resolve } from "node:path";

@@ -24,43 +24,43 @@
   "inputs": [
     {
       "path": "apps/server/package.json",
-      "sha256": "065581b93a87a839ddd21606244cf5aad8807fba7b662f5b981d33367e825b2d"
+      "sha256": "1cdbc0ad2980975fd2efe3bf59c4028b5950ec4dbb6737c3aeee02a73785231e"
     },
     {
       "path": "apps/web/package.json",
-      "sha256": "cd8fa3afc84a278b0d163e9d1d6a8824811050a97eb78634a6a83f62aa6bc695"
+      "sha256": "be14a57489c5687f6fb209975bf6f6d0041a214f670bf638bf7e37d631a232e0"
     },
     {
       "path": "package.json",
-      "sha256": "cdafb4da0a063372547176fe4cb6ebc6e4611421cf9f8c1fb557a1b888aba55a"
+      "sha256": "9b1b3803cc6320836f40b40f6cd239c62bd7299f02df544fc80941fb47787753"
     },
     {
       "path": "packages/base/package.json",
-      "sha256": "3d348f20000b6d2e35e82d8b0c59d6f4303e5dd75d9165d941e2adabe70763b4"
+      "sha256": "14f84384bddf2e6833b329f441aa887ff638498fee610f30ce7537a0d547c167"
     },
     {
       "path": "packages/db/package.json",
-      "sha256": "9744ab0544f7f07a041177849b7222e12cd1dba1671b3d8ada44d7a492cbfd3e"
+      "sha256": "fea6bfee0ea381b1341fdfff6b31cb4b4a3f2b48329db2af610dfaa185e7d9c2"
     },
     {
       "path": "packages/industry-contract/package.json",
-      "sha256": "c807e33ef19ce5b727686c705662108c9fd5ce84986c7f2fbfe669bfad7ae482"
+      "sha256": "02b574622c2cd26aa5f1fff3a94c4d45fe4900240943ec38f0c94de6a9c699d5"
     },
     {
       "path": "packages/runtime/package.json",
-      "sha256": "28351633fd63541b4a26f3cf45a88046893bca0e5bd85b90168c82e257d9640b"
+      "sha256": "9baceab0f88d9fd75de5690e2474dcbe1c9a6b56af74e80794a8ac2daebd349a"
     },
     {
       "path": "packages/shared/package.json",
-      "sha256": "be4781eb24c355a1dc1ec10dabb92d161cde5500c472af7b85e25042256d07ec"
+      "sha256": "c9f5275a1929d3c576e5f484c15303c90824ad0e42ea3bfdb3432053c9ba668b"
     },
     {
       "path": "packages/ui/package.json",
-      "sha256": "839508d5b038912a39f39354665efefc0b42e686b90ba543f36e97fd6091479c"
+      "sha256": "88e2321a6283614fb6b73953747d30b54ac758872a62bcfa631b71321cfd8e27"
     },
     {
       "path": "pnpm-lock.yaml",
-      "sha256": "697cc54c6e18367bccbdcdef33c433a11382e20d5d6e4f2571b95af411b7c928"
+      "sha256": "0e918e517b8c7338cd254bfadc24251542b4bd800b2db5e989c1cd4da91e853a"
     },
     {
       "path": "product.manifest.json",
@@ -83,6 +83,6 @@
       "sha256": "38d5eba21ae509aec4de97000bda055ca632f0216473e1d1000eeba6b5e0a475"
     }
   ],
-  "manifestSha256": "bae08a229cce26438b95966696c66e9e7e285b3dcf6885dc475ecb490faebefb",
-  "packageLockSha256": "97f96e83cb4a3b8e034e5322fcca40ac753c68195206032024afd97f75197fbc"
+  "manifestSha256": "28a4eb3f27de3e7e5a70d9942355b46525aaa13e5f856fa7b3817240f0a3ce25",
+  "packageLockSha256": "5f3e239b219513205fe71a201ebbcbf676c3c0d79cd832df2ff5300c3b9ae47b"
 }
