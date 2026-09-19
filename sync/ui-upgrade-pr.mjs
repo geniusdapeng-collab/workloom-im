@@ -899,7 +899,12 @@ async function createPullRequest({ repo, token, branch, version }) {
     if (listResponse.ok) {
       const listed = await listResponse.json();
       const items = Array.isArray(listed) ? listed : (listed?.data ?? []);
-      const existing = items.find((item) => (item?.head?.ref ?? item?.sourceBranch) === branch);
+      // CNB 返回的 head.ref 是完整 refs/heads/<branch>，必须归一后再比较，
+      // 否则幂等判定失效、重复创建 PR 会撞 409。
+      const normalizeRef = (value) => String(value ?? "").replace(/^refs\/heads\//u, "");
+      const existing = items.find((item) => normalizeRef(
+        item?.head?.ref ?? item?.sourceBranch ?? item?.source_branch ?? item?.head_ref,
+      ) === normalizeRef(branch));
       if (existing) return { html_url: "已存在", number: existing.number ?? existing.id };
     }
   } catch {
@@ -918,7 +923,10 @@ async function createPullRequest({ repo, token, branch, version }) {
   const detail = await response.text();
   // 422/409 通常代表相同 head/base 的 PR 已存在；保持幂等并交给现有 PR 继续验证。
   if ((response.status === 422 || response.status === 409)
-    && /already exists|已存在/iu.test(detail)) return { html_url: "已存在" };
+    && /already exists|already have open pull|已存在/iu.test(detail)) {
+    const number = /"number":(\d+)/u.exec(detail)?.[1];
+    return { html_url: "已存在", number: number ? Number(number) : undefined };
+  }
   throw new Error(`创建 PR 失败 ${response.status}: ${detail.slice(0, 500)}`);
 }
 
