@@ -883,7 +883,7 @@ export function renderConsumerWorkflow(pathPrefix = "") {
 
 async function createPullRequest({ repo, token, branch, version }) {
   assertIndependentUpgradeBranch(branch);
-  const title = `chore(base): 升级 WorkLoom 三端客户端基座至 ${version}`;
+  const title = `sync(ui): 三端客户端基座升级至 ${version}`;
   const payload = {
     title,
     head: branch,
@@ -1454,7 +1454,9 @@ async function upgradeChild(child, manifest, version, token, dryRun, foundationS
     const stagedPaths = stageExactUpgradeChanges({ repoRoot: checkout, allowedPaths: allowedUpgradePaths });
     if (!stagedPaths.length) return { repo: child.repo, status: "already-current", touched, foundationTouched };
     if (dryRun) return { repo: child.repo, status: "planned", touched, foundationTouched };
-    run("git", ["-c", "user.name=WorkLoom Base Release", "-c", "user.email=base-release@workloom.im", "commit", "-m", `chore(base): 升级三端客户端基座至 ${version}`], checkout);
+    // 提交标题走 `sync(...)`：协议 §5 把"同步器产出"登记为豁免项（无需任务号）；
+    // `chore(base)` 不在豁免清单里，会在下级仓的协议门禁被拒（W1 实测）。
+    run("git", ["-c", "user.name=WorkLoom Base Release", "-c", "user.email=base-release@workloom.im", "commit", "-m", `sync(ui): 三端客户端基座升级至 ${version}`], checkout);
     const remoteHead = run("git", ["ls-remote", "--heads", "origin", `refs/heads/${branch}`], checkout, canonicalGitEnvironment(token)).split(/\s+/)[0] || "";
     const lease = remoteHead ? `--force-with-lease=refs/heads/${branch}:${remoteHead}` : "--force-with-lease";
     run("git", ["push", lease, "origin", `HEAD:refs/heads/${branch}`], checkout, canonicalGitEnvironment(token));
