@@ -105,6 +105,23 @@ pnpm suite && pnpm suite:<domain> && pnpm db:verify-chain && pnpm typecheck && p
 - 每仓至少两轮：第一轮找问题（本轮允许条件通过），修复后再跑一轮**只验证修复项 + 回归**；
 - 舰队级：每周 2 仓，5 周跑完 10 仓；之后按发布里程碑做增量复验。
 
+## 4.1 本机就绪度快照（2026-09-19 核，供 Step 2 排期）
+
+| 仓库 | 本机是否存在演示库（库名 / 工作区） | `.env` | 备注 |
+|---|---|---|---|
+| WorkLoom-growth | ✅ `workloom_growth`：`ws-yunqi`(geo-growth) / `ws-geo` / `ws-video` | 已有（`work/growth` 副本） | 试点已跑通；三端 3000/3001/3002 + 8787 |
+| workloom-im（基座） | ⚠️ `workloom_base` 目前只有 `ws-yunqi`(hotel)；基座自身演示应为 `ai-pm-demo` | 需 `pnpm setup`/`.env` | 执行前先种 ai-pm 演示工作区，或改 profile 指向实际工作区 |
+| workloom-hotel | ✅ `wl_workloomhote`：`ws-yunqi`(hotel) + `ws-aipm-demo` | 需补 | — |
+| workloom（获客主仓） | ✅ `wl_workloom`：`ws-geo`(geo-growth) 等 | 需补 | 与 growth 同产品两实例，注意别互踩端口/库 |
+| hyperreality-system | ✅ `wl_hyperreality`：`ws-video`(ai-video) | 需补 | 渲染/发布链路注意 mock 标注 |
+| workroom-andromeda | ✅ `wl_workroomandr`：`ws-platform-demo`(platform) | 需补 | 平台账号域 6 岗 + 密钥保管员红线 |
+| panda-cineforge | ✅ `wl_pandacinefo(r)`：`ws-panda`(ecommerce) | 需补 | 82 岗，矩阵跑批最久 |
+| workroom-eagle | ✅ `workloom_eagle`：`ws-eagle`(consulting) | 需补 | 另有历史评测工作区（`ws-eval-*`）可用于考试院回归 |
+| workroom-fox | ⚠️ 未见独立库（复用 hotel 演示） | 需补 | 3D 舞台需额外录屏/FPS 证据 |
+| workroom-tiger | ⚠️ Python 引擎，库结构不同 | 需补 | **只验模拟/纸面**，不得接真实券商 |
+
+> `.env` 一律不入库；用各仓 `pnpm setup` / `pnpm doctor` 生成，秘密只走本机环境或受管秘密存储。
+
 ## 5. 完成定义（Definition of Done）
 
 1. `outputs/acceptance/REPORT.md` 四段硬性内容齐全，结论明确（通过/条件通过/不通过）；

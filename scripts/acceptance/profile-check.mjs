@@ -16,7 +16,8 @@ const { isDefault, warnings, profile } = loadProfile(REPO_ROOT, args.profilePath
 const errors = [];
 if (!existsSync(path) && !args.profilePath) errors.push(`缺少 ${path}（可复制 docs/acceptance/profile.example.json 起步）`);
 if (!profile.primaryBundle) errors.push("缺少 primaryBundle（组合主包目录名）");
-if (!profile.workspaceId) errors.push("缺少 workspaceId（演示工作区 id）");
+// 工作区二选一：显式 id，或 identity.workspaceSlug（执行器会连库解析 id）
+if (!profile.workspaceId && !profile.identity?.workspaceSlug) errors.push("缺少 workspaceId，也没有 identity.workspaceSlug（执行器需要其中一个才能定位演示工作区）");
 if (!profile.identity?.human) errors.push("缺少 identity.human（演示成员号）");
 if (!Array.isArray(profile.surfaces?.pcRoutes) || profile.surfaces.pcRoutes.length === 0) errors.push("surfaces.pcRoutes 不能为空");
 if (!Array.isArray(profile.journeys) || profile.journeys.length === 0) errors.push("journeys 不能为空（可用内置 builtin:* 清单）");
