@@ -162,9 +162,16 @@ try {
       const re = new RegExp(`^${key}=.*$`, "m");
       return re.test(source) ? source.replace(re, `${key}=${value}`) : `${source}\n${key}=${value}`;
     };
-    text = setKey(text, "DATABASE_URL", url);
-    text = setKey(text, "DATABASE_APP_URL", url);
-    text = setKey(text, "DATABASE_GATEWAY_URL", url);
+    /**
+     * 只换库名、不动角色：`.env.example` 里 DATABASE_APP_URL / DATABASE_GATEWAY_URL 用的是
+     * workloom_app / workloom_gateway 两个**非超级用户**（RLS 生效的前提）。早期版本把三条
+     * 串都换成超级用户地址 → RLS 被绕过 → 套件 P-02（池卫生 fail-closed）与 R-12（跨工作区隔离）
+     * 假失败（基座首轮实测：期望 0 行，实际 6 / 1857 行）。
+     */
+    for (const key of ["DATABASE_URL", "DATABASE_APP_URL", "DATABASE_GATEWAY_URL"]) {
+      const m = text.match(new RegExp(`^${key}=postgres://([^/]+)/([^\\s]+)$`, "m"));
+      text = m ? setKey(text, key, `postgres://${m[1]}/${dbName}`) : setKey(text, key, url);
+    }
     text = setKey(text, "LLM_PROVIDER", "mock");
     text = setKey(text, "IM_DRIVER", "mock");
     for (const key of ["JWT_SECRET", "PII_SALT", "APP_DB_PASSWORD", "GATEWAY_DB_PASSWORD"]) {
