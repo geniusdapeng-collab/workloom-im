@@ -133,6 +133,13 @@ try {
       const m = text.match(new RegExp(`^${key}=(.*)$`, "m"));
       if (!m || m[1].trim().length < 32) { text = setKey(text, key, rand()); patched.push(key); }
     }
+    if (DB) {
+      // 只换库名，角色（workloom_app / workloom_gateway）必须保留——换成超级用户会让 RLS 失效
+      for (const key of ["DATABASE_URL", "DATABASE_APP_URL", "DATABASE_GATEWAY_URL"]) {
+        const m = text.match(new RegExp(`^${key}=postgres://([^/]+)/([^\\s]+)$`, "m"));
+        if (m && m[2] !== DB) { text = setKey(text, key, `postgres://${m[1]}/${DB}`); patched.push(`${key}#db`); }
+      }
+    }
     const dbUrlMissing = !/^DATABASE_URL=.+/m.test(text);
     if (dbUrlMissing) {
       const dbName = DB ?? "workloom";
