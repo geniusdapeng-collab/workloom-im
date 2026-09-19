@@ -28,6 +28,7 @@ export function normalizeBranchRef(ref) {
  */
 export const AUTO_MERGE_ALLOWLIST = Object.freeze([
   "WORKLOOM_PRODUCT_CONTEXT.md",
+  "AI-AUTONOMOUS-OPERATIONS.md",
   "AGENTS.md",
   "docs/DEVELOPMENT-PROTOCOL.md",
   // 真机验收规范与执行契约（RDAS v1）：纯文档 + 检查单 + 模板 + 执行器，不含运行时代码

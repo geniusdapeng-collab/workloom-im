@@ -532,7 +532,7 @@ test("缺少 B 端移动客户端时只报告第一阶段迁移，绝不伪装�
 test("v15 scope 明确保护产品身份、仓级发布器、桌面发布封口器、同步认证、产品派生锁、依赖闭包与 Bundle 装配契约", () => {
   const scope = JSON.parse(readFileSync(join(REAL_BASE, "sync/base-scope.json"), "utf8"));
   const ci = readFileSync(join(REAL_BASE, ".github/workflows/ci.yml"), "utf8");
-  assert.equal(scope.version, 15);
+  assert.equal(scope.version, 16);
   // HP-01 收尾边界：单 active 迁移必须随公共分发下发，审计复现脚本只留基座仓
   assert.ok(scope.publicAppendOnlyFiles.includes("packages/db/migrations/0035_tenant_overlay_single_active.sql"));
   assert.ok(scope.newIndustryBootstrapFiles.includes("packages/db/migrations/0035_tenant_overlay_single_active.sql"));
