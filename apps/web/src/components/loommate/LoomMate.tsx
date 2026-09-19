@@ -107,7 +107,9 @@ export function LoomMate() {
     try { const v = localStorage.getItem("loommate.pos"); return v ? JSON.parse(v) as { x: number; y: number } : null; } catch { return null; }
   });
   const [hidden, setHidden] = useState(() => { try { return localStorage.getItem("loommate.hidden") === "1"; } catch { return false; } });
-  const [mini, setMini] = useState(() => { try { return localStorage.getItem("loommate.mini") === "1"; } catch { return false; } });
+  // RDAS v3.0 T-02/T-11：默认最小打扰形态（64px 小球），避免 480px 数字人命中区压住审批动作栏。
+  // 显式展开过的用户（loommate.mini === "0"）保持展开；未设置过的首次用户默认收起。
+  const [mini, setMini] = useState(() => { try { return localStorage.getItem("loommate.mini") !== "0"; } catch { return true; } });
   const dragRef = useRef<{ startX: number; startY: number; baseX: number; baseY: number; moved: boolean } | null>(null);
   const persistLocal = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } };
   const availableWidth = Math.max(96, viewport.width - railW - navW - 32);

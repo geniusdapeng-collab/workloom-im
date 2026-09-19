@@ -54,10 +54,24 @@ export function chineseDisplayName(value: string | null | undefined, fallback: s
  */
 export function skillDisplayName(name: string, description?: string | null): string {
   const text = (description ?? "").trim();
-  const m = /^([^（(。：:—]{2,40})[（(。：:—]/.exec(text);
-  const candidate = m?.[1]?.trim();
-  if (candidate) {
-    const resolved = chineseDisplayName(candidate, "");
+  if (text) {
+    const m = /^([^（(。：:—]{2,40})[（(。：:—]/.exec(text);
+    const candidate = m?.[1]?.trim();
+    if (candidate) {
+      const resolved = chineseDisplayName(candidate, "");
+      if (resolved) return resolved;
+    }
+    /**
+     * 长说明兜底（RDAS v3.0 实测：badcase-harvest / model-scout 首段 >40 字导致整串回落成裸 id）：
+     * 按句号/分号/破折号切第一段，再取第一个逗号前的短句；剔除技术记号与符号后必须是中文。
+     */
+    const first = text.split(/[。；;！!？?\n]|——/)[0]?.trim() ?? "";
+    const clause = (first.split(/[，,]/)[0] ?? first)
+      .replace(/[+/*#_|]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 32);
+    const resolved = clause ? chineseDisplayName(clause, "") : "";
     if (resolved) return resolved;
   }
   return chineseDisplayName(name, name);
