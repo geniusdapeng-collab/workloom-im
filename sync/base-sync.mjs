@@ -1322,7 +1322,8 @@ function syncToChild(baseDir, childDir, scope, report, extraExclude = [], option
     if (staged) {
       const files = plan.operations.map((item) => item.rel).slice(0, 30).join(", ");
       git(repoRoot, "-c", "user.name=WorkLoom Base Sync", "-c", "user.email=base-sync@workloom.im", "-c", "core.hooksPath=/dev/null", "commit", "-m",
-        `chore(base-sync): 基座能力对齐 → ${baseSha.slice(0, 8)}（base-sync 自动）\n\n内容 ${changed} 文件 · 状态 ${updateState ? "已更新" : "未变"}\n${files}${changed > 30 ? " …" : ""}`);
+        // 提交标题走 `sync(...)`：协议 §5 把"同步器产出"登记为豁免项，子仓提交信息门禁据此放行。
+        `sync(base): 基座能力对齐 → ${baseSha.slice(0, 8)}（base-sync 自动）\n\n内容 ${changed} 文件 · 状态 ${updateState ? "已更新" : "未变"}\n${files}${changed > 30 ? " …" : ""}`);
       report.committed = true;
     }
     return report;
