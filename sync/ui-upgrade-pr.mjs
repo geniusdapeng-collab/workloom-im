@@ -1446,6 +1446,13 @@ async function upgradeChild(child, manifest, version, token, dryRun, foundationS
     run("pnpm", ["install", "--frozen-lockfile", "--ignore-scripts"], workdir);
     run("node", [join(workdir, "scripts/verify-ui-consumer.mjs"), "--repo", workdir], workdir);
     run("node", [join(workdir, "scripts/verify-client-foundation-consumer.mjs"), "--repo", workdir], workdir);
+    // 三端依赖变更会重算 lockfile，使子仓的派生清单 docs/OPEN_SOURCE_COMPONENTS.md
+    // 与仓库事实漂移；其 static-gate 的 `pnpm oss:check` 会直接判红（W1 实测）。
+    // 生成器离线且确定性，就地重算并纳入本次升级的精确路径集合。
+    const ossInventoryDoc = "docs/OPEN_SOURCE_COMPONENTS.md";
+    if (existsSync(join(workdir, "scripts/oss-inventory.mjs")) && existsSync(join(workdir, ossInventoryDoc))) {
+      run("node", [join(workdir, "scripts/oss-inventory.mjs"), "--write"], workdir);
+    }
     const foundationTouched = foundation.filesTouched ?? [];
     const inWorkdir = (path) => prefixedPath(child, path);
     const allowedUpgradePaths = [
@@ -1454,6 +1461,7 @@ async function upgradeChild(child, manifest, version, token, dryRun, foundationS
       inWorkdir(".workloom-ui.json"),
       inWorkdir("package.json"),
       inWorkdir("pnpm-lock.yaml"),
+      inWorkdir(ossInventoryDoc),
       ...governance.files.map(inWorkdir),
       inWorkdir(GOVERNANCE_STATE),
       ...ADOPTION_SCRIPTS.map(inWorkdir),
