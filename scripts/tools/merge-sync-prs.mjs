@@ -116,13 +116,25 @@ async function main() {
           report.skipped.push({ repo: slug, number, title: verdict.title, reasons: [`PR 状态已变为 ${latest?.state}`] });
           continue;
         }
-        const result = await mergePull(slug, number, { mergeStyle });
+        const result = await mergePull(slug, number, {
+          mergeStyle,
+          // CNB 合并接口要求显式 commit_title；沿用舰队习惯的 `标题 (#编号)` 形式。
+          commitTitle: `${String(verdict.title).trim()} (#${number})`,
+        });
         const after = await getPull(slug, number);
-        if (after?.state !== "merged") {
-          report.failed.push({ repo: slug, number, stage: "verify-merge", error: `合并后状态仍为 ${after?.state ?? "unknown"}` });
+        // CNB 的合并结果是 state=closed + is_merged=true（不是 state=merged），三选一判定。
+        const merged = after?.is_merged === true || after?.state === "merged" || after?.mergeable_state === "merged";
+        if (!merged) {
+          report.failed.push({ repo: slug, number, stage: "verify-merge", error: `合并后状态仍为 state=${after?.state ?? "unknown"} is_merged=${after?.is_merged}` });
           continue;
         }
-        report.merged.push({ repo: slug, number, title: verdict.title, mergedBy: result?.merged_by?.username ?? null, state: after.state });
+        report.merged.push({
+          repo: slug,
+          number,
+          title: verdict.title,
+          mergedBy: (after?.merged_by ?? result?.merged_by)?.username ?? null,
+          state: after?.mergeable_state ?? after?.state,
+        });
       } catch (error) {
         report.failed.push({ repo: slug, number, stage: "merge", error: String(error?.message ?? error).slice(0, 300) });
       }

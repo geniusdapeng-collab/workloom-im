@@ -190,8 +190,9 @@ export function getPullCommitStatuses(slug, number, options = {}) {
  * “全部门禁 success 且 mergeable_state=mergeable” 后调用本函数完成。
  */
 export function mergePull(slug, number, { mergeStyle = "squash", commitTitle, commitMessage, force } = {}, options = {}) {
+  if (!commitTitle) throw new Error("mergePull 需要 commitTitle（CNB 合并接口要求显式提交标题）");
   const body = { merge_style: mergeStyle };
-  if (commitTitle) body.commit_title = commitTitle;
+  body.commit_title = commitTitle;
   if (commitMessage) body.commit_message = commitMessage;
   if (force !== undefined) body.force = Boolean(force);
   return api(slug, `/-/pulls/${number}/merge`, { method: "PUT", body, ...options });
