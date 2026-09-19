@@ -23,12 +23,13 @@
 </div>
 
 <!-- CAPABILITIES:BEGIN -->
-<!-- 本区块由 scripts/generate-capabilities.mjs 自动生成（2026-09-18），请勿手改；重跑 pnpm capabilities 更新 -->
+<!-- 本区块由 scripts/generate-capabilities.mjs 自动生成（2026-09-19），请勿手改；重跑 pnpm capabilities 更新 -->
 
 ## 🧩 系统能力速览（自动生成 · 与代码同步）
 
 - 🖥 **三端应用（开箱即看）**：PC 端 · B 端工作台 · 移动端 · B 端高保真 · 移动端 · C 端 AI 服务前台
 - 🏨 **行业 Bundle（垂直能力包）**：bundles/ai-pm/ · bundles/hotel/ · bundles/platform/
+- 🧑‍💼 **数字员工与数字人（本仓自带）**：数字员工中心（`/agents`） · 织伴数字人（Live2D 常驻浮层） · 语音与口型引擎 · Live2D 渲染后端与资产
 - 🖐 **操作电脑能力（本仓自带 · 可装生产工作站）**：computer-use 三层感知（65 动作） · HTTP 远程驱动 + MCP server
 - 🤖 **AI 自动化引擎（系统内置能力）**：围栏 DSL 引擎 · 技能保鲜环（下行分发） · L2 编排（ASK/QUEST） · 夜班自动运行 · 模型路由 · 五元事件 + RLS 隔离 等 10 项
 - ✅ **验证与质量（工程纪律）**：一键安装（bootstrap） · 主测试套件 · 发布门禁 · 五元事件验链 · Agent 能力巡游 · 环境自检
@@ -83,24 +84,57 @@ WorkLoom 的答案是：**大模型是蒸汽机，企业 Agent IM 是织机。**
 </p>
 
 <p align="center">
-  <img src="docs/images/shots/pc-approvals.png" alt="审批中心" width="46%"/>
-  <img src="docs/images/shots/pc-nightshift.png" alt="夜班中心" width="46%"/><br/>
-  <sub>审批中心（P4 · 决策收件箱，推进/校准/制动三手势）｜ 夜班中心（P9 · 夜班值守班组频道与峰谷计量）</sub>
+  <img src="docs/images/shots/pc-agents.png" alt="数字员工中心 · 人机混编通讯录" width="46%"/>
+  <img src="docs/images/shots/pc-chairman.png" alt="经营驾驶舱 · 数字CEO" width="46%"/><br/>
+  <sub>数字员工（/agents · 人机混编通讯录：人类成员与数字员工同册，含岗位、版本、围栏绑定、30 天战绩与段位）｜ 经营驾驶舱（/executive · 数字CEO 授权/裁决/评议/汰换）</sub>
 </p>
 
 <p align="center">
-  <img src="docs/images/shots/pc-chairman.png" alt="董事长视图 · 数字CEO" width="46%"/>
-  <img src="docs/images/shots/pc-skills.png" alt="技能中心" width="46%"/><br/>
-  <sub>董事长视图（P21 · 数字CEO 授权/裁决/评议/汰换）｜ 技能中心（P6 · 技能市场与自建技能）</sub>
+  <img src="docs/images/shots/pc-approvals.png" alt="审批中心" width="46%"/>
+  <img src="docs/images/shots/pc-nightshift.png" alt="夜班中心" width="46%"/><br/>
+  <sub>审批中心（/approvals · 决策收件箱，推进/校准/制动三手势）｜ 夜班中心（/night · 夜班值守班组频道与峰谷计量）</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/shots/pc-inbox.png" alt="统一待办" width="46%"/>
+  <img src="docs/images/shots/pc-memory.png" alt="组织记忆" width="46%"/><br/>
+  <sub>统一待办（/inbox · 一人多店跨工作区聚合）｜ 组织记忆（/memory · 三级作用域 + 语义检索 + 来源归因）</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/shots/pc-skills.png" alt="技能中心" width="46%"/>
+  <img src="docs/images/shots/pc-exams.png" alt="考试院" width="46%"/><br/>
+  <sub>技能中心（/skills · 技能市场与自建技能）｜ 考试院（/exams · 数字员工上岗/复考，错题本与红线题）</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/shots/pc-guardrails.png" alt="围栏规则" width="46%"/>
+  <img src="docs/images/shots/pc-events.png" alt="事件账本" width="46%"/><br/>
+  <sub>围栏规则（/guardrails · auto/review/block 三级与基线红线）｜ 事件账本（/events · 五元事件 + SHA-256 哈希链，可回放可验链）</sub>
+</p>
+
+### 数字人 · 织伴（Live2D 常驻小秘书）
+
+<p align="center">
+  <img src="docs/images/shots/pc-welcome-mate.png" alt="织伴数字人 · 首装开场" width="46%"/>
+  <img src="docs/images/shots/pc-mate-chat.png" alt="织伴 · 对话/设置/记忆面板" width="46%"/><br/>
+  <sub>织伴开场（S0–S4 全身像登场 + 语音字幕）｜ 织伴面板（聊聊 / 设置 / 记忆：换人设、换音色、看得见 AI 记住了什么）</sub>
 </p>
 
 ### 移动端（:3001 高保真演示 / :3002 C 端服务前台）
 
 <p align="center">
   <img src="docs/images/shots/mobile-b-home.png" alt="移动 B 端 · 经营主页" width="30%"/>
-  <img src="docs/images/shots/mobile-b-report.png" alt="移动 B 端 · 服务前台战报" width="30%"/>
+  <img src="docs/images/shots/mobile-b-agents.png" alt="移动 B 端 · 数字员工" width="30%"/>
   <img src="docs/images/shots/mobile-c-chat.png" alt="移动 C 端 · AI 服务前台对话" width="30%"/><br/>
-  <sub>移动 B 端经营主页（数据与 PC 同源）｜ 移动 B 端服务前台掌上战报 ｜ C 端 AI 服务前台（住客真实问答）</sub>
+  <sub>移动 B 端经营主页（数据与 PC 同源）｜ 移动 B 端数字员工名册 ｜ C 端 AI 服务前台（真实问答，打通工单与账本）</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/shots/mobile-b-inbox.png" alt="移动 B 端 · 统一待办" width="30%"/>
+  <img src="docs/images/shots/mobile-c-service.png" alt="移动 C 端 · 服务大厅" width="30%"/>
+  <img src="docs/images/shots/mobile-c-tickets.png" alt="移动 C 端 · 工单" width="30%"/><br/>
+  <sub>移动 B 端统一待办 ｜ C 端服务大厅 ｜ C 端工单（与 B 端账本同源，处理进度用户可见）</sub>
 </p>
 
 ---
@@ -444,15 +478,44 @@ WorkLoom 没有重复造 Agent 运行时的轮子，而是**站在 DeepSeek Harn
 
 **测试**：22 条（真实 PG 集成全链路：注册→登录→刷新旋转→切店→邀请→伙伴吊销→密钥→审批模板→集团层级）。
 
+### 4.8 数字员工与数字人：从「一支班组」到「一个在场的人」
+
+底座把 AI 从「对话框」变成「编制内的同事」，再进一步变成「一直在场的人」。两件事各自独立、可以分别启用：
+
+**① 数字员工（`/agents` · 人机混编通讯录）**
+
+- **同一本通讯录**：人类成员卡（经营者/管理员/只读，在线状态由近 24h 事件留痕推导，**不伪造 presence**）与数字员工卡并列——岗位、版本角标、等级/段位、围栏绑定、技能包一目了然；
+- **员工档案**：点击任一数字员工进档案：身份与归属（Agent ID / 版本 / 工作区 / 来源 Bundle）→ **航道许可**（围栏授权与实际声明逐条对账，悬空标红）→ 技能包（跳技能中心）→ 运行约束 → **30 天战绩**（动作数 / 采纳率 / 被驳回 / 积分与峰谷占比，驳回原因回流偏好模型）→ 直接**派遣**（就地建任务线程）；
+- **夜班自动上线**：22:00–08:00 窗口内自动进入夜班态（青脉冲），窗口外转待命；只读岗位标绿（无写工具，物理上不能改数据）；
+- **加装 / 汰换**：加装走装配中心（行业 Bundle 分发），汰换由数字CEO 提诊断书 + 董事长批；
+- **游戏化不是装饰**：等级 / 段位 / XP / 采纳率是同一个投影——「经营即游戏」在员工层同样成立。
+
+**② 数字人 · 织伴（LoomMate · 全页面常驻）**
+
+<p align="center">
+  <img src="docs/images/shots/pc-mate-chat.png" alt="织伴数字人：Live2D 形象 + 对话/设置/记忆面板" width="72%"/><br/>
+  <sub>织伴：Live2D 数字人常驻浮层，可切换人设与音色、语音播报、随时对话；记忆面板让「AI 记住了什么」完全透明</sub>
+</p>
+
+- **形象**：Live2D 渲染（`pixi-live2d-display` + Cubism core，官方示例模型 Mao，可商用许可）——风格化 2D 绕开写实 3D 的恐怖谷，纯 WebGL，桌面端与浏览器一致；
+- **驱动四要素**：**口型**（语音边界事件 → 中文逐字开口度 + 快开慢收平滑，消灭方波硬切）、**表情**（mood → expression）、**动作**（gesture → motion + 常态呼吸）、**视线追随**（鼠标驱动注视，无操作时自主游移——「她在照看团队」）；
+- **三态共存**：小角落 / 大形象 / **屏保**（全屏守护：红色事件中央强提醒、Esc 退出）；可拖拽吸附边缘、可收成小球、可隐藏为边缘把手；
+- **首装开场**：S0–S4 开场序列（全身像登场 → 自我介绍 → 行业化系统介绍 → 过渡引出团队），话术来自当前行业 Bundle，语音 + 字幕同步；
+- **小秘书能力**：统一待办聚合（勿扰时段静默，清晨一次性送达）、提醒、对话问答、**记忆透明面板**（按身份/事实/偏好/关系/情景/进行中分层展示，可单条删除）；
+- **省电**：静止 2.6 秒自动降帧（生态模式），说话/手势时满帧；应用空闲时预热渲染核；
+- **三条铁律**：不替人决策（只汇总与提醒）、不打扰（勿扰 + 聚合）、不装在线（状态与真实回执一致）。
+
+> 想快速看效果：`pnpm db:seed && pnpm dev` → 打开 :5173，首页右下角即是织伴；点她可聊、可设置人设音色、可查看记忆。**换形象 = 换模型文件**，驱动链路零改动。
+
 ## 五、系统架构与业务闭环
 
 <p align="center"><img src="docs/images/architecture.png" alt="WorkLoom 系统架构" width="88%"/></p>
 
-五层结构自上而下：**体验层**（工作台 Web 端 / IM 通道 / Mac 桌面包）→ **服务层**（Hono + tRPC v11，PG 行级安全）→ **能力层**（自研九域护城河，WorkData 数据大脑为核心底座）→ **运行时地基**（DeepSeek Harness seam 适配）→ **数据层**（PostgreSQL 17 + pgvector，五元事件 append-only + hash chain）。
+五层结构自上而下：**体验层**（PC B 端工作台 / B 端与 C 端移动 / **织伴数字人浮层** / IM 通道 / Mac 桌面包）→ **服务层**（Hono + tRPC v11，工作区上下文 + PG 行级安全）→ **能力层**（自研十域护城河：WorkData 数据大脑、护栏、**数字员工名册**、**数字人能力**、守夜、决断、路由、装备库、巡检、服务前台……）→ **运行时地基**（DeepSeek Harness seam 适配）→ **数据层**（PostgreSQL 17 + pgvector，五元事件 append-only + hash chain）。
 
 <p align="center"><img src="docs/images/business-loop.png" alt="WorkLoom 业务核心闭环" width="88%"/></p>
 
-**设定航线 → 护栏判定 → 班组执行 → 夜班班组 → 08:30 战报 → 主理人拍板**，六节点闭环；「校准写回」与「沉淀」两条回路让每一次协作都让系统更懂这家企业。底部安全底线带（紧急制动 / 黑匣子 / 失败转人工）兜住一切异常。
+**设定航线 → 护栏判定 → 班组执行 → 守夜战队（18:00 候选 / 22:00 出征）→ 08:30 决策包 → 主理人拍板**，六节点闭环；「校准写回」与「沉淀」两条回路让每一次协作都让系统更懂这家企业。数字人织伴在闭环中承担人类的「不在场时段」；底部安全底线带（紧急制动 / 黑匣子 / 失败转人工）兜住一切异常。
 
 ---
 
@@ -565,6 +628,8 @@ LLM_MODEL=deepseek-chat
 ## 九、路线图
 
 - ✅ 当前：Mac 桌面包一键启航 + 官网 + CI 质量门禁（371 场景用例 + 哈希链验证，每次 push 全量执行）
+- ✅ 数字员工中心（`/agents`）：人机混编通讯录 + 员工档案 + 30 天战绩 / 段位 / 派遣 / 夜班自动上线
+- ✅ 数字人织伴（LoomMate）：Live2D 常驻浮层 + 语音口型 + 三态（小角落 / 大形象 / 屏保）+ 记忆透明面板
 - ✅ v1.10 自我进化飞轮 P0（D24）：反馈 → 记忆 → 行为校准（偏好注入主链路 / 记忆提炼器 / 进化积分卡 / P23 组织记忆中心）
 - ✅ dsh 0.1.2-rc.1 已集成（subagent Codex / Claude Code 按需安装；E6 dsh-gate 门禁全绿）
 - 🔜 Intel Mac 包 / Windows 包

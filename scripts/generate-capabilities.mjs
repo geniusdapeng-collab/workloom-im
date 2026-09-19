@@ -49,6 +49,33 @@ if (bundles.length) groups.push({
   items: bundles.map((b) => ({ name: `bundles/${b}/`, how: `见 bundles/${b}/ 目录`, desc: "围栏/技能/员工/对象/管线一键装配" })),
 });
 
+// 数字员工与数字人（事实探测：页面/组件/资产/语音引擎存在才列出）
+const digitalWorkforce = [
+  existsSync(join(ROOT, "apps/web/src/pages/p8/P8.tsx")) && {
+    name: "数字员工中心（`/agents`）",
+    how: "`pnpm preview:all` → http://localhost:3000/agents",
+    desc: "人机混编通讯录：员工档案 / 围栏绑定 / 30 天战绩 / 段位 / 派遣 / 夜班 22:00-08:00 自动上线",
+  },
+  existsSync(join(ROOT, "apps/web/src/components/loommate/LoomMate.tsx")) && {
+    name: "织伴数字人（Live2D 常驻浮层）",
+    how: "打开任一 PC 页面右下角；`pnpm preview:all`",
+    desc: "全页面常驻数字人：语音播报 + 口型/表情/动作 + 三态（小角落 / 大形象 / 屏保）+ 记忆透明面板",
+  },
+  existsSync(join(ROOT, "apps/web/src/voice/VoiceEngine.ts")) && {
+    name: "语音与口型引擎",
+    how: "docs/voice-and-avatar-delivery-contract.md",
+    desc: "TTS 音色映射 + 中文逐字开口度时间线 + 音频振幅驱动口型；人设/音色可切换",
+  },
+  existsSync(join(ROOT, "apps/web/public/live2d")) && {
+    name: "Live2D 渲染后端与资产",
+    how: "apps/web/public/live2d/",
+    desc: "pixi-live2d-display + Cubism core（MIT/官方 SDK）；换形象=换模型文件，驱动链路零改动",
+  },
+].filter(Boolean);
+if (digitalWorkforce.length) groups.push({
+  icon: "🧑‍💼", title: "数字员工与数字人（本仓自带）", items: digitalWorkforce,
+});
+
 if (basePkgs.includes("computer-use")) groups.push({
   icon: "🖐", title: "操作电脑能力（本仓自带 · 可装生产工作站）",
   items: [
