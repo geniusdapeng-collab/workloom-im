@@ -64,14 +64,16 @@
     - name: 桌面运行时锁与载荷边界
       script: |
         set -eu
-        pnpm runtime:deps:verify
+        # 直接用 node 调执行体，避免 pnpm 的 verify-deps-before-run 在 CI 触发
+        # 模块目录清理（无 TTY 时 ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY → 闸门假失败）。
+        node scripts/runtime-deps-lock.mjs verify
         for target in darwin:arm64 darwin:x64 win32:x64; do
           platform="${target%%:*}"
           arch="${target##*:}"
           stage="$(mktemp -d "/tmp/workloom-runtime-${platform}-${arch}.XXXXXX")"
           node scripts/runtime-deps-lock.mjs stage "$stage" --os "$platform" --cpu "$arch"
         done
-        pnpm test:payload-boundary
+        node --test scripts/product-runtime.test.mjs scripts/payload-policy.test.mjs scripts/pack-nm-merge.test.mjs scripts/runtime-deps-lock.test.mjs
 
     - name: typecheck 全包
       script: |
