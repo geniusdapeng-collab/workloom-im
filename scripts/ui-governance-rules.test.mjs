@@ -377,6 +377,17 @@ test("跨文件 surface 只放行可证明直接委托共享表面的精确导�
   const canonicalReExport = 'export { Dialog as HotelDialog } from "@workloom/ui";';
   assert.deepEqual(findUnmanagedSurfaceRisks(canonicalReExport, "apps/web/src/config/industry/safe.ts"), []);
   assert.deepEqual(findSurfaceModuleFacts(canonicalReExport, "apps/web/src/config/industry/safe.ts").provableExports, ["HotelDialog"]);
+
+  // 2026-09-19：`if (!open) return null;` 是“此刻不渲染”的常规写法，不能因此把完全委托的组件
+  // 判成自建浮层（fox 首日上岗引导实测踩到该假阳性）。
+  const earlyNullWrapper = `import { Overlay } from "@workloom/ui";
+    export function GuideOverlay({ open, onClose }){ if (!open) return null; return <Overlay open={open} title="引导" onClose={onClose}><div>内容</div></Overlay>; }`;
+  assert.deepEqual(findUnmanagedSurfaceRisks(earlyNullWrapper, "apps/web/src/extensions/fox/GuideOverlay.tsx"), []);
+  assert.deepEqual(findSurfaceModuleFacts(earlyNullWrapper, "apps/web/src/extensions/fox/GuideOverlay.tsx").provableExports, ["GuideOverlay"]);
+
+  const selfDrawnEarlyNull = `export function GuideOverlay({ open }){ if (!open) return null; return <div className="fixed inset-0">自建浮层</div>; }`;
+  assert.ok(findUnmanagedSurfaceRisks(selfDrawnEarlyNull, "apps/web/src/extensions/fox/GuideOverlay.tsx")
+    .some((risk) => risk.rule.includes("必须委托")));
 });
 
 test("嵌套同名安全诱饵不能覆盖真实顶层 surface 导出", () => {
