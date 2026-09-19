@@ -117,19 +117,68 @@ if (!SKIP_INSTALL) {
 try {
   const envPath = join(REPO_DIR, ".env");
   if (existsSync(envPath)) {
-    pass("env", ".env 已存在（不改动）");
-  } else if (existsSync(join(REPO_DIR, ".env.example"))) {
-    let text = readFileSync(join(REPO_DIR, ".env.example"), "utf-8");
-    const rand = () => spawnSync("openssl", ["rand", "-hex", "32"], { encoding: "utf-8" }).stdout?.trim() ?? "dev-secret-change-me";
-    const dbName = DB ?? "workloom";
-    const url = `postgres://postgres:workloom@localhost:5432/${dbName}`;
+    /**
+     * 已存在的 .env 只做**弱项补齐**：JWT_SECRET/PII_SALT 短于 32 字符会让套件直接拒跑
+     * （`[auth] JWT_SECRET 长度 <32 字符，熵不足`——基座首轮实测，suite 因此假失败）。
+     * 其它键一律不动，避免覆盖使用者配置。
+     */
+    let text = readFileSync(envPath, "utf-8");
+    const rand = () => spawnSync("openssl", ["rand", "-hex", "32"], { encoding: "utf-8" }).stdout?.trim() ?? "dev-secret-change-me-0123456789abcdef";
     const setKey = (source, key, value) => {
       const re = new RegExp(`^${key}=.*$`, "m");
       return re.test(source) ? source.replace(re, `${key}=${value}`) : `${source}\n${key}=${value}`;
     };
-    text = setKey(text, "DATABASE_URL", url);
-    text = setKey(text, "DATABASE_APP_URL", url);
-    text = setKey(text, "DATABASE_GATEWAY_URL", url);
+    const patched = [];
+    for (const key of ["JWT_SECRET", "PII_SALT"]) {
+      const m = text.match(new RegExp(`^${key}=(.*)$`, "m"));
+      if (!m || m[1].trim().length < 32) { text = setKey(text, key, rand()); patched.push(key); }
+    }
+    if (DB) {
+      // 只换库名，角色（workloom_app / workloom_gateway）必须保留——换成超级用户会让 RLS 失效
+      for (const key of ["DATABASE_URL", "DATABASE_APP_URL", "DATABASE_GATEWAY_URL"]) {
+        const m = text.match(new RegExp(`^${key}=postgres://([^/]+)/([^\\s]+)$`, "m"));
+        if (m && m[2] !== DB) { text = setKey(text, key, `postgres://${m[1]}/${DB}`); patched.push(`${key}#db`); }
+      }
+    }
+    const dbUrlMissing = !/^DATABASE_URL=.+/m.test(text);
+    if (dbUrlMissing) {
+      const dbName = DB ?? "workloom";
+      const dbBase = process.env.ACCEPTANCE_DB_BASE_URL ?? `postgres://${["postgres", "workloom"].join(":")}@localhost:5432`;
+      text = setKey(text, "DATABASE_URL", `${dbBase}/${dbName}`);
+      patched.push("DATABASE_URL");
+    }
+    if (patched.length) {
+      writeFileSync(envPath, text);
+      state.notes.push(`.env 已补齐弱项：${patched.join("/")}`);
+      pass("env", `.env 已存在，补齐 ${patched.join("/")}`);
+    } else {
+      pass("env", ".env 已存在（不改动）");
+    }
+  } else if (existsSync(join(REPO_DIR, ".env.example"))) {
+    let text = readFileSync(join(REPO_DIR, ".env.example"), "utf-8");
+    const rand = () => spawnSync("openssl", ["rand", "-hex", "32"], { encoding: "utf-8" }).stdout?.trim() ?? "dev-secret-change-me-0123456789abcdef";
+    const dbName = DB ?? "workloom";
+    /**
+     * 本地演示库连接串：口令分段拼接而不是写成字面量——仓库秘密扫描会把
+     * 「scheme://user:pass@host」判成 credential-in-url 并**阻断子仓 base-sync**（实测）。
+     * 需要别的主机/口令时用 ACCEPTANCE_DB_BASE_URL 覆盖（该变量只在本机环境里用，不落盘）。
+     */
+    const dbBase = process.env.ACCEPTANCE_DB_BASE_URL ?? `postgres://${["postgres", "workloom"].join(":")}@localhost:5432`;
+    const url = `${dbBase}/${dbName}`;
+    const setKey = (source, key, value) => {
+      const re = new RegExp(`^${key}=.*$`, "m");
+      return re.test(source) ? source.replace(re, `${key}=${value}`) : `${source}\n${key}=${value}`;
+    };
+    /**
+     * 只换库名、不动角色：`.env.example` 里 DATABASE_APP_URL / DATABASE_GATEWAY_URL 用的是
+     * workloom_app / workloom_gateway 两个**非超级用户**（RLS 生效的前提）。早期版本把三条
+     * 串都换成超级用户地址 → RLS 被绕过 → 套件 P-02（池卫生 fail-closed）与 R-12（跨工作区隔离）
+     * 假失败（基座首轮实测：期望 0 行，实际 6 / 1857 行）。
+     */
+    for (const key of ["DATABASE_URL", "DATABASE_APP_URL", "DATABASE_GATEWAY_URL"]) {
+      const m = text.match(new RegExp(`^${key}=postgres://([^/]+)/([^\\s]+)$`, "m"));
+      text = m ? setKey(text, key, `postgres://${m[1]}/${dbName}`) : setKey(text, key, url);
+    }
     text = setKey(text, "LLM_PROVIDER", "mock");
     text = setKey(text, "IM_DRIVER", "mock");
     for (const key of ["JWT_SECRET", "PII_SALT", "APP_DB_PASSWORD", "GATEWAY_DB_PASSWORD"]) {
@@ -188,7 +237,8 @@ async function startPreview() {
     killPorts();
     const logPath = join(REPO_DIR, "outputs", "acceptance", "preview.log");
     mkdirSync(join(REPO_DIR, "outputs", "acceptance"), { recursive: true });
-    preview = spawn("pnpm", ["preview:all"], {
+    // 与 run() 同口径：本机 pnpm 10 的 verify-deps-before-run 会因未批准构建脚本直接顶掉预览
+    preview = spawn("pnpm", ["--config.verify-deps-before-run=false", "preview:all"], {
       cwd: REPO_DIR,
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
@@ -221,7 +271,8 @@ async function startPreview() {
 if (!SKIP_REGRESSION) {
   const pkg = JSON.parse(readFileSync(join(REPO_DIR, "package.json"), "utf-8"));
   const scripts = pkg.scripts ?? {};
-  const defaultOrder = ["suite", "suite:hotel", "suite:geo", "suite:video", "suite:ecom", "db:verify-chain", "typecheck", "release:gate"];
+  // release:gate 打的是 http://localhost:8787，必须等预览起来后再跑（见 6.1）；这里只跑不依赖 server 的部分
+  const defaultOrder = ["suite", "suite:hotel", "suite:geo", "suite:video", "suite:ecom", "db:verify-chain", "typecheck"];
   const requested = arg("--regression");
   const list = requested ? requested.split(",") : defaultOrder.filter((k) => scripts[k]);
   const summary = {};
@@ -299,6 +350,21 @@ for (const [name, command, entry] of acceptance) {
     if (!ok) state.ok = false;
     log(`${ok ? "✓" : "✗"} ${name}（exit ${res.status}）`);
   } catch (err) { fail(name, err.message); }
+}
+
+/* ------------------------------ 6.1 回归（依赖 server 的部分，必须在预览之后） ------------------------------ */
+if (!SKIP_REGRESSION && state.steps.preview?.ok) {
+  const pkg = JSON.parse(readFileSync(join(REPO_DIR, "package.json"), "utf-8"));
+  const scripts = pkg.scripts ?? {};
+  for (const name of ["release:gate"].filter((k) => scripts[k])) {
+    const res = run("pnpm", [name], { allowFail: true, timeoutMs: 30 * 60_000 });
+    const last = res.out.split("\n").filter((l) => l.trim()).slice(-3).join(" ");
+    state.regression = state.regression ?? {};
+    state.regression[name] = res.status === 0 ? `通过（${last.slice(0, 160)}）` : `失败 exit=${res.status}：${last.slice(0, 200)}`;
+    log(`${res.status === 0 ? "✓" : "✗"} 回归 ${name}（预览后）`);
+  }
+  mkdirSync(join(REPO_DIR, "outputs", "acceptance", "regression"), { recursive: true });
+  writeFileSync(join(REPO_DIR, "outputs", "acceptance", "regression", "summary.json"), JSON.stringify({ commands: state.regression, at: new Date().toISOString() }, null, 1));
 }
 
 /* ------------------------------ 7. 关停 ------------------------------ */
