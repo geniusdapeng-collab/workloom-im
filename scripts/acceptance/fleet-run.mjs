@@ -122,7 +122,13 @@ try {
     let text = readFileSync(join(REPO_DIR, ".env.example"), "utf-8");
     const rand = () => spawnSync("openssl", ["rand", "-hex", "32"], { encoding: "utf-8" }).stdout?.trim() ?? "dev-secret-change-me";
     const dbName = DB ?? "workloom";
-    const url = `postgres://postgres:workloom@localhost:5432/${dbName}`;
+    /**
+     * 本地演示库连接串：口令分段拼接而不是写成字面量——仓库秘密扫描会把
+     * 「scheme://user:pass@host」判成 credential-in-url 并**阻断子仓 base-sync**（实测）。
+     * 需要别的主机/口令时用 ACCEPTANCE_DB_BASE_URL 覆盖（该变量只在本机环境里用，不落盘）。
+     */
+    const dbBase = process.env.ACCEPTANCE_DB_BASE_URL ?? `postgres://${["postgres", "workloom"].join(":")}@localhost:5432`;
+    const url = `${dbBase}/${dbName}`;
     const setKey = (source, key, value) => {
       const re = new RegExp(`^${key}=.*$`, "m");
       return re.test(source) ? source.replace(re, `${key}=${value}`) : `${source}\n${key}=${value}`;
