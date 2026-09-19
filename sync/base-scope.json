@@ -90,7 +90,11 @@
   "requiredRootAssets": {
     "files": [
       "WORKLOOM_PRODUCT_CONTEXT.md",
-      "docs/DEVELOPMENT-PROTOCOL.md"
+      "docs/DEVELOPMENT-PROTOCOL.md",
+      "docs/REAL-DEVICE-ACCEPTANCE-SPEC.md",
+      "docs/acceptance/checklist.v1.json",
+      "docs/acceptance/report-template.md",
+      "docs/acceptance/profile.example.json"
     ],
     "copiedFiles": {
       ".github/workflows/base-sync-heartbeat.yml": {
