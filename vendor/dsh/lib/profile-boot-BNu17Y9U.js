@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { PROFILE_PATCH_FILENAME, PROFILE_TEMPLATES, boot, composeEntries, healProfilesModuleFallback, initProfile, installFailLoud, loadOptionalPatches, loadOverlayPatches, loadProfile, resolveProfileDir, watchUserPatches } from "@deepseek-ai/dsh-app-boot";
-import { dirname, join, resolve } from "node:path";
+import { PROFILE_PATCH_FILENAME, PROFILE_TEMPLATES, PluginPackages, boot, createProfileResolutionGeneration, healIsolatedProfileModuleFallback, healProfilesModuleFallback, initProfile, installFailLoud, loadOverlayPatches, loadProfile, readProfilePatches, resolveProfileDir } from "@deepseek-ai/dsh-app-boot";
 import { resolveDshHome } from "@deepseek-ai/dsh-home-paths";
+import { dirname, join, resolve } from "node:path";
 import { installProxyFromEnvironment } from "@deepseek-ai/dsh-http-proxy";
 import { DSH_LAUNCH_ENVIRONMENT_KEY } from "@deepseek-ai/dsh-launch-environment";
 import { provideCmdline } from "@deepseek-ai/dsh-cmdline";
@@ -75,8 +75,7 @@ function createProcessShutdown(dispose, forceExit = (code) => {
 * Shared profile boot for every `dsh` surface: resolve the profile, stack its
 * patch layers (bundle layers in `dsh.profile.bundles` order, the profile's
 * own `cordis.patch.yml`, `--patch` overlays, the telemetry switch), mount the
-* tree over the profile's empty root config, apply its selected patch-reload
-* lifecycle, and wire fail-loud plus bounded shutdown.
+* tree over the profile's empty root config, and wire fail-loud plus bounded shutdown.
 *
 * App flags are not the launcher's business: the invocation's inner arguments
 * are provided to the tree through `ctx.cmdlineArgs`, where any injected app
@@ -118,8 +117,6 @@ function homePatchPath() {
 }
 /** Absolute path of this dsh installation's package.json (both anchors: src/ and lib/ sit one level under apps/cli). */
 const INSTALL_ANCHOR = fileURLToPath(new URL("../package.json", import.meta.url));
-/** The session-telemetry row id the DSH_TELEMETRY_DISABLED switch targets. */
-const TELEMETRY_ROW_ID = "session-telemetry-otel";
 /** The empty root entry list every profile tree patches over. */
 const PROFILE_ROOT_CONFIG = `# dsh profile root — an empty entry list. The tree is composed as patches:
 # each bundle in package.json's dsh.profile.bundles, then cordis.patch.yml, then any
@@ -130,7 +127,7 @@ const PROFILE_ROOT_CONFIG = `# dsh profile root — an empty entry list. The tre
 const PROFILE_ROOT_FILENAME = "cordis.yml";
 /**
 * Initialize a missing profile from one shipped template. This copies only
-* the template's bundle list and patch-reload policy; local state from the
+* the template's bundle list; local state from the
 * same-named shipped profile is not read, and no inheritance metadata is
 * persisted. Shipped profile names are reserved, and the target directory is
 * claimed exclusively so existing or concurrent state is never reused.
@@ -157,7 +154,7 @@ function initializeProfileFromDefault(name, fromDefaultProfile, home = resolveDs
 		throw new Error(`${NAME}: profile directory ${dir} already exists; choose an unused profile name`);
 	}
 	try {
-		initProfile(dir, template.bundles, template.patchReload);
+		initProfile(dir, template.bundles);
 	} catch (error) {
 		try {
 			rmSync(dir, {
@@ -169,24 +166,6 @@ function initializeProfileFromDefault(name, fromDefaultProfile, home = resolveDs
 		}
 		throw error;
 	}
-}
-/**
-* Resolve the telemetry opt-out switch into its boot patch. ANY non-empty
-* value (including `'0'`/`'false'`) disables: a privacy switch prefers
-* off-by-mistake over on-by-mistake. A composition without the telemetry row
-* exports nothing, so the switch is then trivially satisfied and no patch is
-* generated — custom profiles need not mount telemetry to run with the
-* switch set.
-* @param disabledEnv - the raw `DSH_TELEMETRY_DISABLED` value (`undefined` when unset).
-* @param hasRow - whether the composition carries the telemetry row.
-* @returns the disable patch, or `undefined` when no hard-disable patch is required.
-*/
-function resolveTelemetryPatch(disabledEnv, hasRow) {
-	if ((disabledEnv ?? "") === "" || !hasRow) return void 0;
-	return {
-		id: TELEMETRY_ROW_ID,
-		disabled: true
-	};
 }
 /**
 * Load a resolved profile for `name` and (re)write the empty root config. The
@@ -209,15 +188,6 @@ function prepareProfile(name, userLayer = true, fromDefaultProfile) {
 	writeFileSync(join(profile.dir, PROFILE_ROOT_FILENAME), PROFILE_ROOT_CONFIG);
 	return profile;
 }
-/** The full patch stack of one composed profile, in application order. */
-function allPatches(composed) {
-	return [
-		...composed.bundlePatches,
-		...composed.profile.patches,
-		...composed.homePatches,
-		...composed.overlays
-	];
-}
 /**
 * Load `name` and compose its effective patch stack: bundle layers in
 * `dsh.profile.bundles` order (a base-backed profile gets the base bundle's
@@ -227,123 +197,108 @@ function allPatches(composed) {
 * then the telemetry switch.
 * @param name - the profile name.
 * @param patchFiles - `--patch` overlay paths, in argv order.
+* @param resolutionMode - runtime lookup, disk links, or dual verification of both.
+* @param fromDefaultProfile - shipped template for a missing named profile.
+* @param resolvedProfile - application-owned profile and installation.
 * @returns the profile and its patch layers.
 */
-async function composeProfile(name, patchFiles, fromDefaultProfile) {
-	const profile = prepareProfile(name, true, fromDefaultProfile);
-	await healProfilesModuleFallback({
-		installAnchor: INSTALL_ANCHOR,
+async function composeProfile(name, patchFiles, resolutionMode, fromDefaultProfile, resolvedProfile) {
+	const profile = resolvedProfile?.profile ?? prepareProfile(name, true, fromDefaultProfile);
+	if (resolvedProfile !== void 0) writeFileSync(join(profile.dir, PROFILE_ROOT_FILENAME), PROFILE_ROOT_CONFIG);
+	const resolutionOptions = {
+		installAnchor: resolvedProfile?.installAnchor ?? INSTALL_ANCHOR,
 		profile
-	});
-	const homePatches = loadOptionalPatches(NAME, homePatchPath()) ?? [];
-	const overlays = patchFiles.flatMap((file) => loadOverlayPatches(NAME, resolve(file)));
-	const bundlePatches = profile.layers.flatMap((layer) => layer.patches);
-	const rows = /* @__PURE__ */ new Map();
-	for (const row of composeEntries([
-		bundlePatches,
-		profile.patches,
-		homePatches,
-		overlays
-	])) if (typeof row.id === "string") rows.set(row.id, row);
-	const composedOverlays = [...overlays];
-	const telemetryPatch = resolveTelemetryPatch(process.env.DSH_TELEMETRY_DISABLED, rows.has(TELEMETRY_ROW_ID));
-	if (telemetryPatch !== void 0) composedOverlays.push(telemetryPatch);
+	};
+	if (resolvedProfile !== void 0 && resolutionMode !== "runtime") healIsolatedProfileModuleFallback(resolvedProfile);
 	return {
 		profile,
-		bundlePatches,
-		homePatches,
-		overlays: composedOverlays
+		resolution: resolutionMode === "runtime" || resolvedProfile !== void 0 ? await createProfileResolutionGeneration(resolutionOptions) : await healProfilesModuleFallback(resolutionOptions),
+		overlays: patchFiles.flatMap((file) => loadOverlayPatches(NAME, resolve(file)))
 	};
-}
-/**
-* Re-throw a watcher-setup failure unless a shutdown already owns the tree:
-* a signal aborted this invocation, or an app requested exit (`ctx.appExit`
-* from a fast one-shot) and the root's disposal rejected the in-flight setup
-* await. Either way the failure describes a tree that is exiting as asked,
-* not a broken watch.
-* @param ctx - the booted root context.
-* @param signal - this invocation's signal-shutdown fact.
-* @param error - the setup failure.
-*/
-function suppressShutdownError(ctx, signal, error) {
-	if (signal.aborted) return;
-	if (ctx.fiber.state !== 2 || ctx.get("loader") === void 0) return;
-	throw error;
 }
 /**
 * Boot one profile invocation end to end and leave process lifetime to the
 * mounted plugins (or to a one-shot runner the composition mounts).
 * @param options - environment snapshot, profile name, overlays, and the booted app's own arguments.
 * @returns the settled root context and the shutdown controller.
+* @throws after disposing startup resources; cleanup failures retain the original error.
 */
 async function runProfile(options) {
 	const disposeProxy = await installProxyFromEnvironment(options.environment, (message) => {
 		process.stderr.write(`${NAME}: ${message}\n`);
 	});
-	const composed = await composeProfile(options.profile, options.patchFiles, options.fromDefaultProfile);
+	const resolutionMode = process.pkg !== void 0 ? "runtime" : options.resolutionMode ?? "runtime";
 	const app = {};
-	const appReady = createAppReady();
-	const shutdown = createProcessShutdown(async () => {
-		await app.current?.fiber.dispose();
-		await disposeProxy();
-	});
-	const signalShutdown = new AbortController();
-	const interrupt = (code) => {
-		signalShutdown.abort();
-		shutdown.interrupt(code);
-	};
-	process.on("SIGTERM", () => {
-		interrupt(0);
-	});
-	process.on("SIGINT", () => {
-		interrupt(130);
-	});
-	installFailLoud(NAME, process, async () => {
-		await app.current?.fiber.dispose();
-	});
-	const rootConfig = join(composed.profile.dir, PROFILE_ROOT_FILENAME);
-	const composeLive = () => structuredClone([
-		...composed.bundlePatches,
-		...loadOptionalPatches(NAME, composed.profile.patchPath) ?? [],
-		...loadOptionalPatches(NAME, homePatchPath()) ?? [],
-		...composed.overlays
-	]);
-	const ctx = await boot(NAME, rootConfig, structuredClone(allPatches(composed)), (hostCtx) => {
-		app.current = hostCtx;
-		hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, options.environment);
-		provideCmdline(hostCtx, {
-			args: options.args,
-			exit: (code) => void shutdown.shutdown(code),
-			ready: appReady.service
-		});
-	});
-	app.current = ctx;
-	if (composed.profile.patchReload === "live" && !signalShutdown.signal.aborted && ctx.fiber.state === 2 && ctx.get("loader") !== void 0) try {
-		if (ctx.get("hmr") === void 0) {
-			if (ctx.get("timer") === void 0) await ctx.loader.create({ name: "@deepseek-ai/cordis-plugin-timer" });
-			await ctx.loader.create({
-				name: "@deepseek-ai/cordis-plugin-hmr",
-				config: { root: [] }
-			});
+	let disposal;
+	const dispose = () => disposal ??= (async () => {
+		const failures = [];
+		for (const release of [() => app.current?.fiber.dispose(), disposeProxy]) try {
+			await release();
+		} catch (error) {
+			failures.push(error);
 		}
-		await watchUserPatches(ctx, {
-			binName: NAME,
-			filename: composed.profile.patchPath,
-			compose: composeLive
+		if (failures.length === 1) throw failures[0];
+		if (failures.length > 1) throw new AggregateError(failures, "dsh: profile cleanup failed");
+	})();
+	try {
+		const composed = await composeProfile(options.profile, options.patchFiles, resolutionMode, options.fromDefaultProfile, options.resolvedProfile);
+		const appReady = createAppReady();
+		const shutdown = createProcessShutdown(dispose);
+		const signalShutdown = new AbortController();
+		const interrupt = (code) => {
+			signalShutdown.abort();
+			shutdown.interrupt(code);
+		};
+		process.on("SIGTERM", () => {
+			interrupt(0);
 		});
-		await watchUserPatches(ctx, {
-			binName: NAME,
-			filename: homePatchPath(),
-			compose: composeLive
+		process.on("SIGINT", () => {
+			interrupt(130);
 		});
+		installFailLoud(NAME, process, async () => {
+			await app.current?.fiber.dispose();
+		});
+		const rootConfig = join(composed.profile.dir, PROFILE_ROOT_FILENAME);
+		const profileContext = {
+			name: options.profile,
+			...options.packageManager === void 0 ? {} : { packageManager: options.packageManager },
+			dir: composed.profile.dir,
+			patchPath: composed.profile.patchPath,
+			installAnchor: options.resolvedProfile?.installAnchor ?? INSTALL_ANCHOR,
+			startedBundles: composed.profile.layers.map((layer) => layer.packageName),
+			cwd: process.cwd(),
+			home: resolveDshHome(),
+			overlays: composed.overlays,
+			telemetryDisabledEnv: process.env.DSH_TELEMETRY_DISABLED
+		};
+		const ctx = await boot(NAME, rootConfig, readProfilePatches(NAME, profileContext, composed.profile), async (hostCtx) => {
+			app.current = hostCtx;
+			hostCtx.provide("profileContext", profileContext);
+			hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, options.environment);
+			await hostCtx.plugin(PluginPackages, resolutionMode === "link" ? {} : {
+				generation: composed.resolution,
+				behavior: resolutionMode === "dual" ? "verify" : "enforce"
+			});
+			provideCmdline(hostCtx, {
+				args: options.args,
+				exit: (code) => void shutdown.shutdown(code),
+				ready: appReady.service
+			});
+		});
+		app.current = ctx;
+		if (!signalShutdown.signal.aborted && ctx.fiber.state === 2 && ctx.get("loader") !== void 0) appReady.commit();
+		return {
+			ctx,
+			shutdown
+		};
 	} catch (error) {
-		suppressShutdownError(ctx, signalShutdown.signal, error);
+		try {
+			await dispose();
+		} catch (cleanupError) {
+			throw new AggregateError([error, cleanupError], "dsh: profile startup and cleanup failed");
+		}
+		throw error;
 	}
-	if (!signalShutdown.signal.aborted && ctx.fiber.state === 2 && ctx.get("loader") !== void 0) appReady.commit();
-	return {
-		ctx,
-		shutdown
-	};
 }
 //#endregion
-export { prepareProfile as a, initializeProfileFromDefault as i, PROFILE_ROOT_FILENAME as n, resolveTelemetryPatch as o, homePatchPath as r, runProfile as s, INSTALL_ANCHOR as t };
+export { prepareProfile as a, initializeProfileFromDefault as i, PROFILE_ROOT_FILENAME as n, runProfile as o, homePatchPath as r, INSTALL_ANCHOR as t };
