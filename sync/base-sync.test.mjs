@@ -78,6 +78,8 @@ function fixture() {
   copyFileSync(ENGINE, join(base, "sync/base-sync.mjs"));
   copyFileSync(ADOPT, join(base, "sync/adopt.sh"));
   copyFileSync(INSTALL_UI_GOVERNANCE, join(base, "sync/install-ui-governance.mjs"));
+  // 引擎现在常驻导入 UI 完整性绑定模块（full 同步重算 lock 后重新注入稳定制品 SRI）。
+  copyFileSync(UI_LOCKFILE_INTEGRITY, join(base, "sync/ui-lockfile-integrity.mjs"));
   mkdirSync(join(base, "scripts"), { recursive: true });
   copyFileSync(SCANNER, join(base, "scripts/secret-scan.mjs"));
   write(join(base, "scripts/verify-ui-consumer.mjs"), "// fixture UI consumer verifier\n");
@@ -1509,6 +1511,54 @@ test("最小新行业仓一次完成 full 基座、三端稳定壳与消费门�
     assert.equal(governanceState.yamlDependency, "npm:yaml@2.9.0");
     assert.ok(governanceState.files["scripts/verify-ui-consumer.mjs"].sha256);
     assert.ok(governanceState.files["scripts/ui-governance-rules.mjs"].sha256);
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("UI 消费仓 full 同步重算 lockfile 后重新绑定稳定制品 SHA-512", () => {
+  const fx = newIndustryFixture();
+  try {
+    const adopt = spawnSync("bash", [join(fx.base, "sync/adopt.sh"), fx.child, "--new-industry"], {
+      cwd: fx.base,
+      encoding: "utf8",
+      timeout: 30_000,
+      env: { ...process.env, PATH: `${fx.bin}:${dirname(NODE)}:${process.env.PATH}` },
+    });
+    assert.equal(adopt.status, 0, `${adopt.stdout}\n${adopt.stderr}`);
+    commitAll(fx.child, "adopted stable client foundation");
+
+    const state = JSON.parse(readFileSync(join(fx.child, ".workloom-ui.json"), "utf8"));
+    const expectedIntegrity = state.artifact.sha512;
+    assert.ok(
+      readFileSync(join(fx.child, "pnpm-lock.yaml"), "utf8").includes(`integrity: ${expectedIntegrity}`),
+      "接入完成时 lockfile 必须已绑定稳定制品 SHA-512",
+    );
+
+    // 基座新增会被普通同步覆盖的 package.json 源 → full 同步必须先在子仓重算 lock；fixture 的 pnpm 桩
+    // 复现 pnpm 10.14 行为：URL tarball 只写 resolution.tarball、不写 SRI。
+    write(join(fx.base, "shared/package.json"), `${JSON.stringify({
+      name: "@example/shared",
+      version: "1.0.0",
+      dependencies: { zod: "^4.6.5" },
+    }, null, 2)}\n`);
+    commitAll(fx.base, "add shared package source");
+
+    const result = cli(["pull", "--repo", ".", "--base-dir", fx.base, "--json"], fx.child, {
+      ...process.env,
+      PATH: `${fx.bin}:${dirname(NODE)}:${process.env.PATH}`,
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.lockfileRefreshed, true);
+    const lockfile = readFileSync(join(fx.child, "pnpm-lock.yaml"), "utf8");
+    assert.ok(
+      lockfile.includes(`resolution: {integrity: ${expectedIntegrity}, tarball: `),
+      "重算 lock 后必须重新注入稳定制品 SHA-512，否则 UI 消费门禁判红",
+    );
+    assert.equal(report.uiLockfileIntegrity?.changed, true);
+    assert.equal(report.uiLockfileIntegrity?.integrity, expectedIntegrity);
+    assert.equal(git(fx.child, "status", "--porcelain"), "");
   } finally {
     rmSync(fx.root, { recursive: true, force: true });
   }

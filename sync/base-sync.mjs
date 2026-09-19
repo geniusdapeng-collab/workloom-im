@@ -29,10 +29,13 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { bindUiLockfileIntegrity } from "./ui-lockfile-integrity.mjs";
+
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(SCRIPT_PATH);
 const DEFAULT_BASE_REPO = "workloom-ai/workloom-im";
 const STATE_FILE = ".workloom-base-sync.json";
+const UI_STATE_FILE = ".workloom-ui.json";
 const MODULE_SOURCE_EXTENSIONS = Object.freeze([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".json"]);
 
 function parseArgs(argv) {
@@ -1233,6 +1236,21 @@ function syncToChild(baseDir, childDir, scope, report, extraExclude = [], option
     if (lockfileInputsChanged) {
       try {
         sh("pnpm", ["install", "--lockfile-only", "--ignore-scripts"], childDir);
+        // pnpm 10.14 只为 URL tarball 写 resolution.tarball，不写 SRI；重算 lock 会把
+        // `@workloom/ui` 稳定制品的 SHA-512 丢掉，子仓 UI 消费门禁
+        // （resolution.integrity == `.workloom-ui.json` 的 SHA-512）随即判红。
+        // UI 消费仓必须在 frozen install 之前把稳定 state 的 SHA-512 重新注入唯一
+        // canonical resolution，口径与 `sync/ui-upgrade-pr.mjs` 的 rollout 路径一致。
+        if (existsSync(join(childDir, UI_STATE_FILE))) {
+          const bound = bindUiLockfileIntegrity(childDir);
+          const lockRel = relative(repoRoot, bound.lockfile).split(sep).join("/");
+          if (!stagedPaths.includes(lockRel)) stagedPaths.push(lockRel);
+          report.uiLockfileIntegrity = {
+            lockfile: lockRel,
+            changed: bound.changed,
+            integrity: bound.integrity,
+          };
+        }
         const dirtyAfter = changedPaths(repoRoot);
         for (const path of dirtyAfter) {
           if (!dirtyBefore.has(path) && /(^|\/)pnpm-lock\.yaml$/.test(path)) {
