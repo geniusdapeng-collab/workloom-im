@@ -148,7 +148,7 @@ CNB 每仓**最多 10 个标签**（实测：创建第 11 个返回 201 但不�
 - 自动合并的判定逻辑在 `sync/fanout-rules.mjs#autoMergeEligibility`（纯函数、有单测），执行器是
   `sync/merge-sync-prs.mjs`；两者与 fanout（`sync/fanout-cnb.mjs`）共同构成"基座改一次、
   舰队跟一次"的闭环，机制说明见 `docs/FLEET-AUTO-SYNC.md`。
-- 白名单只覆盖根级受控资产：`WORKLOOM_PRODUCT_CONTEXT.md`、`AGENTS.md`、
+- 白名单只覆盖根级受控资产：`WORKLOOM_PRODUCT_CONTEXT.md`、`AI-AUTONOMOUS-OPERATIONS.md`、`AGENTS.md`、
   `docs/DEVELOPMENT-PROTOCOL.md`、`.workloom-base-sync.json`、
   `.github/workflows/base-sync-heartbeat.yml`、`sync/**`。
 - 门禁仍然先行：PR 必须全部门禁 success 且平台可合并；**没有状态检查结果的 PR 不自动合并**。
