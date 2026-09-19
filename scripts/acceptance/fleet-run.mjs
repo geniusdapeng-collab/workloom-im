@@ -183,7 +183,7 @@ function portsUp() {
 }
 
 let preview = null;
-if (!SKIP_SEED || has("--start-preview")) {
+async function startPreview() {
   try {
     killPorts();
     const logPath = join(REPO_DIR, "outputs", "acceptance", "preview.log");
@@ -212,7 +212,34 @@ if (!SKIP_SEED || has("--start-preview")) {
   } catch (err) { fail("preview", err.message); }
 }
 
-/* ------------------------------ 5. 真机验收四件套 ------------------------------ */
+/**
+ * 顺序纪律：**回归先跑，再起真机**。
+ * 主套件自己会 spawn server（默认 8787）并把三端端口当资源用；如果预览先起来，
+ * 套件会撞端口给出 net 层报错（基座首轮实测：suite 假失败 exit 1 `emitErrorNT`）。
+ */
+/* ------------------------------ 4.1 回归（先于预览） ------------------------------ */
+if (!SKIP_REGRESSION) {
+  const pkg = JSON.parse(readFileSync(join(REPO_DIR, "package.json"), "utf-8"));
+  const scripts = pkg.scripts ?? {};
+  const defaultOrder = ["suite", "suite:hotel", "suite:geo", "suite:video", "suite:ecom", "db:verify-chain", "typecheck", "release:gate"];
+  const requested = arg("--regression");
+  const list = requested ? requested.split(",") : defaultOrder.filter((k) => scripts[k]);
+  const summary = {};
+  for (const name of list) {
+    if (!scripts[name]) { summary[name] = "本仓无此脚本"; continue; }
+    const res = run("pnpm", [name], { allowFail: true, timeoutMs: 30 * 60_000 });
+    const last = res.out.split("\n").filter((l) => l.trim()).slice(-3).join(" ");
+    summary[name] = res.status === 0 ? `通过（${last.slice(0, 160)}）` : `失败 exit=${res.status}：${last.slice(0, 200)}`;
+    log(`${res.status === 0 ? "✓" : "✗"} 回归 ${name}`);
+  }
+  state.regression = summary;
+  mkdirSync(join(REPO_DIR, "outputs", "acceptance", "regression"), { recursive: true });
+  writeFileSync(join(REPO_DIR, "outputs", "acceptance", "regression", "summary.json"), JSON.stringify({ commands: summary, at: new Date().toISOString() }, null, 1));
+  pass("regression", Object.entries(summary).map(([k, v]) => `${k}=${String(v).slice(0, 40)}`).join("；"));
+}
+
+/* ------------------------------ 5. 起真机 + 真机验收四件套 ------------------------------ */
+await startPreview();
 /**
  * 子仓不会拿到根 package.json（base-sync 只发 scripts/** 等受控资产），
  * 所以这里**直接调执行器**，不依赖 `pnpm acceptance:*` 脚本入口；
@@ -272,27 +299,6 @@ for (const [name, command, entry] of acceptance) {
     if (!ok) state.ok = false;
     log(`${ok ? "✓" : "✗"} ${name}（exit ${res.status}）`);
   } catch (err) { fail(name, err.message); }
-}
-
-/* ------------------------------ 6. 回归 ------------------------------ */
-if (!SKIP_REGRESSION && state.steps.preview?.ok !== false) {
-  const pkg = JSON.parse(readFileSync(join(REPO_DIR, "package.json"), "utf-8"));
-  const scripts = pkg.scripts ?? {};
-  const defaultOrder = ["suite", "suite:hotel", "suite:geo", "suite:video", "suite:ecom", "db:verify-chain", "typecheck", "release:gate"];
-  const requested = arg("--regression");
-  const list = requested ? requested.split(",") : defaultOrder.filter((k) => scripts[k]);
-  const summary = {};
-  for (const name of list) {
-    if (!scripts[name]) { summary[name] = "本仓无此脚本"; continue; }
-    const res = run("pnpm", [name], { allowFail: true, timeoutMs: 30 * 60_000 });
-    const last = res.out.split("\n").filter((l) => l.trim()).slice(-3).join(" ");
-    summary[name] = res.status === 0 ? `通过（${last.slice(0, 160)}）` : `失败 exit=${res.status}：${last.slice(0, 200)}`;
-    log(`${res.status === 0 ? "✓" : "✗"} 回归 ${name}`);
-  }
-  state.regression = summary;
-  mkdirSync(join(REPO_DIR, "outputs", "acceptance", "regression"), { recursive: true });
-  writeFileSync(join(REPO_DIR, "outputs", "acceptance", "regression", "summary.json"), JSON.stringify({ commands: summary, at: new Date().toISOString() }, null, 1));
-  pass("regression", Object.entries(summary).map(([k, v]) => `${k}=${String(v).slice(0, 40)}`).join("；"));
 }
 
 /* ------------------------------ 7. 关停 ------------------------------ */

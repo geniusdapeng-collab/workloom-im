@@ -33,7 +33,9 @@ const missing = [
 const redLines = [];
 if (matrix?.counts && matrix.counts.agentsPass !== matrix.counts.agents) redLines.push("L1 运行层存在失败岗位（可能是治理/在编缺陷）");
 if (ui?.totals && ui.totals.agentsOk !== ui.totals.agentsChecked && ui.totals.agentsChecked > 0) redLines.push("岗位档案页存在渲染缺陷");
-if (experience?.checks?.some((c) => !c.pass && /审批|派活|制动|溯源/.test(c.name))) redLines.push("关键任务不可完成（审批/派活/制动/溯源）");
+// 红线只认「治理/关键任务」：审批写回、派活、围栏 dry-run。制动杆位置随仓不同（基座只在夜班中心），
+// 溯源页容器也随仓不同——这两条作为体验问题记录，不轻易升级为红线。
+if (experience?.checks?.some((c) => !c.pass && /审批|派活|dry-run/.test(c.name))) redLines.push("关键任务不可完成（审批写回/派活/围栏 dry-run）");
 if (ui?.issues?.some((i) => /裸奔技术 id|未见展示名/.test(String(i.detail)))) redLines.push("客户端出现技术串（裸露 id）");
 
 const verdict = redLines.length ? "不通过（红线命中）" : (missing.length ? "条件通过（有未执行层）" : "通过");

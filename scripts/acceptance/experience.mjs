@@ -170,15 +170,25 @@ async function approval() {
 async function traceability() {
   await page.goto(`${URLs.pc}${R.events}`, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => /事件账本|决策链路/.test(document.body.innerText), null, { timeout: 25000 }).catch(() => undefined);
-  await page.waitForFunction(() => document.querySelectorAll("article").length > 0, null, { timeout: 20000 }).catch(() => undefined);
+  /**
+   * 事件卡容器各仓不统一（`article` / 圆角卡片 div），判据落在语义上：
+   * 卡里同时出现「事件」与「执行者 · 动作」才算账本卡，避免因标签名差异误判为空账本。
+   */
+  const cardSelector = "article, main [class*='rounded-xl'], main [class*='rounded-msg']";
+  await page.waitForFunction(
+    (sel) => [...document.querySelectorAll(sel)].some((el) => /事件/.test(el.innerText ?? "") && /·/.test(el.innerText ?? "")),
+    cardSelector,
+    { timeout: 20000 },
+  ).catch(() => undefined);
   await page.waitForTimeout(1200);
-  const card = await page.evaluate(() => {
-    const article = document.querySelector("article");
+  const card = await page.evaluate((sel) => {
+    const cards = [...document.querySelectorAll(sel)];
+    const article = cards.find((el) => /事件/.test(el.innerText ?? "")) ?? cards[0] ?? null;
     const t = article?.innerText ?? "";
     return { hasCard: Boolean(article), hasActor: /·/.test(t), hasEventNo: /事件/.test(t), sample: t.replace(/\s+/g, " ").slice(0, 120) };
-  });
+  }, cardSelector);
   const t0 = now();
-  const link = page.locator("article button").first();
+  const link = page.locator(`${cardSelector.split(",").map((s) => s.trim()).join(" button, ")} button`).first();
   let opened = false;
   if (await link.count()) {
     await link.click({ timeout: 8000 }).catch(() => undefined);
@@ -199,13 +209,27 @@ async function traceability() {
 }
 
 async function brake() {
-  await page.goto(`${URLs.pc}${R.reports}`, { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(3000);
-  const brakeButton = page.getByRole("button", { name: /紧急制动/ }).first();
-  const has = (await brakeButton.count()) > 0;
-  const enabled = has ? !(await brakeButton.isDisabled()) : false;
+  /**
+   * 制动杆位置各仓不同：行业仓挂在经营报告页，基座只在夜班中心（且要求有夜班在跑）。
+   * 依次探测 reports → night；找不到就如实记「未接线」——红线只看审批/派活/治理，不看这一条。
+   */
+  let has = false;
+  let enabled = false;
+  let where = null;
+  for (const [name, route] of [["reports", R.reports], ["night", "/night"]]) {
+    await page.goto(`${URLs.pc}${route}`, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(2500);
+    const candidate = page.getByRole("button", { name: /紧急制动/ }).first();
+    if (await candidate.count()) {
+      has = true;
+      enabled = !(await candidate.isDisabled());
+      where = name;
+      break;
+    }
+  }
   let dialog = false;
   if (has) {
+    const brakeButton = page.getByRole("button", { name: /紧急制动/ }).first();
     await brakeButton.scrollIntoViewIfNeeded().catch(() => undefined);
     await brakeButton.click({ timeout: 8000 }).catch(() => undefined);
     await page.waitForTimeout(1000);
@@ -219,7 +243,7 @@ async function brake() {
     precondition: "经营报告页可用",
     steps: ["打开经营报告", "定位制动杆", "点开二次确认", "撤回（不污染运行态）"],
     expected: "入口可达且可执行；确认层写明生效范围；有撤回路径",
-    actual: { 入口存在: has, 可执行: enabled, 确认层: dialog },
+    actual: { 入口存在: has, 命中页面: where, 可执行: enabled, 确认层: dialog },
     evidence: await shot(page, "exp-04-brake"),
     pass: has && enabled && dialog,
   };
@@ -233,12 +257,22 @@ async function dispatch() {
     return { hasInput: Boolean(input), placeholder: input?.getAttribute("placeholder") ?? null };
   });
   const t0 = now();
+  const title = "为下周三的客房促销活动写一条发布计划，本周五前交付";
   const res = await page.request.post(`${URLs.api}/trpc/threads.dispatch`, {
     headers: { authorization: `Bearer ${TOKEN}` },
-    data: { title: `验收走查：为${profile.productName}核验一条日常任务，本周内完成`, presetKey: null },
+    data: { title, presetKey: null },
   });
   const json = await res.json();
-  const threadId = json?.result?.data?.threadId ?? null;
+  let threadId = json?.result?.data?.threadId ?? null;
+  const clarify = json?.result?.data?.kind === "clarify";
+  // 含糊指令被路由成 clarify（不建任务）是**正确行为**；补一条规格明确的指令再派一次即可
+  if (!threadId && clarify) {
+    const retry = await page.request.post(`${URLs.api}/trpc/threads.dispatch`, {
+      headers: { authorization: `Bearer ${TOKEN}` },
+      data: { title: `${title}（交付物：发布计划文档；截止：本周五 18:00）`, presetKey: null },
+    });
+    threadId = (await retry.json())?.result?.data?.threadId ?? null;
+  }
   const ms = now() - t0;
   let detailOk = false;
   if (threadId) {
