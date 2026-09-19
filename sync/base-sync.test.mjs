@@ -1516,6 +1516,59 @@ test("最小新行业仓一次完成 full 基座、三端稳定壳与消费门�
   }
 });
 
+test("full 同步在依赖变更后重算子仓开源组件清单并纳入提交", () => {
+  const fx = newIndustryFixture();
+  try {
+    // 子仓已有派生清单（内容过期），生成器随本次同步从基座下发。
+    write(join(fx.child, "docs/OPEN_SOURCE_COMPONENTS.md"), "stale-inventory\n");
+    commitAll(fx.child, "stale derived inventory before sync");
+
+    write(join(fx.base, "scripts/oss-inventory.mjs"), `#!/usr/bin/env node
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+const target = join(process.cwd(), "docs/OPEN_SOURCE_COMPONENTS.md");
+mkdirSync(dirname(target), { recursive: true });
+writeFileSync(target, "regenerated-inventory\\n");
+`);
+    write(join(fx.base, "shared/package.json"), `${JSON.stringify({
+      name: "@example/shared",
+      dependencies: { zod: "^4.6.5" },
+    }, null, 2)}\n`);
+    // 本用例关注清单刷新，放宽 fixture 的 2 文件同步上限（首轮对齐本身就有多项变更）。
+    const scope = readScope(fx.base);
+    scope.pollutionGuard.maxFilesPerSync = 40;
+    writeScope(fx.base, scope);
+    commitAll(fx.base, "inventory generator and dependency source");
+
+    // 该用例只关心清单刷新：用最小 pnpm 桩替换 fixture 的 UI 桩（后者要求已接入的 UI override）。
+    const bin = join(fx.root, "inventory-bin");
+    const fakePnpm = join(bin, "pnpm");
+    write(fakePnpm, `#!/usr/bin/env node
+const { writeFileSync } = require("node:fs");
+const { join } = require("node:path");
+if (process.argv.includes("--lockfile-only")) {
+  writeFileSync(join(process.cwd(), "pnpm-lock.yaml"), "lockfileVersion: '9.0'\\n");
+}
+`);
+    chmodSync(fakePnpm, 0o755);
+
+    const result = cli(["pull", "--repo", ".", "--base-dir", fx.base, "--json"], fx.child, {
+      ...process.env,
+      PATH: `${bin}:${dirname(NODE)}:${process.env.PATH}`,
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.lockfileRefreshed, true);
+    assert.equal(report.ossInventoryRefreshed, true);
+    assert.equal(readFileSync(join(fx.child, "docs/OPEN_SOURCE_COMPONENTS.md"), "utf8"), "regenerated-inventory\n");
+    const committed = git(fx.child, "show", "--pretty=format:", "--name-only", "HEAD");
+    assert.match(committed, /docs\/OPEN_SOURCE_COMPONENTS\.md/u);
+    assert.equal(git(fx.child, "status", "--porcelain"), "");
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
 test("UI 消费仓 full 同步重算 lockfile 后重新绑定稳定制品 SHA-512", () => {
   const fx = newIndustryFixture();
   try {
