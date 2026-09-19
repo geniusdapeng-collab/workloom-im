@@ -281,7 +281,7 @@
     volumes:
       - /cnb-cache/pnpm-store:copy-on-write
   env:
-    UI_VERSION: "0.1.3"
+    UI_VERSION: "0.1.4"
   stages:
     - name: 构建并打包 @workloom/ui
       script: |
@@ -294,6 +294,50 @@
         pnpm -C packages/ui build
         (cd packages/ui && pnpm pack --pack-destination /workspace/dist)
         ls -l /workspace/dist
+        # 制品自证：包版本必须等于 UI_VERSION，并记录**本次上传字节**的 sha512。
+        # 该摘要随后写回 sync/base-capabilities.json 并由同一次发布打标签 —— 消灭
+        # “标签先于 integrity” 的时序缺口（此前标签指向的提交里只有预打包占位值，
+        # 客户端基座通道 verify-source 会 fail-close，见 DEF-P1-0023）。
+        node -e '
+          const fs=require("fs"),{createHash}=require("crypto");
+          const ver=process.env.UI_VERSION;
+          const asset=`workloom-ui-${ver}.tgz`;
+          const buf=fs.readFileSync(`/workspace/dist/${asset}`);
+          const pkg=JSON.parse(fs.readFileSync("packages/ui/package.json","utf8"));
+          if(pkg.version!==ver) throw new Error(`packages/ui 版本 ${pkg.version} 与 UI_VERSION ${ver} 不一致`);
+          const digest="sha512-"+createHash("sha512").update(buf).digest("base64");
+          fs.writeFileSync("/workspace/dist/release-metadata.json", JSON.stringify({version:ver,asset,size:buf.length,sha512:digest},null,2));
+          console.log("artifact", asset, buf.length, digest);
+        '
+    - name: 登记 integrity 并打稳定标签（同一次发布自洽）
+      script: |
+        set -eu
+        META=/workspace/dist/release-metadata.json
+        node -e '
+          const fs=require("fs");
+          const meta=JSON.parse(fs.readFileSync(process.env.META_FILE,"utf8"));
+          const path="sync/base-capabilities.json";
+          const manifest=JSON.parse(fs.readFileSync(path,"utf8"));
+          const ver=meta.version;
+          for (const [label,current] of [["ui",manifest.ui.latestStableVersion],["clientFoundation",manifest.clientFoundation.latestStableVersion]]) {
+            if (current!==ver) throw new Error(`${label}.latestStableVersion=${current} 与发布版本 ${ver} 不一致；请先在 PR 内升版`);
+          }
+          manifest.ui.candidateVersion=ver;
+          manifest.ui.distribution.integrityByVersion[ver]=meta.sha512;
+          fs.writeFileSync(path, JSON.stringify(manifest,null,2)+"\n");
+          console.log("registered", ver, meta.sha512);
+        ' META_FILE=$META
+        git config user.name "cnb-ui-release"
+        git config user.email "ui-release@cnb.cool"
+        git add sync/base-capabilities.json
+        git commit -q -m "sync(base): 登记 @workloom/ui $UI_VERSION 发布资产实测 sha512（ui-release 流水线自证提交）"
+        RELEASE_SHA="$(git rev-parse HEAD)"
+        git push -q "https://cnb:${CNB_TOKEN}@cnb.cool/workloom-ai/workloom-im" "HEAD:refs/heads/main"
+        # 标签必须指向登记了真实摘要的这个提交；同一版本重跑时强制对齐（制品内容即上面打包的字节）。
+        git tag -f "ui-v${UI_VERSION}" "$RELEASE_SHA"
+        git push -f -q "https://cnb:${CNB_TOKEN}@cnb.cool/workloom-ai/workloom-im" "refs/tags/ui-v${UI_VERSION}"
+        node -e 'require("fs").writeFileSync("/workspace/dist/release-commit.txt", process.env.RELEASE_SHA + "\n")' RELEASE_SHA="$RELEASE_SHA"
+        echo "RELEASE_SHA=$RELEASE_SHA"
     - name: 发布到 CNB Release
       script: |
         set -eu
@@ -303,6 +347,8 @@
         const ver=process.env.UI_VERSION;
         const tag=`ui-v${ver}`, asset=`workloom-ui-${ver}.tgz`;
         const token=process.env.CNB_TOKEN;
+        const meta=JSON.parse(fs.readFileSync('/workspace/dist/release-metadata.json','utf8'));
+        const releaseSha=fs.readFileSync('/workspace/dist/release-commit.txt','utf8').trim();
         const J={'Authorization':`Bearer ${token}`,'Accept':'application/json','Content-Type':'application/json'};
         async function req(url, opts={}) {
           const r=await fetch(url,{...opts,headers:{...J,...(opts.headers||{})}});
@@ -312,17 +358,30 @@
         }
         let rel;
         try { rel = await req(`${API}/${REPO}/-/releases/tags/${tag}`); }
-        catch { rel = await req(`${API}/${REPO}/-/releases`, {method:'POST', body: JSON.stringify({tag_name:tag,name:tag,body:'WorkLoom 织元共享 UI 制品（CNB 托管）',target_commitish:'main',draft:false,prerelease:false,make_latest:'false'})}); }
+        catch { rel = await req(`${API}/${REPO}/-/releases`, {method:'POST', body: JSON.stringify({tag_name:tag,name:tag,body:'WorkLoom 织元共享 UI 制品（CNB 托管）',target_commitish:releaseSha,draft:false,prerelease:false,make_latest:'false'})}); }
         const buf=fs.readFileSync(`/workspace/dist/${asset}`);
         const up=await req(`${API}/${REPO}/-/releases/${rel.id}/asset-upload-url`, {method:'POST', body: JSON.stringify({asset_name:asset,size:buf.length,overwrite:true})});
         const put=await fetch(up.upload_url,{method:'PUT',body:buf,headers:{'Content-Type':'application/octet-stream'}});
         if(!put.ok) throw new Error('upload '+put.status+' '+(await put.text()).slice(0,200));
         await req(up.verify_url, {method:'POST', body:'{}'});
         const after=await req(`${API}/${REPO}/-/releases/tags/${tag}`);
+        // 回读校验：远端资产字节必须与本地打包字节逐字节一致，且等于登记摘要。
+        const {createHash}=await import('node:crypto');
+        const downloaded=Buffer.from(await (await fetch(`https://cnb.cool/${REPO}/-/releases/download/${tag}/${asset}`)).arrayBuffer());
+        const digest='sha512-'+createHash('sha512').update(downloaded).digest('base64');
+        if(downloaded.length!==meta.size || digest!==meta.sha512) throw new Error(`发布资产与登记摘要不一致：${downloaded.length}/${digest}`);
         console.log('assets', (after.assets||[]).map(a=>`${a.name}:${a.size}`).join(', '));
         console.log('DONE', `https://cnb.cool/${REPO}/-/releases/download/${tag}/${asset}`);
         JS
-        node /tmp/publish.mjs
+        if ! node /tmp/publish.mjs; then
+          # 上传/校验失败 → 回滚登记提交与标签，绝不把「已登记但无制品」的半态留在 main。
+          echo "发布失败：回滚登记提交与稳定标签，保持 main 自洽"
+          RELEASE_SHA="$(cat /workspace/dist/release-commit.txt)"
+          git revert --no-edit "$RELEASE_SHA"
+          git push -q "https://cnb:${CNB_TOKEN}@cnb.cool/workloom-ai/workloom-im" "HEAD:refs/heads/main" || true
+          git push -q --delete "https://cnb:${CNB_TOKEN}@cnb.cool/workloom-ai/workloom-im" "refs/tags/ui-v${UI_VERSION}" || true
+          exit 1
+        fi
 
 main:
   push:

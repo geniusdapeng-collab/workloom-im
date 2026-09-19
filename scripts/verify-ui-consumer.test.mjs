@@ -499,6 +499,27 @@ describe("行业仓共享界面消费门禁", () => {
     }
   });
 
+  it("委托型 shell 包装不算分叉（同名共享组件导入 + 真实渲染）", () => {
+    const repo = fixture();
+    mkdirSync(join(repo, "apps/web/src/shell"), { recursive: true });
+    // 模拟受管客户端壳里的 shell/SideNav.tsx：只把共享 SideNavigation 包一层产品上下文
+    writeFileSync(join(repo, "apps/web/src/shell/ShellNav.tsx"), [
+      'import { SideNavigation as SharedSideNavigation } from "@workloom/ui";',
+      "export function SideNav(){ return <SharedSideNavigation entries={[]} />; }",
+    ].join("\n"));
+    const wrapperErrors = verifyUiConsumerRepo(repo);
+    assert.equal(wrapperErrors.some((error) => error.includes("疑似本地复制分叉")), false);
+    assert.equal(wrapperErrors.some((error) => error.includes("本地定义 SideNav")), false);
+
+    // 只导入不渲染（假装包装、实则自研）仍必须拦截
+    writeFileSync(join(repo, "apps/web/src/shell/ShellNav.tsx"), [
+      'import { SideNavigation } from "@workloom/ui";',
+      "export function SideNav(){ return <div>自己实现的导航</div>; }",
+    ].join("\n"));
+    const fakeErrors = verifyUiConsumerRepo(repo);
+    assert.ok(fakeErrors.some((error) => error.includes("本地定义 SideNav")));
+  });
+
   it("行业新文件不能绕过底层字段、模态层级与 PC 左侧导航门禁", () => {
     const repo = fixture();
     mkdirSync(join(repo, "apps/web/src/extensions/hotel"), { recursive: true });
