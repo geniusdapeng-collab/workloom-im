@@ -1163,6 +1163,7 @@ function transactionPaths(repoRoot, childDir, plan, scope) {
     { path: legacyStatePath, label: `legacy state ${relative(repoRoot, legacyStatePath)}` },
     { path: join(repoRoot, "pnpm-lock.yaml"), label: "根级 pnpm-lock.yaml" },
     { path: join(childDir, "pnpm-lock.yaml"), label: "基座目录 pnpm-lock.yaml" },
+    { path: join(childDir, "docs/OPEN_SOURCE_COMPONENTS.md"), label: "派生清单 docs/OPEN_SOURCE_COMPONENTS.md" },
   ];
   for (const rel of walk(repoRoot)) {
     if (/(^|\/)pnpm-lock\.yaml$/.test(rel)) paths.push({ path: join(repoRoot, rel), label: `lockfile ${rel}` });
@@ -1262,6 +1263,22 @@ function syncToChild(baseDir, childDir, scope, report, extraExclude = [], option
         report.lockfileRefreshed = true;
       } catch (error) {
         throw new Error(`lockfile 刷新失败；未写 state、未提交：${redact(error?.message).slice(0, 300)}`);
+      }
+      // 依赖一变，子仓的派生清单 docs/OPEN_SOURCE_COMPONENTS.md 就与仓库事实漂移，
+      // 其 static-gate 的 `pnpm oss:check` 会直接判红（九仓波次实测）。生成器离线、
+      // 确定性，且产物与 `yaml` 解析器是否可用无关（实测逐字节一致），
+      // 因此在写 state、提交之前就地重算并把清单纳入本次变更。
+      const inventoryGenerator = join(childDir, "scripts/oss-inventory.mjs");
+      const inventoryDoc = join(childDir, "docs/OPEN_SOURCE_COMPONENTS.md");
+      if (existsSync(inventoryGenerator) && existsSync(inventoryDoc)) {
+        try {
+          sh(process.execPath, [inventoryGenerator, "--write"], childDir);
+          const docRel = relative(repoRoot, inventoryDoc).split(sep).join("/");
+          if (!stagedPaths.includes(docRel)) stagedPaths.push(docRel);
+          report.ossInventoryRefreshed = true;
+        } catch (error) {
+          throw new Error(`开源组件清单刷新失败；未写 state、未提交：${redact(error?.message).slice(0, 300)}`);
+        }
       }
     }
 
