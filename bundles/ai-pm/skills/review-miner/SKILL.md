@@ -1,7 +1,7 @@
 ---
 name: review-miner
 version: 1.0.0
-description: 评论/反馈 LLM 聚类、情绪打分、代表原声提取。
+description: 评论挖掘。评论/反馈 LLM 聚类、情绪打分、代表原声提取。
 ---
 
 # 反馈聚类与情绪分析

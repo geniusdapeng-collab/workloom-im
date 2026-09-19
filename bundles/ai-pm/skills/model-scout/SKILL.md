@@ -1,7 +1,7 @@
 ---
 name: model-scout
 version: 3.0.0
-description: 新模型发布监控 + 本产品场景 eval 子集试跑 + 质量/时延/成本三轴选型报告；换型触发器纪律防止被 benchmark 营销带偏。
+description: 模型侦察。新模型发布监控 + 本产品场景 eval 子集试跑 + 质量/时延/成本三轴选型报告；换型触发器纪律防止被 benchmark 营销带偏。
 ---
 
 # 模型能力侦察
