@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { loadLayeredEnv } from "@deepseek-ai/dsh-app-boot";
-import { Command, CommanderError } from "commander";
+import { StartupError, loadLayeredEnv } from "@deepseek-ai/dsh-app-boot";
+import { resolveDshHome } from "@deepseek-ai/dsh-home-paths";
+import { Command, CommanderError, InvalidArgumentError } from "commander";
+import { randomUUID } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { inspect } from "node:util";
 //#region lib/types/args.js
 /**
 * Commander adapter for the `dsh` command line.
@@ -16,7 +21,7 @@ import { Command, CommanderError } from "commander";
 * `dsh --profile tui --resume abc` boots the tui profile with `--resume abc`,
 * and `dsh --profile web -h` prints the web app's help, not this one's.
 *
-* `web` is a hardcoded alias for `--profile web`; `plugin` manages a profile's
+* `dsh <name>` abbreviates `dsh --profile <name>`; `plugin` manages a profile's
 * plugin dependencies by forwarding to pnpm.
 * @module @deepseek-ai/dsh/args
 */
@@ -25,25 +30,29 @@ import { Command, CommanderError } from "commander";
 * variadic — a variadic `--patch` would swallow the inner arguments.
 */
 const collect = (value, previous = []) => [...previous, value];
+function selectProfile(value, previous) {
+	if (previous !== void 0) throw new InvalidArgumentError("select a profile only once");
+	return value;
+}
 function rejectElectronProfile(program, profile) {
 	if (profile.toLowerCase() === "desktop") program.error("error: profile \"desktop\" is managed exclusively by the Electron application");
 }
 /** The launcher's own help text; each app prints its own. */
 const HELP_EXAMPLES = `
 Examples:
-  dsh --profile web                          boot the web profile (same as: dsh web)
-  dsh --profile rescue --from-default-profile web
-                                             create rescue from the shipped web template, then boot it
-  dsh --profile headless "run the tests"     answer one task, print the result, and exit
-  dsh --profile tui --patch ./extra.yml      boot a custom profile with one extra overlay
-  dsh --profile tui --resume <session>       arguments after the launcher flags reach the app
-  dsh --profile web --help                   the web app's own flags and help
-  dsh plugin --profile tui add <package>     install a plugin into the tui profile
+  dsh web                                   boot the web profile (same as: dsh --profile web)
+  dsh rescue --from-default-profile web
+                                            create rescue from the shipped web template, then boot it
+  dsh headless "run the tests"              answer one task, print the result, and exit
+  dsh tui --patch ./extra.yml               boot a custom profile with one extra overlay
+  dsh tui --resume <session>                arguments after the launcher flags reach the app
+  dsh web --help                            the web app's own flags and help
+  dsh plugin --profile tui add <package>    install a plugin into the tui profile
 `;
 /**
 * Resolve a boot or dump invocation from the launcher flags and the leftover
 * inner arguments.
-* @param program - the command whose options were parsed (the root, or the `web` alias).
+* @param program - the command whose options were parsed.
 * @param profile - the profile these flags boot.
 * @param options - the launcher flags commander collected.
 * @param args - the leftover arguments, in argv order.
@@ -80,9 +89,10 @@ function resolveBoot(program, profile, options, args) {
 * @returns the resolved invocation.
 */
 function parseDshArgs(argv, version) {
+	const first = argv[0];
 	let resolved;
 	const program = new Command();
-	program.name("dsh").version(version, "-V, --version", "output the version number").description("dsh: boot a DeepSeek Harness profile — an ordered stack of plugin-bundle patch layers under your own overrides.").addHelpText("after", HELP_EXAMPLES).exitOverride().helpOption(false).allowUnknownOption().passThroughOptions().enablePositionalOptions().argument("[args...]", "arguments for the booted profile's app (see: dsh --profile <name> --help)").option("--profile <name>", "the profile under $DSH_HOME/profiles to boot").option("--from-default-profile <name>", "initialize a new custom profile from a shipped profile template").option("--patch <path>", "extra patch-list overlay applied after the profile layer (repeatable)", collect).option("--dump-config", "print the composed profile tree and exit").option("--dump-default-config", "print the profile tree without its user layer or --patch overlays and exit").action((args, options) => {
+	program.name("dsh").version(version, "-V, --version", "output the version number").usage("[--profile] <name> [options] [app-args...]\n       dsh plugin --profile <name> <pnpm-args...>").description("dsh: boot a DeepSeek Harness profile — an ordered stack of plugin-bundle patch layers under your own overrides.").addHelpText("after", HELP_EXAMPLES).exitOverride().helpOption(false).helpCommand(false).allowUnknownOption().passThroughOptions().enablePositionalOptions().argument("[args...]", "arguments for the booted profile's app (see: dsh --profile <name> --help)").option("--profile <name>", "the profile under $DSH_HOME/profiles to boot", selectProfile).option("--from-default-profile <name>", "initialize a new custom profile from a shipped profile template").option("--patch <path>", "extra patch-list overlay applied after the profile layer (repeatable)", collect).option("--dump-config", "print the composed profile tree and exit").option("--dump-default-config", "print the profile tree without its user layer or --patch overlays and exit").action((args, options) => {
 		if (options.profile === void 0) {
 			if (args.some((argument) => argument === "-h" || argument === "--help")) program.help();
 			program.error("error: --profile <name> is required");
@@ -92,36 +102,85 @@ function parseDshArgs(argv, version) {
 		rejectElectronProfile(program, profile);
 		resolved = resolveBoot(program, profile, options, args);
 	});
-	/** Reject parent options supplied before a subcommand. */
-	const rejectParentOptions = (command) => {
-		const parent = program.opts();
-		if (parent.profile !== void 0 || parent.patch !== void 0 || parent.dumpConfig !== void 0 || parent.dumpDefaultConfig !== void 0 || parent.fromDefaultProfile !== void 0) program.error(`error: ${command} takes none of parent --profile, --from-default-profile, --patch, --dump-config, or --dump-default-config`);
-	};
-	const web = program.command("web").description("boot the web profile (alias of --profile web); the web app's own flags follow");
-	web.helpOption(false).allowUnknownOption().passThroughOptions().enablePositionalOptions().argument("[args...]", "arguments for the web app (see: dsh web --help)").option("--patch <path>", "extra patch-list overlay applied after the profile layer (repeatable)", collect).option("--dump-config", "print the composed web-profile tree (with the user layer and any --patch) and exit").option("--dump-default-config", "print the web profile's bundle layers (no user layer) and exit").action((args, options) => {
-		rejectParentOptions("web");
-		resolved = resolveBoot(web, "web", options, args);
-	});
-	const plugin = program.command("plugin").description("manage a profile's plugins by forwarding the remaining arguments to pnpm in the profile directory");
-	plugin.requiredOption("--profile <name>", "the profile whose plugins to manage (initialized on first use)").allowUnknownOption().argument("[args...]", "pnpm arguments, forwarded verbatim (add <pkg>, remove <pkg>, why <pkg>, ...)").action((args, options) => {
-		rejectParentOptions("plugin");
-		if (options.profile === "") program.error("error: --profile needs a name");
-		rejectElectronProfile(plugin, options.profile);
-		if (args.length === 0) program.error("error: plugin needs pnpm arguments to forward (e.g. add <package>)");
-		resolved = {
-			mode: "plugin",
-			profile: options.profile,
-			args
-		};
-	});
+	if (first === "plugin") {
+		const plugin = program.command("plugin").description("manage a profile's plugins by forwarding the remaining arguments to pnpm in the profile directory");
+		plugin.requiredOption("--profile <name>", "the profile whose plugins to manage (initialized on first use)", selectProfile).allowUnknownOption().argument("[args...]", "pnpm arguments, forwarded verbatim (add <pkg>, remove <pkg>, why <pkg>, ...)").action((args, options) => {
+			if (options.profile === "") program.error("error: --profile needs a name");
+			rejectElectronProfile(plugin, options.profile);
+			if (args.length === 0) program.error("error: plugin needs pnpm arguments to forward (e.g. add <package>)");
+			resolved = {
+				mode: "plugin",
+				profile: options.profile,
+				args
+			};
+		});
+	}
 	try {
-		program.parse(argv, { from: "user" });
+		const expanded = first !== void 0 && !first.startsWith("-") && first !== "plugin" ? ["--profile", ...argv] : argv;
+		program.parse(expanded, { from: "user" });
 	} catch (error) {
 		return process.exit(error instanceof CommanderError ? error.exitCode : 1);
 	}
 	/* v8 ignore next -- an action resolves or Commander throws */
 	if (resolved === void 0) throw new Error("dsh: no invocation resolved");
 	return resolved;
+}
+//#endregion
+//#region lib/types/startup-diagnostics.js
+/** Save original startup diagnostics while keeping the terminal report concise. */
+/** Wait for stderr to finish the write before the failed process exits. */
+function writeStderr(text) {
+	return new Promise((resolve, reject) => {
+		process.stderr.write(text, (error) => {
+			if (error) reject(error);
+			else resolve();
+		});
+	});
+}
+/**
+* Print the startup summary and save a private, uniquely named report under DSH_HOME/logs.
+* Failed writes print the complete report to stderr instead of claiming a saved path.
+* @param error - startup audit failure retaining plugin metadata and original errors.
+* @param context - resolved Harness home, application version, and selected profile.
+* @param write - terminal output sink; awaited before returning, defaults to stderr.
+* @returns after saving or printing the report and completing terminal writes.
+*/
+async function reportStartupFailure(error, context, write = writeStderr) {
+	const now = (/* @__PURE__ */ new Date()).toISOString();
+	const report = "WARNING: Raw diagnostics may contain configuration or credential values from plugin errors. Review before sharing.\n\n" + inspect({
+		timestamp: now,
+		dshVersion: context.version,
+		nodeVersion: process.version,
+		platform: process.platform,
+		arch: process.arch,
+		profile: context.profile,
+		error
+	}, {
+		depth: null,
+		maxArrayLength: null,
+		maxStringLength: null,
+		showHidden: true,
+		customInspect: false,
+		getters: false,
+		colors: false
+	}) + "\n";
+	await write(`${error.message}\n`);
+	const logDir = join(context.home, "logs");
+	const logPath = join(logDir, `startup-${now.replaceAll(":", "-")}-${randomUUID()}.log`);
+	try {
+		await mkdir(logDir, {
+			recursive: true,
+			mode: 448
+		});
+		await writeFile(logPath, report, {
+			flag: "wx",
+			mode: 384
+		});
+	} catch (writeError) {
+		await write(`\ndsh: warning: could not write startup diagnostics: ${String(writeError)}\nFull diagnostics:\n${report}`);
+		return;
+	}
+	await write(`\nFull diagnostics: ${logPath}\n`);
 }
 //#endregion
 //#region lib/types/bin.js
@@ -139,26 +198,37 @@ function readVersion() {
 * @returns a promise that settles when the selected command mode finishes.
 */
 async function runCli() {
-	const invocation = parseDshArgs(process.argv.slice(2), readVersion());
+	const version = readVersion();
+	const invocation = parseDshArgs(process.argv.slice(2), version);
 	switch (invocation.mode) {
 		case "profile": {
-			const { runProfile } = await import("./profile-boot-BP_C0vpU.js");
-			await runProfile({
-				environment: loadLayeredEnv("dsh"),
-				profile: invocation.profile,
-				fromDefaultProfile: invocation.fromDefaultProfile,
-				patchFiles: invocation.patches,
-				args: invocation.args
-			});
+			const { runProfile } = await import("./profile-boot.js");
+			try {
+				await runProfile({
+					environment: loadLayeredEnv("dsh"),
+					profile: invocation.profile,
+					fromDefaultProfile: invocation.fromDefaultProfile,
+					patchFiles: invocation.patches,
+					args: invocation.args
+				});
+			} catch (error) {
+				if (!(error instanceof StartupError)) throw error;
+				await reportStartupFailure(error, {
+					home: resolveDshHome(),
+					version,
+					profile: invocation.profile
+				});
+				process.exit(1);
+			}
 			break;
 		}
 		case "plugin": {
-			const { runPlugin } = await import("./plugin-Ddi42qoW.js");
-			process.exit(runPlugin(invocation.profile, invocation.args));
+			const { runPlugin } = await import("./plugin-DJ-rVHUS.js");
+			process.exit(await runPlugin(invocation.profile, invocation.args));
 			break;
 		}
 		case "dump-config": {
-			const { runDumpConfig } = await import("./dump-config-lFgMwK8i.js");
+			const { runDumpConfig } = await import("./dump-config-Bb5YvFIX.js");
 			runDumpConfig(invocation.profile, invocation.defaultOnly, invocation.patches, invocation.fromDefaultProfile);
 			break;
 		}

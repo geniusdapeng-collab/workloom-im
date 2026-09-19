@@ -417,3 +417,11 @@ npm 最新 rc.7（latest）/ rc.8（next），与锁定 rc.8 一致——**无�
 - **存量红灯（升级前已存在，本轮以回退依赖复现证明无关）**：`pnpm ui:e2e` 2 项失败（PC 200% 文字溢出 4px、darwin 视觉基线差 50px/5% 像素）；`pnpm pc-shell:verify` 4 项失败（PC 导航身份/版本映射与 404 态）。两者对应实现文件与 main 完全一致（`git diff main -- apps/web/src scripts/verify-pc-shell.mjs` 为空）。
 - **暂缓项与理由（同批写入 oss-components.json#notes，扫描可继承）**：yaml 2.9.1（须与 uiGovernance 治理单元同批走 stable-upgrade-pr）；react/react-dom/@types/react 19.3.0（@react-three/fiber peer `>=19 <19.3`，含 10.0.0-canary 仍未放开）；pixi.js 8.21.0（pixi-live2d-display 仅支持 v6 线，需先定 live2d 替换方案）；Node.js 26.9.0 / pnpm 12.4.2 / npm 12.0.2（工具链三件套与九仓 packageManager、fanout lock 重算、桌面载荷绑定，另立整批迁移）；Playwright Python 1.45.1（随 computer-use toolkit/requirements.txt，需同步预检断言与浏览器二进制）。
 - **未执行项**：桌面 Electron 打包冒烟（`pnpm app:pack` 需先跑 `scripts/pack-electron-payload.sh` 装配 dist-payload，且需下载 44.4.3 二进制；桌面发行由 CNB desktop 流水线把关，签名 secrets 仍缺 BLK-B-01-003）；真实 IM 通道端到端（无凭据，维持 mock 口径）。
+
+## dsh 0.1.6-alpha.2 升级登记（2026-09-20，随发布即升纪律 · alpha 通道）
+
+- **触发**：上游 `0.1.6-alpha.2`（2026-09-17T13:52Z 发布，npm `alpha` tag）；npm `latest`/`next` 仍指 `0.1.5-rc.2`。按 2026-08-20 项目所有者口径「任何新版本（含 rc/beta/alpha）即触发升级、不得跳过」，本版照升。
+- **变更面（实测 diff）**：依赖面 `cordis-plugin-hmr` → `dsh-hmr`、`dsh-workflow-worker-thread` → `dsh-workflow-ptc`，新增 `dsh-mcp-resources` / `dsh-plugin-manager` / `dsh-atomic-write` / `dsh-experimental-agent-team-profile(-web-profile)`；devDeps 新增 `dsh-experimental-ptc-runtime-python`、移除 `dsh-experimental-code-runtime-python`；**首次随包发布 `lib/types/*.d.ts` 类型声明**。
+- **动作**：`vendor/dsh` 换基线 0.1.6-alpha.2（integrity `sha512-PHR/3ZHp…OYw==` 与 registry 逐字符一致 ✅）；dsh-gate pin 0.1.6-alpha.2 + **清 lock 重装**；README 中英 + VENDOR.md 同步；oss 清单随之重算。
+- **验证**：E6 dsh-gate 全绿（Node v24.19.0）：用例一哈希链 24 条逐条重算通过；用例二 H-5 kill -9 后链完整 6 条 + 重放零重复。基座 `pnpm test` 全绿（base 679 / server 133 / web 67 / webb 6 / webc 21）、`runtime:deps:verify` 通过、`oss:check` 一致。
+- **分发**：`packages/runtime/dsh-gate/**` 属 base-sync include，随下一轮 full fanout 下发八仓；WorkLoom-growth 的 full 同步仍被其 `provisionComposedWorkforce` 契约修改阻塞（独立事项）。

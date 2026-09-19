@@ -3,18 +3,18 @@
 | 项 | 值 |
 |---|---|
 | 包 | `@deepseek-ai/dsh`（CLI 聚合包；运行时依赖 `@deepseek-ai/dsh-*` / `cordis-plugin-*` 全家桶） |
-| 锁定版本 | `0.1.5-rc.2`（npm 发布时间 2026-09-10T14:57:10Z；rc.6→rc.8→0.1.1-rc.1→0.1.2-rc.1→0.1.5-rc.2 四次升级） |
-| 来源 | `https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.1.5-rc.2.tgz`（npmmirror 同源分发） |
-| integrity（入库时实测） | `sha512-8Xc8hCQHcIWRmTCVU/xZdp6/qMsWMeAd2ObChKDEsfhUPJFXx6H0lgeb1DxUMD86HZrrVN+1bCvn1ppjZ/fOxw==`（与 registry 元数据逐字符一致 ✅） |
+| 锁定版本 | `0.1.6-alpha.2`（npm 发布时间 2026-09-17T13:52:10Z；rc.6→rc.8→0.1.1-rc.1→0.1.2-rc.1→0.1.5-rc.2→0.1.6-alpha.2 五次升级） |
+| 来源 | `https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.1.6-alpha.2.tgz`（npmmirror 同源分发） |
+| integrity（入库时实测） | `sha512-PHR/3ZHpJNWXlDQ3U9weFb7calWbSMJd2GD3z2iPJ8zAKL7ipuzyPy5xGbaXf2OA8hc0SAGJeoUW7nfatCNOYw==`（与 registry 元数据逐字符一致 ✅） |
 | License | MIT |
 | 上游仓库 | `github.com/deepseek-ai/deepseek-harness`（`apps/cli` 目录） |
-| 入库日期 | 2026-08-16（rc.6）；2026-08-20 升级 rc.8；2026-08-21 升级 0.1.1-rc.1；2026-09-05 升级 0.1.2-rc.1；2026-09-19 升级 0.1.5-rc.2 |
+| 入库日期 | 2026-08-16（rc.6）；2026-08-20 升级 rc.8；2026-08-21 升级 0.1.1-rc.1；2026-09-05 升级 0.1.2-rc.1；2026-09-19 升级 0.1.5-rc.2；2026-09-20 升级 0.1.6-alpha.2（alpha 通道，按"任何新版本即触发升级"纪律跟进） |
 | 入库方式 | npm tarball 解压至本目录（`--strip-components=1`），未做任何源码修改 |
 
 ## 纪律
 
-- 本目录**只读**：任何修改必须先复制出去再改，保持与上游 0.1.5-rc.2 字节一致，可审计。
-- 运行时依赖解析仍走 pnpm（`pnpm add @deepseek-ai/dsh@0.1.5-rc.2` 于使用方包）；本目录是**审计基线 + 文档事实源**，升级前对照 diff。
+- 本目录**只读**：任何修改必须先复制出去再改，保持与上游 0.1.6-alpha.2 字节一致，可审计。
+- 运行时依赖解析仍走 pnpm（`pnpm add @deepseek-ai/dsh@0.1.6-alpha.2` 于使用方包）；本目录是**审计基线 + 文档事实源**，升级前对照 diff。
 - **升级触发条件（2026-08-20 项目所有者新决策，取代原「稳定 1.x 才升级」旧口径）**：官方仓库任何新版本（**包括 rc/beta/alpha 预发布**）即触发升级，不得等待稳定版、不得以任何理由跳过；升级前跑契约测试/门禁全绿。
 - **0.1.2-rc.1 变更面（0.1.1-rc.1→0.1.2-rc.1 实测 diff）**：
   - **新增嵌入式 profile 形态**：`sdk` / `sdk-minimal`（JSON-RPC stdio 为 SDK client 服务）、`acp`（Agent Client Protocol stdio）——dsh 可作为 agent 服务嵌入外部客户端（编辑器等）；
@@ -43,6 +43,19 @@
 - 安装纪律：**清 lock 重装**（`packages/runtime/dsh-gate`：删旧 lock + 删 node_modules → `pnpm install --ignore-workspace`，pnpm 10.14.0 / Node 24.19.0），避免全家桶混版；`node-pty` 仍在锁定树内，`onlyBuiltDependencies` 放行预构建通过。
 - E6 dsh-gate 全绿（Node v24.19.0）：用例一全链（headless → 工具调用 → 围栏瀑布 deny 优先 → 事件落账，哈希链 24 条逐条重算通过）；用例二 H-5（kill -9 崩溃现场 → 链完整 20 条 + 会话事件重放零重复）。
 - 变更统计：`packages/runtime/dsh-gate/pnpm-lock.yaml` 全量重算（564 包）；`@deepseek-ai/*` 家族整体 0.1.2-rc.1 → 0.1.5-rc.2。
+
+- **0.1.6-alpha.2 变更面（0.1.5-rc.2→0.1.6-alpha.2 实测 diff；2026-09-20 登记）**：
+  - 宏观版本线：`0.1.6-alpha.1` → `0.1.6-alpha.2`（npm `latest`/`next` 仍指 `0.1.5-rc.2`，本版本只在 `alpha` tag；按 2026-08-20 项目所有者口径跟进）；
+  - 依赖面变化：新增 `dsh-hmr`（替代 `cordis-plugin-hmr`）、`dsh-workflow-ptc`（替代 `dsh-workflow-worker-thread`）、`dsh-mcp-resources`、`dsh-plugin-manager`、`dsh-atomic-write`、`dsh-experimental-agent-team-profile` / `-web-profile`；devDeps 新增 `dsh-experimental-ptc-runtime-python`、移除 `dsh-experimental-code-runtime-python`；
+  - 首次随包发布 **TypeScript 类型声明**（`lib/types/*.d.ts`，`files` 白名单同步扩为 `lib/types/*.d.ts`）；
+  - 新增能力（alpha.1 汇总）：Web 侧边栏终端（多标签 / Shell 选择 / 刷新保持）、已归档会话列表、MCP 资源发现与 URI 模板、headless 支持 stdin 任务与 `--session-id`/`--json`、SSH 远端工作区、实验性 Browser Use（Playwright MCP + Chromium）；
+  - 新增能力（alpha.2）：插件管理页（安装/改配置/实时启停）、回合结束文件改动卡片与逐文件审阅、Office 文档预览（Word/Excel/PowerPoint）、侧边栏浏览器模式访问 URL、侧边栏打开 Subagent 会话与提交计划预览。
+
+## 升级验证（2026-09-20 · 0.1.6-alpha.2）
+
+- 安装纪律：**清 lock 重装**（`packages/runtime/dsh-gate`：旧 lock 与 node_modules 移出 → `pnpm install --ignore-workspace`，pnpm 10.14.0 / Node 24.19.0）。
+- E6 dsh-gate 全绿：用例一全链（headless → 工具调用 → 围栏瀑布 deny 优先 → 事件落账，哈希链 24 条逐条重算通过）；用例二 H-5（kill -9 崩溃现场 → 链完整 6 条 + 会话事件重放零重复）。
+- 基座回归：`pnpm test` 全绿（base 679 / server 133 / web 67 / webb 6 / webc 21 + 脚本门禁）；`pnpm runtime:deps:verify` 通过；`pnpm oss:check` 随清单重算转绿。
 
 ## 参考文档（上游 repo `docs/`，2026-08-16 核验）
 
