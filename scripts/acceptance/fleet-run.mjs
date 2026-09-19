@@ -50,7 +50,11 @@ const fail = (step, detail) => { state.ok = false; state.steps[step] = { ok: fal
 const pass = (step, detail) => { state.steps[step] = { ok: true, detail: String(detail ?? "ok").slice(0, 800) }; log(`✓ ${step}`); };
 
 function run(cmd, args, { cwd = REPO_DIR, env = {}, allowFail = false, timeoutMs = 15 * 60_000 } = {}) {
-  const res = spawnSync(cmd, args, {
+  // pnpm 10 的 verify-deps-before-run 会在跑脚本前自动 install；本机若存在未批准的构建脚本
+  // （electron-winstaller/esbuild）会被 ERR_PNPM_IGNORED_BUILDS 顶掉，导致回归/预览假失败。
+  // 该设置只认 CLI flag（实测 env `npm_config_verify_deps_before_run` 无效），因此统一前置注入。
+  const finalArgs = cmd === "pnpm" ? ["--config.verify-deps-before-run=false", ...args] : args;
+  const res = spawnSync(cmd, finalArgs, {
     cwd,
     env: { ...process.env, ...env },
     encoding: "utf-8",
