@@ -82,6 +82,137 @@
     "offlineAuditSample": 10
   },
   "soak": { "hours": [24, 168, 672], "metrics": ["success", "latency", "cost", "drift"] },
+  "environment": {
+    "kind": "local-preview",
+    "allowWrites": false,
+    "supportDir": null,
+    "target": {},
+    "notes": "生产实测时用 --env client-runtime|deployed 覆盖；deployed 必须显式声明 target.*Url，client-runtime 默认 server 8787 / web 5173。"
+  },
+  "live": {
+    "enabled": true,
+    "requireRealModels": false,
+    "allowDb": false,
+    "budgets": {
+      "maxLlmCalls": 40,
+      "maxLlmTokens": 300000,
+      "maxImages": 8,
+      "maxVideoClips": 3,
+      "minVideoSeconds": 10,
+      "maxVideoSeconds": 15,
+      "maxVideoSecondsTotal": 45,
+      "maxCostCny": 120,
+      "maxWallClockMin": 45
+    },
+    "models": [
+      { "id": "deepseek-v4.1-flash", "kind": "llm", "model": "deepseek-flash", "adapter": "dsh-harness", "apiKeyEnv": "DEEPSEEK_API_KEY", "baseUrlEnv": "DEEPSEEK_BASE_URL" },
+      { "id": "seedream-5.0", "kind": "image", "model": "seedream-5.0", "adapter": "gen-http", "apiKeyEnv": "SEEDREAM_API_KEY", "baseUrlEnv": "SEEDREAM_ENDPOINT" },
+      { "id": "seedance-2.5", "kind": "video", "model": "seedance-2.5", "adapter": "gen-http", "apiKeyEnv": "SEEDANCE_API_KEY", "baseUrlEnv": "SEEDANCE_ENDPOINT" }
+    ],
+    "tasks": [
+      {
+        "id": "LLM-R1",
+        "kind": "llm",
+        "chain": "dsh-harness",
+        "model": "deepseek-v4.1-flash",
+        "criticality": "P0",
+        "title": "内置模型 · 推理任务（dsh harness + 围栏 + 账本）",
+        "prompt": "背景：演示工作区收到一条模糊需求「把产品做得更好用」。请给出：① 你要先澄清的 3 个问题 ② 你会派给哪个岗位 ③ 一条可执行的第一步动作与风险。要求：先结论后依据，最后另起一行输出 TASK_COMPLETE。",
+        "expect": ["澄清|岗位|委派|风险|需求"],
+        "expectAll": ["TASK_COMPLETE"]
+      },
+      {
+        "id": "LLM-T1",
+        "kind": "llm",
+        "chain": "dsh-harness",
+        "model": "deepseek-v4.1-flash",
+        "criticality": "P0",
+        "title": "内置模型 · 工具循环（工具调用过围栏瀑布 + 事件落哈希链）",
+        "prompt": "请调用 bash 工具执行 `echo workloom-live`，把命令输出原样贴出来，然后另起一行输出 TASK_COMPLETE。",
+        "expect": ["workloom-live|TASK_COMPLETE"],
+        "expectAll": ["TASK_COMPLETE"]
+      },
+      {
+        "id": "LLM-M1",
+        "kind": "llm",
+        "chain": "dsh-harness",
+        "model": "deepseek-v4.1-flash",
+        "criticality": "P1",
+        "fixture": "auto",
+        "title": "内置模型 · 多模态理解（截图/夹具图到达模型）",
+        "prompt": "请打开随附图片，用一句话说明图中主体内容，并原样念出图中最下方徽标里的那一串字符。最后另起一行输出 TASK_COMPLETE。",
+        "expect": ["WORKLOOM|验收|夹具|WORKLOOM"],
+        "expectAll": ["TASK_COMPLETE"]
+      },
+      {
+        "id": "LLM-G1",
+        "kind": "llm",
+        "chain": "model-gateway",
+        "model": "deepseek-v4.1-flash",
+        "criticality": "P1",
+        "title": "模型网关 · 结构化输出",
+        "prompt": "只输出一行 JSON：{\"verdict\":\"ok\",\"risk\":\"low\",\"reason\":\"<20 字内>\"}。不要输出任何其他内容。",
+        "expect": ["verdict"]
+      },
+      {
+        "id": "IMG-01",
+        "kind": "image",
+        "model": "seedream-5.0",
+        "criticality": "P1",
+        "images": 2,
+        "title": "生图 · 产品海报（2 张）",
+        "prompt": "WorkLoom 织元产品海报：深色背景 + 织线/光轨意象，中央标题「WORKLOOM」，下方小字「自主经营系统」。扁平、克制、无人物。",
+        "expect": ["png"],
+        "minArtifacts": 1
+      },
+      {
+        "id": "IMG-02",
+        "kind": "image",
+        "model": "seedream-5.0",
+        "criticality": "P2",
+        "images": 1,
+        "title": "生图 · 应用图标",
+        "prompt": "一个极简 App 图标：靛蓝底色，白色「织」字样的几何化线条，圆角方形，高对比。",
+        "expect": ["png"],
+        "minArtifacts": 1
+      },
+      {
+        "id": "VID-01",
+        "kind": "video",
+        "model": "seedance-2.5",
+        "criticality": "P1",
+        "durationSeconds": 12,
+        "title": "生视频 · 12s 产品演示镜头",
+        "prompt": "镜头缓慢推近一块悬浮的半透明数据看板，看板上有流动的光点与折线，背景深空蓝，运镜平稳，无人物，无文字。",
+        "expect": ["mp4"],
+        "durationRange": [10, 15]
+      },
+      {
+        "id": "VID-02",
+        "kind": "video",
+        "model": "seedance-2.5",
+        "criticality": "P2",
+        "durationSeconds": 12,
+        "title": "生视频 · 12s 门店空镜",
+        "prompt": "清晨的酒店大堂空镜：镜头从左向右匀速横移，暖色灯带、大理石地面反光，无人出现，画面干净。",
+        "expect": ["mp4"],
+        "durationRange": [10, 15]
+      },
+      {
+        "id": "PROD-01",
+        "kind": "product",
+        "criticality": "P0",
+        "title": "产品派单链路 · 模糊需求澄清（经产品入口 + 状态断言）",
+        "input": "把产品做得更好用（交付物：澄清问题清单 + 建议承接岗位，截止：今天 18:00）",
+        "presetKey": "chief-pm",
+        "workspaceSlug": "ai-pm-demo",
+        "state_asserts": [
+          { "http": { "url": "http://127.0.0.1:8787/health", "status": 200 } }
+        ]
+      }
+    ],
+    "notes": "生产实测（P 域）：默认三模型各至少一条真实任务；配额上限按产品所有者 2026-09-20 口径（图 ≤8 张、视频 ≤3 段且各 10–15s）。缺凭据时整批 blocked，不得写通过。"
+  },
   "journeys": [
     { "id": "EXP-01", "persona": "owner", "title": "首启看到价值与待拍板", "script": "builtin:first-value" },
     { "id": "EXP-02", "persona": "owner", "title": "审批三手势写回", "script": "builtin:approval" },
