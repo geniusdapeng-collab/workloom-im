@@ -116,7 +116,12 @@
       "scripts/acceptance/fleet-run.mjs",
       "scripts/acceptance/lib/profile.mjs",
       "scripts/acceptance/lib/playwright.mjs",
-      "scripts/acceptance/lib/compose.mjs"
+      "scripts/acceptance/lib/compose.mjs",
+  "scripts/acceptance/lib/target.mjs",
+  "scripts/acceptance/lib/live/budget.mjs",
+  "scripts/acceptance/lib/live/providers.mjs",
+  "scripts/acceptance/lib/live/stub-provider.mjs",
+  "scripts/acceptance/live.mjs"
     ],
     "copiedFiles": {
       ".github/workflows/base-sync-heartbeat.yml": {
