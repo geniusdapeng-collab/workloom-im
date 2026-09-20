@@ -112,7 +112,7 @@
       "note": "获客增长新仓（与 workloom 同 productId，2026-09-18 由舰队扫描纳入）",
       "extraExclude": [],
       "lane": "experiment",
-      "experimentNote": "获客增长实验仓：在共享壳（hud/star-ring/Floor3D/P0 等）上做游戏化经营定制，属实验语义，不下发覆盖、不回流基座。",
+      "experimentNote": "获客增长实验仓：在共享壳（hud/star-ring/Floor3D/P0 等）上做游戏化经营定制，属实验语义，不下发覆盖、不回流基座。；2026-09-20 增补：该仓在共享客户端壳内做获客游戏化定制（App 壳、页面 p1/p2/p21/p26/p3/p5/p6/p8、accounts/dev 页、voice 语音层、loommate 数字人、Stage3D/WelcomeCeremony/MateWelcome/SkillDistBanner、display 渲染工具与三端 manifest），这些路径登记为仓级扩展白名单：UI 波次不再判分叉、也不覆盖；其余受管文件照常随 ui-v* 稳定波次升级。",
       "experimentPaths": [
         "apps/web/src/components/hud/**",
         "apps/web/src/components/star-ring/**",
@@ -121,7 +121,29 @@
       "industryExtensionPaths": [
         "apps/*/src/components/hud/**",
         "apps/*/src/components/star-ring/**",
-        "apps/*/src/pages/p0/**"
+        "apps/*/src/pages/p0/**",
+        "apps/web/package.json",
+        "apps/web/src/App.tsx",
+        "apps/web/src/components/MateWelcome.tsx",
+        "apps/web/src/components/SkillDistBanner.tsx",
+        "apps/web/src/components/Stage3D.tsx",
+        "apps/web/src/components/WelcomeCeremony.tsx",
+        "apps/web/src/components/loommate/**",
+        "apps/web/src/lib/display.test.ts",
+        "apps/web/src/lib/display.ts",
+        "apps/web/src/pages/accounts/**",
+        "apps/web/src/pages/dev/**",
+        "apps/web/src/pages/p1/**",
+        "apps/web/src/pages/p2/**",
+        "apps/web/src/pages/p21/**",
+        "apps/web/src/pages/p26/**",
+        "apps/web/src/pages/p3/**",
+        "apps/web/src/pages/p5/**",
+        "apps/web/src/pages/p6/**",
+        "apps/web/src/pages/p8/**",
+        "apps/web/src/shell/IndustryRoutes.test.tsx",
+        "apps/web/src/voice/**",
+        "apps/webc/package.json"
       ]
     }
   ]
