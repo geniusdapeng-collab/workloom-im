@@ -1417,6 +1417,10 @@ async function upgradeChild(child, manifest, version, token, dryRun, foundationS
       // 即使 rollout 本身是 dry-run，也只在即将销毁的临时 clone 中应用，借此运行
       // 后续真实 lockfile/消费门禁；远端仓和分支始终零写入。
       dryRun: false,
+      // 仓级实验扩展白名单（child-repos.json#children[].industryExtensionPaths）：
+      // 这些路径是行业/实验车道自持的受管壳内文件，不参与稳定基座比对、也不被覆盖；
+      // 缺了这一步，实验仓会被判 MANAGED_FILE_MODIFIED 冲突而 fail-closed（growth 实测）。
+      extraAllowedIndustryExtensionPaths: child.industryExtensionPaths ?? [],
     });
     const touched = setUiVersion({
       repo: checkout,
