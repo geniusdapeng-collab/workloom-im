@@ -82,6 +82,8 @@
     "acceptance:experience": "node scripts/acceptance/experience.mjs",
     "acceptance:ux": "node scripts/acceptance/ux.mjs",
     "acceptance:outcome": "node scripts/acceptance/outcome.mjs",
+    "acceptance:live": "node scripts/acceptance/live.mjs",
+    "acceptance:live:selftest": "node scripts/acceptance/live.mjs --selftest",
     "acceptance:autonomy": "node scripts/acceptance/autonomy.mjs",
     "acceptance:redteam": "node scripts/acceptance/redteam.mjs",
     "acceptance:soak": "node scripts/acceptance/soak.mjs",

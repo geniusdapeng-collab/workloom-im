@@ -1,8 +1,9 @@
-# 十仓真机验收执行队列（RDAS v3.0 · 逐仓执行）
+# 十仓真机验收执行队列（RDAS v3.1 · 逐仓执行）
 
-> 规范：`docs/REAL-DEVICE-ACCEPTANCE-SPEC.md`（rdas/v3.0）｜检查单：`docs/acceptance/checklist.v3.json`（258 项）｜队列事实源：本文件（每跑完一仓更新状态）
+> 规范：`docs/REAL-DEVICE-ACCEPTANCE-SPEC.md`（rdas/v3.1）｜检查单：`docs/acceptance/checklist.v3.json`（276 项）｜队列事实源：本文件（每跑完一仓更新状态）
 > 原则：**一次只验一个仓**（避免并发资源与环境互相污染）；每仓一轮结束必须留下 `outputs/acceptance/REPORT.md`（v3 模板）+ 缺陷工单 + 陷阱清单增量 + 验收债。
 > v3 新增：U 域体验（56 项）、O 域交付（55 项）、ADR/HIR 自主交付（16 项）、L16 资产治理（6 项）、舰队机制（8 项）、T-19–T-50 陷阱、12 条红线。
+> **v3.1 新增（2026-09-20）**：P 域生产实测（18 项）——环境档位（本机预览 / 真实客户端 / 生产部署）、内置模型真实触发（DeepSeek V4.1 Flash + Seedream 5.0 + Seedance 2.5）、配额与成本硬闸（图 ≤8 张、视频 ≤3 段且各 10–15s）、工具循环过围栏 + 哈希链账本、T-51–T-54 陷阱。**本机预览（LLM_PROVIDER=mock）不再构成“真机验收完成”。**
 
 ## 0. 队列与状态
 
@@ -38,14 +39,23 @@ pnpm acceptance:ux          --out outputs/acceptance/ux
 pnpm acceptance:outcome     --out outputs/acceptance/outcome --trials 5
 # 6. 红队（发布前/季度）
 pnpm acceptance:redteam     --out outputs/acceptance/redteam
-# 7. ADR/HIR 自主交付率（M1 遥测；M4 离线审计人工补）
+# 7. P 域生产实测（v3.1；真实模型 + 配额台账；缺凭据整批 blocked，不得写通过）
+#    本机预览（default）：只证明管道，不构成生产证据
+pnpm acceptance:live        --env local-preview --out outputs/acceptance/live
+#    真实客户端（已安装桌面客户端：server 8787 / web 5173）
+pnpm acceptance:live        --env client-runtime --out outputs/acceptance/live
+#    生产部署（profile.environment.target 必须显式声明地址；默认只读）
+pnpm acceptance:live        --env deployed --out outputs/acceptance/live --require-live
+#    编排器最小侵入档（不装依赖/不种子/不起本机预览/不关停目标）：
+node scripts/acceptance/fleet-run.mjs --repo <repo> --env client-runtime --live-only
+# 8. ADR/HIR 自主交付率（M1 遥测；M4 离线审计人工补）
 pnpm acceptance:autonomy    --out outputs/acceptance/autonomy --all
-# 8. 长跑（发布前 24h 起，季度 7d/28d）
+# 9. 长跑（发布前 24h 起，季度 7d/28d）
 pnpm acceptance:soak        --out outputs/acceptance/soak --hours 24
-# 9. 覆盖率 + v3 报告
+# 10. 覆盖率 + v3.1 报告
 pnpm acceptance:coverage    --checklist docs/acceptance/checklist.v3.json --out outputs/acceptance/coverage.json
 pnpm acceptance:report      --root outputs/acceptance
-# 10. 回归
+# 11. 回归（仅本机预览档位；生产档位跳过，证据以 P 域实测与目标探测为准）
 pnpm suite && pnpm suite:<domain> && pnpm db:verify-chain && pnpm typecheck && pnpm release:gate
 ```
 
@@ -88,7 +98,8 @@ pnpm suite && pnpm suite:<domain> && pnpm db:verify-chain && pnpm typecheck && p
 
 ## 4. 轮次节奏与预算（v3）
 
-- 冒烟 S：2–4h（T1 44 项；脚本自动 + 人工抽查）；
+- 冒烟 S：2–4h（T1 52 项；脚本自动 + 人工抽查）；
+- **生产实测轮 P（v3.1，新增）**：30–60 分钟（P 域 18 项 + 目标探测；真实模型调用 8 条任务、图 ≤8 张、视频 ≤3 段）；
 - 标准轮 R1/R2：1–2 人日（T1 + 变更相关 T2 + 红线项）；
 - 全量轮 F：3–5 人日（T1+T2；含真实用户研究、红队、真实设备矩阵）；
 - 长跑轮 L：24h 起，季度 7d/28d（每季度至少 1 个行业仓）；
@@ -96,9 +107,10 @@ pnpm suite && pnpm suite:<domain> && pnpm db:verify-chain && pnpm typecheck && p
 
 ## 5. 完成定义（v3 DoD）
 
-1. `outputs/acceptance/REPORT.md` 含 v3 硬性内容：覆盖率声明 / 证据分级 / 收尾报告 / 自检表 + L/U/O 三层判定 + U/O 记分卡 + ADR/HIR 表；
+1. `outputs/acceptance/REPORT.md` 含 v3.1 硬性内容：覆盖率声明 / 证据分级 / 收尾报告 / 自检表 + L/U/O/P 四层判定 + U/O 记分卡 + P 域记分卡 + ADR/HIR 表；
 2. 12 条红线逐条检查，红线 0；P0 全绿；P1 有工单/期限；
 3. ADR/HIR：夹具过滤披露、H1/H2/H3/H4 分布、Wilson CI、HMPO 估算方法、AVR 四象限结论；未达 AVR 五条不得写“AI 自主价值提升”；
-4. O 域无真实模型/无业务数据时只写“结构合规 / 能力未验证”；
-5. 新增陷阱回写 `docs/acceptance/checklist.v3.json`（基座 PR）；验收债登记到期日；
-6. 本仓 `acceptance/profile.json`（v2）入库；Issue 回执五要素齐备。
+4. O 域无真实模型/无业务数据时只写“结构合规 / 能力未验证”；P 域必须声明 environment.kind，本机预览档位写“未验证”；
+5. 生产实测配额（图 ≤8 张、视频 ≤3 段且各 10–15s、总 ≤45s、成本上限）在 `budget-ledger.jsonl` 可复算，超限任务逐条披露；
+6. 新增陷阱回写 `docs/acceptance/checklist.v3.json`（基座 PR）；验收债登记到期日；
+7. 本仓 `acceptance/profile.json`（v2 + environment/live）入库；Issue 回执五要素齐备。

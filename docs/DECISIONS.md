@@ -169,3 +169,18 @@
 **否决方案**：在线 RL / 主干微调（遗忘风险 + 不可回滚 + local-first 算力不现实，远期以「客户本地 LoRA」选项保留）；跨客户联合学习（数据主权红线，仅走既有 opt-in 脱敏反哺通道）；DGM/SICA 式自动改写 Agent 代码（企业场景不可接受，降级为「生成建议 + 人审」）。
 
 **P0 落地（v1.10.0）**：M1 反馈枚举 + editKind 分流；M2 记忆提炼器 / 生命周期 / P23 组织记忆中心；M3 偏好注入 ask/agent/quest 主链路；M5 进化积分卡。后续：M4 进化提案审批类型、M6 纯客观回路自动化、M7 模板固化与 auto 迁移、M8 prompt 离线进化（GEPA 式，依赖行业金标回归集）、M9 探索配额。
+
+## D25：真机验收升级为生产环境真实验收（P 域）——环境档位 + 内置模型实测 + 配额硬闸（2026-09-20）
+
+**背景**：产品所有者指出 RDAS v1–v3.0 的「真机」实为本机预览（`preview:all` + 本地演示库 + `LLM_PROVIDER=mock`）；dsh（DeepSeek Harness）E6 门禁也走本地 Mock LLM。结论是：**现有验收既不是生产环境验收，也没有触发过客户端内置模型**（DeepSeek V4.1 Flash / Seedream 5.0 / Seedance 2.5），O 域只能写「未验证」正是这个缺口的表现。
+
+**决策**：
+1. **环境档位显式化**：`local-preview` / `client-runtime`（已安装桌面客户端运行时，默认 server 8787 + web 5173）/ `deployed`（生产部署，必须显式声明 `environment.target`）。生产档位**只读优先**：不装依赖、不迁移种子、不起本机预览、不关停目标；写入需 `--allow-prod-writes`。
+2. **P 域生产实测（18 项）**：每个内置模型 ≥1 条真实任务——LLM 推理 / 多模态理解 / 工具循环（工具调用过围栏瀑布 + session/event 落哈希链账本）、生图、生视频、产品派单；逐任务标注链路深度（`dsh-harness` / `model-gateway` / `gen-http` / `product-dispatch`）。
+3. **配额硬闸**：生图 ≤8 张；生视频 ≤3 段、每段 10–15s、总 ≤45s；LLM ≤40 次 / ≤300k token；成本 ≤¥120（估算，账单另行对账）；墙钟 ≤45 分钟。超限 fail-closed，写 `budget-ledger.jsonl`，禁止静默跳过。
+4. **未验证不等于通过**：缺凭据 / 目标不可达 / 仅 selftest → 任务 `blocked`，P 域与 O 域只能写「未验证」，报告徽章必须带 `P-unverified` 限定语；用本机预览冒充生产验收记为红线 #3（演示与真实混淆）。
+5. **凭据边界**：真实模型凭据只从环境变量/秘密存储解析（`DEEPSEEK_API_KEY`、`VOLCENGINE_ARK_API_KEY` / `SEEDREAM_API_KEY` / `SEEDANCE_API_KEY`），报告只写「已配置/缺失 + 掩码」，密钥永不落盘。
+
+**否决方案**：把真实模型调用塞进 CI 门禁（成本与凭据都不可控，且会把不稳定外部依赖变成合并闸门）——P 域是发布前的人工/半自动关卡，不进 `.cnb.yml` 必需检查；用 mock 结果标注为「通过」（违反不变量 9：演示与真实分明）。
+
+**落地**：`scripts/acceptance/live.mjs` + `lib/target.mjs` + `lib/live/{budget,providers,stub-provider}.mjs`、`fleet-run.mjs`（`--env/--live/--live-only/--require-live/--allow-prod-writes`）、`checklist.v3.json`（276 项）、规范 §18、陷阱 T-51–T-54。回滚路径：revert 本任务 PR，P 域条目降级为「未验证」，不影响 L/U/O 既有判定。
