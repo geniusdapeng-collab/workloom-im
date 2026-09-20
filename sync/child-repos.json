@@ -122,7 +122,6 @@
         "apps/*/src/components/hud/**",
         "apps/*/src/components/star-ring/**",
         "apps/*/src/pages/p0/**",
-        "apps/web/package.json",
         "apps/web/src/App.tsx",
         "apps/web/src/components/MateWelcome.tsx",
         "apps/web/src/components/SkillDistBanner.tsx",
@@ -142,8 +141,7 @@
         "apps/web/src/pages/p6/**",
         "apps/web/src/pages/p8/**",
         "apps/web/src/shell/IndustryRoutes.test.tsx",
-        "apps/web/src/voice/**",
-        "apps/webc/package.json"
+        "apps/web/src/voice/**"
       ]
     }
   ]
