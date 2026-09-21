@@ -1,7 +1,33 @@
 {
-  "version": 4,
-  "description": "WorkLoom IM 基座同步的子仓订阅清单——父仓 push 模式按本清单逐仓同步；共享 UI 与三端客户端基座作为同一稳定版本按 uiRolloutWaveOrder 分波升级。新仓由 adopt.sh --new-industry 接入 latest stable 后追加。pathPrefix 用于仓内子目录形态（如 workroom-tiger 的前端在 governance/ 下）。extraExclude 为仓级追加排除（该仓的行业化文件，全局 scope 无法表达的按仓差异）。",
+  "version": 5,
+  "description": "WorkLoom IM 基座同步的子仓订阅清单——父仓 push 模式按本清单逐仓同步；共享 UI 与三端客户端基座作为同一稳定版本按 uiRolloutWaveOrder 分波升级。新仓由 adopt.sh --new-industry 接入 latest stable 后追加。pathPrefix 用于仓内子目录形态（如 workroom-tiger 的前端在 governance/ 下）。extraExclude 为仓级追加排除（该仓的行业化文件，全局 scope 无法表达的按仓差异）。isolatedRepos 为『隔离副本』登记：既不接收基座下发，也不向基座回流；舰队扫描、纳管与 fanout 一律跳过（恢复同步必须由产品所有者重新下令 + 任务卡）。",
   "baseRepo": "workloom-ai/workloom-im",
+  "isolatedRepos": [
+    {
+      "repo": "workloom-ai/workloom-growthtest",
+      "displayName": "AI超增长（实验版）",
+      "productId": "workloom-ai-growth",
+      "lane": "isolated",
+      "syncPolicy": "none-in-none-out",
+      "copiedFrom": "workloom-ai/WorkLoom-growth@a6dc89a",
+      "isolatedSince": "2026-09-21",
+      "declaredBy": "product-owner",
+      "declaredAt": "2026-09-22",
+      "note": "酒店获客复合系统的激进改造实验副本（完整复制自 WorkLoom-growth@a6dc89a；已做『基座去审批化』等与基座不变量冲突的改造）。基座内容暂不下发本仓、本仓内容不回流基座；解除隔离必须由产品所有者明确指令并另开纳管任务卡。"
+    },
+    {
+      "repo": "workloom-ai/workloom-growthmatrix",
+      "displayName": "骇客帝国（实验版）",
+      "productId": "workloom-ai-growth",
+      "lane": "isolated",
+      "syncPolicy": "none-in-none-out",
+      "copiedFrom": "workloom-ai/WorkLoom-growth@a6dc89a",
+      "isolatedSince": "2026-09-21",
+      "declaredBy": "product-owner",
+      "declaredAt": "2026-09-22",
+      "note": "酒店获客复合系统的激进改造实验副本（完整复制自 WorkLoom-growth@a6dc89a；已在视频链路 / 后期调色方向分叉）。基座内容暂不下发本仓、本仓内容不回流基座；解除隔离必须由产品所有者明确指令并另开纳管任务卡。"
+    }
+  ],
   "uiRolloutWaveOrder": [
     "W1",
     "W2",

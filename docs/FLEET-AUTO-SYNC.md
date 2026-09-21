@@ -1,6 +1,8 @@
 # 舰队自动更新机制（本地 + 云端）
 
-> 适用：基座 `workloom-im` 与 `sync/child-repos.json` 里的全部子仓（含实验车道 fox / growth）。
+> 适用：基座 `workloom-im` 与 `sync/child-repos.json#children` 里的全部子仓（含实验车道 fox / growth）。
+> **不适用**：`sync/child-repos.json#isolatedRepos` 登记的隔离副本（`workloom-growthtest` / `workloom-growthmatrix`）——
+> 它们双向不同步（基座不下发、本仓不回流），扫描 / 纳管 / fanout 一律跳过，规则见 `docs/DEVELOPMENT-PROTOCOL.md` §11。
 > 事实源：`sync/child-repos.json`（订阅关系）、`sync/base-scope.json`（同步边界）、本文件（机制说明）。
 > 落点：2026-09-19 起，云端“基座 → 子仓”的资产分发不再依赖人工开 PR；本地副本每日自动跟随。
 
@@ -9,17 +11,17 @@
 | 层 | 做什么 | 载体 | 触发 | 人工介入 |
 |---|---|---|---|---|
 | 云端 · 资产分发 | 基座根级资产 → 每个子仓一条 `sync/base-*` PR → 门禁全绿后自动合并 | `sync/fanout-cnb.mjs` + `sync/merge-sync-prs.mjs`（`.cnb.yml#base-sync-fanout`） | 每 30 分钟 cron；`api_trigger_base_sync`；本地兜底脚本 | 无需（纯同步 PR） |
-| 云端 · 新仓纳管 | 扫描组织发现新 WorkLoom 仓 → 开扫描任务卡 + 纳管 PR（标签/分支保护/协议资产/门禁 stage） | `scripts/tools/fleet-scan.mjs --issue --provision` | 每日 09:00（Asia/Shanghai）cron | 审合并 PR |
+| 云端 · 新仓纳管 | 扫描组织发现新 WorkLoom 仓 → 开扫描任务卡 + 纳管 PR（标签/分支保护/协议资产/门禁 stage）；隔离副本只单列报告、不纳管 | `scripts/tools/fleet-scan.mjs --issue --provision` | 每日 09:00（Asia/Shanghai）cron | 审合并 PR |
 | 云端 · 代码基线 | `packages/**`、`apps/**` 等运行时代码升级 | `sync/base-sync.mjs push` / fanout `--mode full` | AI/API 触发（默认不跑；升级批次由任务卡驱动） | AI 合并（门禁全绿 + 冷却期，协议 §1/§9.5） |
 | 本地 · 文档副本 | 全景认知 + 开发协议落到 `~/.codex/workloom-context/`，供 WorkLoom 会话直接引用 | `~/.codex/skills/workloom-context/scripts/sync-context.sh` | Codex automation `workloom`（每日 09:00）+ 手动 | 无需 |
-| 本地 · 代码克隆 | `~/WorkLoom-fleet/` 十仓跟随云端；新仓自动克隆 | `~/.codex/skills/workloom-context/scripts/sync-fleet-local.sh` | 同上 | 无需（脏树自动跳过） |
+| 本地 · 代码克隆 | `~/WorkLoom-fleet/` 十个订阅仓 + 两个隔离副本都跟随各自云端 `main`；新订阅仓自动克隆 | `~/.codex/skills/workloom-context/scripts/sync-fleet-local.sh` | 同上 | 无需（脏树自动跳过） |
 | 本地 · 云端兜底 | 用本机令牌触发云端 fanout 流水线（跨仓开关未开时的替代通道） | `~/.codex/skills/workloom-context/scripts/fleet-cloud-sync.sh` | 手动 / automation | 无需 |
 
 ## 1. 云端资产分发（fanout）
 
 ### 1.1 它解决什么
 
-基座改动后，八个行业仓 + 实验车道必须拿到**同一份**全景认知、开发协议与 AGENTS 受控区块，同时不得覆盖行业语义。
+基座改动后，九个子仓（八个行业仓 + 实验车道 growth）必须拿到**同一份**全景认知、开发协议与 AGENTS 受控区块，同时不得覆盖行业语义。
 人工逐仓开 PR 的时代（2026-09-19 之前：一轮 9 个 PR，全靠会话手工创建）已经结束：
 
 ```bash
@@ -38,6 +40,8 @@ node sync/merge-sync-prs.mjs                             # 门禁全绿即合：
 3. **在途去重**：子仓已存在 `sync/base-*` 的 open PR 时跳过，不重复开门。
 4. **分支名 = 内容指纹**：`sync/base-<基座sha8>[-full]`；同名分支已存在（例如 PR 被关掉后）时不强推、不覆盖，
    只报告，避免任何形式的强制推送。
+5. **隔离副本不参与**：`isolatedRepos` 里的仓即使被误写进 `children`，也会在 fanout 入口被过滤（报告 `skippedIsolated`），
+   不 clone、不推送、不开 PR。
 
 ### 1.3 自动合并的边界（协议 §9.4）
 
@@ -90,7 +94,10 @@ node sync/merge-sync-prs.mjs                             # 门禁全绿即合：
 - 已纳管集合 = 基座 + `sync/child-repos.json#children`；差集里的新仓会被
   `--issue`（开 `src/auto` 扫描任务卡）与 `--provision`（建立标签/分支保护/协议资产/门禁 stage 并开纳管 PR）覆盖；
 - 实验车道新仓要按协议 §10.1 在清单里补 `lane/experimentNote/experimentPaths/industryExtensionPaths`，
-  否则 `experiment-guard.mjs --check` 会在基座门禁里报警。
+  否则 `experiment-guard.mjs --check` 会在基座门禁里报警；
+- 有意与基座拆分的**隔离副本**按协议 §11 写入顶层 `isolatedRepos`（`syncPolicy: none-in-none-out` + `note` + `isolatedSince`）：
+  `fleet-scan` 把它计入"已知"并单列报告，`--issue` / `--provision` 一律跳过；`provision-protocol.mjs` 默认拒绝为它建纳管 PR；
+  隔离仓若混进 `children`，`experiment-guard --check` 报 `ISOLATED_IN_CHILDREN` 并在基座门禁判红。
 
 纳管 PR 合并后，新仓在下一次 fanout 巡检（≤30 分钟）自动进入资产分发，并在本地 `sync-fleet-local.sh`
 下一次运行时自动克隆到 `~/WorkLoom-fleet/`。
@@ -102,7 +109,7 @@ node sync/merge-sync-prs.mjs                             # 门禁全绿即合：
 sh ~/.codex/skills/workloom-context/scripts/sync-context.sh          # 同步
 sh ~/.codex/skills/workloom-context/scripts/sync-context.sh --check  # 只判断是否过期（退出码 3=过期）
 
-# 十仓克隆 → ~/WorkLoom-fleet/（新仓自动 clone；脏树跳过，不覆盖任何本地改动）
+# 十个订阅仓 + 两个隔离副本 → ~/WorkLoom-fleet/（新仓自动 clone；脏树跳过，不覆盖任何本地改动）
 sh ~/.codex/skills/workloom-context/scripts/sync-fleet-local.sh [--quiet]
 
 # 云端兜底：用本机令牌触发 fanout 流水线（等云端跑完再返回）
@@ -141,5 +148,6 @@ curl -X POST -H "Authorization: Bearer $CNB_TOKEN" -H 'Content-Type: application
 - 关掉自动合并：删除 `.cnb.yml` 中 `crontab: */30 * * * *` 条目（或把 `BASE_SYNC_MODE` 改为 `off` 并停用该 job），
   纯同步 PR 会继续产生但不再自动合并；
 - 关掉 fanout：删除 `api_trigger_base_sync` 与 30 分钟 cron 两条；
-- 单仓豁免：在 `sync/child-repos.json` 该仓条目里加 `extraExclude`，或临时关闭该仓在途 PR（fanout 见在途 PR 即跳过）；
+- 单仓豁免（仍属订阅、只是少同步某些文件）：在 `sync/child-repos.json` 该仓条目里加 `extraExclude`，或临时关闭该仓在途 PR（fanout 见在途 PR 即跳过）；
+- 单仓隔离（完全不收不发，如 growthtest / growthmatrix）：把该仓从 `children` 移到顶层 `isolatedRepos`（协议 §11），fanout / 扫描 / 纳管会同时跳过；
 - 全部回滚：`git revert` 引入 fanout 的提交；已合并的文档同步可用子仓 `git revert` 回退（纯文本，无副作用）。
