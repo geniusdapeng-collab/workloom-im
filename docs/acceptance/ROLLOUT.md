@@ -20,6 +20,17 @@
 | 8 | `workloom-ai/workroom-fox` | experiment | hotel | yunqi-hotel | 待执行（3D 舞台需录屏/FPS 证据） |
 | 9 | `workloom-ai/workroom-tiger` | industry | trading | tiger-trading | 待执行（**只允许模拟/纸面**） |
 
+## 0.1 隔离副本通道（growthtest / growthmatrix，默认不进队列）
+
+`workloom-growthtest`（AI超增长·实验版）与 `workloom-growthmatrix`（骇客帝国·实验版）是登记在
+`sync/child-repos.json#isolatedRepos` 的**隔离副本**（协议 §11，双向不同步）。它们**不进上面的十仓队列**，验收规则如下：
+
+1. **触发**：只有产品所有者点名（"对 XX 隔离副本跑 RDAS"）才执行；不参与舰队默认轮次、不计入舰队总表分母。
+2. **规格来源**：以**该仓自己的**计划/账本为规格——growthmatrix 用 `docs/GROWTHMATRIX-EXECUTION-PLAN.md` + `docs/GROWTHMATRIX-DEV-LEDGER.md`；growthtest 用 `CHANGELOG.md` + 提交信息 + 代码内产品决定注释。不得拿基座全景认知的冻结副本当验收依据。
+3. **不变偏离声明（强制）**：报告必须单列"与基座不变量的有意偏离 + 补偿控制"。已知偏离：两仓均做**去审批化**（下线审批中心/任务中心与统一待办审批状态；补偿控制 = 业务链路关卡 G1–G10 / G-GEO1 / G-GEO2 / G-VIS1 等 + 服务端 `approvalsRouter` 与 `review-console` 保留 + 各业务页就地放行）。这类偏离按产品决定记录，**不判缺陷，也不得作为基座通过证据**。
+4. **证据边界**：报告首页必须标注"隔离副本 · 不作为基座证据"；其结论只对该副本自身有效，公共化需另开提案任务卡（L2→L1→L0）。
+5. **回队条件**：产品所有者明确指令 + 统一产品身份（productId / appId / 端口 / 演示工作区）+ 关闭或显式声明与基座不变量的冲突项 + 移出 `isolatedRepos` 并写入 `children`（再按正常十仓+口径执行）。
+
 ## 1. 每仓执行清单（v3）
 
 ```bash
