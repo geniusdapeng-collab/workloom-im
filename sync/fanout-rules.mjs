@@ -229,3 +229,22 @@ export function syncDrift({ state, mode = "required-only", baseSha, digests = {}
 export function hasInFlightSyncPull(pulls = [], prefix = SYNC_BRANCH_PREFIX) {
   return pulls.find((pull) => normalizeBranchRef(pull?.head?.ref).startsWith(prefix)) ?? null;
 }
+
+/**
+ * 订阅子仓过滤：隔离副本（`sync/child-repos.json#isolatedRepos`）不参与任何下发。
+ * 即使隔离仓被误写进 `children`，也在 fanout 入口被拦下——宁可少同步一个仓，也不把基座内容推给隔离副本。
+ * @param {Array<{repo?: string}>} children
+ * @param {Set<string>|string[]} isolated
+ * @returns {{synced: object[], skipped: string[]}}
+ */
+export function syncedChildren(children = [], isolated = new Set()) {
+  const isolatedSet = isolated instanceof Set ? isolated : new Set(isolated);
+  const synced = [];
+  const skipped = [];
+  for (const child of children) {
+    if (!child) continue;
+    if (child.repo && isolatedSet.has(child.repo)) skipped.push(child.repo);
+    else synced.push(child);
+  }
+  return { synced, skipped };
+}

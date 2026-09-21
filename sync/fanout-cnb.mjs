@@ -7,6 +7,8 @@
  *     由子仓自己的 .cnb.yml 门禁 + 自动合并流水线决定是否落地（协议 §1/§9）。
  *   · 先用 CNB API 低成本比对子仓 `.workloom-base-sync.json` 的资产摘要，只有真漂移的子仓
  *     才会被 clone；舰队巡检因此可以在流水线里每 30 分钟跑一次而不浪费构建资源。
+ *   · 隔离副本（`sync/child-repos.json#isolatedRepos`）即使被误写进 children 也在此处被拦下：
+ *     不下发、不建 PR（双向不同步，见 docs/DEVELOPMENT-PROTOCOL.md §11）。
  *
  * 用法：
  *   node sync/fanout-cnb.mjs [--mode required-only|full] [--only <slug[,slug]>] [--dry-run]
@@ -22,7 +24,8 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadScope } from "./base-sync.mjs";
-import { hasInFlightSyncPull, requiredAssetDigests, syncDrift, SYNC_BRANCH_PREFIX } from "./fanout-rules.mjs";
+import { hasInFlightSyncPull, requiredAssetDigests, syncDrift, syncedChildren, SYNC_BRANCH_PREFIX } from "./fanout-rules.mjs";
+import { isolatedFleet } from "../scripts/tools/fleet-rules.mjs";
 import { addPullLabels, createPull, listPulls, rawFile, requireToken } from "../scripts/tools/cnb-api.mjs";
 
 const SCRIPT_DIR = fileURLToPath(new URL(".", import.meta.url));
@@ -137,8 +140,13 @@ async function main() {
   const baseRepo = fleet.baseRepo ?? "workloom-ai/workloom-im";
   const baseSha = git(baseDir, ["rev-parse", "HEAD"]);
   const digests = requiredAssetDigests(baseDir, scope.raw);
-  const children = fleet.children.filter((child) => !only.length || only.includes(child.repo));
-  if (!children.length) throw new Error(`--only 没有匹配到任何子仓：${only.join(", ")}`);
+  const isolated = isolatedFleet(fleet);
+  const selected = (fleet.children ?? []).filter((child) => !only.length || only.includes(child.repo));
+  const { synced: children, skipped: skippedIsolated } = syncedChildren(selected, isolated);
+  if (!children.length && !skippedIsolated.length) throw new Error(`--only 没有匹配到任何子仓：${only.join(", ")}`);
+  if (skippedIsolated.length && !json) {
+    console.log(`⏸ 隔离副本不下发（sync/child-repos.json#isolatedRepos）：${skippedIsolated.join(", ")}`);
+  }
 
   const results = [];
   let failed = 0;
@@ -240,6 +248,8 @@ async function main() {
     mode,
     dryRun,
     children: results.length,
+    isolatedDeclared: [...isolated],
+    skippedIsolated,
     aligned: results.filter((item) => item.status === "aligned").length,
     inFlight: results.filter((item) => item.status === "in-flight").length,
     opened: results.filter((item) => item.status === "pr-opened").length,
@@ -257,7 +267,7 @@ async function main() {
       const label = { aligned: "✅ 已对齐", "in-flight": "🕒 在途 PR", "pr-opened": "📦 已开 PR", "branch-exists": "🧷 分支已存在", drift: "⚠️ 漂移", "would-sync": "⚠️ [dry-run] 待同步", failed: "❌ 失败", "scope-denied": "🔒 权限不足" }[item.status] ?? item.status;
       console.log(`${label} ${item.repo}${item.pull ? ` #${item.pull}` : ""}${item.reasons.length ? `：${item.reasons.join("；")}` : ""}${item.error ? `：${item.error}` : ""}`);
     }
-    console.log(`\n基座 ${baseSha.slice(0, 8)}（模式 ${mode}${dryRun ? "，dry-run" : ""}）：对齐 ${summary.aligned} · 在途 ${summary.inFlight} · 新开 PR ${summary.opened} · 分支已存在 ${summary.branchExists} · 待同步 ${summary.drift} · 失败 ${failed} · 权限不足 ${scopeError}`);
+    console.log(`\n基座 ${baseSha.slice(0, 8)}（模式 ${mode}${dryRun ? "，dry-run" : ""}）：对齐 ${summary.aligned} · 在途 ${summary.inFlight} · 新开 PR ${summary.opened} · 分支已存在 ${summary.branchExists} · 待同步 ${summary.drift} · 隔离副本 ${summary.isolatedDeclared.length}（不下发） · 失败 ${failed} · 权限不足 ${scopeError}`);
   }
 
   if (failed) process.exitCode = 1;

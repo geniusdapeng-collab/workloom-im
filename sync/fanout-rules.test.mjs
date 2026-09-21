@@ -12,6 +12,7 @@ import {
   matchesGlob,
   normalizeBranchRef,
   requiredAssetDigests,
+  syncedChildren,
   syncDrift,
 } from "./fanout-rules.mjs";
 
@@ -23,6 +24,21 @@ const pull = (overrides = {}) => ({
   ...overrides,
 });
 const ok = [{ context: "static-gate", state: "success" }];
+
+test("隔离副本不下发：即使误写进 children 也在 fanout 入口被拦下", () => {
+  const children = [
+    { repo: "workloom-ai/workloom-hotel" },
+    { repo: "workloom-ai/workloom-growthtest" },
+    { repo: "workloom-ai/workloom-growthmatrix" },
+  ];
+  const { synced, skipped } = syncedChildren(children, new Set(["workloom-ai/workloom-growthtest", "workloom-ai/workloom-growthmatrix"]));
+  assert.deepEqual(synced.map((child) => child.repo), ["workloom-ai/workloom-hotel"]);
+  assert.deepEqual(skipped, ["workloom-ai/workloom-growthtest", "workloom-ai/workloom-growthmatrix"]);
+
+  const none = syncedChildren(children, []);
+  assert.equal(none.synced.length, 3);
+  assert.deepEqual(none.skipped, []);
+});
 
 test("glob：** 跨目录，* 不跨目录", () => {
   assert.equal(matchesGlob("sync/**", "sync/base/fanout.mjs"), true);
