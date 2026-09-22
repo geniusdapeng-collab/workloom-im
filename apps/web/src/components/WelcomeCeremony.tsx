@@ -67,7 +67,7 @@ export function WelcomeCeremony({
   });
   const lastReported = useRef<WelcomeStep | null>(null);
   const currentStep: WelcomeStep = phase === "mate" ? "mate" : phase === "modal" ? "summary" : "team";
-  const roleLabel = role === "owner" ? "董事长" : role === "manager" ? "管理员" : role === "readonly" ? "观察成员" : "团队成员";
+  const roleLabel = role === "owner" ? "老板" : role === "manager" ? "管理员" : role === "readonly" ? "观察成员" : "团队成员";
   const welcomeSurface = useManagedSurface<HTMLDivElement>({
     open: true,
     kind: "welcome",
