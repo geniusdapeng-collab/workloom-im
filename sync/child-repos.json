@@ -40,7 +40,7 @@
     {
       "repo": "workloom-ai/workroom-fox",
       "pathPrefix": "",
-      "uiRolloutWave": "W4",
+      "uiRolloutWave": "paused",
       "note": "试验田（其基座演进不回流）",
       "extraExclude": [],
       "lane": "experiment",
@@ -55,7 +55,8 @@
         "apps/*/src/campaign/**",
         "apps/*/src/components/fox-campaign/**",
         "apps/*/src/pages/p0/**"
-      ]
+      ],
+      "rolloutPauseNote": "2026-09-23 暂停 0.1.8 起波次：fox 实验路径声明（pages/p0/** 等）覆盖基座受管文件，与 client-foundation「快照不得占用行业扩展路径」契约结构性冲突（0.1.8 rollout 实测 UPGRADE_PR_FAILED：pages/p0/Floor.tsx），与 WorkLoom-growth 同型，需协议层决策「实验车道受管文件分叉容差」后恢复；暂停期间基座根级资产照常 base-sync。"
     },
     {
       "repo": "workloom-ai/workloom-hotel",
