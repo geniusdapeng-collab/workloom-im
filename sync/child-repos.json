@@ -134,7 +134,7 @@
     {
       "repo": "workloom-ai/WorkLoom-growth",
       "pathPrefix": "",
-      "uiRolloutWave": "W3B",
+      "uiRolloutWave": "paused",
       "note": "获客增长新仓（与 workloom 同 productId，2026-09-18 由舰队扫描纳入）",
       "extraExclude": [],
       "lane": "experiment",
@@ -168,7 +168,8 @@
         "apps/web/src/pages/p8/**",
         "apps/web/src/shell/IndustryRoutes.test.tsx",
         "apps/web/src/voice/**"
-      ]
+      ],
+      "rolloutPauseNote": "2026-09-23 暂停 0.1.7 波次：该仓 industryExtensionPaths 把 App.tsx 等基座受管文件登记为行业扩展路径，与 client-foundation「快照不得占用行业扩展路径」契约结构性冲突（UPGRADE_PR_FAILED），需协议层决策「实验车道受管文件分叉容差」后恢复；暂停期间基座根级资产照常 base-sync，仅 ui-v* 客户端波次挂起。"
     }
   ]
 }
