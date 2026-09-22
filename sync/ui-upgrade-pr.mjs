@@ -345,6 +345,9 @@ export function validateChildInventory(children, waveOrder) {
   }
   for (const child of children) {
     if (!waveOrder.includes(child.uiRolloutWave)) {
+      // 显式挂起：实验车道与快照契约结构性冲突等场景，必须登记原因与恢复条件（≥20 字）才可暂停波次；
+      // 挂起仓不参与任何波次选择，也不计入前序未完成（否则会把后续全部波次卡死——0.1.7 实测）。
+      if (child.uiRolloutWave === "paused" && typeof child.rolloutPauseNote === "string" && child.rolloutPauseNote.length >= 20) continue;
       throw new Error(`${child.repo} 未登记有效 uiRolloutWave；拒绝无序 rollout`);
     }
   }

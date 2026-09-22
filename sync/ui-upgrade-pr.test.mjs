@@ -667,6 +667,9 @@ process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", f
     assert.equal(waves["workloom-ai/workroom-andromeda"], "W1");
     assert.equal(waves["workloom-ai/workroom-eagle"], "W1");
     assert.equal(waves["workloom-ai/workroom-tiger"], "W5");
+    // 显式挂起（paused）必须登记原因说明，且不影响其它仓的波次固化
+    const paused = childManifest.children.filter((child) => child.uiRolloutWave === "paused");
+    for (const child of paused) assert.ok((child.rolloutPauseNote ?? "").length >= 20, `${child.repo} 挂起缺少原因说明`);
   });
 
   it("逐路径识别缺 B 端移动、产品清单和 UI 状态，不只返回仓名", () => {
