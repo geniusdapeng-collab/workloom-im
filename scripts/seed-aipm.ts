@@ -71,7 +71,7 @@ function loadSeed<T>(file: string): T {
 }
 
 const MEMBERS = [
-  { id: "MEM-001", name: "董事长", role: "owner" },
+  { id: "MEM-001", name: "老板", role: "owner" },
   { id: "MEM-002", name: "产品负责人", role: "manager" },
   { id: "MEM-003", name: "运营同学", role: "readonly" },
 ];

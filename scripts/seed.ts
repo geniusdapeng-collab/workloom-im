@@ -794,7 +794,7 @@ async function main(): Promise<void> {
       object: { type: "workspace", id: WS_ID, label: WS_NAME },
       decision: {
         action: "ceo.briefing",
-        after: { text: "董事长，早报已备：昨夜班组完成 14 项作业（评论/巡检/对账各线正常），1 件差评处置请您拍板；本周 OCC 与 RevPAR 趋势见节拍控制台。试用期边界降一档执行中。" },
+        after: { text: "老板，早报已备：昨夜班组完成 14 项作业（评论/巡检/对账各线正常），1 件差评处置请您拍板；本周入住率与每间可售房收入趋势见节拍控制台。试用期边界降一档执行中。" },
         basis: ["CEO Loop 日频晨报 08:30"],
       },
       rule_impact: [],

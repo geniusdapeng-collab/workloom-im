@@ -332,7 +332,7 @@ export function LoomMate() {
       if (m) setMemory(m.memory);
     }
     if (p === "chat" && chat.length === 0) {
-      setChat([{ from: "mate", text: `${settings?.display_name ?? "董事长"}好呀～我是${personaName}，您的贴身小秘书！有事叫我查、叫我记、叫我提醒您，都可以哦～` }]);
+      setChat([{ from: "mate", text: `${settings?.display_name ?? "老板"}好呀～我是${personaName}，您的贴身小秘书！有事叫我查、叫我记、叫我提醒您，都可以哦～` }]);
     }
   };
 

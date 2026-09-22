@@ -2958,7 +2958,7 @@ const captainRouter = router({
             action: "captain.mode_change",
             params: { from: charter.mode, to: next.mode, by: ctx.identity.memberNo, kind: input.kind },
             after: { mode: next.mode },
-            basis: [`董事长手动迁移：${charter.mode} → ${next.mode}`],
+            basis: [`老板手动迁移：${charter.mode} → ${next.mode}`],
           },
           rule_impact: [],
           model_trace: { model_id: "human-chairman", tier: "standard" },
@@ -3126,7 +3126,7 @@ const captainRouter = router({
             action: "ceo.feedback",
             params: { ref_event: input.eventId, signal: input.signal, note: input.note ?? "" },
             after: {},
-            basis: [`董事长对决策 ${input.eventId} 的${input.signal === "up" ? "点赞" : "点踩"}（入组织记忆，成为后续决策奖励信号）`],
+            basis: [`老板对决策 ${input.eventId} 的${input.signal === "up" ? "点赞" : "点踩"}（入组织记忆，成为后续决策奖励信号）`],
           },
           rule_impact: [],
           model_trace: { model_id: "human-chairman", tier: "standard" },
@@ -3136,7 +3136,7 @@ const captainRouter = router({
           memoryId: `mem-fb-${ev.eventId.toLowerCase()}`,
           scope: "workspace",
           kind: "pattern",
-          content: `【${ctx.identity.memberNo}】董事长${input.signal === "up" ? "认可" : "否定"}决策 ${input.eventId}${input.note ? `：${input.note}` : ""}`,
+          content: `【${ctx.identity.memberNo}】老板${input.signal === "up" ? "认可" : "否定"}决策 ${input.eventId}${input.note ? `：${input.note}` : ""}`,
           sourceEvents: [ev.eventId, input.eventId],
         }, new MockEmbedder());
         await client.query("COMMIT");

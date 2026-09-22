@@ -382,7 +382,7 @@ export default function P0() {
       const lines = clientChineseText(data.latestBriefing.text, BRIEFING_FALLBACK).split("\n");
       return lines.slice(0, 3).join(" ");
     }
-    if (data.mode === "disabled") return "董事长，我还未获授权。到「董事长视图」完成深度授权后，我就开始为您工作。";
+    if (data.mode === "disabled") return "老板，我还未获授权。到「老板视图」完成深度授权后，我就开始为您工作。";
     return "团队待命。您可以直接对我下指令，或等我按节拍向您汇报。";
   }, [data]);
 
@@ -638,7 +638,7 @@ export default function P0() {
       <Overlay
         open={canApprove && askPick !== null}
         title="请您决策"
-        description={askPick ? `${askPick.pendingTier === "l4_chairman" ? "董事长级" : askPick.pendingTier === "l3_fleet" ? "集团负责人级" : "公司负责人级"}事项` : undefined}
+        description={askPick ? `${askPick.pendingTier === "l4_chairman" ? "老板级" : askPick.pendingTier === "l3_fleet" ? "集团负责人级" : "公司负责人级"}事项` : undefined}
         onClose={() => setAskPick(null)}
         footer={askPick && (
           <>
@@ -667,7 +667,7 @@ export default function P0() {
               团队全员就位
             </div>
             <div className={`mt-2 text-body text-ink3 transition-opacity duration-700 ${ceremony >= 4 ? "opacity-100" : "opacity-0"}`}>
-              向您报到，董事长
+              向您报到，老板
             </div>
           </div>
         </div>

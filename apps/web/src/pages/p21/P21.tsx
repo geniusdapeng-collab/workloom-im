@@ -1,5 +1,5 @@
 /**
- * P21 董事长视图（数字CEO · D21）
+ * P21 老板视图（数字CEO · D21）
  * 治理状态 / 简报流 / 待审分层 / 成绩单 / 节拍手动触发 / 深度授权六步向导 / 一键撤回
  */
 import { useEffect, useState } from "react";
@@ -178,7 +178,7 @@ export default function P21() {
             <div className="mb-1 text-body tracking-[.2em] text-ink3">待审分层</div>
             公司负责人审批 {state?.pendingByTier.l2_captain ?? 0} 件<br />
             集团负责人审批 {state?.pendingByTier.l3_fleet ?? 0} 件<br />
-            <b className="text-gold">请示董事长 {state?.pendingByTier.l4_chairman ?? 0} 件</b>
+            <b className="text-gold">请示老板 {state?.pendingByTier.l4_chairman ?? 0} 件</b>
           </div>
           {score && (
             <div className="rounded-lg border border-line bg-card p-3 text-body text-ink2">
@@ -223,7 +223,7 @@ export default function P21() {
         </div>
       }
     >
-      <PageHeader title="董事长视图 · 数字负责人" desc="您只做两件事：听汇报、批少数关键决策。其余工作由公司负责人带领数字团队完成。" />
+      <PageHeader title="老板视图 · 数字负责人" desc="您只做两件事：听汇报、批少数关键决策。其余工作由公司负责人带领数字团队完成。" />
 
       {msg && <div className="mb-3 rounded border border-holo/40 bg-panel px-3 py-2 text-body text-holo">{msg}</div>}
 
@@ -285,7 +285,7 @@ export default function P21() {
       )}
 
       {queue.length > 0 && (
-        <Panel title={`请您决策（${queue.length} 件 · 董事长级）`}>
+        <Panel title={`请您决策（${queue.length} 件 · 老板级）`}>
           <div className="space-y-2">
             {queue.map((q) => {
               const snap = q.snapshot;

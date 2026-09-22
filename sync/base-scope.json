@@ -117,11 +117,11 @@
       "scripts/acceptance/lib/profile.mjs",
       "scripts/acceptance/lib/playwright.mjs",
       "scripts/acceptance/lib/compose.mjs",
-  "scripts/acceptance/lib/target.mjs",
-  "scripts/acceptance/lib/live/budget.mjs",
-  "scripts/acceptance/lib/live/providers.mjs",
-  "scripts/acceptance/lib/live/stub-provider.mjs",
-  "scripts/acceptance/live.mjs"
+      "scripts/acceptance/lib/target.mjs",
+      "scripts/acceptance/lib/live/budget.mjs",
+      "scripts/acceptance/lib/live/providers.mjs",
+      "scripts/acceptance/lib/live/stub-provider.mjs",
+      "scripts/acceptance/live.mjs"
     ],
     "copiedFiles": {
       ".github/workflows/base-sync-heartbeat.yml": {
@@ -280,7 +280,7 @@
       "reason": "种子预检负向测试连接固定的 127.0.0.1:1 不可达地址，用户名和密码均为 invalid。"
     },
     "scripts/seed-aipm.ts": {
-      "sha256": "8af195789effd5e975f0deb841f4dbbde79bf84218a18d9e551948bda6ff37f8",
+      "sha256": "a01c0a322dff1fbd3a79439805a293375db9d741b7bac17685d4024ddbd4c8ce",
       "findings": [
         {
           "rule": "credential-in-url",
