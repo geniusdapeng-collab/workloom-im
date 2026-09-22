@@ -210,6 +210,14 @@ export const BundleUiSchema = z.object({
   welcome: z.object({
     system: z.array(ChineseDisplayText(240)).min(1).max(12),
     keywords: z.array(ChineseDisplayText(24)).min(1).max(6),
+    /**
+     * 首次运行主弹窗的行业场景卡：用真实业务场景回答"这套系统在干什么"，
+     * 替代基座通用的机制说明卡。缺省时基座展示通用三张卡（向后兼容）。
+     */
+    cards: z.array(z.object({
+      t: ChineseDisplayText(24),
+      d: ChineseDisplayText(160),
+    }).strict()).min(1).max(4).optional(),
   }).strict().optional(),
   objects: z.array(ChineseDisplayText(80)).max(100).default([]),
   workflows: z.array(ChineseDisplayText(80)).max(100).default([]),

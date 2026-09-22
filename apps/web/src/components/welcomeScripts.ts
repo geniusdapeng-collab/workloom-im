@@ -53,6 +53,8 @@ const KEYWORDS_DEFAULT = ["全天候在岗", "规则内自动办", "大事您拍
 export interface BundleWelcomeProjection {
   system: string[];
   keywords: string[];
+  /** 主弹窗行业场景卡（真实业务价值前置）；缺省回落基座通用机制卡。 */
+  cards?: Array<{ t: string; d: string }>;
 }
 
 function projectedChineseLines(value: unknown): string[] {
@@ -60,6 +62,19 @@ function projectedChineseLines(value: unknown): string[] {
   return value
     .map((line) => clientChineseText(line, ""))
     .filter((line) => line.length > 0);
+}
+
+/** 主弹窗场景卡投影：标题与正文都必须通过客户端中文校验，任一不合格即整组回落基座通用卡。 */
+export function welcomeCardsOf(projection?: BundleWelcomeProjection | null): Array<{ t: string; d: string }> | null {
+  if (!Array.isArray(projection?.cards)) return null;
+  const cards = projection.cards
+    .map((card) => ({
+      t: clientChineseText(card?.t, ""),
+      d: clientChineseText(card?.d, ""),
+    }))
+    .filter((card) => card.t.length > 0 && card.d.length > 0)
+    .slice(0, 4);
+  return cards.length > 0 ? cards : null;
 }
 
 /** 合并通用仪式文案与 Bundle 行业投影；基座不识别任何具体行业标识。 */
