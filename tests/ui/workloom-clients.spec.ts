@@ -470,6 +470,8 @@ test("PC 键盘完成登录、定位待审、打开裁决并进入事件账本",
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "选择驳回原因" })).toHaveCount(0);
 
+  // 信任治理分组默认折叠（2026-09 易用性批次）：先展开分组再进入事件账本
+  await page.getByRole("button", { name: "信任治理" }).click();
   const ledger = page.getByRole("button", { name: "事件账本" }).first();
   await ledger.focus();
   await page.keyboard.press("Enter");

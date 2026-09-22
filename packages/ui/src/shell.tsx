@@ -7,6 +7,7 @@ import {
   useEffect,
   useId,
   useRef,
+  useState,
 } from "react";
 import { IconButton, Select } from "./forms.js";
 import { Icon } from "./icons.js";
@@ -86,6 +87,13 @@ export interface SideNavigationProps extends HTMLAttributes<HTMLElement> {
   label?: string;
   collapseLabel?: string;
   expandLabel?: string;
+  /**
+   * 默认折叠的分组（治理/系统向入口，给日常使用者降噪）。
+   * 含当前激活项的分组始终自动展开；传入空数组可恢复全部展开的旧行为。
+   */
+  collapsibleGroups?: readonly string[];
+  /** 搜索过滤等场景下强制展开全部分组，避免命中项被折叠隐藏。 */
+  expandAllGroups?: boolean;
 }
 
 export function SideNavigation({
@@ -103,14 +111,34 @@ export function SideNavigation({
   label = "主导航",
   collapseLabel = "收起主导航",
   expandLabel = "展开主导航",
+  collapsibleGroups = ["trust", "automation", "organization"],
+  expandAllGroups = false,
   className = "",
   ...props
 }: SideNavigationProps) {
   const navigationId = useId();
   const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(() => new Set());
   const orderedEntries = NAVIGATION_GROUP_ORDER.flatMap((group) => (
     entries.filter((entry) => entry.group === group).sort((left, right) => left.order - right.order)
   ));
+  // 激活项所在分组必须可见（当前页不能被折叠藏起来）
+  const activeEntry = activeCapabilityId
+    ? orderedEntries.find((entry) => entry.capabilityId === activeCapabilityId)
+    : orderedEntries.find((entry) => activeRoute && isNavigationActive(entry, activeRoute));
+  const isGroupOpen = (group: string) =>
+    expandAllGroups
+    || !collapsibleGroups.includes(group)
+    || openGroups.has(group)
+    || activeEntry?.group === group;
+  const toggleGroup = (group: string) => {
+    setOpenGroups((current) => {
+      const next = new Set(current);
+      if (next.has(group)) next.delete(group);
+      else next.add(group);
+      return next;
+    });
+  };
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, entry: NavigationEntry) => {
     const currentIndex = orderedEntries.findIndex((item) => item.capabilityId === entry.capabilityId);
@@ -154,12 +182,29 @@ export function SideNavigation({
         {NAVIGATION_GROUP_ORDER.map((group) => {
           const groupEntries = orderedEntries.filter((entry) => entry.group === group);
           if (groupEntries.length === 0) return null;
+          const groupOpen = collapsed || isGroupOpen(group);
+          const groupCollapsible = !collapsed && collapsibleGroups.includes(group);
           return (
             <section className="wl-side-navigation__group" aria-labelledby={`${navigationId}-${group}`} key={group}>
-              <h2 id={`${navigationId}-${group}`} className={collapsed ? "wl-visually-hidden" : "wl-side-navigation__group-label"}>
-                {NAVIGATION_GROUP_LABELS[group]}
-              </h2>
-              <div className="wl-side-navigation__items">
+              {groupCollapsible ? (
+                <button
+                  type="button"
+                  id={`${navigationId}-${group}`}
+                  className="wl-side-navigation__group-label wl-side-navigation__group-toggle"
+                  aria-expanded={groupOpen}
+                  aria-controls={`${navigationId}-${group}-items`}
+                  onClick={() => toggleGroup(group)}
+                >
+                  <Icon name="chevron" className={`wl-side-navigation__group-chevron${groupOpen ? " wl-side-navigation__group-chevron--open" : ""}`} />
+                  <span>{NAVIGATION_GROUP_LABELS[group]}</span>
+                </button>
+              ) : (
+                <h2 id={`${navigationId}-${group}`} className={collapsed ? "wl-visually-hidden" : "wl-side-navigation__group-label"}>
+                  {NAVIGATION_GROUP_LABELS[group]}
+                </h2>
+              )}
+              {groupOpen && (
+              <div className="wl-side-navigation__items" id={`${navigationId}-${group}-items`}>
                 {groupEntries.map((entry) => {
                   const clientTitle = clientChineseText(entry.title, "未命名页面");
                   const active = activeCapabilityId
@@ -188,6 +233,7 @@ export function SideNavigation({
                   );
                 })}
               </div>
+              )}
             </section>
           );
         })}

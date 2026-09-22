@@ -27,6 +27,9 @@
         corepack prepare pnpm@10.14.0 --activate
         pnpm config set store-dir /cnb-cache/pnpm-store
         pnpm install --frozen-lockfile
+        # @workloom/ui 的 dist 不入库；typecheck/三端构建消费其类型与产物前必须先构建
+        # （否则新增导出在缓存 dist 上不可见——0.1.8 易用性批次 static-gate 实测）
+        pnpm -C packages/ui build
 
     - name: 增量秘密扫描（自检 + 范围扫描）
       script: |
@@ -147,6 +150,8 @@
         corepack prepare pnpm@10.14.0 --activate
         pnpm config set store-dir /cnb-cache/pnpm-store
         pnpm install --frozen-lockfile
+        # 同 static-gate：@workloom/ui dist 不入库，三端构建前必须先构建
+        pnpm -C packages/ui build
 
     - name: 启动 PostgreSQL 17 + pgvector
       script: |
@@ -291,7 +296,7 @@
     volumes:
       - /cnb-cache/pnpm-store:copy-on-write
   env:
-    UI_VERSION: "0.1.7"
+    UI_VERSION: "0.1.8"
   stages:
     - name: 构建并打包 @workloom/ui
       script: |
