@@ -298,11 +298,13 @@ describe.runIf(RUN_DB)("行业装配 PG 集成（F2.10 铁律）", async () => {
     // 班组卡：7 preset 全注册且围栏绑定合法（P7E2）
     expect(p.agents.length).toBe(7);
     expect(p.agents.every((a) => a.fenceOk)).toBe(true);
-    // 槽摘要口径：档案 7 字段组 · forbidden 硬约束 2 条；UI 6 页 · 42 条；第⑦槽路由策略合法
-    expect(p.slots[0]!.summary).toContain("字段组");
-    expect(p.slots[5]!.summary).toBe("6 页 · 状态用例 42 条同步");
+    // 槽摘要口径（2026-09-23 文案接地气批次）：客户档案 N 组字段 · 硬约束 M 条；
+    // 界面 N 个页面 · M 条界面状态用例；第⑦槽模型与成本策略
+    expect(p.slots[0]!.summary).toContain("组字段");
+    expect(p.slots[0]!.summary).toContain("硬约束");
+    expect(p.slots[5]!.summary).toBe("6 个页面 · 42 条界面状态用例");
     expect(p.slots[6]!.id).toBe("model-policy");
-    expect(p.slots[6]!.summary).toContain("model-policy.yml");
+    expect(p.slots[6]!.summary).toContain("个使用场景");
   });
 
   it("校验留痕：recheck 写 bundle.check_run 事件（P7E3 留痕可查）", async () => {
