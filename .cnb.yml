@@ -287,7 +287,25 @@
       script: |
         set -eu
         set -a; . ./.env; set +a
-        pnpm ui:e2e
+        # 临时诊断（T-2026-0923-0002）：失败时把 Playwright 失败摘要回传到分支，便于会话内定位；
+        # 诊断提交只回传一次，避免自触发循环。读取后随本分支撤销。
+        if ! pnpm ui:e2e; then
+          echo "ui:e2e 失败——回传失败摘要到分支（临时诊断步骤）"
+          mkdir -p .diag
+          for f in test-results/ui/*/error-context.md; do
+            [ -f "$f" ] || continue
+            { echo "### $f"; sed -n '1,120p' "$f"; echo; } >> .diag/ui-failure.md
+          done
+          find test-results/ui -maxdepth 2 -type f | sort > .diag/ui-failure-files.txt || true
+          if ! grep -q "diag(ui)" <<<"$(git log -1 --format=%s)"; then
+            git config user.name "cnb-ui-diag"
+            git config user.email "diag@cnb.cool"
+            git add -f .diag
+            git commit -q -m "diag(ui): 回传失败摘要（临时）"
+            git push -q "https://cnb:${CNB_TOKEN}@cnb.cool/workloom-ai/workloom-im" "HEAD:task/T-2026-0923-0002" || true
+          fi
+          exit 1
+        fi
 
 .ui-release: &ui_release
   name: ui-release
