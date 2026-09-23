@@ -292,7 +292,12 @@ export async function seedAiPm(): Promise<void> {
          VALUES ($1,$2,$3,$4,'inapp','pending',NULL,$5,NULL,NULL)
          ON CONFLICT (approval_id) DO NOTHING`,
         [approvalId, TENANT_ID, WS_ID, evId,
-         JSON.stringify({ action: a.kind, after: { title: a.title }, expires_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString() })],
+         JSON.stringify({
+           action: a.kind,
+           title: a.title,
+           after: { title: a.title },
+           expires_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+         })],
       );
     }
   } finally {

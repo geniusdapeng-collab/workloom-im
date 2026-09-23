@@ -93,11 +93,23 @@
       "text": "已记录为产品反馈草稿。提交前我会请您确认影响范围；只有收到服务端工单编号后才会显示受理成功。"
     }
   ],
+  "safeTerms": [
+    "PRD",
+    "eval",
+    "prompt",
+    "badcase",
+    "OKR",
+    "SOP",
+    "WorkBuddy",
+    "benchmark",
+    "jailbreak",
+    "judge"
+  ],
   "projection": {
     "bundleId": "ai-pm",
     "bundleVersion": "3.0.0",
     "contractVersion": "2.0.0",
-    "uiVersion": "0.1.8",
-    "manifestDigest": "0404fe352c07b2539e9b73c2ece851f9e976c21ea77647f79accb2b0be1d3a4f"
+    "uiVersion": "0.1.9",
+    "manifestDigest": "813f2afd537d44c264d8e055ef7cc9bd3021ddc883e2c04b54fb27249aad8f48"
   }
 }

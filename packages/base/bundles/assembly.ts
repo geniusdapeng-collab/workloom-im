@@ -690,6 +690,8 @@ export function loadBundleUiProjection(slug: string, root = bundlesRoot()): Bund
       workflows: workflows.labels,
       workflowEntries: workflows.entries,
       // 以下高影响投影由主包唯一裁决，低信任依赖不得覆盖。
+      // safeTerms 决定客户端中文显示边界放行哪些行业词，属信任面，只能由主包声明。
+      safeTerms: primary.workloom.ui.safeTerms,
       welcome: primary.workloom.ui.welcome,
       serviceFront: primary.workloom.ui.serviceFront,
       inspection: primary.workloom.ui.inspection,
