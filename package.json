@@ -47,7 +47,7 @@
     "projections:check": "tsx scripts/generate-client-projections.mts",
     "ui:governance": "node --test scripts/ui-governance-rules.test.mjs && node scripts/verify-ui-governance.mjs",
     "ui:governance:test": "node --test scripts/ui-governance-rules.test.mjs",
-    "ui:e2e": "node scripts/ci/ui-e2e-with-diag.mjs",
+    "ui:e2e": "playwright test",
     "ui:e2e:update": "playwright test --update-snapshots",
     "pc-shell:verify": "node scripts/verify-pc-shell.mjs",
     "secrets:scan": "node scripts/secret-scan.mjs --files AGENTS.md AGENTS.repo.md WORKLOOM_PRODUCT_CONTEXT.md",
