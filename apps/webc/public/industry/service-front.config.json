@@ -99,13 +99,17 @@
     "prompt",
     "badcase",
     "OKR",
-    "SOP"
+    "SOP",
+    "WorkBuddy",
+    "benchmark",
+    "jailbreak",
+    "judge"
   ],
   "projection": {
     "bundleId": "ai-pm",
     "bundleVersion": "3.0.0",
     "contractVersion": "2.0.0",
     "uiVersion": "0.1.9",
-    "manifestDigest": "ebbbcd532d7bee8cf7ab969b0df554e72fdd0b4dbb901b2b3e3aeece35efce84"
+    "manifestDigest": "813f2afd537d44c264d8e055ef7cc9bd3021ddc883e2c04b54fb27249aad8f48"
   }
 }

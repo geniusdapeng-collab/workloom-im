@@ -79,7 +79,7 @@ fences:
     action: { result: review }
     note: 组织资产外发必审+脱敏预览
   - rule_id: R-PM13
-    name: 红队 P0 必审
+    name: 红队高危必审
     level: review
     match: { object_types: [redteam_finding], actions: [report_p0] }
     action: { result: review }

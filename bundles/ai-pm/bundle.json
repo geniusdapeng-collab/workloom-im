@@ -89,7 +89,9 @@
       "terminology": {
         "businessObject": "产品需求",
         "customer": "用户",
-        "operation": "产品经营"
+        "operation": "产品经营",
+        "action.threat-rating": "竞对威胁评级调整",
+        "action.reply-draft": "用户回复草稿确认"
       },
       "navigation": {
         "slots": [
@@ -185,17 +187,21 @@
         "prompt",
         "badcase",
         "OKR",
-        "SOP"
+        "SOP",
+        "WorkBuddy",
+        "benchmark",
+        "jailbreak",
+        "judge"
       ]
     }
   },
   "integrity": {
     "algorithm": "sha256",
-    "digest": "ebbbcd532d7bee8cf7ab969b0df554e72fdd0b4dbb901b2b3e3aeece35efce84",
+    "digest": "813f2afd537d44c264d8e055ef7cc9bd3021ddc883e2c04b54fb27249aad8f48",
     "assets": {
       "eval/questions.json": "a204675c579639a33cece2b0a4a5ffa9e94686abcef26c86c1abe7d6c0bd08fb",
       "feedback-enums.yml": "fbba50157cda065db504eb48fbc95a2db8a7fdfb9719f910b82dd7945b5fe4f4",
-      "fences/ai-pm-baseline.yml": "a618d2ffe7fd112e47eb32fe188a14d5bc4b09228db1b5237db89acae24788fb",
+      "fences/ai-pm-baseline.yml": "63975f7af9a267dde69f411bec78bcbc833f250dac933035bfda84df78e126a2",
       "floor-scene.json": "b81f45b6bd74de787351e8eb8ac0ec3545b0ff2c2686a06f0af56cc45ad8a24f",
       "model-policy.yml": "0e52c6ffa32221e2888a7e40e674504090fee38fc321609282c7dc735a640f9e",
       "presets/chief-pm.yml": "eacc678404267367eb262dc183b5de2580648cd76fd3575c1c29d969b7c84650",
