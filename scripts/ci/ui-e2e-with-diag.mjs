@@ -29,17 +29,25 @@ if (existsSync(resultsDir)) {
 }
 mkdirSync(".diag", { recursive: true });
 writeFileSync(".diag/ui-failure.md", sections.join("\n\n---\n\n") || "（没有 error-context 文件）");
+const summary = readFileSync(".diag/ui-failure.md", "utf8");
+console.error(summary.slice(0, 8000));
 try {
-  run("git", ["config", "user.name", "cnb-ui-diag"]);
-  run("git", ["config", "user.email", "diag@cnb.cool"]);
-  run("git", ["add", "-f", ".diag"]);
-  run("git", ["commit", "-q", "-m", "diag(ui): 回传失败摘要（临时）"]);
   const token = process.env.CNB_TOKEN ?? "";
-  if (token) {
-    run("git", ["push", "-q", `https://cnb:${token}@cnb.cool/workloom-ai/workloom-im`, "HEAD:task/T-2026-0923-0002"]);
-  } else {
-    console.error("缺少 CNB_TOKEN，诊断摘要未能回传");
-  }
+  if (!token) throw new Error("缺少 CNB_TOKEN");
+  const repo = "workloom-ai/workloom-im";
+  const headers = { Authorization: `Bearer ${token}`, Accept: "application/json", "Content-Type": "application/json" };
+  const pulls = await (await fetch(`https://api.cnb.cool/${repo}/-/pulls?state=open`, { headers })).json();
+  const list = Array.isArray(pulls) ? pulls : pulls.data ?? pulls.items ?? [];
+  const target = list.find((pull) => String(pull.head?.ref ?? pull.head_ref ?? "").includes("task/T-2026-0923-0002"));
+  if (!target) throw new Error("找不到本分支的 PR");
+  const number = target.number ?? target.id;
+  const body = `### ui-gate 失败摘要（自动回传 · 临时诊断）\n\n\`\`\`\n${summary.slice(0, 12000)}\n\`\`\``;
+  const response = await fetch(`https://api.cnb.cool/${repo}/-/pulls/${number}/comments`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ body }),
+  });
+  console.error("诊断评论回传状态", response.status);
 } catch (error) {
   console.error("诊断回传失败", error instanceof Error ? error.message : error);
 }
