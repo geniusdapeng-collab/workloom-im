@@ -64,7 +64,16 @@
         "action.review.reply": "回复评价",
         "field.occ": "入住率",
         "field.revpar": "每间可售房收入",
-        "field.adr": "平均房价"
+        "field.adr": "平均房价",
+        "field.rating": "评分",
+        "field.amount": "金额",
+        "field.room": "房型",
+        "field.from": "调整前",
+        "field.to": "调整后",
+        "field.price": "房价",
+        "field.occ_forecast": "预测入住率",
+        "field.revpar_est": "预计收益变化",
+        "field.draft": "回复草稿"
       },
       "navigation": {
         "slots": []
@@ -142,12 +151,25 @@
         "brand": {}
       },
       "permissions": [],
-      "experiments": []
+      "experiments": [],
+      "safeTerms": [
+        "OCC",
+        "ADR",
+        "RevPAR",
+        "WiFi",
+        "PMS",
+        "OTA",
+        "SOP",
+        "SLA",
+        "SPA",
+        "FAQ",
+        "Yunqi-Hotel"
+      ]
     }
   },
   "integrity": {
     "algorithm": "sha256",
-    "digest": "6da25d8a58b2cc06275e33aa4b2a4f0fb374593830485366a6ce499b3c6588a6",
+    "digest": "4b05d5081a0d04ce69455e3c99ee87060c82e1525a84333d29ad0b89399eb287",
     "assets": {
       "eval/questions.json": "23044b47e17985da056220cef131e27b6262dab53b036e3750c166d6d337a842",
       "feedback-enums.yml": "0b64759da7c6a529084b6f56fa4bbeb1527c03f665f3e1d460e0d06045d5b263",

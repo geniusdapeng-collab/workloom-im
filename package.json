@@ -35,6 +35,7 @@
     "release:gate": "tsx --env-file=.env scripts/release-gate.ts",
     "agent:tour": "bash scripts/agent-tour.sh",
     "preview:all": "bash scripts/preview-all.sh",
+    "check:builds": "node scripts/check-derived-builds.mjs",
     "capabilities": "node scripts/generate-capabilities.mjs",
     "capabilities:check": "node scripts/generate-capabilities.mjs --check",
     "product:verify": "node scripts/verify-product-content.mjs",

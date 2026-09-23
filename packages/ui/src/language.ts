@@ -167,6 +167,89 @@ const SAFE_CLIENT_LATIN_TERMS = new Set([
   "PC", "RLS", "ROI", "SLA", "URL", "WorkLoom",
 ]);
 
+/* ================= 行业术语白名单（合规注入通道） =================
+ *
+ * 问题：中文显示边界把「含未收录拉丁词的中文串」整串回落。行业文案里天然带
+ * 行业通用词（客房 WiFi、酒店 PMS、渠道 OTA、出租率 OCC、渠道对账 SOP…），
+ * 于是「请使用房间号后四位连接 WiFi」这类正常答复会被判成技术内容而整串消失
+ * （RDAS 实测：C 端答复回落成「本条答复包含无法安全展示的技术内容」，工单详情回落成空）。
+ *
+ * 口径：行业术语只能由**已验签的行业包**经 `ui.safeTerms` 显式声明，客户端在
+ * 装配投影就绪时注册；基座不自带任何行业词（D18 底座行业零残留）。注册表只
+ * 放开「整词匹配」的行业缩写，平台红线（SQL/字段名/JSON/工程代号/内部主键）
+ * 一律不放行，因此不会把内部结构泄露给业务用户。
+ */
+const CLIENT_SAFE_TERMS_MAX = 40;
+const CLIENT_SAFE_TERM_MAX_LENGTH = 20;
+const CLIENT_SAFE_TERM_PATTERN = /^[A-Za-z][A-Za-z0-9]*(?:[.-][A-Za-z0-9]+)*$/;
+/** 小写起头的驼峰（orderStatus）是结构化字段的形态，不接受行业声明。 */
+const STRUCTURED_FIELD_SHAPE = /^[a-z][a-z0-9]*[A-Z]/;
+/** 平台保留记号：即使行业包误声明也不得放开（SQL 关键字、通用错误串、结构化字段）。 */
+const CLIENT_SAFE_TERM_DENY = new Set([
+  "SELECT", "INSERT", "UPDATE", "DELETE", "FROM", "WHERE", "NULL", "TRUE", "FALSE", "UNDEFINED",
+  "INTERNAL", "SERVER", "ERROR", "STACK", "TRACE", "JSON", "UUID", "ID",
+]);
+
+let industrySafeTerms: readonly string[] = [];
+let industrySafeTermPattern: RegExp | null = null;
+
+function foldSafeTerm(term: string): string {
+  return term.trim().toUpperCase().replace(/[.-]/g, "");
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * 登记当前工作区行业包声明的可显示术语，返回实际生效的白名单。
+ * 幂等且原子替换：切换身份/工作区时必须用空数组清空，避免跨租户串用术语。
+ */
+export function registerClientSafeTerms(terms: unknown): readonly string[] {
+  if (!Array.isArray(terms) || terms.length === 0) {
+    industrySafeTerms = [];
+    industrySafeTermPattern = null;
+    return industrySafeTerms;
+  }
+  const seen = new Set<string>();
+  const accepted: string[] = [];
+  for (const raw of terms.slice(0, CLIENT_SAFE_TERMS_MAX)) {
+    if (typeof raw !== "string") continue;
+    const term = raw.trim();
+    if (term.length < 2 || term.length > CLIENT_SAFE_TERM_MAX_LENGTH) continue;
+    if (!CLIENT_SAFE_TERM_PATTERN.test(term)) continue;
+    if (STRUCTURED_FIELD_SHAPE.test(term)) continue;
+    const folded = foldSafeTerm(term);
+    if (CLIENT_SAFE_TERM_DENY.has(folded) || seen.has(folded)) continue;
+    seen.add(folded);
+    accepted.push(term);
+  }
+  industrySafeTerms = Object.freeze(accepted);
+  industrySafeTermPattern = accepted.length === 0 ? null : new RegExp(
+    `(?<![A-Za-z0-9])(?:${accepted
+      // Wi-Fi 与 WiFi、RevPAR 与 Rev.PAR 属同一术语：逐字允许省略分隔符
+      .map((term) => term.replace(/[.-]+/g, "").split("").map(escapeRegExp).join("[.-]?"))
+      .join("|")})(?![A-Za-z0-9])`,
+    "gi",
+  );
+  return industrySafeTerms;
+}
+
+/** 当前生效的行业术语白名单（只读，供验收与诊断核对装配结果）。 */
+export function clientSafeTerms(): readonly string[] {
+  return industrySafeTerms;
+}
+
+/**
+ * 把已登记的行业术语从文本中屏蔽后再过基线规则：行业词不触发回落，
+ * 未登记的字段名、SQL、JSON、工程代号仍按原规则拦截。
+ */
+function withoutRegisteredTerms(text: string): string {
+  if (!industrySafeTermPattern) return text;
+  industrySafeTermPattern.lastIndex = 0;
+  return text.replace(industrySafeTermPattern, "\u3000");
+}
+
 function hasUnknownLatinTerm(text: string): boolean {
   const tokens = text.match(CLIENT_LATIN_TOKEN) ?? [];
   return tokens.some((token) =>
@@ -179,11 +262,13 @@ function hasUnknownLatinTerm(text: string): boolean {
 }
 
 function unsafeMachineText(text: string): boolean {
-  return RAW_MACHINE_TEXT.test(text)
-    || RAW_FIELD_TOKEN.test(text)
-    || ENGINEERING_TEXT.test(text)
-    || /^[\[{][\s\S]*[\]}]$/.test(text)
-    || (/[㐀-鿿]/.test(text) && hasUnknownLatinTerm(text));
+  // 机器文本红线在屏蔽前判定：行业白名单不能把 SQL、错误串、JSON 放行。
+  if (RAW_MACHINE_TEXT.test(text)) return true;
+  if (/^[\[{][\s\S]*[\]}]$/.test(text)) return true;
+  const baseline = withoutRegisteredTerms(text);
+  return RAW_FIELD_TOKEN.test(baseline)
+    || ENGINEERING_TEXT.test(baseline)
+    || (/[㐀-鿿]/.test(baseline) && hasUnknownLatinTerm(baseline));
 }
 
 export function isKnownClientField(key: string): boolean {

@@ -23,13 +23,13 @@ const ri = (rule_id: string, result = "pass") => [{ rule_id, version: FENCE_VERS
 
 const EVENTS: unknown[] = [
   { event_id: "E-SEED-BT-0201", who: who("captain"), context: ctx(at(2700)), object: { type: "thread", id: "T-201", label: "任务派发·市场" },
-    decision: { action: "thread.dispatch", after: {"title": "三季度品牌焕新 Campaign", "steps": 5, "owner": "市场组", "deadline": "本周五"}, basis: ["QUEST 五步拆解"] },
+    decision: { action: "thread.dispatch", after: {"title": "三季度品牌焕新活动", "steps": 5, "owner": "市场组", "deadline": "本周五"}, basis: ["任务五步拆解"] },
     rule_impact: [], receipt: receipt(at(2700)), model_trace: mt },
   { event_id: "E-SEED-BT-0202", who: who("captain"), context: ctx(at(2650)), object: { type: "thread", id: "T-202", label: "任务派发·产品" },
-    decision: { action: "thread.dispatch", after: {"title": "客服知识库 2.0 上线", "steps": 4, "owner": "产品组", "deadline": "下周三"}, basis: ["QUEST 五步拆解"] },
+    decision: { action: "thread.dispatch", after: {"title": "客服知识库 2.0 上线", "steps": 4, "owner": "产品组", "deadline": "下周三"}, basis: ["任务五步拆解"] },
     rule_impact: [], receipt: receipt(at(2650)), model_trace: mt },
   { event_id: "E-SEED-BT-0203", who: who("captain"), context: ctx(at(2600)), object: { type: "thread", id: "T-203", label: "任务派发·销售" },
-    decision: { action: "thread.dispatch", after: {"title": "重点客户季度回访 28 家", "steps": 3, "owner": "销售组", "deadline": "本月底"}, basis: ["QUEST 五步拆解"] },
+    decision: { action: "thread.dispatch", after: {"title": "重点客户季度回访 28 家", "steps": 3, "owner": "销售组", "deadline": "本月底"}, basis: ["任务五步拆解"] },
     rule_impact: [], receipt: receipt(at(2600)), model_trace: mt },
   { event_id: "E-SEED-BT-0204", who: who("content-agent"), context: ctx(at(2400)), object: { type: "content", id: "cp-091", label: "市场活动发布" },
     decision: { action: "campaign.publish", after: {"campaign": "品牌焕新首发", "channels": ["企微", "官网", "行业社群"], "reach": 12600}, basis: ["活动管线"] },
@@ -64,7 +64,7 @@ const EVENTS: unknown[] = [
   { event_id: "E-SEED-BT-0214", who: who("night-shift"), context: ctx(at(500)), object: { type: "night_package", id: "np-i", label: "夜班日报" },
     decision: { action: "night.package.deliver", after: {"overnight": {"tasks": 8, "completed": 8, "escalation": 0}, "note": "夜间任务全清"}, basis: ["夜班值守"] },
     rule_impact: [], receipt: receipt(at(500)), model_trace: mt },
-  { event_id: "E-SEED-BT-0215", who: who("company-ceo"), context: ctx(at(60)), object: { type: "conversion", id: "brief-i", label: "CEO 晨报" },
+  { event_id: "E-SEED-BT-0215", who: who("company-ceo"), context: ctx(at(60)), object: { type: "conversion", id: "brief-i", label: "经营晨报" },
     decision: { action: "ceo.briefing", after: {"yesterday": {"threads": 14, "decisions": 3, "events": 186}, "week": "营收管线 ¥412,000 · 线索转化 25%"}, basis: ["晨报节拍"] },
     rule_impact: [], receipt: receipt(at(60)), model_trace: mt },
 ];
@@ -72,13 +72,13 @@ const EVENTS: unknown[] = [
 const APPROVALS = [
   { id: "apr-boost-i1", eventRef: "E-SEED-BT-0201",
     snapshot: { action: "deal.quote", summary: "季度市场预算审批：¥120,000（品牌焕新+获客投放）", title: "Q3 市场预算 ¥120,000",
-      ceo_rationale: "其中获客投放 ¥80,000（预计 MQL 240 条，CPL ≤ ¥333）；品牌焕新 ¥40,000；ROI 目标 ≥ 3.5×", rule_version: "R16 baseline/v1", gate: "必审",
+      ceo_rationale: "其中获客投放 ¥80,000（预计带来 240 条线索，单条线索成本不超过 ¥333）；品牌焕新 ¥40,000；目标投产比不低于 3.5 倍", rule_version: "R16 baseline/v1", gate: "必审",
       params: {"amount": 120000, "split": {"获客投放": 80000, "品牌焕新": 40000}, "target_mql": 240},
       before: {"budget_q2": 96000}, after: {"budget_q3": 120000, "roi_target": "3.5×"} } },
   { id: "apr-boost-i2", eventRef: "E-SEED-BT-0213",
-    snapshot: { action: "lead.assign", summary: "AI 员工扩编审批：新增 2 名（客户成功 Agent + 数据 Agent）", title: "AI 员工扩编 ×2",
+    snapshot: { action: "lead.assign", summary: "数字员工扩编审批：新增 2 名（客户成功专员、数据专员）", title: "AI 员工扩编 ×2",
       ceo_rationale: "客户成功工单周增 34%，现有坐席饱和度 87%；扩编后预计 SLA 提升至 99%，月成本 ¥1,200", rule_version: "R16 baseline/v1", gate: "必审",
-      params: {"agents": ["客户成功 Agent", "数据 Agent"], "cost_month": 1200, "sla_target": "99%"},
+      params: {"agents": ["客户成功专员", "数据专员"], "cost_month": 1200, "sla_target": "99%"},
       before: {"headcount": 14}, after: {"headcount": 16, "cost": "+¥1,200/月"} } },
 ];
 

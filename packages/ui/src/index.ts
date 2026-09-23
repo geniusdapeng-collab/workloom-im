@@ -3,9 +3,11 @@ export {
   clientFieldLabel,
   clientChineseText,
   clientIdentifierText,
+  clientSafeTerms,
   clientStatusLabel,
   clientValueText,
   isKnownClientField,
+  registerClientSafeTerms,
   type ClientFieldEntry,
   type ClientFieldOptions,
 } from "./language.js";

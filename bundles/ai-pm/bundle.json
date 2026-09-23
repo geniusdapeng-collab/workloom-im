@@ -178,12 +178,20 @@
       "permissions": [
         "ai-pm.development.read"
       ],
-      "experiments": []
+      "experiments": [],
+      "safeTerms": [
+        "PRD",
+        "eval",
+        "prompt",
+        "badcase",
+        "OKR",
+        "SOP"
+      ]
     }
   },
   "integrity": {
     "algorithm": "sha256",
-    "digest": "0404fe352c07b2539e9b73c2ece851f9e976c21ea77647f79accb2b0be1d3a4f",
+    "digest": "ebbbcd532d7bee8cf7ab969b0df554e72fdd0b4dbb901b2b3e3aeece35efce84",
     "assets": {
       "eval/questions.json": "a204675c579639a33cece2b0a4a5ffa9e94686abcef26c86c1abe7d6c0bd08fb",
       "feedback-enums.yml": "fbba50157cda065db504eb48fbc95a2db8a7fdfb9719f910b82dd7945b5fe4f4",
