@@ -34,7 +34,8 @@
         "0.1.8": "sha512-RUkSt59H1XPuHLPdsxGp/0VYtGnHqk1ZaSGG0euWnD2kXRoGOUXIksTuTQa9DPAFoS/ldD2KvBExQMeHO2SfGg==",
         "0.1.9": "sha512-7OVDLNYwo+8snmDNhFHm4/yYU2Pye9vgqE//jflbemaxUiWouquSMR1y8K6S+zHcT3mm7rZl8Er4YsriyLx7KQ==",
         "0.1.10": "sha512-uktUxD1J+svHFwAfq1dQxtJW2h55E9zYst0K2IZtv7eHq+qDX7g/OrZ12AjeklZKJMc45gawPsukhlXCE6zIVw==",
-        "0.1.11": "sha512-/I/KRbEIRWRiLXeHNwVWowJCNpUQgKy/9PX4B+Jy+TYYjHagocB7Ijkx2dEvLl6HN9/cf9DU8yyT3g9k+ivxYw=="
+        "0.1.11": "sha512-/I/KRbEIRWRiLXeHNwVWowJCNpUQgKy/9PX4B+Jy+TYYjHagocB7Ijkx2dEvLl6HN9/cf9DU8yyT3g9k+ivxYw==",
+        "0.1.12": "sha512-Gnik9XEeuCyyfO/y7rpMYveELqPkdV4nRK23+dyb+mM53euEhcHsU2GAaRwJZN95i15RHXMg/GH+ZSxaz5xinA=="
       },
       "comment": "2026-09-17 起 @workloom/ui 制品托管在 CNB Release（cnb.cool/workloom-ai/workloom-im），替代已失效的 GitHub Release tarball；type 枚举保留历史值以兼容各仓 state。"
     }
