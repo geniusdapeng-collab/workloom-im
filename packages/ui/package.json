@@ -1,6 +1,6 @@
 {
   "name": "@workloom/ui",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "private": true,
   "description": "WorkLoom 三端共享交互、中文显示与内容安全基座",
   "license": "Apache-2.0",
