@@ -6,15 +6,37 @@
 
 - 所有播报只能进入 `VoiceEngine` 单消费者队列；除熔断外不得打断正在播放的句子。
 - 同一角色第一次选中系统 voice 后必须锁定，后续段落不得重新猜测；voice 列表未就绪时锁定系统默认声，宁可全程一致，也不能中途变声。
-- 角色配置明确区分男女声；织伴固定为柔和中文女声，优先 `Flo / Tingting / Xiaoxiao / Xiaoyi / Meijia / Sinji`，音高只做轻微修饰。
+- **织伴（小织）的默认音色 = 本机克隆音色**（配音工位音色档案 `zh-myvoice`，可用 `WORKLOOM_VOICE_PROFILE` 覆盖）；
+  客户端经本机服务端 `/api/voice/speech` 取音频，**工位未配置/不可达时回落到系统柔和中文女声**并锁定同一音色
+  （降级只换声线，不让播报消失）。链路与纪律见 §2。
+- 除织伴外的数字员工保持各自的系统音色（按角色稳定锁定，避免"全员一个声"）；角色可用 `neural:false` 显式关掉克隆音色。
+- 角色配置明确区分男女声；系统语音回落时优先 `Flo / Tingting / Xiaoxiao / Xiaoyi / Meijia / Sinji`，音高只做轻微修饰。
 - TTS 开始时环境声自动 duck 到 0，结束后平滑恢复；首次安装默认“仅反馈+仪式”，不默认播放连续白噪。
 - 欢迎介绍控制在四个短段内：问候、系统价值、权限原则、团队引出。字幕与语音使用同一文本，禁止另起长文案。
 
-## 2. 神经 TTS 选型
+## 2. 神经 TTS：本机克隆音色（默认）与选型备选
 
-系统 TTS 作为零下载兜底保留；高品质声音以可选“本地神经语音包”提供，不能把数 GB 模型强塞进每个基础安装包。
+**已落地的默认路径**：本机配音工位（`bundles/ai-video/connectors/voice-bridge`，Apple 原生 MLX 引擎）承载
+音色档案与零样本克隆；服务端 `apps/server/src/voice/station.ts` 只按 profile 名请求并做幂等缓存
+（同 profile+文本只合成一次），客户端 `apps/web/src/voice/neuralVoice.ts` 负责播放与口型驱动。
 
-首选评估 `QwenAudio/CosyVoice`：Apache-2.0，中文与多语言、流式输出、情绪/语速/音量指令均由官方实现。目标接入形态是独立本机 sidecar，Electron 通过受限 IPC 请求 PCM 流，前端 `AudioContext + AnalyserNode` 直接驱动口型。
+- **声纹不出域**：参考音频、音色档案与授权回执只留**本机工位** `~/.workloom/voice-station/profiles/<profile>/`；
+  服务端与客户端只传 profile 名与文本，音色样本不进仓库、不进数据库、不上行蜂群。
+- **能力先探测再使用**：客户端启动时探测一次 `/api/voice/status`，探到才走克隆音色；
+  未探到（工位没起、非本机部署、未授权）一律走系统语音 —— 不允许"每句话都等一次失败往返"。
+- **口型**：克隆音频没有 `onboundary` 事件，客户端用 `AudioContext + AnalyserNode` 的播放进度回调
+  `onProgress(0–1)` 估算字位，喂给同一套 `emitLip` 链路（与系统语音的 boundary 语义一致）。
+- 版权与授权：克隆他人声音必须先有授权声明（围栏 `G-VOICE1`）；对外发布另需 `G-VOICE6`。
+
+系统 TTS 作为零下载兜底保留；不能把数 GB 模型强塞进每个基础安装包。
+
+备选引擎（按需评估，不改变上面这条默认路径）：
+
+- `QwenAudio/CosyVoice`：Apache-2.0，中文与多语言、流式输出、情绪/语速/音量指令均由官方实现；形态是独立本机 sidecar。
+- `RVC-Boss/GPT-SoVITS`（MIT）：中文/粤语/日韩克隆第一梯队，官方支持 Apple Silicon；需自带 api_v2 服务。
+- `debpalash/VoiceStudio`（AGPL-3.0）：带 GUI 与配音工作区，可直连 GPT-SoVITS。
+- `hexgrad/Kokoro-82M`：模型小、Apache-2.0，适合轻量包，但中文情绪控制不是首选。
+- 不采用 `fishaudio/fish-speech`：Fish Audio Research License（研究用途）+ 仅 Linux/WSL2 + 4B 参数，不满足"跑在本机 + 可商用"。
 
 备选：
 
@@ -42,3 +64,5 @@
 4. 角色名牌 DOM 中不存在系统默认人名，且团队人数与 Bundle 编制一致；
 5. 欢迎页、团队仪式、职场和舞台四张截图通过非黑屏、人物包围盒、标签密度检查；
 6. 默认与安全渲染模式分别验收。
+7. 织伴（小织）播报默认走本机克隆音色：`/api/voice/status` 探测为真时音频来自工位（响应头 `x-voice-profile`），
+   工位不可用时回落系统女声且**不得中途换声**；两种模式下字幕与语音文本仍逐字一致。
