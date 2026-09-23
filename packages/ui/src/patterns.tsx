@@ -52,7 +52,7 @@ const ENVIRONMENT_LABELS: Readonly<Record<TenantScopeProps["environment"], strin
 export function TenantScope({ tenant, workspace, environment }: TenantScopeProps) {
   return (
     <div className="wl-tenant-scope" aria-label="当前公司与工作区范围">
-      <span><strong>租户</strong>{tenant || "待确认"}</span>
+      <span><strong>公司</strong>{tenant || "待确认"}</span>
       <span><strong>工作区</strong>{workspace || "待确认"}</span>
       <Badge tone={environment === "active" ? "success" : environment === "unknown" || environment === "rollback" ? "danger" : "warning"}>
         {ENVIRONMENT_LABELS[environment]}

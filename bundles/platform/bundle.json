@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "workloom": {
     "industry": "platform",
-    "displayName": "仙女座运营运维系统 · WorkLoom 平台运营包（platform-bundle）",
+    "displayName": "平台运营包（平台自用示例）",
     "description": "平台运营运维系统 V1：以工单为账本、以技术支持为桥梁、以知识库为弹药、以自生长为引擎。七个数字员工班组 17 名（技术支持工单组/知识管理组/客户成功组/计费账务组/平台运维组/行业包运营组/策略运营组）+ 平台基线围栏 R-PL1~R-PL10（含默认围栏级别兜底）+ 11 个平台技能（意图分诊/需求澄清/工单记账/知识沉淀/知识保鲜/健康扫描/关怀触达/积分对账/故障应急/灰度观察/策略锻造）+ 需求确认单数据结构 + 上架考题 + 运行态种子数据。与 AI 产品经理 V3 研发流水线通过「需求转运官」标准接口衔接：确认后的需求注入产品经理负责制流水线，交付状态自动回传关单。",
     "status": "candidate",
     "owner": "WorkLoom 平台运营组",
@@ -131,7 +131,7 @@
   },
   "integrity": {
     "algorithm": "sha256",
-    "digest": "ad37e9d0744d3f5ff5c75b16e734e9cd8956bc28dfc94eacdb031ba1cd8b40b5",
+    "digest": "3fdf03f41ea34a140cdcde306169201e28f4f2948190636ca2c616353a73bcdd",
     "assets": {
       "eval/questions.json": "7ec77d60f206882208b3ed1dfbdb013544d66656e9d0de1283cc3ec23b7e3e32",
       "feedback-enums.yml": "8f74c92981d840bfa897cc2a6530c10768e72bc20aaddb46a3cbbf2c546b0e7b",

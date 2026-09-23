@@ -1,1 +1,70 @@
-{"objects":["requirement","competitor_report","metric_daily","feedback_item","document","release_checklist","intel_item","model","eval_set","eval_run","prompt","badcase","dataset","finetune_run","knowledge_item","prototype"]}
+{
+  "$id": "workloom://bundles/ai-pm/schemas/objects",
+  "description": "AI 产品经理示例包的业务对象枚举（槽②）。",
+  "objects": [
+    {
+      "type": "requirement",
+      "label": "需求"
+    },
+    {
+      "type": "competitor_report",
+      "label": "竞品报告"
+    },
+    {
+      "type": "metric_daily",
+      "label": "指标日报"
+    },
+    {
+      "type": "feedback_item",
+      "label": "用户反馈"
+    },
+    {
+      "type": "document",
+      "label": "产出文档"
+    },
+    {
+      "type": "release_checklist",
+      "label": "发布检查单"
+    },
+    {
+      "type": "intel_item",
+      "label": "情报条目"
+    },
+    {
+      "type": "model",
+      "label": "模型"
+    },
+    {
+      "type": "eval_set",
+      "label": "评测集"
+    },
+    {
+      "type": "eval_run",
+      "label": "评测运行"
+    },
+    {
+      "type": "prompt",
+      "label": "提示词版本"
+    },
+    {
+      "type": "badcase",
+      "label": "失败案例"
+    },
+    {
+      "type": "dataset",
+      "label": "数据集"
+    },
+    {
+      "type": "finetune_run",
+      "label": "微调任务"
+    },
+    {
+      "type": "knowledge_item",
+      "label": "知识条目"
+    },
+    {
+      "type": "prototype",
+      "label": "原型"
+    }
+  ]
+}
