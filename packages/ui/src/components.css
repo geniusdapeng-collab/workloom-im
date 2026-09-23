@@ -248,7 +248,10 @@
   .wl-top-context-bar__title { font-size: var(--wl-text-h1); font-weight: 700; line-height: 1.35; margin: 0; }
   .wl-top-context-bar__context { flex: 0 1 auto; min-width: 0; }
   .wl-top-context-bar__actions { align-items: center; display: flex; flex: 0 1 auto; flex-wrap: wrap; gap: var(--wl-space-2); max-width: 100%; }
-  .wl-side-navigation { background: var(--wl-color-surface); border-inline-end: 1px solid var(--wl-color-border); color: var(--wl-color-text); display: flex; flex-direction: column; inline-size: var(--wl-sidebar-expanded); max-inline-size: 100%; min-block-size: 100%; min-width: 0; overflow: hidden; transition: inline-size var(--wl-motion-normal) var(--wl-ease-standard); }
+  /* 主导航固定（2026-09-23 走查）：此前 min-block-size:100% 让导航随页面内容一起滚动，
+     长页面（事件账本/员工档案）滑到底后左侧入口消失。改为视口内粘附：
+     导航自身撑满一屏并在内部滚动，页面列继续按文档滚动，移动端抽屉不受影响。 */
+  .wl-side-navigation { align-self: flex-start; background: var(--wl-color-surface); block-size: 100dvh; border-inline-end: 1px solid var(--wl-color-border); color: var(--wl-color-text); display: flex; flex-direction: column; inline-size: var(--wl-sidebar-expanded); inset-block-start: 0; max-block-size: 100dvh; max-inline-size: 100%; min-block-size: 0; min-width: 0; overflow: hidden; position: sticky; transition: inline-size var(--wl-motion-normal) var(--wl-ease-standard); }
   .wl-side-navigation--collapsed { inline-size: var(--wl-sidebar-compact); }
   .wl-side-navigation__header { align-items: flex-start; border-bottom: 1px solid var(--wl-color-border); display: flex; gap: var(--wl-space-2); justify-content: space-between; min-width: 0; padding: var(--wl-space-3); }
   .wl-side-navigation__brand { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }

@@ -4,7 +4,7 @@
   "version": "3.0.0",
   "workloom": {
     "industry": "ai-pm",
-    "displayName": "WorkLoom · AI 产品经理版（产品经理负责制示例 Bundle）",
+    "displayName": "AI 产品经理版（示例方案：产品经理负责制）",
     "description": "AI 产品经理行业示例包 V3：产品总监领队的 14 个数字员工（产品经理负责制研发机制）+ 14 条基线围栏（含默认围栏级别兜底）+ 20 个技能（评测即需求文档/模型选型/微调跟踪/学习飞轮/红队）+ 评测实验室与红队角楼层场景 + 运行态种子数据 + 36 道行业考题（含 16 道 AI 领域专项）",
     "status": "candidate",
     "owner": "WorkLoom 基座产品组",
@@ -197,7 +197,7 @@
   },
   "integrity": {
     "algorithm": "sha256",
-    "digest": "813f2afd537d44c264d8e055ef7cc9bd3021ddc883e2c04b54fb27249aad8f48",
+    "digest": "f77098f77c668c5228db3fef4c5d8b2739c75eb4a560a4791150df78780ce44c",
     "assets": {
       "eval/questions.json": "a204675c579639a33cece2b0a4a5ffa9e94686abcef26c86c1abe7d6c0bd08fb",
       "feedback-enums.yml": "fbba50157cda065db504eb48fbc95a2db8a7fdfb9719f910b82dd7945b5fe4f4",
@@ -219,8 +219,8 @@
       "presets/requirement-analyst.yml": "67c526bf51dd35b571d6334f3b7532fcd216042df16283e322a4ebe50c7a2427",
       "presets/user-listener.yml": "19dc2e229878b0f06cc50a4c5f4afa739c9feb67b39724b533f5f6cf2ba73e73",
       "schemas/archive.schema.json": "93d0d1c2bccc4fb3b393148a00c5e662f1bc56722acd2c6d81e8fe1527b691a0",
-      "schemas/objects.json": "52d45711d074bb77d83bf20ed93aa568c784ef23584cbb63971fc0e01f2ce0cf",
-      "schemas/stages.json": "33b8ebbe5d864e4d8e7f9033be8c8e5d76746b0323f90ad4a14772091bafe577",
+      "schemas/objects.json": "61aba8c6baa7acbc47a9f81320de926b1c749a2c334c9f6ae22f88a2e65c9356",
+      "schemas/stages.json": "1188b2c6677dbb0ea362227d03044a5ea24a8c05602267354fe4cfcd8fa06910",
       "seeds/approvals.json": "c87a95fd2bc3d25b046f7d89584747f2b984ec2784868399b62b549bf5516275",
       "seeds/badcases.json": "36a836f44ee13f68e80f3fccc5a024fc1c347f581ae686b3313ca0219a381278",
       "seeds/competitors.json": "791f410aa9740b45c7552ab8e7efe490998c913af2100534e44f1b70102d9fc2",
