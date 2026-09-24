@@ -17,6 +17,13 @@ import { fileURLToPath } from "node:url";
 import { charterSchema } from "@workloom/base/captain";
 
 const BASE = process.env.SERVER_BASE ?? "http://localhost:8787";
+/**
+ * QUEST 链路的等待上限（毫秒）。默认 60000（历史 SLO 口径）不变；
+ * 谷时段（22:00–08:00）模型路由会按 bundle 的 model-policy 把 L2 场景切到 off-peak 档位
+ * （实测 `deepseek-v4-pro`，规划耗时 61–65s）→ 该窗口下用 `GATE_QUEST_TIMEOUT_MS` 显式放宽，
+ * 并在报告/偏离文档里如实记录实测耗时（不把"放宽"当成 SLO 达标）。
+ */
+const QUEST_TIMEOUT_MS = Number(process.env.GATE_QUEST_TIMEOUT_MS ?? 60_000);
 const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const APP_URL = process.env.DATABASE_APP_URL ?? "postgres://workloom_app:workloom_dev_app@localhost:5432/workloom";
 const OWNER_URL = process.env.DATABASE_URL ?? "postgres://postgres:workloom@localhost:5432/workloom";
@@ -229,10 +236,10 @@ for (const [i, question] of ASK_SCENARIOS.entries()) {
 await check("Q-01", "QUEST · 一句话目标自动拆解多步骤", async () => {
   assert(TARGET && token, "无可执行的验收工作区身份");
   const r = await call<{ kind: string; mode?: string; threadId?: string; status?: string; stepsTotal?: number; stepsDone?: number }>(
-    "threads.dispatch", token,
-    { title: "生成一份本周运行复盘，并列出三项下一步任务", presetKey: TARGET.presetKey, runImmediately: true },
-    60000,
-  );
+      "threads.dispatch", token,
+      { title: "生成一份本周运行复盘，并列出三项下一步任务", presetKey: TARGET.presetKey, runImmediately: true },
+      QUEST_TIMEOUT_MS,
+    );
   assert(r.kind === "routed" && r.mode === "quest", `未按 quest 路由（${r.kind}/${r.mode}）`);
   assert(r.threadId, "未建线程");
   assert(typeof r.stepsTotal === "number" && r.stepsTotal >= 2, `未拆解多步骤（stepsTotal=${r.stepsTotal}）`);
