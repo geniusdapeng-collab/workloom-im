@@ -5,8 +5,8 @@
   "ui": {
     "package": "@workloom/ui",
     "contractVersion": "2.0.0",
-    "candidateVersion": "0.1.12",
-    "latestStableVersion": "0.1.12",
+    "candidateVersion": "0.1.13",
+    "latestStableVersion": "0.1.13",
     "requiredClientPackages": [
       "apps/web/package.json",
       "apps/webb/package.json",
@@ -43,8 +43,8 @@
   "clientFoundation": {
     "schemaVersion": "workloom.client-foundation/v1",
     "stateFile": ".workloom-client-foundation.json",
-    "candidateVersion": "0.1.12",
-    "latestStableVersion": "0.1.12",
+    "candidateVersion": "0.1.13",
+    "latestStableVersion": "0.1.13",
     "stableSourceRefPattern": "refs/tags/ui-v{version}",
     "distribution": "stable-tag-upgrade-pr",
     "maxManagedFiles": 500,
