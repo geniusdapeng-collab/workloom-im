@@ -39,3 +39,7 @@ test-results/
 
 # 发布流水线由 Ed25519 私钥派生的独立 Bundle 公钥环（仅进入受签名构建资源，不入源码提交）
 build/bundle-trust.json
+
+# 手绘白板解说引擎：venv 随机器重建；渲染任务产物不入库
+scripts/whiteboard/engine/.venv/
+var/whiteboard/
