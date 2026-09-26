@@ -17,8 +17,21 @@ import type { LoomBallEmotionId, LoomBallEngine } from "../../vendor/loomball";
 import { ensureLoomBallEngine, loomBallApi, loomBallEnabled } from "./engine";
 import { emotionLabelOf } from "./agent-emotion";
 
-/** 品牌皮肤（去上游视觉识别：WorkLoom navy + gold） */
-export const LOOMBALL_BRAND = Object.freeze({ body: "#1B2A4E", eye: "#C9A227" });
+/**
+ * 品牌皮肤：跟随 @workloom/ui 语义令牌（`--wl-brand-primary` / `--wl-brand-accent`），
+ * 不在客户端硬编码品牌色——行业覆盖层只允许改 brand 标记的令牌，球体颜色因此自动随主题走；
+ * 令牌取不到时返回空对象，交给上游引擎默认皮肤（不猜色）。
+ */
+export function loomBallBrandSkin(): { body?: string; eye?: string } {
+  try {
+    const styles = getComputedStyle(document.documentElement);
+    const body = styles.getPropertyValue("--wl-brand-primary").trim();
+    const eye = styles.getPropertyValue("--wl-brand-accent").trim();
+    return { ...(body ? { body } : {}), ...(eye ? { eye } : {}) };
+  } catch {
+    return {};
+  }
+}
 
 /** 小尺寸放大眼睛保证可读（48px 角标口径来自上游 SKILL） */
 export function eyeScaleFor(size: number): number {
@@ -91,10 +104,11 @@ export function LoomBall(props: LoomBallProps) {
     if (!host || !loomBallEnabled) return;
     const ready = ensureLoomBallEngine();
     if (!ready.enabled) return;
+    const skin = loomBallBrandSkin();
     const engine = loomBallApi().create(host, {
       emotion,
-      color: LOOMBALL_BRAND.body,
-      eyeColor: LOOMBALL_BRAND.eye,
+      ...(skin.body ? { color: skin.body as `#${string}` } : {}),
+      ...(skin.eye ? { eyeColor: skin.eye as `#${string}` } : {}),
       eyeScale: scale,
       autostart: active,
       idle: true,

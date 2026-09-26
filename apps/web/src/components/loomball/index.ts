@@ -1,5 +1,5 @@
 /** 织球 LoomBall · 桶导出（业务方只从这里引入） */
-export { LoomBall, LOOMBALL_BRAND, eyeScaleFor, type LoomBallProps } from "./LoomBall";
+export { LoomBall, loomBallBrandSkin, eyeScaleFor, type LoomBallProps } from "./LoomBall";
 export {
   ACTIVE_WINDOW_MS,
   EMOTION_LABEL,
