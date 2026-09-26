@@ -166,7 +166,7 @@
   ],
   "acceptedBaseSecretScanFindings": {
     ".env.example": {
-      "sha256": "860df8059d1d37289d4c333e0ad8dc603c927753eae11a8c9c45c88954a91817",
+      "sha256": "816b8a44c892fb5ee5d6bb3be89f031fe53915349249c2f57c34fb0b02a3c7e5",
       "findings": [
         {
           "rule": "private-key",
