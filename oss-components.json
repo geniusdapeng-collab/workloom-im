@@ -691,6 +691,24 @@
       "latest_checked_at": "2026-09-19T10:15:16.000Z"
     },
     {
+      "name": "grok-ball（织球 LoomBall 上游引擎）",
+      "repo": "https://github.com/tycoding/grok-ball",
+      "license": "MIT",
+      "channel": "vendor",
+      "usage": "runtime",
+      "probe": {
+        "kind": "regex",
+        "file": "apps/web/src/vendor/loomball/grok-ball.js",
+        "pattern": "EB\\.version = '([0-9.]+)'"
+      },
+      "scope": [
+        "apps/web/src/vendor/loomball（单文件 SVG 表情球引擎，118KB，零运行依赖，随仓 vendor + PINNED 锁 commit）"
+      ],
+      "cadence": "weekly",
+      "gate": "full",
+      "notes": "AI 班组状态可视化引擎：用 emotionId 表达岗位/班组工作状态（基座公共化 T-2026-0926-0001，源自 Growth 实验车道 T-2026-0926-0019）。产品内命名「织球 LoomBall」，上游兼容门面已在适配层删除（见 vendor/loomball/NOTICE.md）；升级走评审 + 重跑织球四份单测 + 三接入面真机走查，永不自动升级"
+    },
+    {
       "name": "Electron",
       "package": "electron",
       "repo": "https://github.com/electron/electron",

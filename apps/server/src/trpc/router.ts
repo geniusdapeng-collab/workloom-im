@@ -2212,12 +2212,16 @@ const rosterRouter = router({
       );
 
       // Agent 成员 + 30 天工时聚合（L6.3：动作数/采纳/驳回/积分/峰谷占比全部事件投影）
+      // + 织球 LoomBall 真实状态信号（T-2026-0926-0001 公共化：最近动作 / 待审批 / 近 1h 被围栏阻断）——
+      //   三个信号都是只读投影，不新增表、不改变任何写路径；用 LATERAL 各取一次，避免 N+1。
       const agents = await client.query<{
         id: string; preset_key: string; name: string; version: string; kind: string;
         readonly: boolean; status: string; invalid_reason: string | null;
         fence_bindings: string[]; skills: string[];
         meta: { night_shift?: boolean; high_risk?: boolean; description?: string };
         actions30: string; adopted30: string; rejected30: string; credits30: string; offpeak30: string;
+        last_action: string | null; last_action_at: Date | null;
+        pending_approvals: string; blocked_recent: string;
       }>(
         `SELECT a.id, a.preset_key, a.name, a.version, a.kind, a.readonly, a.status, a.invalid_reason,
                 a.fence_bindings, a.skills, a.meta,
@@ -2240,8 +2244,29 @@ const rosterRouter = router({
                 (SELECT COALESCE(sum((e.payload->'model_trace'->>'credits')::numeric)
                         FILTER (WHERE e.payload->'model_trace'->>'window' = 'off-peak'), 0) FROM biz_events e
                   WHERE e.workspace_id=$1 AND e.payload->'who'->>'id' = a.preset_key
-                    AND e.created_at > now() - interval '30 days') AS offpeak30
-         FROM agents a WHERE a.workspace_id=$1 ORDER BY a.preset_key`,
+                    AND e.created_at > now() - interval '30 days') AS offpeak30,
+                last_ev.action AS last_action, last_ev.at AS last_action_at,
+                COALESCE(pend.n, 0)::text AS pending_approvals,
+                COALESCE(blocked.n, 0)::text AS blocked_recent
+         FROM agents a
+         LEFT JOIN LATERAL (
+           SELECT e.payload->'decision'->>'action' AS action, e.created_at AS at
+           FROM biz_events e
+           WHERE e.workspace_id = a.workspace_id AND e.payload->'who'->>'id' = a.preset_key
+           ORDER BY e.seq DESC LIMIT 1
+         ) last_ev ON true
+         LEFT JOIN LATERAL (
+           SELECT count(*) AS n FROM approvals ap JOIN biz_events e ON e.event_id = ap.event_id
+           WHERE ap.workspace_id = $1 AND e.workspace_id = $1
+             AND e.payload->'who'->>'id' = a.preset_key AND ap.status = 'pending'
+         ) pend ON true
+         LEFT JOIN LATERAL (
+           SELECT count(*) AS n FROM biz_events e
+           WHERE e.workspace_id = $1 AND e.payload->'who'->>'id' = a.preset_key
+             AND e.created_at > now() - interval '1 hour'
+             AND e.payload->'rule_impact' @> '[{"result":"blocked"}]'::jsonb
+         ) blocked ON true
+         WHERE a.workspace_id=$1 ORDER BY a.preset_key`,
         [scope.workspaceId],
       );
 
@@ -2273,6 +2298,12 @@ const rosterRouter = router({
             description: a.meta?.description ?? "",
             // M4：夜班 preset 窗口内自动上线；其余待命；invalid=校验失败（F2.10 错误态）
             online: a.status === "ready" && a.meta?.night_shift === true && nightNow,
+            // 织球 LoomBall：岗位此刻的真实工作信号（唯一事实源，映射层在
+            // apps/web/src/components/loomball/agent-emotion.ts；此处不做任何语义加工）
+            lastAction: a.last_action,
+            lastActionAt: a.last_action_at ? a.last_action_at.toISOString() : null,
+            pendingApprovals: Number(a.pending_approvals),
+            blockedRecent: Number(a.blocked_recent),
             stats: {
               actions30: actions, adopted30: adopted, rejected30: rejected,
               adoptionRate: decided > 0 ? adopted / decided : null,
