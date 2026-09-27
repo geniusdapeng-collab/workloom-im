@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
-import { appRouter } from "./router.js";
+import { appRouter } from "../src/trpc/router.js";
 
 const anonymous = {
   session: null,
