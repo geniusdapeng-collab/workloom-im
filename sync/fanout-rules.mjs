@@ -4,8 +4,8 @@
  *
  * 边界（与 docs/DEVELOPMENT-PROTOCOL.md §1/§9 一致）：
  *   · fanout 只负责“把基座根级资产的新版本变成子仓里的一条同步 PR”；
- *   · `autoMergeEligibility` 覆盖**纯同步 PR**：分支名 `sync/base-*`，且改动文件全部落在
- *     根级受控资产白名单内、全部门禁 success；
+ *   · `autoMergeEligibility` 覆盖**纯同步 PR**：只允许非执行性的根级资产，且
+ *     PR 非 WIP、无风险标签、全部门禁 success；治理资产留在显式审查车道。
  *   · `codeMergeEligibility` 覆盖**代码类 PR**（协议 §1「合并在机器」）：全部门禁 success、
  *     平台可合并、非 WIP、无 `risk/review` / `risk/block` 标签、避开治理路径、且分支最近
  *     提交已过冷却期。两条判定都是纯函数，`sync/merge-sync-prs.mjs` 按同一口径串行执行。
@@ -25,22 +25,14 @@ export function normalizeBranchRef(ref) {
 }
 
 /**
- * 纯同步 PR 允许自动合并的路径白名单。
- * 这里是**根级受控资产 + 同步登记文件**，不含 packages/**、apps/** 等运行时代码：
- * 运行时代码的基座升级按协议 §1 由 AI 在门禁全绿后串行合并（见 codeMergeEligibility）。
+ * 纯同步 PR 允许无人值守合并的非执行性资产。
+ * AGENTS/协议/同步器/验收执行器/工作流会改变治理行为，必须显式审查。
+ * 运行时代码走 codeMergeEligibility；治理路径在两条无人值守车道都拦截。
  */
 export const AUTO_MERGE_ALLOWLIST = Object.freeze([
   "WORKLOOM_PRODUCT_CONTEXT.md",
   "AI-AUTONOMOUS-OPERATIONS.md",
-  "AGENTS.md",
-  "docs/DEVELOPMENT-PROTOCOL.md",
-  // 真机验收规范与执行契约（RDAS v1）：纯文档 + 检查单 + 模板 + 执行器，不含运行时代码
-  "docs/REAL-DEVICE-ACCEPTANCE-SPEC.md",
-  "docs/acceptance/**",
-  "scripts/acceptance/**",
   ".workloom-base-sync.json",
-  ".github/workflows/base-sync-heartbeat.yml",
-  "sync/**",
 ]);
 
 /** glob：`**` 跨目录，`*` 不跨 `/`，`?` 单字符 */
@@ -70,9 +62,17 @@ export function autoMergeEligibility(
 ) {
   const reasons = [];
   const headRef = normalizeBranchRef(pull?.head?.ref);
-  const state = pull?.state ?? "open";
+  const state = pull?.state ?? "未知";
+  const labels = (pull?.labels ?? [])
+    .map((label) => (typeof label === "string" ? label : label?.name))
+    .filter(Boolean);
 
   if (state !== "open") reasons.push(`PR 状态为 ${state}`);
+  if (normalizeBranchRef(pull?.base?.ref) !== "main") reasons.push("目标分支不是 main");
+  if (!Array.isArray(pull?.labels)) reasons.push("风险标签不可核对");
+  if (pull?.is_wip) reasons.push("PR 处于 WIP / 草稿状态");
+  if (labels.includes("risk/block")) reasons.push("带 risk/block 标签（红线，永不合并）");
+  if (labels.includes("risk/review")) reasons.push("带 risk/review 标签（需显式审查）");
   if (!acceptPrefixes.some((prefix) => headRef.startsWith(prefix))) {
     reasons.push(`分支 ${headRef || "(未知)"} 不是 ${acceptPrefixes.map((prefix) => `${prefix}*`).join(" / ")} 同步分支`);
   }
@@ -85,8 +85,8 @@ export function autoMergeEligibility(
     const value = status?.state ?? status?.status ?? "";
     if (value !== "success") reasons.push(`门禁未通过：${status?.context ?? status?.name ?? "(未命名)"}=${value || "(空)"}`);
   }
-  if (pull?.mergeable_state && pull.mergeable_state !== "mergeable") {
-    reasons.push(`平台可合并状态=${pull.mergeable_state}`);
+  if (pull?.mergeable_state !== "mergeable") {
+    reasons.push(`平台可合并状态=${pull?.mergeable_state ?? "未知"}`);
   }
   return { eligible: reasons.length === 0, reasons };
 }
@@ -116,6 +116,9 @@ export const CODE_MERGE_SKIP_PATHS = Object.freeze([
   "protocol/**",
   "sync/**",
   "docs/DEVELOPMENT-PROTOCOL.md",
+  "docs/REAL-DEVICE-ACCEPTANCE-SPEC.md",
+  "docs/acceptance/**",
+  "scripts/acceptance/**",
   "AGENTS.md",
   "AGENTS.repo.md",
   ".cnb.yml",
@@ -145,12 +148,14 @@ export function codeMergeEligibility(
 ) {
   const reasons = [];
   const headRef = normalizeBranchRef(pull?.head?.ref);
-  const state = pull?.state ?? "open";
+  const state = pull?.state ?? "未知";
   const labels = (pull?.labels ?? [])
     .map((label) => (typeof label === "string" ? label : label?.name))
     .filter(Boolean);
 
   if (state !== "open") reasons.push(`PR 状态为 ${state}`);
+  if (normalizeBranchRef(pull?.base?.ref) !== "main") reasons.push("目标分支不是 main");
+  if (!Array.isArray(pull?.labels)) reasons.push("风险标签不可核对");
   if (labels.includes("risk/block")) reasons.push("带 risk/block 标签（红线，永不合并）");
   if (labels.includes("risk/review")) reasons.push("带 risk/review 标签（需人审放行后由会话显式合并）");
   if (pull?.is_wip) reasons.push("PR 处于 WIP / 草稿状态");
@@ -170,8 +175,8 @@ export function codeMergeEligibility(
     const value = status?.state ?? status?.status ?? "";
     if (value !== "success") reasons.push(`门禁未通过：${status?.context ?? status?.name ?? "(未命名)"}=${value || "(空)"}`);
   }
-  if (pull?.mergeable_state && pull.mergeable_state !== "mergeable") {
-    reasons.push(`平台可合并状态=${pull.mergeable_state}`);
+  if (pull?.mergeable_state !== "mergeable") {
+    reasons.push(`平台可合并状态=${pull?.mergeable_state ?? "未知"}`);
   }
   if (minHeadAgeMs > 0) {
     if (!Number.isFinite(headAgeMs)) {

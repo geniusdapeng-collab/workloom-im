@@ -4,13 +4,13 @@
 > **不适用**：`sync/child-repos.json#isolatedRepos` 登记的隔离副本（`workloom-growthtest` / `workloom-growthmatrix`）——
 > 它们双向不同步（基座不下发、本仓不回流），扫描 / 纳管 / fanout 一律跳过，规则见 `docs/DEVELOPMENT-PROTOCOL.md` §11。
 > 事实源：`sync/child-repos.json`（订阅关系）、`sync/base-scope.json`（同步边界）、本文件（机制说明）。
-> 落点：2026-09-19 起，云端“基座 → 子仓”的资产分发不再依赖人工开 PR；本地副本每日自动跟随。
+> 落点：2026-09-19 起，云端“基座 → 子仓”的资产分发不再依赖人工开 PR；治理资产仍需显式审查合并。本地舰队镜像每日尝试跟随。
 
 ## 0. 一页速览
 
 | 层 | 做什么 | 载体 | 触发 | 人工介入 |
 |---|---|---|---|---|
-| 云端 · 资产分发 | 基座根级资产 → 每个子仓一条 `sync/base-*` PR → 门禁全绿后自动合并 | `sync/fanout-cnb.mjs` + `sync/merge-sync-prs.mjs`（`.cnb.yml#base-sync-fanout`） | 每 30 分钟 cron；`api_trigger_base_sync`；本地兜底脚本 | 无需（纯同步 PR） |
+| 云端 · 资产分发 | 基座根级资产 → 每个子仓一条 `sync/base-*` PR；仅非执行性资产且门禁全绿时自动合并，治理资产走显式审查 | `sync/fanout-cnb.mjs` + `sync/merge-sync-prs.mjs`（`.cnb.yml#base-sync-fanout`） | 每 30 分钟 cron；`api_trigger_base_sync`；本地兜底脚本 | 治理路径需显式审查 |
 | 云端 · 新仓纳管 | 扫描组织发现新 WorkLoom 仓 → 开扫描任务卡 + 纳管 PR（标签/分支保护/协议资产/门禁 stage）；隔离副本只单列报告、不纳管 | `scripts/tools/fleet-scan.mjs --issue --provision` | 每日 09:00（Asia/Shanghai）cron | 审合并 PR |
 | 云端 · 代码基线 | `packages/**`、`apps/**` 等运行时代码升级 | `sync/base-sync.mjs push` / fanout `--mode full` | AI/API 触发（默认不跑；升级批次由任务卡驱动） | AI 合并（门禁全绿 + 冷却期，协议 §1/§9.5） |
 | 本地 · 文档副本 | 全景认知 + 开发协议落到 `~/.codex/workloom-context/`，供 WorkLoom 会话直接引用 | `~/.codex/skills/workloom-context/scripts/sync-context.sh` | Codex automation `workloom`（每日 09:00）+ 手动 | 无需 |
@@ -22,12 +22,12 @@
 ### 1.1 它解决什么
 
 基座改动后，九个子仓（八个行业仓 + 实验车道 growth）必须拿到**同一份**全景认知、开发协议与 AGENTS 受控区块，同时不得覆盖行业语义。
-人工逐仓开 PR 的时代（2026-09-19 之前：一轮 9 个 PR，全靠会话手工创建）已经结束：
+人工逐仓开 PR 的时代（2026-09-19 之前：一轮 9 个 PR，全靠会话手工创建）已经结束；含治理资产的 PR 仍需逐仓显式审查：
 
 ```bash
 # 基座仓内（CI 或本地干净克隆）
 node sync/fanout-cnb.mjs --mode required-only            # 只处理根级受控资产
-node sync/merge-sync-prs.mjs                             # 门禁全绿即合：纯同步 + 代码车道（同仓每轮一条）
+node sync/merge-sync-prs.mjs                             # 条件自动合并：非执行性同步 + 普通代码车道（治理路径跳过）
 ```
 
 ### 1.2 幂等与“不打扰”规则
@@ -45,13 +45,20 @@ node sync/merge-sync-prs.mjs                             # 门禁全绿即合：
 
 ### 1.3 自动合并的边界（协议 §9.4）
 
-`sync/merge-sync-prs.mjs` 只合并同时满足以下条件的 PR：
+`sync/merge-sync-prs.mjs` 的免审同步车道只合并同时满足以下条件的 PR：
 
 1. 源分支是 `sync/base-*`（存量 `docs/context-*` 需显式传 `--legacy-doc-sync`，仅用于收口）；
-2. **改动文件全部**落在根级受控白名单：`WORKLOOM_PRODUCT_CONTEXT.md`、`AGENTS.md`、
-   `docs/DEVELOPMENT-PROTOCOL.md`、`.workloom-base-sync.json`、
-   `.github/workflows/base-sync-heartbeat.yml`、`sync/**`；
-3. 该 PR 的**全部**状态检查都是 `success`，且平台 `mergeable_state=mergeable`（合并前会再读一次状态）。
+2. **改动文件全部**落在非执行性资产白名单：`WORKLOOM_PRODUCT_CONTEXT.md`、
+   `AI-AUTONOMOUS-OPERATIONS.md`、`.workloom-base-sync.json`；
+3. 该 PR 非 WIP、无 `risk/review` / `risk/block` 标签，**全部**状态检查都是 `success`，
+   且平台明确返回 `mergeable_state=mergeable`。缺失标签清单或合并状态也拒绝；
+4. 入队后、实际合并前，源分支 HEAD、目标 `main`、改动路径、门禁与风险状态仍一致。
+
+`AGENTS.md`、开发协议、`sync/**`、验收规范与执行器、工作流是治理资产。
+同步 PR 触及其中任何一个路径，就算门禁全绿也只保留为待显式审查的 PR；
+回落代码车道不会豁免治理路径。基座一次变更若同时改普通资产和治理资产，
+子仓整条 PR 等审查，不能用 fanout 的 `pr-opened` 或 `.workloom-base-sync.json`
+更新来宣称分发完成。
 
 改动文件清单取自 `GET /{repo}/-/git/compare/main...<head>`（**完整路径**）。
 注意 `GET /pulls/{n}/files` 的 `filename` 会丢目录（实测把 `docs/DEVELOPMENT-PROTOCOL.md` 报成
@@ -62,7 +69,7 @@ node sync/merge-sync-prs.mjs                             # 门禁全绿即合：
 无 `risk/review` / `risk/block` 标签、分支最近提交已过 10 分钟冷却期，且不落在治理/高风险路径
 （`.cnb.yml`、迁移、`platform-ops/**`、`bundles/platform/**` 等）时，由 `merge-sync-prs.mjs`
 串行合并（同仓每轮最多一条）。非纯同步的 `sync/base-*-full` 波次按同一规则处理；
-受控资产（本文件 §1.3 白名单）在波次里放行。
+非执行性资产（本文件 §1.3 白名单）在波次里放行；混有治理资产的 full 波次留待显式审查。
 
 ### 1.4 权限模型（谁给谁开权限）
 
@@ -81,7 +88,8 @@ node sync/merge-sync-prs.mjs                             # 门禁全绿即合：
 |---|---|---|
 | `🔒 权限不足` | 定时任务跨仓开关未开 | 开组织开关；或改用 API 触发 / 本地兜底 |
 | `CNB 429 Too many requests` | 舰队级巡检触发限流 | 已在 `scripts/tools/cnb-api.mjs` 内置指数退避重试（尊重 `Retry-After`），无需人工 |
-| 子仓 PR 门禁红 | 代码漂移、行业化改动冲突 | fanout 与合并器都会跳过；修复至门禁全绿后由 §9.5 车道自动合并 |
+| 子仓 PR 门禁红 | 代码漂移、行业化改动冲突 | fanout 与合并器都会跳过；修复至门禁全绿后重新判定车道，治理路径仍需显式审查 |
+| 子仓 PR 门禁绿但停在队列 | PR 含 `sync/**`、`AGENTS.md`、协议、验收执行器或工作流等治理资产 | 审核路径与固定源 SHA，按协议 §3 放行后由会话内 AI 合并；逐仓核验合并 SHA |
 | `verify-lock-conflict` 拒绝 | 同仓另有 open PR 改了同一路径（例如 `.workloom-base-sync.json`） | 先合并/关闭在途 PR；fanout 下次巡检会重开一条干净 PR |
 | 子仓 state 显示“已漂移”但无内容变更 | 基座 sha 变了、资产没变 | `required-only` 不产生 PR，属预期 |
 
@@ -128,7 +136,7 @@ Codex automation `workloom`（每日 09:00）按顺序跑前两条，**无变化
 ## 5. 验证与排障命令
 
 ```bash
-node --test sync/fanout-rules.test.mjs                       # 白名单/合并判定/漂移判定单测
+node --test sync/fanout-rules.test.mjs sync/merge-sync-prs.test.mjs # 白名单/合并前复核/漂移判定单测
 node sync/fanout-cnb.mjs --dry-run --json                     # 只报告：谁漂移、谁在途、谁对齐
 node sync/fanout-cnb.mjs --only workloom-ai/workroom-tiger    # 只处理单仓
 node sync/merge-sync-prs.mjs --dry-run --json                 # 只报告：两条车道各自会合谁、为什么不合
