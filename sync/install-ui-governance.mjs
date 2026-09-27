@@ -187,7 +187,35 @@ function restore(path, backup) {
   chmodSync(path, backup.mode);
 }
 
-export function installUiGovernance({ repo, sourceRoot, repositoryRoot = repo, dryRun = false, onWrite }) {
+/**
+ * 仓级行业扩展声明（唯一事实源：基座 sync/child-repos.json#children[].industryExtensionPaths）。
+ * 写进 `.workloom-ui-governance.json` 后，仓内自包含门禁（verify-client-foundation-consumer）
+ * 才能在离线状态下知道"哪些 apps/* 路径由本仓自有"，而不需要各仓自持一份声明文件。
+ */
+function normalizeIndustryExtensionPaths(paths = []) {
+  const list = Array.isArray(paths) ? paths : [];
+  const seen = new Set();
+  const normalized = [];
+  for (const pattern of list) {
+    if (typeof pattern !== "string" || !pattern.startsWith("apps/") || pattern.includes("..") || pattern.includes("\\")) {
+      throw new Error(`仓级行业扩展路径非法：${String(pattern)}`);
+    }
+    if (seen.has(pattern)) continue;
+    seen.add(pattern);
+    normalized.push(pattern);
+  }
+  return normalized;
+}
+
+export function installUiGovernance({
+  repo,
+  sourceRoot,
+  repositoryRoot = repo,
+  dryRun = false,
+  onWrite,
+  lane = null,
+  industryExtensionPaths = [],
+}) {
   const targetRoot = safeRoot(repo, "目标仓");
   const targetRepositoryRoot = safeRoot(repositoryRoot, "目标 Git 仓根");
   if (targetRoot !== targetRepositoryRoot && !targetRoot.startsWith(`${targetRepositoryRoot}${sep}`)) {
@@ -216,6 +244,19 @@ export function installUiGovernance({ repo, sourceRoot, repositoryRoot = repo, d
     || previous.updatePolicy !== "stable-upgrade-pr-only"
     || GOVERNANCE_FILES.some((path) => !/^[0-9a-f]{64}$/u.test(previous.files?.[path]?.sha256 ?? "")))) {
     throw new Error(`${GOVERNANCE_STATE} 契约无效`);
+  }
+  const declaredLane = typeof lane === "string" && lane.trim() ? lane.trim() : null;
+  const declaredExtensions = normalizeIndustryExtensionPaths(industryExtensionPaths);
+  if (previous) {
+    // 声明必须与基座清单一致：仓内私自改写 lane / 扩展路径将在下一次 rollout fail closed。
+    const previousLane = previous.lane ?? null;
+    const previousExtensions = Array.isArray(previous.industryExtensionPaths) ? previous.industryExtensionPaths : null;
+    if (previousLane !== null && previousLane !== declaredLane) {
+      throw new Error(`${GOVERNANCE_STATE} 登记的车道 ${previousLane} 与基座声明 ${declaredLane ?? "（无）"} 不一致；拒绝静默改写`);
+    }
+    if (previousExtensions !== null && JSON.stringify(previousExtensions) !== JSON.stringify(declaredExtensions)) {
+      throw new Error(`${GOVERNANCE_STATE} 登记的行业扩展路径与基座声明不一致；拒绝静默改写`);
+    }
   }
 
   let legacyProof = null;
@@ -261,6 +302,8 @@ export function installUiGovernance({ repo, sourceRoot, repositoryRoot = repo, d
     yamlDependency: GOVERNANCE_YAML,
     updatePolicy: "stable-upgrade-pr-only",
     files,
+    ...(declaredLane ? { lane: declaredLane } : {}),
+    ...(declaredExtensions.length ? { industryExtensionPaths: declaredExtensions } : {}),
     ...(legacyProof ? {
       legacyTakeover: {
         sourceCommit: legacyProof.sourceCommit,

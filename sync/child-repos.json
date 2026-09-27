@@ -40,7 +40,7 @@
     {
       "repo": "workloom-ai/workroom-fox",
       "pathPrefix": "",
-      "uiRolloutWave": "paused",
+      "uiRolloutWave": "W5",
       "note": "试验田（其基座演进不回流）",
       "extraExclude": [],
       "lane": "experiment",
@@ -57,7 +57,8 @@
         "apps/*/src/pages/p0/**",
         "apps/*/src/voice/**"
       ],
-      "rolloutPauseNote": "2026-09-23 暂停 0.1.8 起波次：fox 实验路径声明（pages/p0/** 等）覆盖基座受管文件，与 client-foundation「快照不得占用行业扩展路径」契约结构性冲突（0.1.8 rollout 实测 UPGRADE_PR_FAILED：pages/p0/Floor.tsx），与 WorkLoom-growth 同型，需协议层决策「实验车道受管文件分叉容差」后恢复；暂停期间基座根级资产照常 base-sync。"
+      "rolloutPauseNote": "2026-09-23 暂停 0.1.8 起波次：fox 实验路径声明（pages/p0/** 等）覆盖基座受管文件，与 client-foundation「快照不得占用行业扩展路径」契约结构性冲突（0.1.8 rollout 实测 UPGRADE_PR_FAILED：pages/p0/Floor.tsx），与 WorkLoom-growth 同型，需协议层决策「实验车道受管文件分叉容差」后恢复；暂停期间基座根级资产照常 base-sync。",
+      "rolloutResumeNote": "2026-09-27 恢复波次（W5）：协议 §10.3 落地「实验车道受管文件分叉容差」——稳定快照或旧 state 占用本仓声明的 industryExtensionPaths 时，不再 fail closed，而是把这些路径从受管集合退管（记入 state.retiredManagedForks）并原样保留本仓版本；非实验车道保持严格模式。"
     },
     {
       "repo": "workloom-ai/workloom-hotel",

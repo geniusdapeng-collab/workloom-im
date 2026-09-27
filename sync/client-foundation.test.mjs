@@ -328,4 +328,98 @@ describe("三端客户端基座稳定分发", () => {
     });
     assert.equal(withExtra.conflicts.some((item) => item.code === "ILLEGAL_INDUSTRY_APP_PATH"), false);
   });
+
+  it("实验车道分叉容差：快照占用的仓级扩展路径退管并原样保留本仓版本，非实验模式仍 fail closed", () => {
+    const repo = createIndustryRepo();
+    const forkPath = "apps/web/src/pages/p0/Floor.tsx";
+    const extensions = ["apps/*/src/pages/p0/**"];
+    // 先按严格口径安装一版，让该路径进入受管清单（复刻 fox 0.1.4 的真实历史）
+    applyClientFoundation({
+      repoRoot: repo,
+      manifest: manifest(),
+      snapshot: makeSnapshot(VERSION, "v1", { [forkPath]: "export const floor = \"base-v1\";\n" }),
+      mode: "scaffold",
+    });
+    const destination = join(repo, forkPath);
+    writeFileSync(destination, "export const floor = \"repo-fork\";\n");
+    const next = makeSnapshot("1.2.4", "v2", { [forkPath]: "export const floor = \"base-v2\";\n" });
+
+    // 非容差：快照占用行业扩展路径 → 直接拒绝（暂停期的原行为）
+    assert.throws(
+      () => planClientFoundation({
+        repoRoot: repo,
+        manifest: manifest("1.2.4"),
+        snapshot: next,
+        mode: "upgrade",
+        extraAllowedIndustryExtensionPaths: extensions,
+      }),
+      /快照不得占用行业扩展路径/u,
+    );
+
+    // 容差：退管 + 保留本仓版本 + 记录 retiredManagedForks
+    const result = applyClientFoundation({
+      repoRoot: repo,
+      manifest: manifest("1.2.4"),
+      snapshot: next,
+      mode: "upgrade",
+      extraAllowedIndustryExtensionPaths: extensions,
+      tolerateExtensionSnapshotOverlap: true,
+    });
+    assert.equal(result.applied, true);
+    assert.equal(result.toleratedManagedPaths.includes(forkPath), true);
+    assert.equal(result.filesTouched.includes(forkPath), false);
+    assert.equal(readFileSync(destination, "utf8"), "export const floor = \"repo-fork\";\n");
+    const state = JSON.parse(readFileSync(join(repo, ".workloom-client-foundation.json"), "utf8"));
+    assert.equal(state.version, "1.2.4");
+    assert.equal(state.managedFiles[forkPath], undefined);
+    assert.deepEqual(state.retiredManagedForks[forkPath], { retiredInVersion: "1.2.4", reason: "repo-owned-extension-path" });
+
+    // 幂等：同版本再跑一次零变更，且 inspect 不再报漂移
+    const again = planClientFoundation({
+      repoRoot: repo,
+      manifest: manifest("1.2.4"),
+      snapshot: next,
+      mode: "upgrade",
+      extraAllowedIndustryExtensionPaths: extensions,
+      tolerateExtensionSnapshotOverlap: true,
+    });
+    assert.equal(again.operations.length, 0);
+    assert.deepEqual(inspectClientFoundationState({
+      repoRoot: repo,
+      manifest: manifest("1.2.4"),
+      extraAllowedIndustryExtensionPaths: extensions,
+      tolerateExtensionSnapshotOverlap: true,
+    }).issues, []);
+  });
+
+  it("仓内自包含门禁按基座声明豁免实验车道自有路径，非实验车道保持严格", () => {
+    const repo = createIndustryRepo();
+    const forkPath = "apps/web/src/pages/p0/Floor.tsx";
+    applyClientFoundation({
+      repoRoot: repo,
+      manifest: manifest(),
+      snapshot: makeSnapshot(VERSION, "v1", { [forkPath]: "export const floor = 1;\n" }),
+      mode: "scaffold",
+    });
+    writeJson(join(repo, ".workloom-ui.json"), { package: "@workloom/ui", version: VERSION });
+    writeFileSync(join(repo, forkPath), "export const floor = 2;\n");
+    assert.ok(verifyClientFoundationConsumer(repo).some((error) => error.includes("指纹漂移")));
+
+    writeJson(join(repo, ".workloom-ui-governance.json"), {
+      schemaVersion: "workloom.ui-governance-state/v1",
+      lane: "industry",
+      industryExtensionPaths: ["apps/*/src/pages/p0/**"],
+    });
+    assert.ok(
+      verifyClientFoundationConsumer(repo).some((error) => error.includes("指纹漂移")),
+      "非实验车道的声明不得豁免受管文件指纹",
+    );
+
+    writeJson(join(repo, ".workloom-ui-governance.json"), {
+      schemaVersion: "workloom.ui-governance-state/v1",
+      lane: "experiment",
+      industryExtensionPaths: ["apps/*/src/pages/p0/**"],
+    });
+    assert.deepEqual(verifyClientFoundationConsumer(repo), []);
+  });
 });
