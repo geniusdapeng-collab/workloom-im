@@ -652,6 +652,15 @@ fixtureDescribe("F C 端旅程 · 首问到五星评价全链路", () => {
     expect(res.status).toBe(409);
   });
 
+  it("F14a 原请求在评价改写 payload 后重放，仍只返回同一张工单", async () => {
+    const r = await chat(token, "帮我送两瓶矿泉水", {
+      conversationId: convId, confirmTicket: true, idempotencyKey: `${RUN}-f5`,
+    }, ip);
+    expect(r.deduped).toBe(true);
+    expect(r.ticket).toMatchObject({ id: ticketId, ratingScore: 5, status: "done" });
+    expect(r.receipt).toMatchObject({ resourceId: ticketId, idempotentReplay: true });
+  });
+
   it("F15 全旅程时间线完整：create→assign→start→complete→rate", async () => {
     const d = (await (await cReq(`/tickets/${ticketId}`, {}, token, ip)).json()) as { timeline: Array<{ action: string }> };
     expect(d.timeline.map((e) => e.action)).toEqual(["create", "assign", "start", "complete", "rate"]);
