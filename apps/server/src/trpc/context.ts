@@ -165,6 +165,19 @@ export const navigationPermissionWriteProcedure = (permission: string) =>
     return next();
   });
 
+/** 已验活动行业包声明的执行权限 + 实时成员授权 + 公共写权限。 */
+export const bundleActionWriteProcedure = (permission: string) =>
+  writeProcedure.use(async ({ ctx, next }) => {
+    const access = await resolveAuthoritativeClientAccess(ctx.identity);
+    if (!permission.endsWith(".execute") || !access.actionPermissions.includes(permission)) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "当前成员没有执行这项行业能力的权限。",
+      });
+    }
+    return next();
+  });
+
 /** 越版（plan 能力）+ 写操作（role）双守卫 */
 export const capabilityWriteProcedure = (cap: CapabilityKey) =>
   writeProcedure.use(({ ctx, next }) => {
