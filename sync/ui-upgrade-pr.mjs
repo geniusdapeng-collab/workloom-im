@@ -598,7 +598,15 @@ export function inspectMigratedConsumer(repoRoot, child, manifest) {
   }
 
   if (manifest.clientFoundation && existsSync(workdir)) {
-    const foundation = inspectClientFoundationState({ repoRoot, targetRoot: workdir, manifest });
+    const foundation = inspectClientFoundationState({
+      repoRoot,
+      targetRoot: workdir,
+      manifest,
+      // 实验车道：仓级扩展路径内的文件属本仓自有，不参与基座指纹比对；
+      // 历史 state 里对这些路径的登记由升级 PR 自动退管（分叉容差）。
+      extraAllowedIndustryExtensionPaths: child.industryExtensionPaths ?? [],
+      tolerateExtensionSnapshotOverlap: child.lane === "experiment",
+    });
     for (const issue of foundation.issues.filter((item) => item.code !== "INVALID_PRODUCT_IDENTITY")) {
       blockers.push(blocker(
         issue.code,
@@ -1424,6 +1432,10 @@ async function upgradeChild(child, manifest, version, token, dryRun, foundationS
       // 这些路径是行业/实验车道自持的受管壳内文件，不参与稳定基座比对、也不被覆盖；
       // 缺了这一步，实验仓会被判 MANAGED_FILE_MODIFIED 冲突而 fail-closed（growth 实测）。
       extraAllowedIndustryExtensionPaths: child.industryExtensionPaths ?? [],
+      // 实验车道受管文件分叉容差：稳定快照占用本仓声明的自有路径、或旧 state 已把
+      // 这类路径登记成受管文件时，不退化成 fail closed，而是退管并原样保留本地版本。
+      // 非实验车道（lane !== "experiment"）保持严格模式。
+      tolerateExtensionSnapshotOverlap: child.lane === "experiment",
     });
     const touched = setUiVersion({
       repo: checkout,
@@ -1437,7 +1449,13 @@ async function upgradeChild(child, manifest, version, token, dryRun, foundationS
     const workflow = renderConsumerWorkflow(child.pathPrefix);
     writeFileSync(join(checkout, ".github/workflows/workloom-ui-contract.yml"), workflow);
     // 门禁脚本属于消费契约，不是可分叉的 UI 源码；随升级 PR 一并落到行业仓。
-    const governance = installUiGovernance({ repo: workdir, repositoryRoot: checkout, sourceRoot: baseDir });
+    const governance = installUiGovernance({
+      repo: workdir,
+      repositoryRoot: checkout,
+      sourceRoot: baseDir,
+      lane: child.lane ?? null,
+      industryExtensionPaths: child.industryExtensionPaths ?? [],
+    });
     for (const path of ADOPTION_SCRIPTS) {
       // apps/web 的生产 build 会执行文案边界；升级 PR 必须自带与稳定
       // 客户端壳同源的验证器，不能假设独立 base-sync 已先落地。

@@ -1264,7 +1264,11 @@ process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", f
     assert.match(implementation, /base: "main"/u);
     assert.match(implementation, /applyClientFoundation/u);
     assert.match(implementation, /installUiGovernance/u);
-    assert.match(implementation, /installUiGovernance\(\{ repo: workdir, repositoryRoot: checkout, sourceRoot: baseDir \}\)/u);
+    assert.match(
+      implementation,
+      /installUiGovernance\(\{[\s\S]*?repo: workdir,[\s\S]*?repositoryRoot: checkout,[\s\S]*?sourceRoot: baseDir,[\s\S]*?lane: child\.lane \?\? null,[\s\S]*?industryExtensionPaths: child\.industryExtensionPaths \?\? \[\],[\s\S]*?\}\)/u,
+    );
+    assert.match(implementation, /tolerateExtensionSnapshotOverlap: child\.lane === "experiment"/u);
     assert.match(implementation, /verify-client-foundation-consumer\.mjs/u);
     assert.match(implementation, /ADOPTION_SCRIPTS/u);
     assert.match(implementation, /SYNC_TOKEN\|CNB_TOKEN\|GH_TOKEN\|GITHUB_TOKEN\|NPM_TOKEN\|NODE_AUTH_TOKEN/u);

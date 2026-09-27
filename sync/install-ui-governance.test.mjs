@@ -132,6 +132,43 @@ test("新行业把 verifier、规则、固定解析器和指纹作为同一治�
   }
 });
 
+test("实验车道声明（lane + 仓级扩展路径）随治理单元落盘，仓内私改后 fail closed", () => {
+  const fx = fixture();
+  try {
+    const declared = { lane: "experiment", industryExtensionPaths: ["apps/*/src/pages/p0/**", "apps/*/src/voice/**"] };
+    installUiGovernance({ repo: fx.target, sourceRoot: fx.source, ...declared });
+    const statePath = join(fx.target, GOVERNANCE_STATE);
+    const state = JSON.parse(readFileSync(statePath, "utf8"));
+    assert.equal(state.lane, "experiment");
+    assert.deepEqual(state.industryExtensionPaths, declared.industryExtensionPaths);
+
+    // 幂等：同一声明重复安装不报错、内容不变
+    installUiGovernance({ repo: fx.target, sourceRoot: fx.source, ...declared });
+    assert.deepEqual(JSON.parse(readFileSync(statePath, "utf8")), state);
+
+    // 仓内把扩展路径改宽 → 下一次安装拒绝静默改写
+    const tampered = { ...state, industryExtensionPaths: ["apps/*/src/**"] };
+    write(statePath, `${JSON.stringify(tampered, null, 2)}\n`);
+    assert.throws(
+      () => installUiGovernance({ repo: fx.target, sourceRoot: fx.source, ...declared }),
+      /与基座声明不一致；拒绝静默改写/u,
+    );
+
+    // 非实验仓不写入声明字段（避免给普通行业仓留额外豁免面）
+    const plain = fixture();
+    try {
+      installUiGovernance({ repo: plain.target, sourceRoot: plain.source });
+      const plainState = JSON.parse(readFileSync(join(plain.target, GOVERNANCE_STATE), "utf8"));
+      assert.equal(plainState.lane, undefined);
+      assert.equal(plainState.industryExtensionPaths, undefined);
+    } finally {
+      rmSync(plain.root, { recursive: true, force: true });
+    }
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
 test("既有 v1 治理 state 可在文件指纹不变时补入固定 YAML 解析器", () => {
   const fx = fixture();
   try {

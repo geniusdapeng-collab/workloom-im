@@ -326,12 +326,16 @@ function validateProductIdentity(repoRoot) {
   return { path: productPath, hash: sha256(readFileSync(productPath)), product };
 }
 
-function readFoundationState(targetRoot, config, { required = false, extraAllowedIndustryExtensionPaths = [] } = {}) {
+function readFoundationState(targetRoot, config, {
+  required = false,
+  extraAllowedIndustryExtensionPaths = [],
+  tolerateExtensionSnapshotOverlap = false,
+} = {}) {
   const stateFile = config.stateFile;
   const statePath = assertNoSymlinkPath(targetRoot, join(targetRoot, stateFile), "客户端基座 state");
   if (!existsSync(statePath)) {
     if (required) throw new Error(`缺少 ${stateFile}；存量仓须先完成受管文件迁移`);
-    return null;
+    return { state: null, legacyExtensionManagedPaths: [] };
   }
   let state;
   try {
@@ -354,19 +358,26 @@ function readFoundationState(targetRoot, config, { required = false, extraAllowe
   if (JSON.stringify(state.allowedIndustryExtensionPaths) !== JSON.stringify(config.allowedIndustryExtensionPaths)) {
     throw new Error(`${stateFile} 的行业扩展白名单被修改`);
   }
+  const extensionPaths = effectiveExtensionPaths(config, extraAllowedIndustryExtensionPaths);
+  const legacyExtensionManagedPaths = [];
   for (const [path, entry] of Object.entries(state.managedFiles)) {
     normalizeRelativePath(path, "state managed path");
     if (!config.managedRoots.some((root) => path.startsWith(`${root}/`))) {
       throw new Error(`${stateFile} 的受管文件逃逸出三端根：${path}`);
     }
-    if (matchesAny(path, effectiveExtensionPaths(config, extraAllowedIndustryExtensionPaths))) {
-      throw new Error(`${stateFile} 不得把行业扩展登记成基座受管文件：${path}`);
-    }
     if (!/^[0-9a-f]{64}$/.test(entry?.sha256 ?? "") || ![420, 493].includes(entry?.mode)) {
       throw new Error(`${stateFile} 的文件指纹无效：${path}`);
     }
+    if (matchesAny(path, extensionPaths)) {
+      // 实验车道容差：该路径已由本仓声明为自有，但历史 state 仍把它登记为基座受管文件；
+      // 下一次升级会把它退管并原样保留本地内容。非容差模式仍 fail closed。
+      if (!tolerateExtensionSnapshotOverlap) {
+        throw new Error(`${stateFile} 不得把行业扩展登记成基座受管文件：${path}`);
+      }
+      legacyExtensionManagedPaths.push(path);
+    }
   }
-  return state;
+  return { state, legacyExtensionManagedPaths };
 }
 
 function walkFiles(root, relativeRoot = "", ignoredPatterns = []) {
@@ -389,9 +400,9 @@ function fileMode(path) {
   return (lstatSync(path).mode & 0o111) ? 0o755 : 0o644;
 }
 
-function makeState(snapshot, manifest) {
+function makeState(snapshot, manifest, { toleratedManagedPaths = new Set(), retiredManagedForks = {} } = {}) {
   const config = validateFoundationConfig(manifest);
-  return {
+  const state = {
     schemaVersion: STATE_SCHEMA,
     baseRepository: manifest.baseRepository,
     version: snapshot.version,
@@ -400,14 +411,17 @@ function makeState(snapshot, manifest) {
     updatePolicy: "upgrade-pr-only",
     clients: CLIENTS,
     allowedIndustryExtensionPaths: config.allowedIndustryExtensionPaths,
-    managedFiles: Object.fromEntries([...snapshot.files.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([path, file]) => [
-      path,
-      { sha256: sha256(file.content), mode: file.mode },
-    ])),
+    managedFiles: Object.fromEntries([...snapshot.files.entries()]
+      .filter(([path]) => !toleratedManagedPaths.has(path))
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([path, file]) => [path, { sha256: sha256(file.content), mode: file.mode }])),
   };
+  const retired = Object.fromEntries(Object.entries(retiredManagedForks).sort(([a], [b]) => a.localeCompare(b)));
+  if (Object.keys(retired).length) state.retiredManagedForks = retired;
+  return state;
 }
 
-function validateSnapshot(snapshot, manifest, extraAllowedIndustryExtensionPaths = []) {
+function validateSnapshot(snapshot, manifest, extraAllowedIndustryExtensionPaths = [], { tolerateExtensionSnapshotOverlap = false } = {}) {
   const config = validateFoundationConfig(manifest);
   if (!/^\d+\.\d+\.\d+$/.test(snapshot?.version ?? "")) throw new Error("客户端基座快照版本必须是精确稳定 semver");
   resolveStableFoundationVersion(manifest, snapshot.version);
@@ -424,18 +438,27 @@ function validateSnapshot(snapshot, manifest, extraAllowedIndustryExtensionPaths
   if (!/^[0-9a-f]{40}$/.test(snapshot?.sourceCommit ?? "")) throw new Error("客户端基座快照缺少不可变来源提交");
   if (!(snapshot.files instanceof Map)) throw new Error("客户端基座快照缺少文件映射");
   if (snapshot.files.size > config.maxManagedFiles) throw new Error(`客户端基座快照文件数超过上限 ${config.maxManagedFiles}`);
+  const extensionPaths = effectiveExtensionPaths(config, extraAllowedIndustryExtensionPaths);
+  const toleratedSnapshotPaths = [];
   for (const [rawPath, file] of snapshot.files) {
     const path = normalizeRelativePath(rawPath, "snapshot path");
     if (!config.managedRoots.some((root) => path === root || path.startsWith(`${root}/`))) {
       throw new Error(`客户端基座快照逃逸出三端受管根：${path}`);
     }
     if ((config.protectedRootFiles ?? []).includes(path)) throw new Error(`客户端基座快照不得包含受保护身份资产：${path}`);
-    if (matchesAny(path, effectiveExtensionPaths(config, extraAllowedIndustryExtensionPaths))) throw new Error(`客户端基座快照不得占用行业扩展路径：${path}`);
+    if (matchesAny(path, extensionPaths)) {
+      // 实验车道容差：稳定快照占用了该仓声明的自有路径时，不再 fail closed，
+      // 而是把这些文件从本仓的受管集合里剔除（仓内版本原样保留，不覆盖、不删除）。
+      if (!tolerateExtensionSnapshotOverlap) throw new Error(`客户端基座快照不得占用行业扩展路径：${path}`);
+      toleratedSnapshotPaths.push(path);
+      continue;
+    }
     if (!Buffer.isBuffer(file?.content) || ![0o644, 0o755].includes(file?.mode)) throw new Error(`客户端基座快照文件无效：${path}`);
   }
   for (const entry of config.requiredEntries) {
     if (!snapshot.files.has(entry)) throw new Error(`客户端基座缺少真实生产入口：${entry}`);
   }
+  return toleratedSnapshotPaths;
 }
 
 function compareSemver(left, right) {
@@ -458,15 +481,31 @@ function resolvePhysicalTarget(root, targetRoot) {
  * 生成完整升级计划。先收集全部冲突，只有零冲突时 apply 才会写入，因此不会
  * 出现“覆盖一半才发现行业定制”的不完整迁移。
  */
-export function planClientFoundation({ repoRoot, targetRoot = repoRoot, manifest, snapshot, mode = "upgrade", extraAllowedIndustryExtensionPaths = [] }) {
+export function planClientFoundation({
+  repoRoot,
+  targetRoot = repoRoot,
+  manifest,
+  snapshot,
+  mode = "upgrade",
+  extraAllowedIndustryExtensionPaths = [],
+  tolerateExtensionSnapshotOverlap = false,
+}) {
   if (!['scaffold', 'upgrade'].includes(mode)) throw new Error(`未知客户端基座模式：${mode}`);
   const config = validateFoundationConfig(manifest);
-  validateSnapshot(snapshot, manifest, extraAllowedIndustryExtensionPaths);
+  const toleratedSnapshotPaths = validateSnapshot(
+    snapshot,
+    manifest,
+    extraAllowedIndustryExtensionPaths,
+    { tolerateExtensionSnapshotOverlap },
+  );
   const root = realpathSync(resolve(repoRoot));
   const target = resolvePhysicalTarget(root, targetRoot);
   if (!lstatSync(target).isDirectory()) throw new Error("行业基座目录必须存在");
   const identity = validateProductIdentity(root);
-  const state = readFoundationState(target, config, { extraAllowedIndustryExtensionPaths });
+  const { state, legacyExtensionManagedPaths } = readFoundationState(target, config, {
+    extraAllowedIndustryExtensionPaths,
+    tolerateExtensionSnapshotOverlap,
+  });
   if (state && state.baseRepository !== manifest.baseRepository) {
     throw new Error(`客户端基座来源不一致：${state.baseRepository ?? "未登记"}`);
   }
@@ -480,11 +519,19 @@ export function planClientFoundation({ repoRoot, targetRoot = repoRoot, manifest
     throw new Error(`稳定标签 ${snapshot.sourceRef} 的来源提交发生变化；拒绝接受同版本异内容`);
   }
   const previous = state?.managedFiles ?? {};
-  const next = makeState(snapshot, manifest);
+  // 本仓自有路径（仓级实验扩展）：快照占用 + 旧 state 曾登记，两类都要退管并原样保留本地文件。
+  const toleratedManagedPaths = new Set([...toleratedSnapshotPaths, ...legacyExtensionManagedPaths]);
+  const retiredManagedForks = { ...(state?.retiredManagedForks ?? {}) };
+  for (const path of toleratedManagedPaths) {
+    if (!previous[path]) continue;
+    retiredManagedForks[path] = { retiredInVersion: snapshot.version, reason: "repo-owned-extension-path" };
+  }
+  const next = makeState(snapshot, manifest, { toleratedManagedPaths, retiredManagedForks });
   const operations = [];
   const conflicts = [];
 
   for (const path of new Set([...Object.keys(previous), ...snapshot.files.keys()])) {
+    if (toleratedManagedPaths.has(path)) continue;
     const destination = assertNoSymlinkPath(target, join(target, path), `受管文件 ${path}`);
     const beforeExists = existsSync(destination);
     const beforeHash = beforeExists ? sha256(readFileSync(destination)) : null;
@@ -569,6 +616,7 @@ export function planClientFoundation({ repoRoot, targetRoot = repoRoot, manifest
     stateContent,
     operations,
     conflicts,
+    toleratedManagedPaths: [...toleratedManagedPaths].sort((left, right) => left.localeCompare(right)),
     ready: conflicts.length === 0,
   };
 }
@@ -583,10 +631,27 @@ function restoreFile(path, backup) {
   chmodSync(path, backup.mode);
 }
 
-export function applyClientFoundation({ repoRoot, targetRoot = repoRoot, manifest, snapshot, mode = "upgrade", dryRun = false, extraAllowedIndustryExtensionPaths = [] }) {
+export function applyClientFoundation({
+  repoRoot,
+  targetRoot = repoRoot,
+  manifest,
+  snapshot,
+  mode = "upgrade",
+  dryRun = false,
+  extraAllowedIndustryExtensionPaths = [],
+  tolerateExtensionSnapshotOverlap = false,
+}) {
   const root = realpathSync(resolve(repoRoot));
   const target = resolvePhysicalTarget(root, targetRoot);
-  const plan = planClientFoundation({ repoRoot: root, targetRoot: target, manifest, snapshot, mode, extraAllowedIndustryExtensionPaths });
+  const plan = planClientFoundation({
+    repoRoot: root,
+    targetRoot: target,
+    manifest,
+    snapshot,
+    mode,
+    extraAllowedIndustryExtensionPaths,
+    tolerateExtensionSnapshotOverlap,
+  });
   if (!plan.ready) {
     const summary = plan.conflicts.slice(0, 8).map((item) => `${item.code}:${item.path}`).join("、");
     const error = new Error(`客户端基座存在 ${plan.conflicts.length} 个冲突，拒绝覆盖：${summary}`);
@@ -622,7 +687,15 @@ export function applyClientFoundation({ repoRoot, targetRoot = repoRoot, manifes
     if (identityAfter !== identityBefore || identityAfter !== plan.identitySha256) {
       throw new Error("product.manifest.json 身份在客户端基座应用期间发生变化；已回滚");
     }
-    const verification = planClientFoundation({ repoRoot: root, targetRoot: target, manifest, snapshot, mode, extraAllowedIndustryExtensionPaths });
+    const verification = planClientFoundation({
+      repoRoot: root,
+      targetRoot: target,
+      manifest,
+      snapshot,
+      mode,
+      extraAllowedIndustryExtensionPaths,
+      tolerateExtensionSnapshotOverlap,
+    });
     if (!verification.ready || verification.operations.length !== 0) {
       throw new Error("客户端基座落盘后验真失败；已回滚");
     }
@@ -634,7 +707,13 @@ export function applyClientFoundation({ repoRoot, targetRoot = repoRoot, manifes
 }
 
 /** 不需要目标稳定源即可验证现有 state 是否仍可信，供发布前盘点使用。 */
-export function inspectClientFoundationState({ repoRoot, targetRoot = repoRoot, manifest, extraAllowedIndustryExtensionPaths = [] }) {
+export function inspectClientFoundationState({
+  repoRoot,
+  targetRoot = repoRoot,
+  manifest,
+  extraAllowedIndustryExtensionPaths = [],
+  tolerateExtensionSnapshotOverlap = false,
+}) {
   const config = validateFoundationConfig(manifest);
   const root = realpathSync(resolve(repoRoot));
   const target = resolvePhysicalTarget(root, targetRoot);
@@ -646,8 +725,12 @@ export function inspectClientFoundationState({ repoRoot, targetRoot = repoRoot, 
     issues.push({ code: "INVALID_PRODUCT_IDENTITY", path: "product.manifest.json", message: String(error.message) });
   }
   let state;
+  let legacyExtensionManagedPaths = [];
   try {
-    state = readFoundationState(target, config, { extraAllowedIndustryExtensionPaths });
+    ({ state, legacyExtensionManagedPaths } = readFoundationState(target, config, {
+      extraAllowedIndustryExtensionPaths,
+      tolerateExtensionSnapshotOverlap,
+    }));
   } catch (error) {
     issues.push({ code: "INVALID_CLIENT_FOUNDATION_STATE", path: config.stateFile, message: String(error.message) });
   }
@@ -655,6 +738,7 @@ export function inspectClientFoundationState({ repoRoot, targetRoot = repoRoot, 
     issues.push({ code: "MISSING_CLIENT_FOUNDATION_STATE", path: config.stateFile, message: "缺少三端客户端基座指纹清单" });
     return { identity, state: null, issues };
   }
+  const toleratedLegacyPaths = new Set(legacyExtensionManagedPaths);
   if (config.latestStableVersion && state.version !== config.latestStableVersion) {
     issues.push({
       code: "CLIENT_FOUNDATION_VERSION_DRIFT",
@@ -663,6 +747,7 @@ export function inspectClientFoundationState({ repoRoot, targetRoot = repoRoot, 
     });
   }
   for (const [path, entry] of Object.entries(state.managedFiles)) {
+    if (toleratedLegacyPaths.has(path)) continue;
     const destination = assertNoSymlinkPath(target, join(target, path), `检查 ${path}`);
     if (!existsSync(destination)) {
       issues.push({ code: "MANAGED_FILE_MISSING", path, message: "受管客户端文件缺失" });
@@ -683,7 +768,7 @@ export function inspectClientFoundationState({ repoRoot, targetRoot = repoRoot, 
       });
     }
   }
-  return { identity, state, issues };
+  return { identity, state, issues, legacyExtensionManagedPaths };
 }
 
 function resolveTarget(repo, prefix) {
