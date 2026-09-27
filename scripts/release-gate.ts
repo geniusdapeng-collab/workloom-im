@@ -8,13 +8,16 @@
  * 环境适配：沙箱=内置 AI 模型驱动（mock）；线上=独立部署模型服务（真实端点）
  * 红线：三条主链路未全部通过 → 禁止发布（本脚本 exit 1）
  *
- * 用法：pnpm release:gate（需要 server 运行于 SERVER_BASE，默认 http://localhost:8787）
+ * 用法：pnpm release:gate（需要 server 运行于 SERVER_BASE，默认 http://localhost:8787）。
+ * 生产/远端目标需注入 RELEASE_GATE_EMAIL 与 RELEASE_GATE_PASSWORD：该正式账号必须
+ * 已加入待验收示例工作区并有执行主链路所需权限；凭据仅由部署密钥库提供。
  */
 import pg from "pg";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { charterSchema } from "@workloom/base/captain";
+import { releaseGateLogin } from "./release-gate-auth.mjs";
 
 const BASE = process.env.SERVER_BASE ?? "http://localhost:8787";
 const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -43,13 +46,7 @@ function assert(cond: unknown, msg: string): asserts cond {
 
 /* ================= tRPC 客户端 ================= */
 async function login(workspaceSlug: string, memberNo: string): Promise<string> {
-  const r = await fetch(`${BASE}/trpc/auth.loginAs`, {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ workspaceSlug, memberNo }),
-  });
-  const j = (await r.json()) as { result?: { data?: { token?: string } } };
-  assert(j.result?.data?.token, `登录失败 ${workspaceSlug}/${memberNo}`);
-  return j.result.data.token;
+  return releaseGateLogin({ base: BASE, workspaceSlug, memberNo });
 }
 async function call<T = Record<string, unknown>>(path: string, token: string, body?: unknown, timeoutMs = 30000, method: "mutation" | "query" = "mutation"): Promise<T> {
   const ctrl = new AbortController();
@@ -202,10 +199,10 @@ if (!TARGET) {
   results.push({ id: "G-01", name: "工作区探测", ok: false, detail: "无可验收的示例工作区（请先播种当前 Bundle）", ms: 0 });
   console.log("✗ G-01 工作区探测 —— 无可验收的示例工作区（请先播种当前 Bundle）");
 }
-const token = TARGET ? await login(TARGET.slug, TARGET.memberNo).catch(() => "") : "";
+let token = "";
 if (TARGET) await check("G-01", `身份签发 · ${TARGET.name}`, async () => {
-  assert(token, "JWT 签发失败");
-  return "JWT 签发正常";
+  token = await login(TARGET.slug, TARGET.memberNo);
+  return "正式账号或本机演示身份签发正常";
 });
 
 /* ---------- 链路一：ASK 问答模式 ---------- */
