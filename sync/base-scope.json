@@ -294,15 +294,15 @@
       "reason": "AI 产品经理示例种子只使用仓库 docker-compose 的本机 owner / gateway 测试默认值；生产值只能来自环境变量。"
     },
     "scripts/release-gate.ts": {
-      "sha256": "9a4aadf86539a4bb2c43d0960e2684454de8099ab1dfb08c54f7b9dc62cbfe00",
+      "sha256": "7607c5730a95e6dee0ba7dd335bba776a7a17d1148a5fa375127eb0eaaa0e982",
       "findings": [
         {
           "rule": "credential-in-url",
-          "line": 24
+          "line": 21
         },
         {
           "rule": "credential-in-url",
-          "line": 25
+          "line": 22
         }
       ],
       "reason": "发布门禁的 app / owner 连接串均为仓库 docker-compose 中公开的本机测试库默认值；生产连接仍只能来自环境变量。"
