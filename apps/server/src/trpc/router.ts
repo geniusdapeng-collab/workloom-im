@@ -809,6 +809,12 @@ const authRouter = router({
   loginAs: publicProcedure
     .input(z.object({ workspaceSlug: z.string(), memberNo: z.string() }))
     .mutation(async ({ input }) => {
+      // 演示身份可直接签发成员 JWT，只能在本机开发入口使用。前端隐藏按钮
+      // 不是鉴权边界；在 procedure 内拒绝，tRPC 单请求、批量与直调同口径。
+      const host = process.env.SERVER_HOST?.trim() || "127.0.0.1";
+      if (process.env.NODE_ENV === "production" || !["127.0.0.1", "localhost", "::1"].includes(host)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "演示身份入口仅供本机开发使用，请通过正式账号登录" });
+      }
       const app = getAppPool();
       // 登录引导例外点（F7.1）：身份未建立前无法 set_config，workspace 解析走 owner 池
       const ws = await getOwnerPool().query<{ id: string; tenant_id: string }>(
