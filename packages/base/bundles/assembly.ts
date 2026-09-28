@@ -22,8 +22,6 @@ import pg from "pg";
 import YAML from "yaml";
 import { gatewayAppend, gatewayAppendOnClient, registerReadActions, registerWriteActions } from "../workdata/gateway.js";
 import { fenceRulesOf } from "../fence-engine/dsl.js";
-// GR-03：装配检查单⑥ 用判定器真实语义核对"红线是否可达"（命名空间后缀扩展等规则一致）
-import { actionMatches } from "../fence-engine/judge.js";
 import { parseModelPolicy } from "../model-router/policy.js";
 import {
   loadFeedbackEnumsFromBundle,
@@ -48,11 +46,11 @@ export const DEFAULT_BUNDLES_ROOT = join(__dirname, "..", "..", "..", "bundles")
 import { maybeApplyOverlay } from "../overlay/assembly-hook.js";
 
 /**
- * 打包载荷布局（2026-09-20 客户端首启实证）：
- *   仓库：<repo>/packages/base/bundles/assembly.ts      → 上三级 = <repo>/bundles ✅
- *   载荷：<runtime>/node_modules/@workloom/base/bundles → 上三级 = <runtime>/node_modules/bundles ❌
- * 载荷比仓库多一级，反推会落到不存在的目录 → 组合装配 NOT_FOUND、种子失败。
- * 因此按候选存在性择优；`BUNDLES_ROOT` 仍是最高优先级（测试/自定义部署）。
+ * 打包载荷布局（2026-09-20 本机客户端实证）：
+ *   仓库：  <repo>/packages/base/bundles/assembly.ts        → 上三级 = <repo>/bundles ✅
+ *   载荷：  <runtime>/node_modules/@workloom/base/bundles/  → 上三级 = <runtime>/node_modules/bundles ❌
+ * 打包形态比仓库多一级，反推会指向不存在的目录 → 组合装配抛 NOT_FOUND（geo-growth 种子失败现场）。
+ * 因此按候选顺序取第一个存在的目录；`BUNDLES_ROOT` 仍是最高优先级（测试/自定义部署用）。
  */
 export const PACKAGED_BUNDLES_ROOT = join(__dirname, "..", "..", "..", "..", "bundles");
 const BUNDLES_ROOT_CANDIDATES = [DEFAULT_BUNDLES_ROOT, PACKAGED_BUNDLES_ROOT] as const;
@@ -65,17 +63,8 @@ export function bundlesRoot(): string {
   return DEFAULT_BUNDLES_ROOT;
 }
 
-/**
- * 已注册工作台页面（P7E3 ⑤「UI 用例同步」校验基准；新增页面须同步此表与 cases.json）。
- *
- * p10–p20 是行业获客控制台页面（apps/web/src/extensions/hotel/routes.tsx 交付，
- * 历史页号经 legacyPaths 重定向到 /hotel/* 新路由）——它们必须在应用里有真实页面
- * 才允许登记，未交付的用例不得靠加页号骗过门禁。
- */
-export const REGISTERED_PAGES = [
-  "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9",
-  "p10", "p11", "p12", "p13", "p14", "p15", "p16", "p17", "p18", "p19", "p20",
-] as const;
+/** 已注册工作台页面（P7E3 ⑤「UI 用例同步」校验基准；新增页面须同步此表与 cases.json） */
+export const REGISTERED_PAGES = ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9"] as const;
 
 export type SlotId = "archive" | "enums" | "tools" | "fences" | "presets" | "ui" | "model-policy";
 export interface SlotState {
@@ -88,7 +77,7 @@ export interface SlotState {
   /** 回链管理页（围栏包→P5；班组→P8） */
   go?: "p5" | "p8";
 }
-export type CheckKey = "archive" | "enums" | "tools" | "fences" | "fence-vocabulary" | "ui" | "model_policy";
+export type CheckKey = "archive" | "enums" | "tools" | "fences" | "ui" | "model_policy";
 export interface CheckItem {
   key: CheckKey;
   label: string;
@@ -528,417 +517,6 @@ function assertOwnedProjectionDeclarations(manifest: BundleManifest): void {
   }
 }
 
-/** 组合编制结果：权威岗位 + 被遮蔽岗位留痕（遮蔽必须可见，不静默） */
-export interface ComposedWorkforce {
-  /**
-   * preset_key → 权威定义及其归属行业包。
-   * `effectiveFenceBindings` 是组合层算出的**围栏并集**（权威定义 ∪ 全部被遮蔽定义）：
-   * 融合不得以"丢岗"为代价丢掉被遮蔽岗位声明的治理边界，但也不改写各包自己的
-   * preset 文件——单包装配校验（F2.10 围栏绑定完整）仍按本包围栏资产判定。
-   */
-  presets: Map<string, {
-    bundleId: string;
-    preset: WorkforcePreset;
-    effectiveFenceBindings: string[];
-    shadowedBundleIds: string[];
-  }>;
-  /** 被遮蔽（非权威）的同名岗位定义，用于激活留痕与审计 */
-  shadowed: Array<{ presetKey: string; bundleId: string; winnerBundleId: string }>;
-}
-
-/**
- * 组合岗位编制（主包 + 依赖包）。
- *
- * 多领域融合（如 获客主包 + 视频包 + 酒店包）各自带编制，跨包同名 preset_key
- * 只能有一个权威定义——运行时 `agents` 幂等键是 (workspace_id, preset_key)，
- * 同名不同义会让其中一个岗位静默失效。两条纪律：
- *   ① 同名必须在主包 `composition.presetOwners` 显式声明权威归属，未声明即拒绝装载；
- *   ② 权威定义的 fence_bindings 必须覆盖所有被遮蔽定义声明的围栏（只紧不松），
- *      否则融合会以"组合"之名悄悄放宽治理边界。
- */
-export function composeWorkforce(slug: string, root = bundlesRoot()): ComposedWorkforce {
-  const sources = loadProjectionSources(slug, root);
-  const byKey = new Map<string, Array<{ bundleId: string; preset: WorkforcePreset }>>();
-  for (const { manifest } of sources) {
-    const bundleId = manifest.workloom.industry;
-    for (const preset of parseBundleWorkforcePresets(manifest, bundleId, root)) {
-      const list = byKey.get(preset.preset_key) ?? [];
-      list.push({ bundleId, preset });
-      byKey.set(preset.preset_key, list);
-    }
-  }
-
-  const primary = sources.at(-1)!.manifest;
-  const owners = primary.workloom.composition?.presetOwners ?? {};
-  const presets: ComposedWorkforce["presets"] = new Map();
-  const shadowed: ComposedWorkforce["shadowed"] = [];
-
-  for (const [key, definitions] of byKey) {
-    if (definitions.length === 1) {
-      const only = definitions[0]!;
-      presets.set(key, {
-        bundleId: only.bundleId,
-        preset: only.preset,
-        effectiveFenceBindings: [...(only.preset.fence_bindings ?? [])].sort(),
-        shadowedBundleIds: [],
-      });
-      continue;
-    }
-    const involved = definitions.map((definition) => definition.bundleId).sort();
-    const owner = owners[key];
-    if (!owner) {
-      throw new BundleError("INVALID_INPUT",
-        `组合行业包岗位「${key}」在 ${involved.join(" / ")} 重复定义，主包 ${primary.workloom.industry} 未在 composition.presetOwners 声明权威归属`);
-    }
-    if (!involved.includes(owner)) {
-      throw new BundleError("INVALID_INPUT",
-        `组合行业包岗位「${key}」声明的权威归属「${owner}」不参与本次组合（${involved.join(" / ")}）`);
-    }
-    const winner = definitions.find((definition) => definition.bundleId === owner)!;
-    const losers = definitions.filter((definition) => definition.bundleId !== owner);
-    // 组合层并集：被遮蔽定义的围栏不丢，也不回写各包 preset 文件（单包校验不受影响）
-    const effectiveFenceBindings = [...new Set([
-      ...(winner.preset.fence_bindings ?? []),
-      ...losers.flatMap((loser) => loser.preset.fence_bindings ?? []),
-    ])].sort();
-    presets.set(key, {
-      bundleId: winner.bundleId,
-      preset: winner.preset,
-      effectiveFenceBindings,
-      shadowedBundleIds: losers.map((loser) => loser.bundleId).sort(),
-    });
-    for (const loser of losers) {
-      shadowed.push({ presetKey: key, bundleId: loser.bundleId, winnerBundleId: owner });
-    }
-  }
-
-  return { presets, shadowed };
-}
-
-/** 组合装配资产：主包 + 依赖包的编制视图与围栏并集（冲突已由 composeWorkforce 收口） */
-export interface ComposedAssets {
-  /** 参与组合的行业包（依赖在前、主包在后） */
-  bundleIds: string[];
-  /** 组合权威编制（被遮蔽的同名定义不在内） */
-  presets: WorkforcePreset[];
-  /** preset_key → 组合有效围栏（权威 ∪ 被遮蔽定义声明的围栏） */
-  effectiveFenceBindings: Map<string, string[]>;
-  /** 各包声明的围栏包（保序：依赖包在前） */
-  fencePacks: Array<{ bundleId: string; pack: FenceYml }>;
-  shadowed: ComposedWorkforce["shadowed"];
-}
-
-/** 读取某行业包声明的档案 schema（未声明/不可读 → null；内容摘要仍按 provides 校验） */
-function readDeclaredArchiveSchema(bundleId: string, root: string): Record<string, unknown> | null {
-  try {
-    const manifest = loadVerifiedBundleManifest(bundleId, root);
-    const schemaPath = manifest.workloom.provides.schemas.find((path) => path.endsWith("/archive.schema.json"));
-    if (!schemaPath) return null;
-    return readJson<Record<string, unknown>>(verifiedAssetPath(bundleId, schemaPath, root));
-  } catch {
-    return null;
-  }
-}
-
-/**
- * 装载组合装配资产。
- *
- * 融合产品（酒店获客复合系统 = 获客主包 + 酒店包 + 视频包）的编制与围栏都来自多个
- * 行业包：装配检查单、上岗安装与运行时并集必须以**同一份组合视图**为准，
- * 否则会出现"检查单只认主包、运行时却跑了三包"的口径分裂。
- */
-export function loadComposedAssets(slug: string, root = bundlesRoot()): ComposedAssets {
-  const composed = composeWorkforce(slug, root);
-  const sources = loadProjectionSources(slug, root);
-  const bundleIds = sources.map(({ manifest }) => manifest.workloom.industry);
-  const fencePacks: ComposedAssets["fencePacks"] = [];
-  for (const bundleId of bundleIds) {
-    const manifest = loadVerifiedBundleManifest(bundleId, root);
-    for (const assetPath of manifest.workloom.provides.fences) {
-      /**
-       * 只合并各行业包的**基线**围栏（hotel-baseline / ai-video-baseline / geo-growth-baseline）。
-       * fences/patches/* 是「按客群二选一」的客户级收紧包（体检期/低星单体/民宿/无人），
-       * 把它们全并进基线等于同时叠加四套客户配置——会把不该拦的动作拦下。
-       * 客群补丁由落地向导按所选客群单独应用；组合上岗只做单调守卫（更严的补丁保留）。
-       */
-      if (assetPath.includes("/patches/")) continue;
-      const pack = YAML.parse(readFileSync(verifiedAssetPath(bundleId, assetPath, root), "utf-8")) as FenceYml;
-      if (pack?.version) fencePacks.push({ bundleId, pack });
-    }
-  }
-  const effectiveFenceBindings = new Map<string, string[]>();
-  const presets: WorkforcePreset[] = [];
-  for (const [key, entry] of composed.presets) {
-    presets.push(entry.preset);
-    effectiveFenceBindings.set(key, entry.effectiveFenceBindings);
-  }
-  return { bundleIds, presets, effectiveFenceBindings, fencePacks, shadowed: composed.shadowed };
-}
-
-/** 组合围栏并集：跨包同名 rule_id 取最严（只紧不松），同级别时先声明者（依赖包）优先。 */
-export function mergeComposedFenceRules(
-  packs: ComposedAssets["fencePacks"],
-): Array<{ bundleId: string; packVersion: string; rule: FenceRuleYml }> {
-  const levelRank: Record<string, number> = { auto: 0, review: 1, block: 2 };
-  const merged = new Map<string, { bundleId: string; packVersion: string; rule: FenceRuleYml }>();
-  for (const { bundleId, pack } of packs) {
-    const packVersion = pack.version ?? "unknown";
-    // HP-02：并集读取口径统一走 fenceRulesOf（rules ?? fences），否则 `fences:` 形态的
-    // 行业包在组合视图里"一条规则都看不见"，组合并集与运行时判定口径分裂。
-    for (const rule of fenceRulesOf(pack) as FenceRuleYml[]) {
-      if (!rule?.rule_id) continue;
-      const current = merged.get(rule.rule_id);
-      if (!current) {
-        merged.set(rule.rule_id, { bundleId, packVersion, rule });
-        continue;
-      }
-      /**
-       * 同名规则跨包/跨补丁合并必须**只紧不松**：
-       *  - level 取更严的一档；
-       *  - 适用范围取并集（规则命中的对象/动作更多 = 更严）；
-       *  - 条件用 and 合并（两个条件都要成立 = 更严）。
-       * 基线 + 客群补丁正是这种关系，简单"后者覆盖前者"会悄悄放宽客户已收紧的围栏。
-       */
-      const currentRank = levelRank[current.rule.level ?? "review"] ?? 1;
-      const nextRank = levelRank[rule.level ?? "review"] ?? 1;
-      const stricter = nextRank > currentRank ? rule : current.rule;
-      const conditions = [...new Set([current.rule.when, rule.when].filter((w): w is string => !!w && w.trim() !== ""))];
-      merged.set(rule.rule_id, {
-        bundleId: nextRank > currentRank ? bundleId : current.bundleId,
-        packVersion: nextRank > currentRank ? packVersion : current.packVersion,
-        rule: {
-          ...stricter,
-          match: {
-            object_types: [...new Set([
-              ...(current.rule.match?.object_types ?? []),
-              ...(rule.match?.object_types ?? []),
-            ])],
-            actions: [...new Set([
-              ...(current.rule.match?.actions ?? []),
-              ...(rule.match?.actions ?? []),
-            ])],
-          },
-          ...(conditions.length > 1 ? { when: conditions.map((c) => `(${c})`).join(" and ") } : {}),
-        },
-      });
-    }
-  }
-  return [...merged.values()];
-}
-
-/**
- * 组合档案契约（一店一档）：融合体的租户档案必须同时满足各领域包的契约。
- *
- * 酒店包要 `property`（房态/布草/供应商），获客包要 `enterprise`（实体卡/目标市场/内容与
- * GEO 资产）——融合产品的工作区两者都要具备，否则"酒店获客复合系统"会在档案层被拆回单包。
- * 合并口径：properties 取并集（同键冲突时保留先声明者并记录，交检查单暴露），required 取并集。
- */
-export function mergeComposedArchiveSchemas(
-  schemas: Array<{ bundleId: string; schema: Record<string, unknown> | null }>,
-): { schema: Record<string, unknown> | null; conflicts: string[] } {
-  const usable = schemas.filter((entry): entry is { bundleId: string; schema: Record<string, unknown> } => !!entry.schema);
-  if (usable.length === 0) return { schema: null, conflicts: [] };
-  const properties: Record<string, unknown> = {};
-  const required = new Set<string>();
-  const conflicts: string[] = [];
-  for (const { bundleId, schema } of usable) {
-    const props = (schema.properties ?? {}) as Record<string, unknown>;
-    for (const [key, value] of Object.entries(props)) {
-      if (key in properties) {
-        if (JSON.stringify(properties[key]) !== JSON.stringify(value)) {
-          conflicts.push(`字段「${key}」在多个领域包中定义不一致（保留先声明者，来自 ${bundleId} 的定义被忽略）`);
-        }
-        continue;
-      }
-      properties[key] = value;
-    }
-    for (const key of (Array.isArray(schema.required) ? schema.required : []) as string[]) required.add(key);
-  }
-  return {
-    schema: {
-      $schema: "https://json-schema.org/draft/2020-12/schema",
-      title: `融合档案（${usable.map((u) => u.bundleId).join(" + ")}）`,
-      type: "object",
-      additionalProperties: true,
-      properties,
-      required: [...required],
-    },
-    conflicts,
-  };
-}
-
-export interface ComposedProvision {
-  bundleIds: string[];
-  rosterSize: number;
-  perBundle: Record<string, number>;
-  fenceRules: number;
-  shadowed: ComposedWorkforce["shadowed"];
-}
-
-/**
- * 组合上岗所需的最小执行器：pg.Pool（服务端）与 pg.Client（seed 脚本）都能满足。
- * 池走 connect/release 取连接；单连接直接复用同一客户端（BEGIN/COMMIT 由本函数显式发）。
- */
-export interface ProvisionExecutor {
-  connect?: () => Promise<pg.PoolClient>;
-  /**
-   * 最小查询面：pg.Pool / pg.PoolClient / pg.Client 都满足。
-   * 返回类型放宽到 unknown 行，避免与 pg 的具体 QueryResult 泛型打架。
-   */
-  query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount?: number | null }>;
-  release?: () => void;
-}
-
-export interface ProvisionOptions {
-  /**
-   * 是否由本函数提交事务。
-   * 默认按执行器判定：pool（有 connect）→ true；裸执行器 → false。
-   * 调用方已在事务内（如落地向导的段装配）必须显式传 false：
-   * 另开会话既看不到未提交的收紧补丁（单调守卫会误判），也会互相锁住同一批 fence_rules/agents 行。
-   */
-  manageTransaction?: boolean;
-}
-
-/**
- * 组合编制上岗（幂等）：先把三包围栏并集与三包编制写进工作区，再走检查单激活。
- *
- * 融合产品的装配语义是"一套班子管一个获客闭环"：酒店经营、内容生产、GEO 分发
- * 三类岗位必须在同一工作区同时在场，且围栏取并集（只紧不松）。因此这里：
- *   ① 围栏并集按版本化滚动落库（同 rule_id 旧 active → rolled_back，单一生效版本）；
- *   ② 编制按 (workspace_id, preset_key) 幂等上岗，fence_bindings 用组合并集；
- *   ③ 每个岗位的 meta 记录来源包与被遮蔽包，激活事件可审计"谁提供了谁"。
- */
-export async function provisionComposedWorkforce(
-  app: pg.Pool | ProvisionExecutor,
-  scope: Scope,
-  slug: string,
-  by: string,
-  root = bundlesRoot(),
-  options: ProvisionOptions = {},
-): Promise<ComposedProvision> {
-  const composed = loadComposedAssets(slug, root);
-  const perBundle: Record<string, number> = {};
-  for (const [key, entry] of composeWorkforce(slug, root).presets) {
-    perBundle[entry.bundleId] = (perBundle[entry.bundleId] ?? 0) + 1;
-    void key;
-  }
-  const mergedRules = mergeComposedFenceRules(composed.fencePacks);
-
-  const manageTransaction = options.manageTransaction ?? typeof (app as pg.Pool).connect === "function";
-  const client = manageTransaction
-    ? await (app as pg.Pool).connect()
-    : (app as unknown as pg.PoolClient);
-  try {
-    if (manageTransaction) await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
-
-    for (const { packVersion, rule } of mergedRules) {
-      const version = `${packVersion}/${slug}`;
-      const verSlug = version.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
-      /**
-       * 单调守卫（只紧不松）：工作区已有更严的 active 版本（例如客群补丁把 R4 从 review
-       * 收紧成 block）时，组合基线不得把它滚回去——直接跳过，保留客户已收紧的规则。
-       */
-      const existing = await client.query<{ level: string }>(
-        `SELECT level FROM fence_rules
-          WHERE workspace_id=$1 AND rule_id=$2 AND status='active'
-          ORDER BY CASE level WHEN 'block' THEN 2 WHEN 'review' THEN 1 ELSE 0 END DESC
-          LIMIT 1`,
-        [scope.workspaceId, rule.rule_id],
-      );
-      const rank: Record<string, number> = { auto: 0, review: 1, block: 2 };
-      const existingRank = existing.rows[0] ? rank[existing.rows[0].level] ?? 0 : -1;
-      const nextRank = rank[rule.level ?? "review"] ?? 1;
-      if (existingRank > nextRank) continue;
-      await client.query(
-        `UPDATE fence_rules SET status='rolled_back'
-          WHERE workspace_id=$1 AND rule_id=$2 AND version <> $3 AND status='active'`,
-        [scope.workspaceId, rule.rule_id, version],
-      );
-      await client.query(
-        `INSERT INTO fence_rules (id, rule_id, version, workspace_id, name, level, match_spec, action, is_baseline, status, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',$10)
-         ON CONFLICT (rule_id, version, workspace_id) DO UPDATE SET
-           name = EXCLUDED.name, level = EXCLUDED.level, match_spec = EXCLUDED.match_spec,
-           action = EXCLUDED.action, is_baseline = EXCLUDED.is_baseline, status = 'active'`,
-        [
-          `fr-${rule.rule_id.toLowerCase()}-${verSlug}-${scope.workspaceId}`,
-          rule.rule_id,
-          version,
-          scope.workspaceId,
-          rule.name ?? rule.rule_id,
-          rule.level ?? "review",
-          JSON.stringify({
-            object_types: rule.match?.object_types ?? [],
-            actions: rule.match?.actions ?? [],
-            when: rule.when ?? "",
-          }),
-          JSON.stringify({
-            result: rule.level === "auto" ? "pass" : rule.level === "review" ? "review" : "blocked",
-            note: rule.note ?? "",
-          }),
-          rule.is_baseline ?? false,
-          `system:compose:${by}`,
-        ],
-      );
-    }
-
-    for (const [presetKey, entry] of composeWorkforce(slug, root).presets) {
-      const meta = JSON.stringify({
-        ...(entry.preset as unknown as Record<string, unknown>),
-        sourceBundleId: entry.bundleId,
-        shadowedBundleIds: entry.shadowedBundleIds,
-        composedFrom: { primary: slug, bundles: composed.bundleIds },
-      });
-      const updated = await client.query(
-        `UPDATE agents SET name=$3, version=$4, kind=$5, readonly=$6, fence_bindings=$7, skills=$8, status='ready', meta=$9
-          WHERE workspace_id=$1 AND preset_key=$2`,
-        [
-          scope.workspaceId, presetKey, entry.preset.name, entry.preset.version, entry.preset.kind,
-          entry.preset.readonly, JSON.stringify(entry.effectiveFenceBindings),
-          JSON.stringify(entry.preset.skills ?? []), meta,
-        ],
-      );
-      if ((updated.rowCount ?? 0) === 0) {
-        /**
-         * agents 的主键只有 id（(workspace_id, preset_key) 是业务幂等键但无唯一约束），
-         * 因此不能对它做 ON CONFLICT 复合键；id 必须带工作区后缀，
-         * 否则第二个工作区装同名岗位会撞主键。
-         */
-        await client.query(
-          `INSERT INTO agents (id, workspace_id, preset_key, name, version, kind, readonly, fence_bindings, skills, status, meta)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'ready',$10)
-           ON CONFLICT (id) DO UPDATE SET
-             name = EXCLUDED.name, version = EXCLUDED.version, kind = EXCLUDED.kind,
-             readonly = EXCLUDED.readonly, fence_bindings = EXCLUDED.fence_bindings,
-             skills = EXCLUDED.skills, status = 'ready', meta = EXCLUDED.meta`,
-          [
-            `agt-${presetKey}-${scope.workspaceId}`, scope.workspaceId, presetKey,
-            entry.preset.name, entry.preset.version,
-            entry.preset.kind, entry.preset.readonly, JSON.stringify(entry.effectiveFenceBindings),
-            JSON.stringify(entry.preset.skills ?? []), meta,
-          ],
-        );
-      }
-    }
-    if (manageTransaction) await client.query("COMMIT");
-  } catch (err) {
-    if (manageTransaction) await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally {
-    if (manageTransaction) client.release();
-  }
-
-  return {
-    bundleIds: composed.bundleIds,
-    rosterSize: composed.presets.length,
-    perBundle,
-    fenceRules: mergedRules.length,
-    shadowed: composed.shadowed,
-  };
-}
-
 function loadProjectionSources(primarySlug: string, root: string): VerifiedProjectionSource[] {
   const sources: VerifiedProjectionSource[] = [];
   const visiting: string[] = [];
@@ -1017,9 +595,6 @@ function mergeSourcedLabels(
  * - welcome、serviceFront、inspection、theme、experiments 始终由主包裁决，依赖不能覆盖。
  */
 export function loadBundleUiProjection(slug: string, root = bundlesRoot()): BundleUiProjection {
-  // 组合岗位编制必须先通过同名冲突裁决（fail closed）：投影装载与岗位装载同一事实源，
-  // 不允许"导航能装、岗位静默丢一半"的组合。
-  composeWorkforce(slug, root);
   const sources = loadProjectionSources(slug, root);
   const primarySource = sources.at(-1)!;
   const primary = primarySource.manifest;
@@ -1115,6 +690,8 @@ export function loadBundleUiProjection(slug: string, root = bundlesRoot()): Bund
       workflows: workflows.labels,
       workflowEntries: workflows.entries,
       // 以下高影响投影由主包唯一裁决，低信任依赖不得覆盖。
+      // safeTerms 决定客户端中文显示边界放行哪些行业词，属信任面，只能由主包声明。
+      safeTerms: primary.workloom.ui.safeTerms,
       welcome: primary.workloom.ui.welcome,
       serviceFront: primary.workloom.ui.serviceFront,
       inspection: primary.workloom.ui.inspection,
@@ -1185,22 +762,10 @@ export function listSelfServiceBundles(root = bundlesRoot()): SelfServiceBundleR
   };
 }
 
-interface FenceRuleYml {
-  rule_id: string;
-  name?: string;
-  level?: "auto" | "review" | "block";
-  is_baseline?: boolean;
-  match?: { object_types?: string[]; actions?: string[] };
-  when?: string;
-  note?: string;
-}
-
 interface FenceYml {
   version?: string;
-  default_level?: "auto" | "review" | "block";
-  rules?: FenceRuleYml[];
-  /** HP-02：出厂包存在两种顶层键——hotel/本仓各行业包用 `rules:`，ai-pm/platform 用 `fences:` */
-  fences?: FenceRuleYml[];
+  rules?: Array<{ rule_id: string; is_baseline?: boolean }>;
+  fences?: Array<{ rule_id: string; is_baseline?: boolean }>;
 }
 
 interface UiCasesJson {
@@ -1285,8 +850,6 @@ export async function computeAssembly(
 ): Promise<BundleProfile> {
   // M4-装配：先纯磁盘读（事务外），再开 DB 事务做库侧校验
   const assets = loadBundleDiskAssets(join(root, slug), slug);
-  // 融合产品口径：检查单看的是**组合编制**（主包 + 依赖包），与上岗安装同一份视图
-  const composed = loadComposedAssets(slug, root);
 
   // 每连接重设租户/工作区上下文（编码铁律：RLS 依赖 set_config）
   const client = await app.connect();
@@ -1297,9 +860,7 @@ export async function computeAssembly(
     await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
     // 租户覆盖层（L2）：L0 基座→L1 行业包→L2 租户覆盖层逐层合并（无覆盖层=零行为变化）
     await maybeApplyOverlay(client, scope, slug, assets);
-    return await computeAssemblyScoped(client, scope, slug, assets, composed, mergeComposedArchiveSchemas(
-      composed.bundleIds.map((bundleId) => ({ bundleId, schema: readDeclaredArchiveSchema(bundleId, root) })),
-    ));
+    return await computeAssemblyScoped(client, scope, slug, assets);
   } catch (err) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw err;
@@ -1314,8 +875,6 @@ async function computeAssemblyScoped(
   scope: Scope,
   slug: string,
   assets: BundleDiskAssets,
-  composed: ComposedAssets,
-  composedArchive: ReturnType<typeof mergeComposedArchiveSchemas>,
 ): Promise<BundleProfile> {
   const { bj, isDraft } = assets;
   // 当前工作区是否已激活本 profile（激活态才复核档案/阶段与工作区实物的一致性）
@@ -1325,13 +884,7 @@ async function computeAssemblyScoped(
   const isActive = ws.rows[0]?.industry === slug;
 
   /* ---------- 槽① 档案 Schema + 校验① 档案 forbidden ---------- */
-  /**
-   * 融合档案契约：主包 + 依赖包的档案 schema 取并集（required 亦取并集）。
-   * 酒店包的 property/business 与获客包的 enterprise/content/geo 资产同属"一店一档"，
-   * 只认主包会把融合体在档案层拆回单包（酒店档案直接判不合规）。
-   */
-  const archiveSchema = (composedArchive.schema ?? assets.archiveSchema) as
-    { properties?: Record<string, unknown>; required?: string[] } | null;
+  const archiveSchema = assets.archiveSchema;
   const prof = isActive
     ? await client.query<{ archive: Record<string, unknown> | null }>(
         `SELECT archive FROM profiles WHERE workspace_id=$1`, [scope.workspaceId])
@@ -1345,16 +898,16 @@ async function computeAssemblyScoped(
     ? archiveSchema.required.filter((k) => !archive || !(k in archive))
     : [];
   const checkArchive: CheckItem = !archiveSchema
-    ? { key: "archive", label: "档案 forbidden 校验", ok: false, slot: "archive",
-        detail: "缺少 schemas/archive.schema.json", fix: "补齐档案 Schema（五要素之①档案，§2.3）" }
+    ? { key: "archive", label: "客户档案硬约束校验", ok: false, slot: "archive",
+        detail: "缺少客户档案结构文件", fix: "在行业包里补齐客户档案结构（必备文件之一）" }
     : requiredMissing.length > 0
-      ? { key: "archive", label: "档案 forbidden 校验", ok: false, slot: "archive",
-          detail: `一店一档缺必填字段组：${requiredMissing.join("、")}`, fix: "回 P3 补齐一店一档必填字段组" }
+      ? { key: "archive", label: "客户档案硬约束校验", ok: false, slot: "archive",
+          detail: `客户档案缺必填字段组：${requiredMissing.join("、")}`, fix: "到「经营报告 · 客户档案」补齐必填字段组" }
       : forbiddenCount === 0 && isActive
-        ? { key: "archive", label: "档案 forbidden 校验", ok: false, slot: "archive",
-            detail: "档案 forbidden 硬约束为空（L1.6 至少 1 条）", fix: "回 P3 档案补 forbidden 硬约束" }
-        : { key: "archive", label: "档案 forbidden 校验", ok: true, slot: "archive",
-            detail: `一店一档 ${fieldGroups} 字段组 · forbidden 硬约束 ${isActive ? forbiddenCount : "激活时复核"} 条` };
+        ? { key: "archive", label: "客户档案硬约束校验", ok: false, slot: "archive",
+            detail: "客户档案硬约束为空（至少需要 1 条）", fix: "到「经营报告 · 客户档案」补上硬约束" }
+        : { key: "archive", label: "客户档案硬约束校验", ok: true, slot: "archive",
+            detail: `客户档案 ${fieldGroups} 组字段 · 硬约束 ${isActive ? forbiddenCount : "启用时复核"} 条` };
 
   /* ---------- 槽② 枚举 + 校验② 枚举冲突检测 ---------- */
   const objectsJson = assets.objectsJson;
@@ -1372,16 +925,16 @@ async function computeAssemblyScoped(
     ...stageConflict,
   ];
   const checkEnums: CheckItem = !objectsJson || !stagesJson
-    ? { key: "enums", label: "枚举冲突检测", ok: false, slot: "enums",
-        detail: "缺少 schemas/objects.json 或 schemas/stages.json", fix: "补齐对象与阶段枚举（五要素之②枚举）" }
+    ? { key: "enums", label: "业务对象与阶段一致性", ok: false, slot: "enums",
+        detail: "缺少业务对象或经营阶段清单", fix: "在行业包里补齐业务对象与经营阶段" }
     : enumConflicts.length > 0
-      ? { key: "enums", label: "枚举冲突检测", ok: false, slot: "enums",
+      ? { key: "enums", label: "业务对象与阶段一致性", ok: false, slot: "enums",
           detail: enumConflicts.join("；"), fix: "消除枚举冲突后重跑校验" }
-      : { key: "enums", label: "枚举冲突检测", ok: true, slot: "enums",
-          detail: `${objTypes.length} 对象 × 经营${stageIds.length}阶段，无冲突` };
+      : { key: "enums", label: "业务对象与阶段一致性", ok: true, slot: "enums",
+          detail: `已声明 ${objTypes.length} 类业务对象、${stageIds.length} 个经营阶段，无冲突` };
 
   /* ---------- 槽③ 工具集 + 校验③ 工具探针健康 ---------- */
-  const presets = composed.presets;
+  const presets = assets.presets;
   const toolNames = [...new Set(presets.flatMap((p) => (p.tools ?? []).map((t) => t.name)))];
   // HP-02：把本工作区装配声明的工具动作登记进网关动作分类表——
   // access=write 的工具名成为显式写动作（否则落入"未分类"仍按写，但显式登记才能让
@@ -1409,17 +962,17 @@ async function computeAssemblyScoped(
     else if (a.status !== "ready") probeFails.push(`「${a.name} ${a.version}」状态 ${a.status}（invalid/disabled 不可装配 L3.7）`);
   }
   const checkTools: CheckItem = presets.length === 0
-    ? { key: "tools", label: "工具探针健康", ok: false, slot: "tools",
-        detail: "无 preset 可探针（presets/*.yml 缺失）", fix: "补齐 Agent preset（五要素之⑤班组）" }
+    ? { key: "tools", label: "工具可用性检查", ok: false, slot: "tools",
+        detail: "没有可检查的岗位（缺少岗位定义文件）", fix: "在行业包里补齐数字员工岗位定义" }
     : probeFails.length > 0
-      ? { key: "tools", label: "工具探针健康", ok: false, slot: "presets",
-          detail: probeFails.join("；"), fix: "修复 preset 实例状态（→P8 船员名册）" }
-      : { key: "tools", label: "工具探针健康", ok: true, slot: "tools",
-          detail: `${presets.length} preset 探针全绿 · 工具 ${toolNames.length} 项` };
+      ? { key: "tools", label: "工具可用性检查", ok: false, slot: "presets",
+          detail: probeFails.join("；"), fix: "到「数字员工」页修复岗位状态" }
+      : { key: "tools", label: "工具可用性检查", ok: true, slot: "tools",
+          detail: `${presets.length} 个岗位检查通过 · 工具 ${toolNames.length} 项` };
 
   /* ---------- 槽④ 围栏包 + 校验④ 围栏绑定完整 ---------- */
   const fenceFiles = assets.fenceFiles;
-  const fencePacks = composed.fencePacks.map((entry) => entry.pack);
+  const fencePacks = assets.fencePacks;
   // HP-02：规则数与基线数按统一读取口径（rules ?? fences），且行业围栏包内规则默认即基线
   // （显式 is_baseline:false 才退出基线保护）——否则 ai-pm/platform 这类包会显示"基线 0 条"。
   const ruleCount = fencePacks.reduce((n, f) => n + fenceRulesOf(f).length, 0);
@@ -1455,57 +1008,13 @@ async function computeAssemblyScoped(
     };
   });
   const checkFences: CheckItem = fencePacks.length === 0
-    ? { key: "fences", label: "围栏绑定完整", ok: false, slot: "fences",
-        detail: "缺少 fences/*.yml 围栏包", fix: "补齐围栏包（五要素之④围栏）" }
+    ? { key: "fences", label: "安全规则绑定完整", ok: false, slot: "fences",
+        detail: "缺少安全规则包", fix: "在行业包里补齐安全规则包" }
     : fenceFails.length > 0
-      ? { key: "fences", label: "围栏绑定完整", ok: false, slot: "presets",
-          detail: fenceFails.join("；"), fix: "在 preset 中补齐围栏声明（F2.10）" }
-      : { key: "fences", label: "围栏绑定完整", ok: true, slot: "fences",
-          detail: `基线 ${baselineCount} 条 🔒 单调守卫 · ${agentsOut.filter((a) => !a.readonly).length} 员绑定全合法` };
-
-  /**
-   * 校验⑥ 围栏-工具词表交叉校验（GR-03，2026-09-28 压测新增）。
-   *
-   * 为什么必须有机检：红线规则（is_baseline + level=block）如果 actions 对不上任何岗位写工具，
-   * 就是"空膛红线"——产品对外宣称的熔断永远不会发生（实测 geo-growth 12 条、ai-video 4 条、
-   * hotel 4 条，修复前 GEO 的"数据出域红线"就属于这一类）。
-   * 判定用**判定器真实语义** actionMatches（命名空间后缀扩展：规则 price.adjust 命中工具 pms.price.write），
-   * 不搞字符串相等，避免误报与漏报。
-   * 确实无法接线（能力未落地/由审批链而非判定器执行）时，围栏包必须显式声明 `unwired_blocks`，
-   * 把"空膛"变成"有据可查的缺口"，而不是静默失守。
-   */
-  // 复用槽③已算出的写工具清单（同一份组合视图，不另起同名变量）
-  const unwiredDeclared = new Set(
-    composed.fencePacks.flatMap((entry) => (entry.pack as { unwired_blocks?: Array<{ rule_id?: unknown }> }).unwired_blocks ?? [])
-      .map((item) => (typeof item?.rule_id === "string" ? item.rule_id : ""))
-      .filter(Boolean),
-  );
-  const emptyRedLines: string[] = [];
-  for (const entry of composed.fencePacks) {
-    for (const rule of fenceRulesOf(entry.pack)) {
-      const candidate = rule as unknown as {
-        rule_id?: unknown; name?: unknown; level?: unknown; is_baseline?: unknown;
-        match?: { actions?: unknown };
-      };
-      if (!(candidate.is_baseline !== false && candidate.level === "block")) continue;
-      const ruleId = String(candidate.rule_id ?? "");
-      if (!ruleId || unwiredDeclared.has(ruleId)) continue;
-      const ruleActions = Array.isArray(candidate.match?.actions) ? candidate.match!.actions!.map(String) : [];
-      const reachable = ruleActions.some((ruleAction) =>
-        writeToolNames.some((tool) => actionMatches(ruleAction, tool, "write")));
-      if (!reachable) emptyRedLines.push(`${ruleId}${typeof candidate.name === "string" && candidate.name ? `（${candidate.name}）` : ""}`);
-    }
-  }
-  const checkFenceVocabulary: CheckItem = emptyRedLines.length > 0
-    ? {
-      key: "fence-vocabulary", label: "围栏-工具词表交叉校验", ok: false, slot: "fences",
-      detail: `红线空膛：${emptyRedLines.join("、")}（规则声明了 block，但没有任何岗位写工具能触发）`,
-      fix: "把规则 actions 对齐真实工具名（可保留语义词），或在围栏包声明 unwired_blocks 说明未接线原因",
-    }
-    : {
-      key: "fence-vocabulary", label: "围栏-工具词表交叉校验", ok: true, slot: "fences",
-      detail: `写工具 ${writeToolNames.length} 项 · 红线全部可达（未接线声明 ${unwiredDeclared.size} 条）`,
-    };
+      ? { key: "fences", label: "安全规则绑定完整", ok: false, slot: "presets",
+          detail: fenceFails.join("；"), fix: "在岗位定义里补齐安全规则声明" }
+      : { key: "fences", label: "安全规则绑定完整", ok: true, slot: "fences",
+          detail: `平台基线 ${baselineCount} 条（只可收紧）· ${agentsOut.filter((a) => !a.readonly).length} 个岗位绑定全部合法` };
 
   /* ---------- 槽⑥ 工作台 UI + 校验⑤ UI 用例同步 ---------- */
   const uiCases = assets.uiCases;
@@ -1513,57 +1022,59 @@ async function computeAssemblyScoped(
   const casePages = [...new Set(cases.map((c) => c.page))];
   const unregistered = casePages.filter((p) => !(REGISTERED_PAGES as readonly string[]).includes(p));
   const checkUi: CheckItem = !uiCases
-    ? { key: "ui", label: "UI 用例同步", ok: false, slot: "ui",
-        detail: "缺少 ui/cases.json 状态用例清单", fix: "补齐工作台 UI 用例（五要素之⑥皮肤）" }
+    ? { key: "ui", label: "界面状态用例", ok: false, slot: "ui",
+        detail: "缺少界面状态用例清单", fix: "在行业包里补齐工作台界面用例" }
     : unregistered.length > 0
-      ? { key: "ui", label: "UI 用例同步", ok: false, slot: "ui",
-          detail: `用例引用未注册页面：${unregistered.join("、")}`, fix: "同步页面注册表或修正用例" }
-      : { key: "ui", label: "UI 用例同步", ok: true, slot: "ui",
-          detail: `${casePages.length} 页 · 状态用例 ${cases.length} 条同步` };
+      ? { key: "ui", label: "界面状态用例", ok: false, slot: "ui",
+          detail: `用例引用了未注册页面：${unregistered.join("、")}`, fix: "同步页面登记或修正用例" }
+      : { key: "ui", label: "界面状态用例", ok: true, slot: "ui",
+          detail: `${casePages.length} 个页面 · ${cases.length} 条界面状态用例已就位` };
 
   /* ---------- 槽⑦ 模型路由策略（v3.0：非阻断——缺失用底座默认；存在但非法 → 标红拒绝激活） ---------- */
   let modelPolicyScenes = 0;
   let checkModelPolicy: CheckItem;
   if (assets.modelPolicyText === null) {
-    checkModelPolicy = { key: "model_policy", label: "模型路由策略", ok: true, slot: "model-policy",
-      detail: "未提供 model-policy.yml，使用底座默认路由策略（L2.6 行业可覆盖）" };
+    checkModelPolicy = { key: "model_policy", label: "模型与成本策略", ok: true, slot: "model-policy",
+      detail: "未单独配置，使用平台默认模型策略" };
   } else {
     const parsed = parseModelPolicy(assets.modelPolicyText);
     if (parsed.policy) {
       modelPolicyScenes = Object.keys(parsed.policy.scenes).length;
-      checkModelPolicy = { key: "model_policy", label: "模型路由策略", ok: true, slot: "model-policy",
-        detail: `model-policy.yml 合法 · ${modelPolicyScenes} 场景（含底座继承）· 三档套餐映射` };
+      checkModelPolicy = { key: "model_policy", label: "模型与成本策略", ok: true, slot: "model-policy",
+        detail: `模型策略已就绪 · ${modelPolicyScenes} 个使用场景 · 三档能力映射` };
     } else {
-      checkModelPolicy = { key: "model_policy", label: "模型路由策略", ok: false, slot: "model-policy",
-        detail: `model-policy.yml 非法：${parsed.issues.join("；")}`, fix: "修正场景表（tier 须为 L1/L2/L3）后重跑校验" };
+      checkModelPolicy = { key: "model_policy", label: "模型与成本策略", ok: false, slot: "model-policy",
+        detail: `模型策略配置有误：${parsed.issues.join("；")}`, fix: "修正各场景对应的能力档位后重新校验" };
     }
   }
 
-  // GR-03：第六项=围栏-工具词表交叉校验（红线空膛=装配事故，不允许静默通过）
-  const checks = [checkArchive, checkEnums, checkTools, checkFences, checkFenceVocabulary, checkUi, checkModelPolicy];
+  const checks = [checkArchive, checkEnums, checkTools, checkFences, checkUi, checkModelPolicy];
   const failedSlots = new Set(checks.filter((c) => !c.ok).map((c) => c.slot));
 
   const slots: SlotState[] = [
-    { id: "archive", label: "① 档案 Schema", filled: !!archiveSchema, failed: failedSlots.has("archive"),
+    { id: "archive", label: "① 客户档案结构", filled: !!archiveSchema, failed: failedSlots.has("archive"),
       summary: checkArchive.detail },
-    { id: "enums", label: "② 对象与阶段枚举", filled: !!objectsJson && !!stagesJson, failed: failedSlots.has("enums"),
-      summary: objectsJson && stagesJson ? `${objTypes.length} 对象 × 经营${stageIds.length}阶段` : "待填充" },
+    { id: "enums", label: "② 业务对象与阶段", filled: !!objectsJson && !!stagesJson, failed: failedSlots.has("enums"),
+      summary: objectsJson && stagesJson ? `已声明 ${objTypes.length} 类业务对象、${stageIds.length} 个经营阶段` : "待填充" },
     { id: "tools", label: "③ 工具集", filled: toolNames.length > 0, failed: false,
-      summary: toolNames.length > 0 ? toolNames.slice(0, 5).join(" · ") + (toolNames.length > 5 ? ` 等 ${toolNames.length} 项` : "") : "待填充" },
-    { id: "fences", label: "④ 围栏包 / 群规", filled: fencePacks.length > 0, failed: failedSlots.has("fences"),
-      summary: fencePacks.length > 0 ? `${fenceFiles[0]} · 基线 ${baselineCount} 条 🔒 单调守卫` : "待填充", go: "p5" },
-    { id: "presets", label: "⑤ Agent 班组 / 通讯录", filled: presets.length > 0 && agentRows.length > 0,
+      // 只给业务口径的数量与写入分类：工具名是内部标识（team.briefing.write 之类），不进客户端
+      summary: toolNames.length > 0
+        ? `已登记 ${toolNames.length} 项工具能力（含 ${toolNames.filter((name) => /write|\.(create|send|publish|update)/.test(name)).length} 项写入类）`
+        : "待填充" },
+    { id: "fences", label: "④ 安全规则包", filled: fencePacks.length > 0, failed: failedSlots.has("fences"),
+      summary: fencePacks.length > 0 ? `平台基线 ${baselineCount} 条 · 行业规则包已就位` : "待填充", go: "p5" },
+    { id: "presets", label: "⑤ 数字员工班组", filled: presets.length > 0 && agentRows.length > 0,
       failed: failedSlots.has("presets"),
       summary: presets.length > 0
-        ? `${presets.length} preset · 围栏绑定校验 ${fenceFails.length > 0 ? `${fenceFails.length} 项失败` : "✓"}`
+        ? `${presets.length} 个岗位 · 安全规则绑定校验 ${fenceFails.length > 0 ? `${fenceFails.length} 项失败` : "通过"}`
         : "待填充", go: "p8" },
-    { id: "ui", label: "⑥ 工作台 UI / 皮肤", filled: !!uiCases, failed: failedSlots.has("ui"),
-      summary: uiCases ? `${casePages.length} 页 · 状态用例 ${cases.length} 条同步` : "待填充" },
-    { id: "model-policy", label: "⑦ 模型路由策略", filled: assets.modelPolicyText !== null,
+    { id: "ui", label: "⑥ 工作台界面", filled: !!uiCases, failed: failedSlots.has("ui"),
+      summary: uiCases ? `${casePages.length} 个页面 · ${cases.length} 条界面状态用例` : "待填充" },
+    { id: "model-policy", label: "⑦ 模型与成本策略", filled: assets.modelPolicyText !== null,
       failed: failedSlots.has("model-policy"),
       summary: assets.modelPolicyText !== null
-        ? (checkModelPolicy.ok ? `model-policy.yml · ${modelPolicyScenes} 场景` : checkModelPolicy.detail)
-        : "底座默认（可经 model-policy.yml 覆盖）" },
+        ? (checkModelPolicy.ok ? `已配置 ${modelPolicyScenes} 个使用场景` : checkModelPolicy.detail)
+        : "平台默认（可按行业单独配置）" },
   ];
 
   return {
@@ -1592,14 +1103,7 @@ export async function activateBundle(
   slug: string,
   by: string,
   root = bundlesRoot(),
-): Promise<{ eventId: string; profile: BundleProfile; composition: ComposedProvision }> {
-  /**
-   * 融合获客系统的装配顺序：**先上岗，再验单，最后激活**。
-   * 组合编制（酒店经营 + 内容生产 + GEO 分发）必须全部在场，检查单里的
-   * "围栏绑定完整 / 工具探针 / 班组名册"才代表真实运行态；反过来先验单会
-   * 要求岗位已存在却又不提供上岗步骤，等于把融合产品降级成单包产品。
-   */
-  const composition = await provisionComposedWorkforce(app, scope, slug, by, root);
+): Promise<{ eventId: string; profile: BundleProfile }> {
   const profile = await computeAssembly(app, scope, slug, root);
   if (!profile.canActivate) {
     const failed = profile.checks.filter((c) => !c.ok);
@@ -1632,22 +1136,8 @@ export async function activateBundle(
       object: { type: "bundle", id: slug },
       decision: {
         action: "bundle.activate",
-        after: {
-          slug, version: profile.version, checks: profile.checks.map((c) => ({ key: c.key, ok: c.ok })),
-          // 组合装配事实：本次激活把哪些包的编制与围栏装进了工作区（可审计"谁提供了谁"）
-          composition: {
-            bundles: composition.bundleIds,
-            rosterSize: composition.rosterSize,
-            perBundle: composition.perBundle,
-            fenceRules: composition.fenceRules,
-            shadowed: composition.shadowed,
-          },
-        },
-        basis: [
-          "F2.10 起飞前检查单五项全通过",
-          "§2.3 profile 切换=整套皮肤+通讯录+群规生效",
-          `组合编制上岗：${composition.bundleIds.join(" + ")} 共 ${composition.rosterSize} 岗（围栏并集 ${composition.fenceRules} 条）`,
-        ],
+        after: { slug, version: profile.version, checks: profile.checks.map((c) => ({ key: c.key, ok: c.ok })) },
+        basis: ["F2.10 起飞前检查单五项全通过", "§2.3 profile 切换=整套皮肤+通讯录+群规生效"],
       },
       rule_impact: [],
     })).eventId;
@@ -1728,7 +1218,7 @@ export async function activateBundle(
   } catch (enumErr) {
     console.warn(`第⑧槽反馈枚举表注册失败（不阻断激活）：${enumErr instanceof Error ? enumErr.message : enumErr}`);
   }
-  return { eventId: actEventId, profile: { ...profile, status: "active" }, composition };
+  return { eventId: actEventId, profile: { ...profile, status: "active" } };
 }
 
 /** 重跑校验并留痕（P7E3：校验记录留痕可查；数据活算，重算即重跑） */

@@ -9,7 +9,7 @@
  *  - celebrating  近 10 分钟线程完成/夜班包生成事件关联该员工（前端 3s 彩带后回位）
  *  - collab       近 10 分钟跨员工交接（write_back/转派）——β 批次走位动画，本批归并 working
  *  - idle         无任务待命（休息角）；disabled 工位清空名牌变灰
- * 优先级：blocked > celebrating（近 10 分钟；与 asking 共存时气泡保留请示与直达号）> asking > working > queued > idle（disabled 独立于外）
+ * 优先级：blocked > asking（与 celebrating 共存：状态保持 asking，另带 celebrating 标志与双信息气泡）> celebrating > working > queued > idle
  *
  * 场景包：声明式 JSON（地板网格/工位锚点/道具/CEO 指挥台/休息角/入口/主题色），
  * 行业包经 registerFloorSceneProvider() 或 bundles/<industry>/floor-scene.json 覆盖；
@@ -32,6 +32,8 @@ export interface FloorAgent {
   currentThread: { id: string; title: string } | null;
   pendingTier: string | null;    // asking 时：l2_captain/l3_fleet/l4_chairman
   approvalId: string | null;     // asking 时：审批单号（原地三手势用）
+  /** 近 10 分钟内该员工刚完成过任务（与 asking 共存：请示仍为主态，庆祝作为附加信号） */
+  celebrating?: boolean;
   statusLine: string;            // 头顶气泡一句话（最近动作中文摘要）
 }
 
@@ -240,16 +242,26 @@ export async function deriveFloor(app: pg.Pool, scope: Scope, scene: FloorScene)
        * 口径改为**共存**：刚完成（近 10 分钟）优先渲染庆祝，同时在气泡里保留请示信息与审批单号，
        * 点击仍能直达审批（不丢信息，也不压正反馈）。
        */
-      if (celebrating) {
+      /**
+       * X-05：刚完成（近 10 分钟）与请示共存时**不再互相压制**——
+       * 状态仍为 asking（审批必须显眼、可直达、可被门禁断言），另带 celebrating 标志与"刚完成"气泡，
+       * 前端据此同时渲染庆祝与举手（既不让队列堆积吃掉正反馈，也不让庆祝淹没待审）。
+       */
+      if (ask) {
         out.push({
-          id: a.id, presetKey: a.preset_key, name: a.name, state: "celebrating", stationId: station?.id ?? null,
-          currentThread: null, pendingTier: ask?.tier ?? null, approvalId: ask?.approval_id ?? null,
-          statusLine: ask ? `刚完成：${last} · 另有请示待裁：${ask.action}` : `刚完成：${last}`,
+          id: a.id, presetKey: a.preset_key, name: a.name, state: "asking", stationId: station?.id ?? null,
+          currentThread: null, pendingTier: ask.tier, approvalId: ask.approval_id,
+          ...(celebrating ? { celebrating: true } : {}),
+          statusLine: celebrating ? `请示待裁：${ask.action} · 刚完成：${last}` : `请示待裁：${ask.action}`,
         });
         return;
       }
-      if (ask) {
-        out.push({ id: a.id, presetKey: a.preset_key, name: a.name, state: "asking", stationId: station?.id ?? null, currentThread: null, pendingTier: ask.tier, approvalId: ask.approval_id, statusLine: `请示待裁：${ask.action}` });
+      if (celebrating) {
+        out.push({
+          id: a.id, presetKey: a.preset_key, name: a.name, state: "celebrating", stationId: station?.id ?? null,
+          currentThread: null, pendingTier: null, approvalId: null, celebrating: true,
+          statusLine: `刚完成：${last}`,
+        });
         return;
       }
       const run = runningBy.get(a.id);
