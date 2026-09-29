@@ -32,6 +32,23 @@ export const DSH_DEEPSEEK_DEFAULTS = {
   fallbackBaseEnvs: ["LLM_BASE_URL", "DEEPSEEK_BASE_URL"],
 };
 
+/**
+ * OpenAI 兼容根的环境变量优先级。
+ * 背景（2026-09-29 growthmatrix 隔离副本 P 域实测）：封存凭据里两个端点变量是**两种方言**——
+ * `DEEPSEEK_BASE_URL` 是 Anthropic 兼容根（`<root>/anthropic`，Messages 协议，dsh-harness 走它），
+ * `LLM_BASE_URL` 才是 OpenAI 兼容根。把 Anthropic 根交给 `<root>/chat/completions` 只会得到 404
+ * （实测：POST https://api.deepseek.com/anthropic/chat/completions → 404 空体；同一 key 打
+ * https://api.deepseek.com/chat/completions → 200）。
+ */
+export const OPENAI_COMPATIBLE_BASE_ENVS = ["LLM_BASE_URL", "OPENAI_BASE_URL", "OPENAI_API_BASE", "DEEPSEEK_BASE_URL"];
+
+/** Anthropic 兼容面去后缀：`<root>/anthropic` 的 OpenAI 兼容面在 `<root>`（仓库既有口径：scripts/tools/explainer-run.mts） */
+export function normalizeOpenAiCompatibleBaseUrl(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  return text.replace(/\/+$/u, "").replace(/\/anthropic$/u, "");
+}
+
 export function pickEnv(keys, env = process.env) {
   for (const key of keys) {
     const value = env[key];
@@ -53,13 +70,33 @@ export function resolveLiveModels(models = [], env = process.env) {
     const resolved = { id: m.id, kind, adapter, model: m.model ?? null, baseUrl: null, credentialEnv: null };
     if (adapter === "dsh-harness" || adapter === "model-gateway") {
       const key = pickEnv([...(m.apiKeyEnv ? [m.apiKeyEnv] : []), DSH_DEEPSEEK_DEFAULTS.apiKeyEnv, ...DSH_DEEPSEEK_DEFAULTS.fallbackApiKeyEnvs], env);
-      const base = pickEnv([...(m.baseUrlEnv ? [m.baseUrlEnv] : []), ...DSH_DEEPSEEK_DEFAULTS.fallbackBaseEnvs], env);
+      /**
+       * 端点按链路方言分流（2026-09-29 修复，失败现象 = LLM-G1 `HTTP 404`）：
+       *   · dsh-harness     → Anthropic 兼容根（Messages 协议）：`baseUrlEnv` → `fallbackBaseEnvs`；
+       *   · model-gateway   → OpenAI 兼容根（`/chat/completions`）：`openAiBaseUrlEnv` → `OPENAI_COMPATIBLE_BASE_ENVS`
+       *                       → 声明值 → `fallbackBaseEnvs`，并统一做 `…/anthropic` 归一。
+       * 修复前两条链路共用同一套解析，封存文件里 `DEEPSEEK_BASE_URL=…/anthropic` 一旦命中，
+       * model-gateway 就必然 404——且该断言在任何仓库、任何凭据下都永远无法通过。
+       */
+      const declaredBase = pickEnv([...(m.baseUrlEnv ? [m.baseUrlEnv] : []), ...DSH_DEEPSEEK_DEFAULTS.fallbackBaseEnvs], env);
+      const openAiBase = pickEnv([
+        ...(m.openAiBaseUrlEnv ? [m.openAiBaseUrlEnv] : []),
+        ...OPENAI_COMPATIBLE_BASE_ENVS,
+        ...(m.baseUrlEnv ? [m.baseUrlEnv] : []),
+        ...DSH_DEEPSEEK_DEFAULTS.fallbackBaseEnvs,
+      ], env);
       resolved.credentialEnv = key.key;
-      resolved.baseUrl = base.value ?? DSH_DEEPSEEK_DEFAULTS.baseURL;
+      resolved.baseUrl = adapter === "model-gateway"
+        ? normalizeOpenAiCompatibleBaseUrl(openAiBase.value ?? DSH_DEEPSEEK_DEFAULTS.baseURL)
+        : declaredBase.value ?? DSH_DEEPSEEK_DEFAULTS.baseURL;
+      resolved.baseUrlDialect = adapter === "model-gateway" ? "openai" : "anthropic";
       resolved.model = m.model ?? resolveModelFromBaseUrl(resolved.baseUrl) ?? DSH_DEEPSEEK_DEFAULTS.model;
       if (!key.value) missing.push(`凭据未配置（可用环境变量：${unique([m.apiKeyEnv, DSH_DEEPSEEK_DEFAULTS.apiKeyEnv, ...DSH_DEEPSEEK_DEFAULTS.fallbackApiKeyEnvs]).join(" / ")}）`);
-      // 端点缺失不是阻断项：dsh 的 deepseek 适配器有内置默认端点（可用环境变量覆盖）
-      if (!base.value) warnings.push(`端点未显式配置，使用内置默认 ${DSH_DEEPSEEK_DEFAULTS.baseURL}（可用 ${unique([m.baseUrlEnv, ...DSH_DEEPSEEK_DEFAULTS.fallbackBaseEnvs]).join(" / ")} 覆盖）`);
+      // 端点缺失不是阻断项：两个适配器都有内置默认端点（可用环境变量覆盖）
+      if (!declaredBase.value) warnings.push(`端点未显式配置，使用内置默认 ${DSH_DEEPSEEK_DEFAULTS.baseURL}（可用 ${unique([m.baseUrlEnv, ...DSH_DEEPSEEK_DEFAULTS.fallbackBaseEnvs]).join(" / ")} 覆盖）`);
+      if (adapter === "model-gateway" && String(openAiBase.value ?? "") && String(openAiBase.value) !== resolved.baseUrl) {
+        warnings.push(`model-gateway 端点按 OpenAI 兼容根归一：${openAiBase.value} → ${resolved.baseUrl}（Anthropic 兼容根不接受 /chat/completions）`);
+      }
       if (!m.model) resolved.modelNote = `model 未显式声明，按端点推导/内置默认 ${resolved.model}（dsh 内置目录：deepseek-flash 支持文本+图像）`;
     } else if (adapter === "gen-http" || adapter === "arkcli") {
       const key = pickEnv([...(m.apiKeyEnv ? [m.apiKeyEnv] : []), kind === "image" ? "SEEDREAM_API_KEY" : "SEEDANCE_API_KEY", "VOLCENGINE_ARK_API_KEY", "ARK_API_KEY"], env);
@@ -264,7 +301,8 @@ function runProcess(cmd, args, { cwd, env, timeoutMs }) {
 export async function runChatTask({ resolved, prompt, timeoutMs = 180_000, env = process.env, image = null }) {
   if (!resolved.ready) return { status: "blocked", reason: resolved.missing.join("；") };
   const apiKey = pickEnv([resolved.credentialEnv, DSH_DEEPSEEK_DEFAULTS.apiKeyEnv, "LLM_API_KEY"], env).value;
-  const base = String(resolved.baseUrl).replace(/\/$/, "");
+  /** 兜底再归一一次：即使 profile 直接把 Anthropic 根声明给 model-gateway，也不至于打出 /anthropic/chat/completions（404） */
+  const base = normalizeOpenAiCompatibleBaseUrl(resolved.baseUrl);
   const url = `${base}/chat/completions`;
   const content = image
     ? [
