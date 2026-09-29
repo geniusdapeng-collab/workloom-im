@@ -559,6 +559,29 @@ async function main(): Promise<void> {
   }
   console.log(`✓ 人类成员 ×${MEMBERS.length}（${MEMBERS.map((m) => `${m.name}/${m.role}`).join("、")}）`);
 
+  /**
+   * MC-113（M3 联动实测）：演示成员必须挂全局账号，否则 P28「统一待办」恒为空——
+   * accounts.inbox.unified 先按 `members.account_id` 解析账号，再跨 membership 聚合；
+   * 此前种子只建 members 不建 accounts，出厂演示工作区永远看不到待办（groups:[]）。
+   * 命名空间：账号 ID `acc-demo-hotel-mem-00x`、邮箱 `<member_no>@demo.workloom.local`、
+   * 手机号 1390000100x 均为演示保留值，与真实客户账号不冲突；重复执行幂等（回填缺失的绑定）。
+   */
+  for (const m of MEMBERS) {
+    const accountId = `acc-demo-hotel-${m.id.toLowerCase()}`;
+    await q(
+      `INSERT INTO accounts (id, phone, email, display_name, status)
+       VALUES ($1,$2,$3,$4,'active')
+       ON CONFLICT (id) DO UPDATE SET display_name=EXCLUDED.display_name`,
+      [accountId, `1390000100${m.id.slice(-1)}`, `${m.id.toLowerCase()}@demo.workloom.local`, m.name],
+    );
+    await q(
+      `UPDATE members SET account_id=$1
+        WHERE workspace_id=$2 AND member_no=$3 AND account_id IS DISTINCT FROM $1`,
+      [accountId, WS_ID, m.id],
+    );
+  }
+  console.log(`✓ 演示账号 ×${MEMBERS.length}（P28 统一待办跨店聚合的数据源）`);
+
   // Agent preset 实例（IM.5；F2.10 fence_bindings 原样落库）
   for (const p of presets) {
     await q(
