@@ -20,7 +20,10 @@ const pull = (overrides = {}) => ({
   number: "7",
   state: "open",
   mergeable_state: "mergeable",
+  is_wip: false,
+  labels: [],
   head: { ref: "sync/base-1234abcd" },
+  base: { ref: "main" },
   ...overrides,
 });
 const ok = [{ context: "static-gate", state: "success" }];
@@ -48,9 +51,12 @@ test("glob：** 跨目录，* 不跨目录", () => {
   assert.equal(matchesGlob("*.md", "README.md"), true);
 });
 
-test("白名单只覆盖根级受控资产，不覆盖运行时代码", () => {
+test("免审白名单只覆盖非执行性根级资产；治理路径保留显式审查", () => {
   assert.equal(isAllowlistedPath(".workloom-base-sync.json"), true);
-  assert.equal(isAllowlistedPath("docs/DEVELOPMENT-PROTOCOL.md"), true);
+  assert.equal(isAllowlistedPath("WORKLOOM_PRODUCT_CONTEXT.md"), true);
+  for (const path of ["AGENTS.md", "docs/DEVELOPMENT-PROTOCOL.md", "sync/merge-sync-prs.mjs", ".github/workflows/base-sync-heartbeat.yml", "scripts/acceptance/fleet-run.mjs", "docs/acceptance/ROLLOUT.md"]) {
+    assert.equal(isAllowlistedPath(path), false, `${path} 不得免审`);
+  }
   assert.equal(isAllowlistedPath("packages/base/fence-engine/index.ts"), false);
   assert.equal(isAllowlistedPath("apps/web/src/App.tsx"), false);
 });
@@ -89,6 +95,29 @@ test("自动合并拒绝：门禁红 / 非 sync 分支 / 文件出圈 / 无门�
   assert.match(conflicted.reasons.join("；"), /平台可合并状态=conflict/);
 });
 
+test("攻击样例：伪同步分支改合并器，即使门禁绿也不得免审或回落代码车道", () => {
+  const hostile = pull({ is_wip: true, labels: [{ name: "risk/block" }] });
+  const files = ["sync/merge-sync-prs.mjs", ".workloom-base-sync.json"];
+  const syncVerdict = autoMergeEligibility({ pull: hostile, files, statuses: ok });
+  assert.equal(syncVerdict.eligible, false);
+  assert.match(syncVerdict.reasons.join("；"), /WIP/);
+  assert.match(syncVerdict.reasons.join("；"), /risk\/block/);
+  assert.match(syncVerdict.reasons.join("；"), /sync\/merge-sync-prs.mjs/);
+
+  const codeVerdict = codeMergeEligibility({ pull: hostile, files, statuses: ok, headAgeMs: oneHour }, {
+    branchPrefixes: ["sync/base-"], allowPaths: [".workloom-base-sync.json"],
+  });
+  assert.equal(codeVerdict.eligible, false);
+  assert.match(codeVerdict.reasons.join("；"), /治理\/高风险路径：sync\/merge-sync-prs.mjs/);
+});
+
+test("纯同步分支缺风险标签、可合并状态或处于 WIP 时失败关闭", () => {
+  for (const changed of [{ labels: undefined }, { mergeable_state: undefined }, { is_wip: true }, { labels: ["risk/review"] }, { base: { ref: "release" } }]) {
+    const verdict = autoMergeEligibility({ pull: pull(changed), files: ["WORKLOOM_PRODUCT_CONTEXT.md", ".workloom-base-sync.json"], statuses: ok });
+    assert.equal(verdict.eligible, false, JSON.stringify(changed));
+  }
+});
+
 test("在途同步 PR 检测：只认 sync/base-* 前缀", () => {
   const open = [{ head: { ref: "refs/heads/task/T-1" } }, { head: { ref: "refs/heads/sync/base-deadbee" } }];
   assert.equal(hasInFlightSyncPull(open)?.head.ref, "refs/heads/sync/base-deadbee");
@@ -120,6 +149,7 @@ const codePull = (overrides = {}) => ({
   is_wip: false,
   labels: [],
   head: { ref: "task/T-2026-0919-0001" },
+  base: { ref: "main" },
   ...overrides,
 });
 const oneHour = 60 * 60 * 1000;
@@ -219,10 +249,10 @@ test("代码 PR 拒绝：治理与高风险路径不由无人值守扫描合并"
 });
 
 test("同步回落车道：受控资产（allowPaths 命中）不算治理路径，其余治理路径仍拦截", () => {
-  const allowPaths = ["WORKLOOM_PRODUCT_CONTEXT.md", "AGENTS.md", "docs/DEVELOPMENT-PROTOCOL.md", "sync/**"];
+  const allowPaths = ["WORKLOOM_PRODUCT_CONTEXT.md", ".workloom-base-sync.json"];
   const controlled = codeMergeEligibility({
     pull: codePull({ head: { ref: "sync/base-af278afd-full" } }),
-    files: ["docs/DEVELOPMENT-PROTOCOL.md", "AGENTS.md", "sync/base-scope.json", ".workloom-runtime-deps/package.json"],
+    files: ["WORKLOOM_PRODUCT_CONTEXT.md", ".workloom-base-sync.json", "packages/base/tenancy/index.ts"],
     statuses: ok,
     headAgeMs: oneHour,
   }, { branchPrefixes: ["sync/"], allowPaths });
@@ -230,12 +260,14 @@ test("同步回落车道：受控资产（allowPaths 命中）不算治理路径
 
   const stillBlocked = codeMergeEligibility({
     pull: codePull({ head: { ref: "sync/base-af278afd-full" } }),
-    files: ["docs/DEVELOPMENT-PROTOCOL.md", ".cnb.yml"],
+    files: ["WORKLOOM_PRODUCT_CONTEXT.md", "docs/DEVELOPMENT-PROTOCOL.md", "AGENTS.md", "sync/base-scope.json"],
     statuses: ok,
     headAgeMs: oneHour,
   }, { branchPrefixes: ["sync/"], allowPaths });
   assert.equal(stillBlocked.eligible, false);
-  assert.match(stillBlocked.reasons.join("；"), /治理\/高风险路径：.cnb.yml/);
+  assert.match(stillBlocked.reasons.join("；"), /治理\/高风险路径：docs\/DEVELOPMENT-PROTOCOL.md/);
+  assert.match(stillBlocked.reasons.join("；"), /治理\/高风险路径：AGENTS.md/);
+  assert.match(stillBlocked.reasons.join("；"), /治理\/高风险路径：sync\/base-scope.json/);
 });
 
 test("required-only 漂移只看资产摘要，full 还看基座发布点", () => {

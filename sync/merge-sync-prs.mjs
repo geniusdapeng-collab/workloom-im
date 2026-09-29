@@ -4,10 +4,11 @@
  *
  * 两条车道，判定逻辑都在 sync/fanout-rules.mjs（纯函数、可单测）：
  *   ① 纯同步 PR（`autoMergeEligibility`）：源分支 `sync/base-*`（或存量 `docs/context-*`），
- *      改动文件全部落在根级受控资产白名单，全部门禁 success 且平台可合并；
+ *      改动文件全部落在非执行性资产白名单，非 WIP、无风险标签、全部门禁 success；
  *   ② 代码类 PR（`codeMergeEligibility`）：分支在任务/行业/实验/维护车道，全部门禁 success、
  *      平台可合并、非 WIP、无 `risk/review` / `risk/block` 标签、避开治理路径、且分支最近提交
  *      已过冷却期（默认 10 分钟，避免合并"会话仍在写"的 PR）。
+ * 治理资产不进入两条无人值守车道；合并前重新核对源/目标 SHA 与资格。
  * 两条车道都遵守**串行**：同一仓库每轮最多合并一条代码类 PR，其余留待下一轮（先 rebase 再合）。
  *
  * 用法：
@@ -71,10 +72,16 @@ export async function inspect(slug, pull, acceptPrefixes) {
     files,
     statuses,
   }, { acceptPrefixes });
+  if (!compare.headSha || (pull.head?.sha && pull.head.sha !== compare.headSha)) {
+    verdict.eligible = false;
+    verdict.reasons.push("无法确认 PR 源分支与比较结果是同一提交");
+  }
   return {
     number: Number(pull.number),
     title: pull.title,
     head: pull.head?.ref,
+    headSha: compare.headSha,
+    baseSha: pull.base?.sha ?? null,
     mergeable: pull.mergeable_state,
     commits: compare.totalCommits,
     files,
@@ -104,10 +111,16 @@ export async function inspectCode(slug, pull, options = {}) {
   const statuses = normalizeStatuses(await getPullCommitStatuses(slug, pull.number));
   const headAgeMs = headAgeMsFromCommits(await api(slug, `/-/pulls/${Number(pull.number)}/commits`));
   const verdict = codeMergeEligibility({ pull, files, statuses, headAgeMs }, options);
+  if (!compare.headSha || (pull.head?.sha && pull.head.sha !== compare.headSha)) {
+    verdict.eligible = false;
+    verdict.reasons.push("无法确认 PR 源分支与比较结果是同一提交");
+  }
   return {
     number: Number(pull.number),
     title: pull.title,
     head: pull.head?.ref,
+    headSha: compare.headSha,
+    baseSha: pull.base?.sha ?? null,
     mergeable: pull.mergeable_state,
     lane: "code",
     commits: compare.totalCommits,
@@ -118,20 +131,43 @@ export async function inspectCode(slug, pull, options = {}) {
   };
 }
 
-/** 串行合并单条 PR：合并前重读状态，合并后校验 is_merged。 */
-async function mergeNow(report, slug, number, title, mergeStyle, lane) {
+/** 串行合并单条 PR：在合并前重新核对 HEAD、目标基线、标签、WIP、改动文件与门禁。 */
+export async function mergeNow(report, slug, candidate, mergeStyle, lane, recheck = {}, services = {}) {
+  const number = candidate.number;
+  const title = candidate.title;
+  const readPull = services.getPull ?? getPull;
+  const readSync = services.inspectSync ?? inspect;
+  const readCode = services.inspectCode ?? inspectCode;
+  const executeMerge = services.mergePull ?? mergePull;
   try {
-    const latest = await getPull(slug, number);
+    const latest = await readPull(slug, number);
     if (latest?.state !== "open") {
       report.skipped.push({ repo: slug, number, title, lane, reasons: [`PR 状态已变为 ${latest?.state}`] });
       return;
     }
-    const result = await mergePull(slug, number, {
+    const fresh = lane === "sync"
+      ? await readSync(slug, latest, recheck.acceptPrefixes)
+      : await readCode(slug, latest, recheck.codeOptions);
+    const reasons = [...fresh.reasons];
+    if (!candidate.headSha || fresh.headSha !== candidate.headSha) {
+      reasons.push("源分支 HEAD 自入队后发生变化，需重跑门禁与候选判定");
+    }
+    if (normalizeBranchRef(fresh.head) !== normalizeBranchRef(candidate.head)) {
+      reasons.push("源分支名称自入队后发生变化");
+    }
+    if (!candidate.baseSha || !fresh.baseSha || fresh.baseSha !== candidate.baseSha) {
+      reasons.push("目标 main 的提交无法核对或自入队后发生变化");
+    }
+    if (!fresh.eligible || reasons.length) {
+      report.skipped.push({ repo: slug, number, title, lane, reasons });
+      return;
+    }
+    const result = await executeMerge(slug, number, {
       mergeStyle,
       // CNB 合并接口要求显式 commit_title；沿用舰队习惯的 `标题 (#编号)` 形式。
       commitTitle: `${String(title).trim()} (#${number})`,
     });
-    const after = await getPull(slug, number);
+    const after = await readPull(slug, number);
     // CNB 的合并结果是 state=closed + is_merged=true（不是 state=merged），三选一判定。
     const merged = after?.is_merged === true || after?.state === "merged" || after?.mergeable_state === "merged";
     if (!merged) {
@@ -212,7 +248,7 @@ async function main() {
           if (dryRun) {
             report.merged.push({ repo: slug, number, title: verdict.title, dryRun: true, lane: "sync" });
           } else {
-            await mergeNow(report, slug, number, verdict.title, mergeStyle, "sync");
+            await mergeNow(report, slug, verdict, mergeStyle, "sync", { acceptPrefixes });
           }
           continue;
         }
@@ -225,11 +261,15 @@ async function main() {
           const codeVerdict = await inspectCode(slug, pull, {
             minHeadAgeMs,
             branchPrefixes: [...CODE_MERGE_BRANCH_PREFIXES, SYNC_BRANCH_PREFIX, ...LEGACY_SYNC_BRANCH_PREFIXES],
-            // 受控资产（白名单文件）允许随波次分发；.cnb.yml / 迁移 / platform-ops 等仍拦截。
+            // 仅非执行性资产允许随波次无人值守合并；治理路径仍拦截。
             allowPaths: AUTO_MERGE_ALLOWLIST,
           });
           if (codeVerdict.eligible) {
-            codeCandidates.push({ ...codeVerdict, lane: "code", fromSyncLane: true });
+            codeCandidates.push({ ...codeVerdict, lane: "code", fromSyncLane: true, recheckOptions: {
+              minHeadAgeMs,
+              branchPrefixes: [...CODE_MERGE_BRANCH_PREFIXES, SYNC_BRANCH_PREFIX, ...LEGACY_SYNC_BRANCH_PREFIXES],
+              allowPaths: AUTO_MERGE_ALLOWLIST,
+            } });
           } else {
             report.skipped.push({
               repo: slug,
@@ -263,7 +303,9 @@ async function main() {
       report.merged.push({ repo: slug, number: pick.number, title: pick.title, dryRun: true, lane: pick.lane ?? "code" });
       continue;
     }
-    await mergeNow(report, slug, pick.number, pick.title, mergeStyle, pick.lane ?? "code");
+    await mergeNow(report, slug, pick, mergeStyle, pick.lane ?? "code", {
+      codeOptions: pick.recheckOptions ?? { minHeadAgeMs },
+    });
   }
 
   if (json) {

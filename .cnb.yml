@@ -107,7 +107,7 @@
     - name: 基座同步与客户端接入门禁
       script: |
         set -eu
-        node --test scripts/verify-ui-consumer.test.mjs sync/base-sync.test.mjs sync/client-foundation.test.mjs sync/set-ui-version.test.mjs sync/ui-upgrade-pr.test.mjs sync/fanout-rules.test.mjs
+        node --test scripts/verify-ui-consumer.test.mjs sync/base-sync.test.mjs sync/client-foundation.test.mjs sync/set-ui-version.test.mjs sync/ui-upgrade-pr.test.mjs sync/fanout-rules.test.mjs sync/merge-sync-prs.test.mjs
         node --test apps/desktop/electron/bootstrap.test.cjs scripts/desktop-bootstrap-db.test.mjs
 
     - name: 三端生产构建
@@ -407,9 +407,10 @@
 #
 # 职责：把 workloom-im 的根级受控资产（全景认知 / 开发协议 / AGENTS 受控区块 / 同步登记）
 # 的最新版本，开成每个子仓里的一条 `sync/base-*` 同步 PR；门禁全绿后由
-# `sync/merge-sync-prs.mjs` 自动合并：纯同步 PR 走免审通道；携带运行时代码的
+# `sync/merge-sync-prs.mjs` 自动合并：仅非执行性资产的纯同步 PR 走免审通道；携带运行时代码的
 # `-full` 波次与代码类 PR 走 §9.5 代码车道（门禁全绿 + 10 分钟冷却期 + 无风险标签 +
-# 治理路径拦截，同仓每轮串行合并一条）。人保留叫停 / 回滚 / 高风险裁决权。
+# 治理路径拦截，同仓每轮串行合并一条）。AGENTS/协议/同步器/验收执行器等治理资产
+# 即使由 fanout 生成，也须显式审查后合并。人保留叫停 / 回滚 / 高风险裁决权。
 #
 # 跨仓前提（一次性）：CNB「组织设置 → 仓库管控 → 允许定时任务跨仓操作」。
 # 未开启时定时任务会以“权限不足”告警收尾（不红），可改用 API 触发
