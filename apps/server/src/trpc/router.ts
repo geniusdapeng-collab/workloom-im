@@ -1474,8 +1474,12 @@ async function activateFenceRuleAfterApproval(
  *  - HR 汰换同样同步执行；
  *  - 每一项各自隔离 catch，失败只落服务端日志——审批已 approved 的事实不被副作用失败反噬。
  *
- * 注：基座的 Quest 续跑语义是**人工"继续推进"**（threads.run），本钩子不引入自动续跑；
- * 跨重启的遗留挂起由 A-05 启动补扫兜底。
+ * 注（合并口径，2026-09-30）：基座原先的 Quest 续跑语义是**人工"继续推进"**（threads.run），
+ * 跨重启的遗留挂起由 A-05 启动补扫兜底；本轮排雷 T-2026-0929-0200 的 MC-101 进一步把
+ * **步骤级关卡"采纳/编辑后采纳"** 的线程在同一事务内直接置回 `queued`（见 review-console/approvals.ts），
+ * 由既有调度器重入并携带 approvalRef 执行该步；本钩子仍只负责围栏激活 / HR 汰换 / 知识库生效等副作用，
+ * 两者叠加不重复执行（step_id 幂等锚点 + replay 只认已核实回执）。非步骤级审批（围栏提案、HR、
+ * 技能下发等无 session_id/step_id 的行）一律不动线程。
  */
 async function runPostApprovalSideEffects(
   scope: { tenantId: string; workspaceId: string },
