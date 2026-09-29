@@ -73,6 +73,15 @@ function safeObjectType(tool: string): string {
   return normalized || "task_resource";
 }
 
+/**
+ * MC-108（P0/INV-4）：高危岗位（agents.meta.high_risk=true，如 desktop-agent）的写步骤
+ * 一律不得自动放行——围栏即使命中 auto，也只能降到「人审」这一档，再由人工逐次授权后执行。
+ * block 的熔断语义不变（调用点已在上游 return）。review/block 原样返回。
+ */
+function escalateHighRiskLevel(level: "auto" | "review" | "block"): "auto" | "review" | "block" {
+  return level === "auto" ? "review" : level;
+}
+
 function validatePlan(steps: QuestStep[], preset: AssembledPreset): QuestStep[] {
   if (!Array.isArray(steps) || steps.length < 1 || steps.length > 6) throw new Error("任务步骤数量不合法");
   const allowed = new Set(preset.tools.map((tool) => tool.name));
@@ -334,6 +343,14 @@ export async function runQuest(
   const { threadId } = input;
   // F3.6/L3.7：装配三要素校验（缺一拒绝）
   const preset = await assemblePreset(app, scope, { workspaceId: scope.workspaceId, presetKey: input.presetKey, goal: input.goal });
+  /**
+   * HP-02 补口（MC-108 联动，2026-09-29）：把装配声明的**写**工具登记为显式写类动作。
+   * 此前只有围栏规则的 actions 与硬编码前缀参与 isWriteAction，按工具名发起写步骤的岗位
+   * （实测基座 red-teamer：redteam.scan.execute / redteam.report.write，meta.high_risk=true）
+   * 在网关段①/段③ 都被当作「未分类」——既不校验 fence_bindings，也不要求逐次授权，
+   * 高危岗位的逐次授权对这些动作同样空转。此处按 access ≠ read 登记（未分类偏写，fail-closed）。
+   */
+  registerWriteActions(preset.tools.filter((tool) => tool.access !== "read").map((tool) => tool.name));
   const { rules, defaultLevel } = await loadActiveRules(app, scope);
   // M3 偏好注入（D24 自我进化飞轮）：检索组织偏好/禁忌，注入规划上下文——
   // 「这家店驳过什么」直接约束任务拆解；引用在首个产出事件同事务留痕（F1.4）
@@ -347,6 +364,15 @@ export async function runQuest(
     ?? ((name, params) => executeDeclaredTool(name, params, { allowedTools, simulated }));
   const effectOf = (toolName: string): "read" | "write" =>
     preset.tools.find((tool) => tool.name === toolName)?.access === "read" ? "read" : "write";
+  /**
+   * MC-108（P0）：岗位级高危标记——装配期已从 agents.meta.high_risk 派生（Y-01 修复位），
+   * 此前无人消费：审批快照不写 high_risk、actor 不带 highRisk，于是「高危必须逐次人审」
+   * （L3.5/INV-4）在 Quest 链路上三处同时空转。此处统一取值，供下面三处消费：
+   *   ① 写步骤最低级别升级（auto → review）；
+   *   ② 关卡快照写 high_risk（批量采纳/超时扫描的守卫据此拦下）；
+   *   ③ 执行事件 actor 带 highRisk（网关段③逐次授权检查据此生效，须携带 approvalRef）。
+   */
+  const highRiskPreset = preset.highRisk === true;
   const done = await existingStepIds(gateway, scope, threadId); // replay 续跑锚点
   const approved = await approvedStepIds(app, scope, threadId); // #34 已批准挂起步骤（恢复闭环）
   const unverified: string[] = [];
@@ -461,7 +487,10 @@ export async function runQuest(
     // agent 模式（F3.3 逐步商量）：非 block 步骤一律视为 review——每步操作前挂起等人类确认
     //（block 已在上方提前 return；此处重新取宽类型避免控制流收窄误判）
     //（block 已在上方提前 return，此处 level ∈ {auto, review}；agent 模式一律 review）
-    const effectiveLevel: "auto" | "review" | "block" = input.mode === "agent" ? "review" : (verdict.level as "auto" | "review");
+    // MC-108：高危岗位的**写**步骤再叠加一层——auto 也升到 review（读步骤不受影响）
+    const effectiveLevel: "auto" | "review" | "block" = input.mode === "agent"
+      ? "review"
+      : (highRiskPreset && toolAccess === "write" ? escalateHighRiskLevel(verdict.level) : verdict.level);
 
     // #34：review 级别但已获人工批准（approved/edited）→ 不二次挂起，携带授权引用执行
     const approvalRef = effectiveLevel === "review" ? approved.get(step.stepId) : undefined;
@@ -543,6 +572,19 @@ export async function runQuest(
               before: step.before ?? null,
               after: step.params,
               action: step.action,
+              /**
+               * MC-108：岗位级高危标记随关卡进快照——批量采纳（batchApprove）与超时扫描
+               * （expireSweep）共用 approvals.isHighRiskApproval 读这一位，缺则「高危须逐条
+               * 人审」在 Quest 链路上空转（真机实证：desktop-agent 的关卡被一次批量放行）。
+               */
+              high_risk: highRiskPreset,
+              /**
+               * MC-106 联动契约：审批必须携带 object/action 绑定，供网关段③（P1-8）逐次
+               * 授权验真逐项比对；缺绑定不再视为通用授权。object_id 显式为 null 表示
+               * 「本步骤未声明对象」——与执行事件 object.id 缺省口径一致，仍逐次消费。
+               */
+              object_type: step.objectType,
+              object_id: step.objectId ?? null,
               params: step.params,
               autonomy_range_key: rangeKey,
               autonomy_range_value: Number.isFinite(rangeValue) ? rangeValue : undefined,
@@ -581,9 +623,27 @@ export async function runQuest(
     if (!verified) unverified.push(step.stepId);
     // D16（#1/A）：执行事件与线程进度同一事务——步骤级原子提交（replay 幂等锚点不漂移）
     await inTx(app, scope, async (c) => {
+      /**
+       * MC-108（P0）：**只有执行事件**把 highRisk 带进 actor——网关段③（workdata/gateway.ts）
+       * 见到「高危 agent + 写类动作」即强制要求 approvalRef 并经 approvals 验真。
+       *
+       * 为什么 block/挂起两处不标记（与修复规格的直觉写法不同，这里有实证）：
+       * 段③ 的判据是「actor.highRisk × isWriteAction(decision.action)」，而
+       *   - 熔断事件（basis 以「熔断：」开头）与挂起事件（basis 以「越围栏挂起：」开头）
+       *     都是**未执行的记账动作**，此时审批行尚不存在（挂起路径的 aprId 由本事件的
+       *     event_id 派生，事件先于审批行写入同一事务），不可能携带 approvalRef；
+       *   - 一旦这两处也标记 highRisk，段③ 会以「缺少逐次授权引用」拒绝写入，
+       *     挂起路径直接抛 GatewayReject（真机复现：desktop-agent 的写步骤无法进入
+       *     pending_review，MK-108 断言从「批量被放行」变成「派遣 500」）。
+       * 因此强制点选在**执行事件**上：命中 auto 的高危写步骤已在上面被升级为 review，
+       * 执行必然发生在人工授权之后（approvalRef 由 #34 恢复闭环携带），段③ 因此可达且必需。
+       */
       const ev = await gatewayAppendOnClient(c, {
         ...scope,
-        actor: { id: preset.presetKey, type: "agent", fenceBindings: preset.fenceBindings },
+        actor: {
+          id: preset.presetKey, type: "agent", fenceBindings: preset.fenceBindings,
+          highRisk: highRiskPreset,
+        },
         approvalRef, // #34：已批准步骤携带审批引用（L3.5 授权留痕）
         sessionId: threadId,
       }, {

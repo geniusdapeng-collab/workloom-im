@@ -255,6 +255,63 @@ d("PG 集成 Quest 循环（种子库）", async () => {
     expect(r2.stepsDone).toBe(r1.stepsDone);
   });
 
+  it("MC-108 高危岗位写步骤：命中 auto 也升级人审；快照带 high_risk 且批量采纳被拦", async () => {
+    // 借用既有 preset（pricing-agent 的 price.adjust 命中 R1 auto）临时标记为高危岗位，
+    // 覆盖「围栏命中 auto、但岗位高危必须逐次人审」这条路径；无论成败都恢复 meta（重跑安全）。
+    const markHighRisk = async (remove: boolean) => {
+      const c = await app.connect();
+      try {
+        await c.query("SELECT set_config('app.workspace_id', $1, false)", [scope.workspaceId]);
+        await c.query(
+          remove
+            ? `UPDATE agents SET meta = meta - 'high_risk' WHERE workspace_id=$1 AND preset_key='pricing-agent'`
+            : `UPDATE agents SET meta = jsonb_set(meta, '{high_risk}', 'true'::jsonb) WHERE workspace_id=$1 AND preset_key='pricing-agent'`,
+          [scope.workspaceId],
+        );
+      } finally { c.release(); }
+    };
+    await markHighRisk(false);
+    try {
+      const tid = await newThread("高危岗位调价（MC-108）");
+      const r1 = await runQuest(app, gw, scope, { threadId: tid, goal: "周五调价 2%", presetKey: "pricing-agent", fallbackPlanner: hotelFixturePlanner });
+      // 两个读步骤照常自动执行；写步骤（R1 auto）因岗位高危被升级 → 挂起人审
+      expect(r1.status).toBe("pending_review");
+      const approvalId = r1.pendingApprovalId!;
+      expect(approvalId).toBeDefined();
+      // 快照必须带 high_risk（批量/超时守卫的判据）+ MC-106 绑定字段（网关段③可比对）
+      const c = await app.connect();
+      let snap: Record<string, unknown> = {};
+      try {
+        await c.query("SELECT set_config('app.workspace_id', $1, false)", [scope.workspaceId]);
+        const a = await c.query<{ snapshot: Record<string, unknown> }>(
+          `SELECT snapshot FROM approvals WHERE approval_id=$1`, [approvalId]);
+        snap = a.rows[0]!.snapshot;
+      } finally { c.release(); }
+      expect(snap.high_risk).toBe(true);
+      expect(snap.object_type).toBe("room_price");
+      expect(snap.object_id).toBe("OBJ-DEMO-01");
+      expect(snap.action).toBe("price.adjust");
+      // 批量采纳守卫必须逐条拦下（L5.4 / isHighRiskApproval）
+      const { decide, batchApprove } = await import("@workloom/base/review-console");
+      const batch = await batchApprove(app, gw, scope, { memberNo: "MEM-001", role: "owner" }, [approvalId]);
+      expect(batch.approved).toEqual([]);
+      expect(batch.skipped[0]?.reason ?? "").toContain("高危");
+      // 尚未执行：该步骤只留下挂起事件（无回执位）
+      const hung = (await threadEvents(tid)).filter((e) => e.decision.step_id === "s3");
+      expect(hung).toHaveLength(1);
+      expect(hung[0]!.receipt).toBeUndefined();
+      // 逐条人审后恢复执行：执行事件 actor 带 highRisk，approvalRef 过网关段③验真后闭环
+      await decide(app, gw, scope, { memberNo: "MEM-001", role: "owner" }, approvalId, { type: "approve" });
+      const r2 = await runQuest(app, gw, scope, { threadId: tid, goal: "周五调价 2%", presetKey: "pricing-agent", fallbackPlanner: hotelFixturePlanner });
+      expect(r2.status).toBe("completed");
+      const executed = (await threadEvents(tid)).find((e) => e.decision.step_id === "s3" && e.receipt !== undefined)!;
+      expect(executed).toBeTruthy();
+      expect((executed.decision.basis as string[])[0]).toContain(approvalId);
+    } finally {
+      await markHighRisk(true);
+    }
+  });
+
   it("#24 装配围栏并集：安装技能绑定进装配声明（F8.2/L8.3），卸载即收缩", async () => {
     const { installSkill, uninstallSkill, listSkills } = await import("@workloom/base/skills");
     const revenue = (await listSkills(app, scope, { level: "official" })).find((s) => s.name === "revenue-manager")!;
