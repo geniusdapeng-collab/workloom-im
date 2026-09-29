@@ -208,6 +208,18 @@ export interface QuestRunResult {
   blockedBy?: string;
 }
 
+/**
+ * E3.7/MC-305：步骤是否拿到**真实回执**（`receipt.synced===true`）。
+ *
+ * 真机实证（T-187/T-152）：无连接器时步骤执行了但回执 synced=false，线程落 failed；
+ * 旧 replay 只看 step_id 是否出现过，重跑时该步骤被 done 集合跳过 → unverified 为空 →
+ * 线程直接翻 completed（「无回执不算完成」被绕过）。只有 synced=true 的步骤才可作为断点锚点。
+ */
+export function stepReceiptVerified(payload: { receipt?: unknown }): boolean {
+  const receipt = payload?.receipt as { synced?: unknown } | undefined;
+  return receipt?.synced === true;
+}
+
 async function existingStepIds(gateway: pg.Pool, scope: { tenantId: string; workspaceId: string }, threadId: string): Promise<Set<string>> {
   const client = await gateway.connect();
   try {
@@ -228,7 +240,9 @@ async function existingStepIds(gateway: pg.Pool, scope: { tenantId: string; work
       const basis = Array.isArray(decision.basis) ? decision.basis as string[] : [];
       const isBlocked = basis.some((b) => b.startsWith("熔断："));
       const isReview = basis.some((b) => b.startsWith("越围栏挂起："));
-      if (typeof sid === "string" && !isBlocked && !isReview) set.add(sid);
+      // MC-305：未核实步骤（无回执/回执未同步）不得进 done 集合，重跑必须重新执行
+      const verified = stepReceiptVerified(row.payload as { receipt?: unknown });
+      if (typeof sid === "string" && !isBlocked && !isReview && verified) set.add(sid);
     }
     return set;
   } catch (err) {
@@ -467,9 +481,14 @@ export async function runQuest(
           decision: {
             action: step.action, tool: step.tool, step_id: step.stepId, effect: effectOf(step.tool), params: step.params,
             basis: [
-              // W-01：求值异常降级过来的挂起要说清"为什么"，不能让客户以为是越了围栏
+              /**
+               * W-01：求值异常降级过来的挂起也要带「越围栏挂起：」机器前缀——
+               * 它确实是挂起待审（replay 的 done 集合按此前缀排除未执行步骤，见 existingStepIds），
+               * 同时必须说清“为什么”（不能让客户以为是越了围栏）：原因与 params_incomplete/说明
+               * 同写在快照里，UI 可直接展示。
+               */
               fenceUnevaluable
-                ? `围栏无法求值（缺参数）→ 一律人工裁决：${verdict.evalErrors.slice(0, 3).join("；")}`
+                ? `越围栏挂起：围栏无法求值（缺参数）→ 一律人工裁决：${verdict.evalErrors.slice(0, 3).join("；")}`
                 : (verdict.triggeredBy.length
                   ? `越围栏挂起：${verdict.triggeredBy.join("、")}`
                   : "越围栏挂起：写类动作无规则命中 → default_level=review"),
@@ -609,6 +628,8 @@ export async function runQuest(
     await updateThread(app, scope, threadId, { status: "failed", error: `步骤 ${unverified.join("/")} 无回执，标「未核实」` });
     return { threadId, status: "failed", stepsDone: done.size, stepsTotal: steps.length, unverified };
   }
-  await updateThread(app, scope, threadId, { status: "completed", closed_at: new Date().toISOString() });
+  // MC-305：真正跑完（全部步骤有回执）时清掉历史 error——否则 failed→completed 的线程
+  // 仍挂着「步骤 s1 无回执」这类过时错误，客户看到 completed 与错误并存。
+  await updateThread(app, scope, threadId, { status: "completed", closed_at: new Date().toISOString(), error: null });
   return { threadId, status: "completed", stepsDone: done.size, stepsTotal: steps.length, unverified };
 }
