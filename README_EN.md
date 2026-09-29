@@ -363,11 +363,11 @@ Five layers, top to bottom: **Experience** (bridge web / IM channels / Mac deskt
 
 ## Get started in 3 minutes (Mac)
 
-1. **Download** `WorkLoom-macOS.zip` from [Releases](https://github.com/workloom-ai/workloom-im/releases) (~208 MB, sha256 included).
-2. **Unzip and drag to Applications.** On first launch, if Gatekeeper prompts, click "Open Anyway" once in System Settings → Privacy & Security — the only manual authorization in the whole journey.
+1. **Download** the installer for your chip from the [CNB Release](https://cnb.cool/workloom-ai/workloom-im/-/releases): `WorkLoom-mac-arm64.dmg` (Apple Silicon) or `WorkLoom-mac-x64.dmg` (Intel). The same page ships `WorkLoom-SHA512SUMS.txt` (sha512 checksums, verifiable with `shasum -a 512`).
+2. **Open the dmg and drag to Applications.** On first launch, if Gatekeeper prompts, click "Open Anyway" once in System Settings → Privacy & Security — the only manual authorization in the whole journey.
 3. **Double-click WorkLoom.app.** The launcher does everything: embedded PostgreSQL 17 + pgvector init, migrations, service boot, bridge opens. No dependencies, no command line.
 
-> Requires macOS 13 Ventura+ on Apple Silicon. Intel build coming later.
+> Requires macOS 13 Ventura+; installers are published for both Apple Silicon and Intel (x64).
 
 ## User documentation (downloads with the code)
 
