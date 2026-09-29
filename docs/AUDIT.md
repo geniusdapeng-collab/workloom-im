@@ -425,3 +425,12 @@ npm 最新 rc.7（latest）/ rc.8（next），与锁定 rc.8 一致——**无�
 - **动作**：`vendor/dsh` 换基线 0.1.6-alpha.2（integrity `sha512-PHR/3ZHp…OYw==` 与 registry 逐字符一致 ✅）；dsh-gate pin 0.1.6-alpha.2 + **清 lock 重装**；README 中英 + VENDOR.md 同步；oss 清单随之重算。
 - **验证**：E6 dsh-gate 全绿（Node v24.19.0）：用例一哈希链 24 条逐条重算通过；用例二 H-5 kill -9 后链完整 6 条 + 重放零重复。基座 `pnpm test` 全绿（base 679 / server 133 / web 67 / webb 6 / webc 21）、`runtime:deps:verify` 通过、`oss:check` 一致。
 - **分发**：`packages/runtime/dsh-gate/**` 属 base-sync include，随下一轮 full fanout 下发八仓；WorkLoom-growth 的 full 同步仍被其 `provisionComposedWorkforce` 契约修改阻塞（独立事项）。
+
+## dsh 0.2.0-rc.2 升级登记（2026-09-30，随发布即升纪律 · 首次跨 minor 线）
+
+- **触发**：上游 `0.2.0-rc.2`（2026-09-29T09:56Z 发布，npm `latest` 与 `next` 同指）；区间内另有 `0.1.7-alpha.2` / `0.1.7-rc.1` / `0.1.7-rc.2` / `0.2.0-rc.1`。按 2026-08-20 项目所有者口径「任何新版本（含 rc/beta/alpha）即触发升级、不得跳过」，本轮从 `0.1.6-alpha.2` 直升 `0.2.0-rc.2`（**本仓首次跨 minor 线**）。
+- **变更面（实测 diff）**：家族 74 个子包版本声明由 `^0.1.6-alpha.2` 改为**精确 pin `0.2.0-rc.2`**（上游改为非 caret），cordis `^4.0.2` → `~4.0.4`；新增 `dsh-agent-preset` / `dsh-experimental-auto-review` / `dsh-experimental-schedule-bundle` / `dsh-experimental-voice-input-bundle` / `dsh-skill-office` / `dsh-tool-workspace-dependencies`，移除 `dsh-experimental-agent-team-web-profile`；新增原生依赖 `koffi`（经 `dsh-subprocess-local`，平台预编译包随 optional deps 就位，pnpm 阻断其 install 脚本不影响运行）；新增 `--dump-config-schema`；**新增插件兼容性门禁**（按插件声明的 DSH peer 范围校验，不兼容需 `dsh plugin allow-version … --accept-risk` 精确豁免）；`--profile desktop` 插件管理改由 Desktop 内置运行时接管。
+- **动作**：`vendor/dsh` 换基线 0.2.0-rc.2（sha512 `…XQ6IdA==` 与 registry 逐字符一致 ✅，sha1 同步核对）；`dsh-gate` pin 0.2.0-rc.2 + **清 lock 重装**（532 包；本机到 registry.npmjs.org socket 超时，改用 npmmirror 镜像安装，完整性由 vendor tarball 核对兜底）；`scripts/dsh-gate.sh` 与 dsh-gate 模板增加 `DSH_GATE_MOCK_PORT` 端口覆盖（默认 8799 不变）；`oss-components.json` 与 `docs/OPEN_SOURCE_COMPONENTS.md` 随清单重算。
+- **验证**：E6 dsh-gate 全绿（Node v24.19.0）：用例一哈希链 **24 条**逐条重算通过；用例二 H-5 kill -9 后链完整 **18 条** + 会话事件重放零重复；`oss:check` 一致；`test:oss` 通过。**未执行**：`pnpm test` / `runtime:deps:verify`（改动面不含 `packages/**`、`apps/**` 生产代码，该组件指定回归为 E6+H-5）。
+- **门禁可运行性（本轮修复）**：8799 被常驻 `~/.codex/deepseek-proxy/proxy.py` 占用会导致门禁在本机不可运行，故端口参数化；命令示例：`DSH_GATE_MOCK_PORT=8899 bash scripts/dsh-gate.sh`。
+- **分发**：`vendor/dsh/**`、`packages/runtime/dsh-gate/**`、`scripts/dsh-gate.sh` 中前两者属 base-sync include，随下一轮 fanout 下发订阅仓；`scripts/dsh-gate.sh` 是否为受控资产以 `sync/base-scope.json` 为准，需在下发后按仓复核。

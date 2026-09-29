@@ -10,7 +10,7 @@
  * @module @deepseek-ai/dsh/profile-boot
  */
 import { type Context } from '@deepseek-ai/cordis';
-import { type ProfileContext, type Profile, type ProfileResolutionMode } from '@deepseek-ai/dsh-app-boot';
+import { type ProfileContext, type Profile } from '@deepseek-ai/dsh-app-boot';
 import { type LaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment';
 import { type ProcessShutdown } from './process-shutdown.ts';
 /**
@@ -75,8 +75,6 @@ export interface RunProfileOptions {
     args: readonly string[];
     /** Application-owned package runtime, scoped to plugin package operations. */
     packageManager?: ProfileContext['packageManager'];
-    /** Module fallback backend; defaults to runtime. Plain Node callers may override it; pkg executables always use runtime. */
-    resolutionMode?: ProfileResolutionMode;
 }
 /**
  * Boot one profile invocation end to end and leave process lifetime to the
