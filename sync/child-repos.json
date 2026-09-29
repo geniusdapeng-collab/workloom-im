@@ -77,9 +77,10 @@
     {
       "repo": "workloom-ai/workloom",
       "pathPrefix": "",
-      "uiRolloutWave": "W3B",
-      "note": "酒店获客系统",
-      "extraExclude": []
+      "uiRolloutWave": "paused",
+      "note": "获客增长系统（2026-09-30 起代码基线 = WorkLoom-growth@2edea37，产品身份自有）",
+      "extraExclude": [],
+      "rolloutPauseNote": "2026-09-30 暂停 ui-v* 波次（原 W3B）：产品所有者指令 [T-2026-0929-0006]（CNB Issue #68 / PR #69）已把本仓代码整体复刻为 WorkLoom-growth@2edea37 并统一产品身份，客户端随之落在实验车道冻结的 0.1.1；其差异（页面/壳/语音/引导/mate-guide/hud/star-ring 等）由本仓 .workloom-client-extensions.json 声明为产品分叉，与 client-foundation「受管文件不得分叉」契约结构性冲突（rollout 实测 UPGRADE_PR_FAILED：85 个冲突 = MANAGED_FILE_MODIFIED 19 / MANAGED_FILE_DELETED 6 / UNTRACKED_MANAGED_FILE 40 / ILLEGAL_INDUSTRY_APP_PATH 20，另 preflight 报 UI_CONSUMER_CONTRACT_FAILED 207 + 非法行业路径 94）。恢复 ui-v* 波次的前置条件（二选一）：① 基座落地「仓级扩展路径全链路」（受管文件分叉容差扩展到行业仓）；② 本仓完成受管客户端文件对齐迁移（差异迁入 extensions/projections/config/theme 白名单）。暂停期间基座根级资产照常 base-sync，仅 ui-v* 客户端波次挂起。"
     },
     {
       "repo": "workloom-ai/panda-cineforge",
