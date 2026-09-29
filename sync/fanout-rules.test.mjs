@@ -11,6 +11,7 @@ import {
   isAllowlistedPath,
   matchesGlob,
   normalizeBranchRef,
+  pausedWaveChildren,
   requiredAssetDigests,
   syncedChildren,
   syncDrift,
@@ -324,4 +325,29 @@ test("requiredAssetDigests 与 base-sync 的 state 口径一致（整文件 + �
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+/**
+ * full 波次的 paused 仓过滤（2026-09-29 实测事故）：
+ * 获客实验车道在共享包上分叉出基座尚未收编的能力（composeWorkforce / loop.ts 硬化等），
+ * full 下发会整文件回退 → 该仓 typecheck 与 db:seed 直接崩。
+ * 因此 full 波次必须跳过 `uiRolloutWave: "paused"` 的仓，只留 required-only 通道。
+ */
+test("full 波次跳过 paused 波次仓（获客实验车道），其余仓照常下发", () => {
+  const children = [
+    { repo: "workloom-ai/WorkLoom-growth", uiRolloutWave: "paused" },
+    { repo: "workloom-ai/workloom-hotel", uiRolloutWave: "W2" },
+    { repo: "workloom-ai/workroom-fox", uiRolloutWave: "W5" },
+    { repo: "workloom-ai/workroom-tiger" },
+  ];
+  const { synced, skipped } = pausedWaveChildren(children);
+  assert.deepEqual(skipped, ["workloom-ai/WorkLoom-growth"]);
+  assert.deepEqual(synced.map((c) => c.repo), [
+    "workloom-ai/workloom-hotel",
+    "workloom-ai/workroom-fox",
+    "workloom-ai/workroom-tiger",
+  ]);
+  // 大小写与空值容忍：不因字段书写差异误判
+  assert.deepEqual(pausedWaveChildren([{ repo: "a/b", uiRolloutWave: "PAUSED" }]).skipped, ["a/b"]);
+  assert.deepEqual(pausedWaveChildren([{ repo: "a/b", uiRolloutWave: null }]).skipped, []);
 });
