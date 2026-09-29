@@ -20,6 +20,7 @@ import {
   repoUrl,
   withExtraExclude,
 } from "./base-sync.mjs";
+import { CODE_MERGE_SKIP_PATHS, matchesGlob } from "./fanout-rules.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ENGINE = join(HERE, "base-sync.mjs");
@@ -534,7 +535,7 @@ test("缺少 B 端移动客户端时只报告第一阶段迁移，绝不伪装�
 test("v15 scope 明确保护产品身份、仓级发布器、桌面发布封口器、同步认证、产品派生锁、依赖闭包与 Bundle 装配契约", () => {
   const scope = JSON.parse(readFileSync(join(REAL_BASE, "sync/base-scope.json"), "utf8"));
   const ci = readFileSync(join(REAL_BASE, ".github/workflows/ci.yml"), "utf8");
-  assert.equal(scope.version, 16);
+  assert.equal(scope.version, 17);
   // HP-01 收尾边界：单 active 迁移必须随公共分发下发，审计复现脚本只留基座仓
   assert.ok(scope.publicAppendOnlyFiles.includes("packages/db/migrations/0035_tenant_overlay_single_active.sql"));
   assert.ok(scope.newIndustryBootstrapFiles.includes("packages/db/migrations/0035_tenant_overlay_single_active.sql"));
@@ -687,6 +688,28 @@ test("v15 scope 明确保护产品身份、仓级发布器、桌面发布封口�
   assert.match(ci, /fetch-depth:\s*0/);
   assert.match(ci, /git merge-base "\$EVENT_BASE_SHA" "\$HEAD_SHA"/);
   assert.match(ci, /secret-scan\.mjs --range "\$BASE_SHA" "\$HEAD_SHA" --acceptance-manifest sync\/base-scope\.json/);
+});
+
+test("v17 scope 登记排雷式交付机制（MCD）受控资产，并保持显式审查边界", () => {
+  const scope = JSON.parse(readFileSync(join(REAL_BASE, "sync/base-scope.json"), "utf8"));
+  assert.equal(scope.version, 17);
+  const required = scope.requiredRootAssets.files;
+  for (const path of [
+    "docs/MINE-CLEAR-DELIVERY-SPEC.md",
+    "docs/mine-clear/ledger.schema.json",
+    "docs/mine-clear/report-template.md",
+    "docs/mine-clear/prompt-pack.md",
+    "scripts/delivery/README.md",
+    "scripts/delivery/mine-clear.mjs",
+    "scripts/delivery/mine-clear.test.mjs",
+  ]) {
+    assert.ok(required.includes(path), `${path} 必须作为根级受控资产随 base-sync 下发十仓`);
+    assert.ok(existsSync(join(REAL_BASE, path)), `${path} 必须在基座仓真实存在`);
+    assert.ok(
+      CODE_MERGE_SKIP_PATHS.some((pattern) => matchesGlob(pattern, path)),
+      `${path} 必须留在显式审查车道（不得由无人值守车道合并）`,
+    );
+  }
 });
 
 test("权威子仓清单的附加排除不会切断公共基座依赖闭包", () => {
