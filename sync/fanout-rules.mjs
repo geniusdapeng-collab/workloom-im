@@ -258,3 +258,30 @@ export function syncedChildren(children = [], isolated = new Set()) {
   }
   return { synced, skipped };
 }
+
+/**
+ * full 波次的**暂停波次仓**过滤（2026-09-29 实测事故）：
+ *
+ * `--mode full` 会把基座 `packages/**`、`apps/**` 整包下发。对 `uiRolloutWave: "paused"`
+ * 的仓（当前只有获客实验车道 WorkLoom-growth）这是**降级式覆盖**：
+ * 该仓在共享包上已实现基座尚未收编的能力（组合装配 `composeWorkforce`、`loop.ts` 计划持久化
+ * 与硬化、`autonomySchema`、`GenSubmissionError`、`channels.bindCUserIdentityOn` 等），
+ * 基座对应文件更旧——full 波次会把它们整文件回退，实测 `pnpm typecheck` / `db:seed` 直接崩
+ * （`@workloom/base/bundles does not provide an export named 'composeWorkforce'`）。
+ *
+ * 因此：full 波次跳过 paused 仓，paused 仓只接受 `required-only`（根级受控资产）。
+ * 需要给 paused 仓下发代码时必须显式开单（协议 §14 实验车道：先抽象提案，再决定收编方向）。
+ *
+ * @param {Array<{repo?: string, uiRolloutWave?: string}>} children
+ * @returns {{synced: object[], skipped: string[]}}
+ */
+export function pausedWaveChildren(children = []) {
+  const synced = [];
+  const skipped = [];
+  for (const child of children) {
+    if (!child) continue;
+    if (String(child.uiRolloutWave ?? "").toLowerCase() === "paused") skipped.push(child.repo ?? "(unknown)");
+    else synced.push(child);
+  }
+  return { synced, skipped };
+}

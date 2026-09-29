@@ -24,7 +24,9 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadScope } from "./base-sync.mjs";
-import { hasInFlightSyncPull, requiredAssetDigests, syncDrift, syncedChildren, SYNC_BRANCH_PREFIX } from "./fanout-rules.mjs";
+import {
+  hasInFlightSyncPull, pausedWaveChildren, requiredAssetDigests, syncDrift, syncedChildren, SYNC_BRANCH_PREFIX,
+} from "./fanout-rules.mjs";
 import { isolatedFleet } from "../scripts/tools/fleet-rules.mjs";
 import { addPullLabels, createPull, listPulls, rawFile, requireToken } from "../scripts/tools/cnb-api.mjs";
 
@@ -142,10 +144,22 @@ async function main() {
   const digests = requiredAssetDigests(baseDir, scope.raw);
   const isolated = isolatedFleet(fleet);
   const selected = (fleet.children ?? []).filter((child) => !only.length || only.includes(child.repo));
-  const { synced: children, skipped: skippedIsolated } = syncedChildren(selected, isolated);
+  const { synced: subscribed, skipped: skippedIsolated } = syncedChildren(selected, isolated);
+  /**
+   * full 波次跳过 paused 波次仓（2026-09-29 实测事故）：
+   * paused 仓（获客实验车道）在共享包上已分叉出基座尚未收编的能力，
+   * full 下发会把它们整文件回退 → 该仓 typecheck/seed 直接崩（详见 fanout-rules.pausedWaveChildren 注释）。
+   * 除非显式 `--only <slug>`（人工单仓推进），否则 full 一律不给 paused 仓开 PR。
+   */
+  const { synced: children, skipped: skippedPaused } = mode === "full" && !only.length
+    ? pausedWaveChildren(subscribed)
+    : { synced: subscribed, skipped: [] };
   if (!children.length && !skippedIsolated.length) throw new Error(`--only 没有匹配到任何子仓：${only.join(", ")}`);
   if (skippedIsolated.length && !json) {
     console.log(`⏸ 隔离副本不下发（sync/child-repos.json#isolatedRepos）：${skippedIsolated.join(", ")}`);
+  }
+  if (skippedPaused.length && !json) {
+    console.log(`⏸ full 波次跳过暂停波次仓（uiRolloutWave=paused，仅接 required-only）：${skippedPaused.join(", ")}`);
   }
 
   const results = [];
@@ -250,6 +264,7 @@ async function main() {
     children: results.length,
     isolatedDeclared: [...isolated],
     skippedIsolated,
+    skippedPaused,
     aligned: results.filter((item) => item.status === "aligned").length,
     inFlight: results.filter((item) => item.status === "in-flight").length,
     opened: results.filter((item) => item.status === "pr-opened").length,
@@ -267,7 +282,7 @@ async function main() {
       const label = { aligned: "✅ 已对齐", "in-flight": "🕒 在途 PR", "pr-opened": "📦 已开 PR", "branch-exists": "🧷 分支已存在", drift: "⚠️ 漂移", "would-sync": "⚠️ [dry-run] 待同步", failed: "❌ 失败", "scope-denied": "🔒 权限不足" }[item.status] ?? item.status;
       console.log(`${label} ${item.repo}${item.pull ? ` #${item.pull}` : ""}${item.reasons.length ? `：${item.reasons.join("；")}` : ""}${item.error ? `：${item.error}` : ""}`);
     }
-    console.log(`\n基座 ${baseSha.slice(0, 8)}（模式 ${mode}${dryRun ? "，dry-run" : ""}）：对齐 ${summary.aligned} · 在途 ${summary.inFlight} · 新开 PR ${summary.opened} · 分支已存在 ${summary.branchExists} · 待同步 ${summary.drift} · 隔离副本 ${summary.isolatedDeclared.length}（不下发） · 失败 ${failed} · 权限不足 ${scopeError}`);
+    console.log(`\n基座 ${baseSha.slice(0, 8)}（模式 ${mode}${dryRun ? "，dry-run" : ""}）：对齐 ${summary.aligned} · 在途 ${summary.inFlight} · 新开 PR ${summary.opened} · 分支已存在 ${summary.branchExists} · 待同步 ${summary.drift} · 隔离副本 ${summary.isolatedDeclared.length}（不下发） · paused 波次 ${summary.skippedPaused.length}（不下发） · 失败 ${failed} · 权限不足 ${scopeError}`);
   }
 
   if (failed) process.exitCode = 1;
