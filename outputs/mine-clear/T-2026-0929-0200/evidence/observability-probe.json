@@ -1,0 +1,70 @@
+{
+  "base": "http://127.0.0.1:8921",
+  "results": [
+    {
+      "id": "OBS-500-01 依赖故障被转成 5xx（不吞错、不假成功）",
+      "ok": true,
+      "detail": {
+        "status": 500,
+        "body": "{\"error\":{\"message\":\"permission denied for table approvals\",\"code\":-32603,\"data\":{\"code\":\"INTERNAL_SERVER_ERROR\",\"httpStatus\":500,\"path\":\"approvals.list\"}}}"
+      }
+    },
+    {
+      "id": "OBS-500-02 5xx 在服务端日志有记录（含 path/code/ref）",
+      "ok": true,
+      "detail": {
+        "sample": "[trpc] query approvals.list → INTERNAL_SERVER_ERROR: permission denied for table approvals（ref=09f7e862）"
+      }
+    },
+    {
+      "id": "OBS-500-03 5xx 写入事件账本（system.error 计数增加）",
+      "ok": true,
+      "detail": {
+        "before": 0,
+        "after": 1
+      }
+    },
+    {
+      "id": "OBS-500-04 依赖恢复后接口自愈（无需重启）",
+      "ok": true,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "id": "OBS-NEG-01 负对照：参数错误(4xx)不写系统错误事件",
+      "ok": true,
+      "detail": {
+        "status": 400,
+        "before": 1,
+        "after": 1
+      }
+    }
+  ],
+  "raw": {
+    "grantsBefore": [
+      "DELETE",
+      "INSERT",
+      "SELECT",
+      "UPDATE"
+    ],
+    "induced5xx": {
+      "status": 500,
+      "body": "{\"error\":{\"message\":\"permission denied for table approvals\",\"code\":-32603,\"data\":{\"code\":\"INTERNAL_SERVER_ERROR\",\"httpStatus\":500,\"path\":\"approvals.list\"}}}"
+    },
+    "logDelta": "[trpc] query approvals.list → INTERNAL_SERVER_ERROR: permission denied for table approvals（ref=09f7e862）\n",
+    "systemErrorBefore": 0,
+    "systemErrorAfter": 1,
+    "systemErrorSample": {
+      "action": "system.error",
+      "path": "approvals.list",
+      "ref": "09f7e862",
+      "seq": "1579"
+    },
+    "negativeControl": {
+      "status": 400,
+      "before": 1,
+      "after": 1
+    }
+  }
+}

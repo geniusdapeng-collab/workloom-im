@@ -1,0 +1,59 @@
+{
+  "id": "MC-402",
+  "kind": "fix",
+  "batch": 1,
+  "state": "fixed",
+  "title": "覆盖层锚点不丢：平台基线行保持 active，单调守卫取最严 active 行为基准",
+  "covers": [
+    "MC-109"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "packages/base/fence-engine/lifecycle.ts:370@4e52948",
+      "note": "激活只回滚旧租户覆盖行（is_baseline=false），平台基线行保持 active"
+    },
+    {
+      "type": "code",
+      "ref": "packages/base/fence-engine/dsl.ts:215@4e52948",
+      "note": "checkCandidateAgainstBaseline 锚点改为『同 rule_id 最严 active 行』"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/green-1-fence.log",
+      "note": "第 3 次放宽提案 400（守卫有效），基线行仍 active"
+    }
+  ],
+  "fix_plan": "取消『租户行继承 is_baseline』方案（避免 night-shift 快照与 P5 计数漂移），改为保留平台基线行 + 守卫按最严 active 行比对",
+  "blast_radius": "围栏判定（同 rule_id 多行共存→取最严）、P5 计数口径、night-shift 围栏快照",
+  "conflict_paths": [
+    "packages/base/fence-engine/lifecycle.ts",
+    "packages/base/fence-engine/dsl.ts"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "R7 已自定义为 review 后提交 level=auto 放宽提案",
+      "expect": "confirmDryRun 400（基线只可加严）",
+      "command": "同上断言脚本第 3 段",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/green-1-fence.log"
+    },
+    {
+      "kind": "property",
+      "given": "任意被自定义过的平台基线规则",
+      "expect": "收紧下界始终可判定（锚点不丢），放宽路径被拒",
+      "command": "同上 + DB 直查 is_baseline/status 组合",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/green-4-fence-with-dbstate.log"
+    }
+  ],
+  "regression": {
+    "command": "RUN_DB_TESTS=1 vitest run packages/base/fence-engine",
+    "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/vitest-fence-2.log（57/57）"
+  },
+  "rollback": "revert 4e52948",
+  "fixed_by": "fixer-B",
+  "verified_by": null,
+  "notes": "与 PLAN-fixes 规格的偏差（不把租户行标 is_baseline）已由 fixer-B 在报告 §2.1 论证并留痕。"
+}

@@ -1,0 +1,78 @@
+{
+  "autoThread": "T-141",
+  "blockThread": "T-142",
+  "realThread": "T-143",
+  "rejThread": "T-144",
+  "expThread": "T-145",
+  "autoEvents": [
+    {
+      "step": "s1",
+      "action": "pms.price.read",
+      "before": null,
+      "after": "{\"result\": {\"state\": \"connector-required\"}}",
+      "impacts": 0,
+      "synced": "false",
+      "basis": null
+    },
+    {
+      "step": "s2",
+      "action": "price.adjust",
+      "before": null,
+      "after": null,
+      "impacts": 2,
+      "synced": null,
+      "basis": "[\"围栏无法求值（缺参数）→ 一律人工裁决：R1: - 期望数字，得到 undefined；R2: < 期望数字，得到 undefined\"]"
+    },
+    {
+      "step": "s3",
+      "action": "pms.price.write",
+      "before": null,
+      "after": null,
+      "impacts": 0,
+      "synced": null,
+      "basis": "[\"越围栏挂起：写类动作无规则命中 → default_level=review\"]"
+    }
+  ],
+  "blockEvents": [
+    {
+      "action": "pms.price.read",
+      "basis": null,
+      "impacts": []
+    },
+    {
+      "action": "price.adjust",
+      "basis": "[\"围栏无法求值（缺参数）→ 一律人工裁决：R1: - 期望数字，得到 undefined；R2: < 期望数字，得到 undefined\"]",
+      "impacts": [
+        "R1:blocked",
+        "R2:blocked"
+      ]
+    },
+    {
+      "action": "pms.price.write",
+      "basis": "[\"越围栏挂起：写类动作无规则命中 → default_level=review\"]",
+      "impacts": []
+    }
+  ],
+  "afterStatus": [
+    {
+      "status": "completed",
+      "n": 51
+    },
+    {
+      "status": "pending_review",
+      "n": 29
+    },
+    {
+      "status": "failed",
+      "n": 4
+    },
+    {
+      "status": "cancelled",
+      "n": 4
+    },
+    {
+      "status": "paused",
+      "n": 1
+    }
+  ]
+}

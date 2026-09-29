@@ -1,0 +1,135 @@
+/**
+ * 生成批 E 的修复卡（台账记账用；结果写入 cards/MC-44x.json 与 cards/fix-E.json）
+ * 用法：node outputs/mine-clear/T-2026-0929-0200/cards/gen-fix-E.mjs
+ */
+import { writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const DIR = dirname(fileURLToPath(import.meta.url));
+const repo = "outputs/mine-clear/T-2026-0929-0200";
+const E = "fix_e_semantics";
+const HEAD_SHA = "0c0a1ad"; // 批 E 最后一个提交（style(web) P28 信息色令牌）
+const RUN = "MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app:workloom_dev_app@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway:workloom_dev_gateway@127.0.0.1:5432/wl_mcd_fe";
+
+const cards = [
+  {
+    id: "MC-441", kind: "fix", batch: 2, state: "fixed",
+    title: "知识发布当场人审留痕 + kb.publish 裁决联动（驳回即退出检索）",
+    covers: ["MC-110"],
+    evidence: [
+      { type: "code", ref: `apps/server/src/service/router.ts:119@036f02b`, note: "publishKbDocumentInTx：文档生效 + kb.publish 事件 + approved 审批行三写同一 COMMIT" },
+      { type: "code", ref: `apps/server/src/service/router.ts:302@036f02b`, note: "approveDocument 幂等（deduped）+ 仅待审文档可批（PRECONDITION_FAILED）" },
+      { type: "code", ref: `apps/server/src/service/kb.ts:358@036f02b`, note: "applyKbPublishAfterApproval：approve/edit→生效、reject→退回待审并退出检索" },
+      { type: "code", ref: `apps/server/src/trpc/router.ts:1@036f02b`, note: "approvals.decide 接线调用钩子（非 deduped 且终态）" },
+      { type: "log", ref: `${repo}/evidence/fix-e/f1-kb-1790706124251.json`, note: "f1 知识发布门禁 19/19：无幽灵待办、approved 记录、驳回退出检索、再批准恢复" },
+      { type: "log", ref: `${repo}/evidence/m3-kb-1790706124843.json`, note: "M3 探针 2 复跑 18/18（断点候选改写为修复后语义）" },
+      { type: "log", ref: "work/fix-e/e2e.log", note: "apps/server e2e 101/101（含新增 4 例发布留痕/幂等/驳回回滚/直达启用）" }
+    ],
+    fix_plan: "待审区「批准生效」= 逐条人审动作本身：文档置 active、kb.publish 五元事件、approvals 行（approved + gesture/decided_by/decided_at + snapshot.post_hoc）同事务落库，审批台不再出现「已执行却待办」幽灵条目；存量/任何来源的 pending kb.publish 由 approvals.decide 钩子收敛（reject → 退回 pending_review 且即刻退出检索）；setStatus(active) 对待审文档同口径留痕",
+    blast_radius: "P22 知识库待审区与文档抽屉、审批中心列表与计数（P4/P28）、C 端问答检索范围、ask 事实面；approveDocument 返回值增 status/approvalId/deduped（前端已同步）",
+    conflict_paths: ["apps/server/src/service/router.ts", "apps/server/src/service/kb.ts", "apps/server/src/trpc/router.ts", "apps/web/src/pages/p22/P22.tsx"],
+    assertions: [
+      { kind: "sample", given: "ws-aipm-demo 上传文档后调用 service.kb.approveDocument，再对该记录重复批准", expect: "文档 active 且可检索；审批记录 approved（带决策人/手势）；pending 列表无该文档；重复批准 deduped 且不新增事件", command: `cd <repo> && ${RUN} node outputs/mine-clear/T-2026-0929-0200/assertions/f1-kb-publish-gate.mjs`, last_result: "pass", evidence: `${repo}/evidence/fix-e/f1-kb-1790706124251.json` },
+      { kind: "property", given: "任意 kb.publish 审批（含修复前遗留的 pending 行）被 approve/edit/reject", expect: "approve/edit → 文档生效；reject → 文档退回 pending_review 且检索不可见（两面不再矛盾）；重复回调幂等", command: `cd <repo> && ${RUN} node outputs/mine-clear/T-2026-0929-0200/assertions/f1-kb-publish-gate.mjs`, last_result: "pass", evidence: `${repo}/evidence/fix-e/f1-kb-1790706124251.json` }
+    ],
+    regression: { command: "pnpm typecheck && RUN_DB_TESTS=1 SERVICE_C_TEST_WORKSPACE_ID=ws-yunqi SERVER_E2E_PORT=8983 pnpm -C apps/server exec vitest run src/service/e2e.test.ts && pnpm suite", evidence: "work/fix-e/typecheck.log; work/fix-e/e2e.log; work/fix-e/suite.log" },
+    rollback: "git revert 036f02b", fixed_by: E, verified_by: null,
+    notes: "与卡片建议的两段式门禁不同：采用卡片断言允许的第二条分支（批准 = 人审动作本身、审批行直接 approved）；理由见 FIX-E-REPORT §2",
+  },
+  {
+    id: "MC-442", kind: "fix", batch: 2, state: "fixed",
+    title: "ask 事实面被问域优先 + 知识库相关性下限 + 工单/夜班事实面",
+    covers: ["MC-111"],
+    evidence: [
+      { type: "code", ref: `packages/runtime/src/ask.ts:345@5a44312`, note: "askedAskDomains/orderAskFactsForQuestion：被问域事实先于知识库装行" },
+      { type: "code", ref: `packages/runtime/src/ask.ts:357@5a44312`, note: "ASK_KB_MIN_SCORE=0.65（噪声 0.53~0.64 / 真知识 0.64~0.69 校准）" },
+      { type: "code", ref: `packages/runtime/src/ask.ts:133@5a44312`, note: "defaultAskFactProvider 增 c_tickets 未办结（含 SLA 超时）与 night_runs 最近班次事实" },
+      { type: "code", ref: `packages/runtime/src/ask.ts:379@5a44312`, note: "composeAskAnswer 落款按正文实际事实类型生成（KB-only 不声称事件库数字）" },
+      { type: "log", ref: `${repo}/evidence/fix-e/f1-ask-1790706124455.json`, note: "f1 ask 覆盖 20/20：四类系统问题数字与库内一致、账本 basis 含对应域、approvals 来源无 kb:" },
+      { type: "log", ref: `${repo}/evidence/m3-ask-1790706125002.json`, note: "M3 探针 4 复跑 8/8（探针账本查询按 decision.basis 修正）" }
+    ],
+    fix_plan: "①searchKB 增 minScore（ask 注入 0.65，P22 检索面保持宽召回）；②composeAskAnswer 按被问域排序并在正文未用 KB 时改落款口径；③补 c_tickets / night_runs 只读事实面",
+    blast_radius: "P0 对话框、移动端问询、账本 basis 与 ask.answer 事实清单；行业包若注册自有 AskFactProvider 不受影响（domain 缺省即通用事实）",
+    conflict_paths: ["packages/runtime/src/ask.ts", "apps/server/src/service/kb.ts", "apps/server/src/trpc/router.ts"],
+    assertions: [
+      { kind: "sample", given: "ws-yunqi 出厂 mock 态依次提问：待审批 / 进行中任务 / 工单 / 夜班 / 毛巾更换", expect: "四类系统问题给出当前真实数字（与库内计数一致），知识型问题引用知识库；approvals 取数来源无 kb:；KB-only 答案不声称「数字来自事件库」", command: `cd <repo> && ${RUN} node outputs/mine-clear/T-2026-0929-0200/assertions/f1-ask-coverage.mjs`, last_result: "pass", evidence: `${repo}/evidence/fix-e/f1-ask-1790706124455.json` },
+      { kind: "property", given: "任意工作区任意问题（纯函数口径 + 真机 5 问）", expect: "被问域事实排序先于知识库；落款与正文实际取数来源一致；KB 命中必须过相关性下限", command: `cd <repo> && node outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-ask.mjs yunqi-hotel（+ pnpm -C packages/runtime test / pnpm suite 的同名纯函数断言）`, last_result: "pass", evidence: `${repo}/evidence/m3-ask-1790706125002.json` }
+    ],
+    regression: { command: "pnpm typecheck && pnpm -C packages/runtime test && pnpm suite", evidence: "work/fix-e/typecheck.log; work/fix-e/suite.log" },
+    rollback: "git revert 5a44312", fixed_by: E, verified_by: null,
+    notes: "相关性下限按 hotel 出厂语料校准（385 问），跨行业语料如需调整只改 ASK_KB_MIN_SCORE",
+  },
+  {
+    id: "MC-443", kind: "fix", batch: 2, state: "fixed",
+    title: "重复派单原地改派 + 服务层语义错误映射（不再 500）",
+    covers: ["MC-112"],
+    evidence: [
+      { type: "code", ref: `apps/server/src/service/ticket.ts:173@036f02b`, note: "assignTicketOn：assigned→assigned 原地改派；同值幂等不落事件；processing/done 仍 409" },
+      { type: "code", ref: `apps/server/src/service/router.ts:70@036f02b`, note: "toTrpcServiceError + remapServiceErrorResult（tRPC v11 经 next() 结果取 error.cause 映射 404/409/503）" },
+      { type: "code", ref: `apps/server/src/service/router.ts:207@036f02b`, note: "kb/tickets 写过程统一走 svcWriteProcedure（语义码不再被兜成 500）" },
+      { type: "log", ref: `${repo}/evidence/fix-e/f1-ticket-1790706124591.json`, note: "f1 工单改派 11/11：同值幂等、跨部门留痕、已办结 409 CONFLICT、不存在 404 NOT_FOUND" },
+      { type: "log", ref: `${repo}/evidence/m3-ticket-1790706125123.json`, note: "M3 探针 3 复跑 18/18（B 端派单成功 500→200）" },
+      { type: "log", ref: "work/fix-e/e2e.log", note: "apps/server e2e 101/101（重复派单幂等/改派留痕/409 语义三例）" }
+    ],
+    fix_plan: "assigned→assigned 定义为原地改派（同值 no-op、异值更新 dept/assignee 并追加 assign 事件且状态不变）；服务路由层把 ServiceHttpError 映射为 TRPCError 语义码（404/409/503），契约文案不再被 5xx 脱敏吞掉",
+    blast_radius: "P22 工单台派单/改派入口、C 端自动派单链路、c_ticket_events 时间线（改派新增 reassign 语义事件）；所有 service 写过程的错误码口径",
+    conflict_paths: ["apps/server/src/service/ticket.ts", "apps/server/src/service/router.ts", "apps/server/src/service/e2e.test.ts"],
+    assertions: [
+      { kind: "sample", given: "C 端建单（自动 assigned）后 B 端重复派单（同值 / 异值），再对已办结单派单", expect: "同值 200 且不重复落 assign 事件；异值 200 且 dept/assignee 更新、状态不变；已办结 409 CONFLICT；不存在 404 NOT_FOUND", command: `cd <repo> && ${RUN} node outputs/mine-clear/T-2026-0929-0200/assertions/f1-ticket-reassign.mjs`, last_result: "pass", evidence: `${repo}/evidence/fix-e/f1-ticket-1790706124591.json` },
+      { kind: "property", given: "任意 (工单状态 × 重复派单) 组合", expect: "不产生 5xx；同值派单幂等；非法迁移返回可判定的 409 契约文案", command: "同上 + RUN_DB_TESTS=1 pnpm -C apps/server exec vitest run src/service/e2e.test.ts", last_result: "pass", evidence: "work/fix-e/e2e.log" }
+    ],
+    regression: { command: "pnpm typecheck && pnpm -C apps/server exec vitest run src/service/e2e.test.ts && pnpm suite", evidence: "work/fix-e/typecheck.log; work/fix-e/e2e.log; work/fix-e/suite.log" },
+    rollback: "git revert 036f02b", fixed_by: E, verified_by: null, notes: "",
+  },
+  {
+    id: "MC-444", kind: "fix", batch: 3, state: "fixed",
+    title: "演示种子补全局账号 + 统一待办纳入未办结工单",
+    covers: ["MC-113"],
+    evidence: [
+      { type: "code", ref: `scripts/seed.ts:583@c1f0fbb`, note: "酒店演示成员建账号（acc-demo-hotel-*）并回填 members.account_id，幂等" },
+      { type: "code", ref: `scripts/seed-aipm.ts:130@c1f0fbb`, note: "ai-pm 示例团队同口径（acc-demo-aipm-*）" },
+      { type: "code", ref: `apps/server/src/trpc/accounts-router.ts:591@c1f0fbb`, note: "inbox.unified 增 pendingTickets（created/assigned/processing，与 P22 同口径），按工作区独立 fail-soft" },
+      { type: "code", ref: `apps/web/src/pages/p28/P28.tsx:1@0c0a1ad`, note: "P28 卡片同时展示待审批与未办结工单（信息色走 text-holo 令牌）" },
+      { type: "log", ref: `${repo}/evidence/fix-e/f1-inbox-1790706124692.json`, note: "f1 统一待办 10/10：groups 非空、计数与库内一致、建单 +1 / 办结 -1、跨店隔离、种子账号回填" },
+      { type: "log", ref: `${repo}/evidence/m3-ticket-1790706125123.json`, note: "M3 探针 3 的 P28 检查改为建单后 +1 / 办结后回落两段取证" }
+    ],
+    fix_plan: "①种子为演示成员建 accounts 并联结 members.account_id（演示保留命名空间，幂等）；②inbox.unified 增 pendingTickets 并按店分组返回；③P28 卡片展示两项计数",
+    blast_radius: "P28 统一待办页面与 accounts.inbox 端点、出厂种子（全新安装与既有库均需重跑种子才生效）、跨店聚合口径",
+    conflict_paths: ["apps/server/src/trpc/accounts-router.ts", "scripts/seed.ts", "scripts/seed-aipm.ts", "apps/web/src/pages/p28/P28.tsx"],
+    assertions: [
+      { kind: "sample", given: "演示成员 MEM-001 调用 accounts.inbox.unified（ai-pm-demo 与 yunqi-hotel）", expect: "groups 非空且分店计数与库内 pending 审批/未办结工单一致；C 端建单后 pendingTickets +1、办结后回落", command: `cd <repo> && ${RUN} node outputs/mine-clear/T-2026-0929-0200/assertions/f1-inbox-unified.mjs`, last_result: "pass", evidence: `${repo}/evidence/fix-e/f1-inbox-1790706124692.json` },
+      { kind: "property", given: "任意有 pending 审批或未完结工单的工作区成员", expect: "该成员在统一待办看到对应计数；无账号绑定的成员由种子/注册流程保证绑定（仍有 UI 提示而非静默空列表）", command: "同上 + DATABASE_APP_URL=... psql 直查 members.account_id 覆盖", last_result: "pass", evidence: `${repo}/evidence/fix-e/f1-inbox-1790706124692.json` }
+    ],
+    regression: { command: "pnpm typecheck && pnpm suite && pnpm test", evidence: "work/fix-e/typecheck.log; work/fix-e/suite.log; work/fix-e/root-test.log" },
+    rollback: "git revert c1f0fbb", fixed_by: E, verified_by: null,
+    notes: "告警计数仍为行业包数据面（基座无 alerts 表）——本卡只补审批 + 工单两域",
+  },
+  {
+    id: "MC-445", kind: "fix", batch: 3, state: "fixed",
+    title: "数字职场遇阻与请示共存 + 待裁总数",
+    covers: ["MC-114"],
+    evidence: [
+      { type: "code", ref: `packages/base/captain/floor.ts:255@861c9d1`, note: "blocked 分支并列 asking 信息（pendingTier/approvalId/asking/pendingCount + 双信息 statusLine）" },
+      { type: "code", ref: `packages/base/captain/floor.ts:45@861c9d1`, note: "FloorAgent.pendingCount：同员工多条 pending 时 FIFO 直达号 + 待裁总数" },
+      { type: "code", ref: `apps/web/src/pages/p0/Floor.tsx:1@861c9d1`, note: "blocked 且有审批时气泡「遇阻 · 请您定（· 共 N 项）」并可点击直达审批卡" },
+      { type: "log", ref: `${repo}/evidence/fix-e/f1-floor-1790706117609.json`, note: "f1 楼层共存 11/11：blocked 主态保留、审批直达号/分级/asking/待裁总数齐备、批准后线程续跑" },
+      { type: "log", ref: `${repo}/evidence/m3-thread-1790706160084.json`, note: "M3 探针 1 复跑 11/11（断点判定改为「请示信号 + 直达号」，快照补 asking/pendingCount）" }
+    ],
+    fix_plan: "deriveFloor 的 blocked 分支并入 asking 信息（状态仍 blocked，V-06 遇阻优先），pendingTier/approvalId/asking/pendingCount 与双信息气泡一并下发；前端 blocked+asking 可点击直达审批卡",
+    blast_radius: "P0 数字职场楼层投影、织球情绪映射（blocked 仍优先）、theater.floor 消费方与 suite 楼层断言（V-06 纪律保留）",
+    conflict_paths: ["packages/base/captain/floor.ts", "apps/web/src/pages/p0/Floor.tsx"],
+    assertions: [
+      { kind: "sample", given: "ws-yunqi 派遣高风险调价（触发围栏挂起）后读 captain.theater", expect: "该员工条目 state=blocked 且带 approvalId/pendingTier/asking=true/pendingCount≥1，statusLine 同时含「遇阻」与「请示待裁」", command: `cd <repo> && MCD_BASE=http://127.0.0.1:8981 node outputs/mine-clear/T-2026-0929-0200/assertions/f1-floor-blocked-asking.mjs`, last_result: "pass", evidence: `${repo}/evidence/fix-e/f1-floor-1790706117609.json` },
+      { kind: "property", given: "任意 (blocked, asking) 组合状态", expect: "楼层不隐藏待人工裁决项：条目必带审批直达号与待裁总数，点击可直达审批卡（不再被遇阻态吃掉）", command: "同上 + MCD_BASE=... node outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-thread.mjs", last_result: "pass", evidence: `${repo}/evidence/m3-thread-1790706160084.json` }
+    ],
+    regression: { command: "pnpm typecheck && RUN_DB_TESTS=1 pnpm -C packages/base test && pnpm suite", evidence: "work/fix-e/typecheck.log; work/fix-e/base-test.log; work/fix-e/suite.log" },
+    rollback: "git revert 861c9d1", fixed_by: E, verified_by: null, notes: "",
+  },
+];
+
+for (const card of cards) {
+  writeFileSync(join(DIR, `${card.id}.json`), JSON.stringify(card, null, 2));
+}
+writeFileSync(join(DIR, "fix-E.json"), JSON.stringify(cards, null, 2));
+console.log(`已生成 ${cards.length} 张修复卡（MC-441..445）+ fix-E.json（批 E 合并版，HEAD=${HEAD_SHA}）`);

@@ -1,0 +1,13 @@
+
+> @workloom/runtime@0.1.0 test /Users/mac/WorkLoom-fleet/.wt-mcd-m6/packages/runtime
+> vitest run
+
+
+ RUN  v5.0.1 /Users/mac/WorkLoom-fleet/.wt-mcd-m6/packages/runtime
+
+
+ Test Files  2 passed (2)
+      Tests  26 passed (26)
+   Start at  02:39:28
+   Duration  525ms (tests 48%, transform 34%, import 17%, worker 1%)
+

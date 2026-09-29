@@ -1,0 +1,34 @@
+{
+  "base": "http://127.0.0.1:8921",
+  "results": [
+    {
+      "id": "LEAK-01 约束错误的原始文案回传客户端（含 SQL/约束细节）",
+      "ok": true,
+      "detail": {
+        "status": 500,
+        "sample": "{\"error\":{\"message\":\"duplicate key value violates unique constraint \\\"probe_uq_threads_title\\\"\",\"code\":-32603,\"data\":{\"code\":\"INTERNAL_SERVER_ERROR\",\"httpStatus\":500,\"path\":\"threads.dispatch\"}}}"
+      }
+    },
+    {
+      "id": "LEAK-02 错误文案可携带行值（此处为标题，真实场景如同手机号/邮箱）",
+      "ok": false,
+      "detail": {
+        "containsPayload": false
+      }
+    },
+    {
+      "id": "LEAK-03 正对照：同一错误服务端日志有记录（风险点在回传而非记录）",
+      "ok": true,
+      "detail": "见 OBS-500-02 日志条目"
+    }
+  ],
+  "raw": {
+    "firstDispatch": {
+      "status": 200
+    },
+    "secondDispatch": {
+      "status": 500,
+      "body": "{\"error\":{\"message\":\"duplicate key value violates unique constraint \\\"probe_uq_threads_title\\\"\",\"code\":-32603,\"data\":{\"code\":\"INTERNAL_SERVER_ERROR\",\"httpStatus\":500,\"path\":\"threads.dispatch\"}}}"
+    }
+  }
+}

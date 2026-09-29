@@ -1,0 +1,53 @@
+{
+  "id": "MC-423",
+  "kind": "fix",
+  "batch": 0,
+  "state": "fixed",
+  "title": "高危逐次授权 fail-closed：绑定齐备校验 + 一次性消费",
+  "covers": [
+    "MC-106"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "packages/base/workdata/gateway.ts:252@b339712",
+      "note": "快照缺 object/action 绑定即拒；同事务 snapshot.used_at 一次性消费（FOR UPDATE）"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m5-merge-m1-approval-reuse.log",
+      "note": "合并后复跑：无绑定审批两次都拒；有绑定审批第一次放行、第二次报『已被使用过』"
+    }
+  ],
+  "fix_plan": "checkHighRiskAuthorization 缺绑定 fail-closed；成功写入后在同一事务标记 snapshot.used_at，重放即拒",
+  "blast_radius": "高危 agent 写动作授权语义；captain/skill-ops 等无绑定审批不再是通用授权",
+  "conflict_paths": [
+    "packages/base/workdata/gateway.ts"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "同一 approvalRef 两次高危写动作",
+      "expect": "第二次被拒（一次性授权）",
+      "command": "node_modules/.bin/tsx --env-file=<env-verify> outputs/mine-clear/T-2026-0929-0200/assertions/m1-approval-reuse.mts",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m5-merge-m1-approval-reuse.log"
+    },
+    {
+      "kind": "property",
+      "given": "任意 snapshot 缺少 object/action 绑定的 approved 审批",
+      "expect": "不得作为高危写动作授权（两次都拒）",
+      "command": "同上（场景 A）",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m5-merge-m1-approval-reuse.log"
+    }
+  ],
+  "regression": {
+    "command": "pnpm -C packages/base test",
+    "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m5-merge-m1-approval-reuse.log"
+  },
+  "rollback": "git revert b339712",
+  "fixed_by": "fixer-A",
+  "verified_by": null,
+  "notes": ""
+}

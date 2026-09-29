@@ -1,0 +1,131 @@
+{
+  "base": "http://127.0.0.1:8921",
+  "workspace": "ws-yunqi",
+  "before": {
+    "threads.list": {
+      "n": 40,
+      "p50": 3.2,
+      "p95": 16.6,
+      "max": 22,
+      "mean": 4.3,
+      "bytes": 11281,
+      "status": 200
+    },
+    "approvals.list(pending)": {
+      "n": 40,
+      "p50": 3.5,
+      "p95": 6.3,
+      "max": 6.5,
+      "mean": 3.7,
+      "bytes": 44583,
+      "status": 200
+    },
+    "captain.theater": {
+      "n": 40,
+      "p50": 10.3,
+      "p95": 16.8,
+      "max": 17.9,
+      "mean": 10.8,
+      "bytes": 5584,
+      "status": 200
+    },
+    "memory.list(query)": {
+      "n": 40,
+      "p50": 4.2,
+      "p95": 12.5,
+      "max": 13.7,
+      "mean": 5,
+      "bytes": 13662,
+      "status": 200
+    }
+  },
+  "after": {
+    "threads.list": {
+      "n": 40,
+      "p50": 3.3,
+      "p95": 4.1,
+      "max": 6.7,
+      "mean": 3.3,
+      "bytes": 12666,
+      "status": 200
+    },
+    "approvals.list(pending)": {
+      "n": 40,
+      "p50": 8.6,
+      "p95": 12.9,
+      "max": 13.9,
+      "mean": 9.2,
+      "bytes": 47450,
+      "status": 200
+    },
+    "captain.theater": {
+      "n": 40,
+      "p50": 16.7,
+      "p95": 18.2,
+      "max": 19,
+      "mean": 16.8,
+      "bytes": 5604,
+      "status": 200
+    },
+    "memory.list(query)": {
+      "n": 40,
+      "p50": 4.3,
+      "p95": 7.3,
+      "max": 26.2,
+      "mean": 4.9,
+      "bytes": 13662,
+      "status": 200
+    }
+  },
+  "volume": {
+    "approvals": "20334",
+    "threads": "3042",
+    "events": "1545"
+  },
+  "plans": {
+    "threads.list SQL": [
+      "Limit  (cost=110.40..110.53 rows=50 width=116) (actual time=0.601..0.604 rows=50 loops=1)",
+      "  Buffers: shared hit=60",
+      "  ->  Sort  (cost=110.40..113.32 rows=1168 width=116) (actual time=0.601..0.602 rows=50 loops=1)",
+      "        Sort Key: created_at DESC",
+      "        Sort Method: top-N heapsort  Memory: 35kB",
+      "        Buffers: shared hit=60",
+      "        ->  Seq Scan on threads  (cost=0.00..71.60 rows=1168 width=116) (actual time=0.004..0.343 rows=3042 loops=1)",
+      "              Filter: (workspace_id = 'ws-yunqi'::text)",
+      "              Buffers: shared hit=57",
+      "Planning:",
+      "  Buffers: shared hit=26",
+      "Planning Time: 0.060 ms",
+      "Execution Time: 0.610 ms"
+    ],
+    "approvals.list SQL": [
+      "Limit  (cost=737.08..737.20 rows=50 width=809) (actual time=5.667..5.670 rows=50 loops=1)",
+      "  Buffers: shared hit=688",
+      "  ->  Sort  (cost=737.08..738.03 rows=382 width=809) (actual time=5.667..5.669 rows=50 loops=1)",
+      "        Sort Key: a.created_at DESC",
+      "        Sort Method: top-N heapsort  Memory: 77kB",
+      "        Buffers: shared hit=688",
+      "        ->  Hash Left Join  (cost=227.17..724.39 rows=382 width=809) (actual time=0.693..3.629 rows=16032 loops=1)",
+      "              Hash Cond: ((a.tenant_id = e.tenant_id) AND (a.event_id = e.event_id))",
+      "              Buffers: shared hit=688",
+      "              ->  Bitmap Heap Scan on approvals a  (cost=12.20..507.40 rows=382 width=283) (actual time=0.199..1.786 rows=16032 loops=1)",
+      "                    Recheck Cond: ((workspace_id = 'ws-yunqi'::text) AND (status = 'pending'::text))",
+      "                    Heap Blocks: exact=498",
+      "                    Buffers: shared hit=512",
+      "                    ->  Bitmap Index Scan on idx_approvals_ws_status  (cost=0.00..12.10 rows=382 width=0) (actual time=0.168..0.169 rows=16032 loops=1)",
+      "                          Index Cond: ((workspace_id = 'ws-yunqi'::text) AND (status = 'pending'::text))",
+      "                          Buffers: shared hit=14",
+      "              ->  Hash  (cost=191.59..191.59 rows=1559 width=545) (actual time=0.487..0.487 rows=1580 loops=1)",
+      "                    Buckets: 2048  Batches: 1  Memory Usage: 914kB",
+      "                    Buffers: shared hit=176",
+      "                    ->  Seq Scan on biz_events e  (cost=0.00..191.59 rows=1559 width=545) (actual time=0.004..0.268 rows=1580 loops=1)",
+      "                          Buffers: shared hit=176",
+      "Planning:",
+      "  Buffers: shared hit=215",
+      "Planning Time: 0.328 ms",
+      "Execution Time: 5.710 ms"
+    ]
+  },
+  "sloMs": 500,
+  "sloViolations": []
+}

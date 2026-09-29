@@ -1,0 +1,13 @@
++ node /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/assertions/f1-inbox-unified.mjs
+✓ 演示成员登录（ai-pm-demo）
+✓ 统一待办非空（修复前恒 groups:[]） :: [{"workspaceId":"ws-aipm-demo","slug":"ai-pm-demo","workspaceName":"织元产品部（AI 产品经理示例团队）","tenantName":"织元演示租户","role":"owner","industry":"ai-pm","pendingApprovals":2,"pendingTickets":1}]
+✓ 返回 ai-pm-demo 分组且字段齐备 :: {"workspaceId":"ws-aipm-demo","slug":"ai-pm-demo","workspaceName":"织元产品部（AI 产品经理示例团队）","tenantName":"织元演示租户","role":"owner","industry":"ai-pm","pendingApprovals":2,"pendingTickets":1}
+✓ pendingApprovals 与库内 pending 审批数一致 :: {"api":2,"db":2}
+✓ pendingTickets 与库内未办结工单数一致 :: {"api":1,"db":1}
+✓ C 端新建工单成功 :: "tck-mun0mzr7002enfs"
+✓ 新工单即刻进入统一待办（+1） :: {"before":1,"after":2}
+✓ 酒店演示成员看到自家分组且计数一致 :: {"group":{"workspaceId":"ws-yunqi","slug":"yunqi-hotel","workspaceName":"云栖酒店","tenantName":"演示租户","role":"owner","industry":"hotel","pendingApprovals":3,"pendingTickets":5},"db":{"approvals":3,"tickets":5}}
+✓ 跨店隔离：两个演示账号各自只看到自己的工作区 :: {"aipm":["ws-aipm-demo"],"hotel":["ws-yunqi"]}
+✓ 出厂种子成员全部挂账号（account_id 回填） :: [{"workspace_id":"ws-aipm-demo","total":3,"bound":3},{"workspace_id":"ws-yunqi","total":3,"bound":3}]
+
+f1 统一待办：10/10 通过；证据 → /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-inbox-1790706875035.json

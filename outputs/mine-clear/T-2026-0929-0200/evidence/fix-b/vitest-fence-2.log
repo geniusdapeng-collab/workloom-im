@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /Users/mac/WorkLoom-fleet/.wt-mcd-fb
+
+
+ Test Files  3 passed (3)
+      Tests  57 passed (57)
+   Start at  00:26:14
+   Duration  1.40s (tests 72%, transform 15%, import 13%)
+

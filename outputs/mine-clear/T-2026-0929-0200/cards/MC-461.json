@@ -1,0 +1,58 @@
+{
+  "id": "MC-461",
+  "kind": "fix",
+  "batch": 1,
+  "state": "fixed",
+  "title": "R2 修复：验收门禁假红：Z-11 启动补扫夹具缺 snapshot.action（被 MC-106 fail-closed 正确拒绝）",
+  "covers": [
+    "MC-501"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "scripts/suite.ts:2686@88e6b51",
+      "note": "修复提交 88e6b51"
+    },
+    {
+      "type": "log",
+      "ref": "work/fix-f/suite-red-n1.log → work/fix-f/reg-suite.log（470/470）",
+      "note": "红→绿对照"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/FIX-F-REPORT.md",
+      "note": "修复报告（根因/修法/回归/回滚）"
+    }
+  ],
+  "fix_plan": "见 FIX-F-REPORT.md §3（根因 + 代码级修法 + 证据）",
+  "blast_radius": "见 FIX-F-REPORT.md 对应小节",
+  "conflict_paths": [
+    "scripts/suite.ts"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "复跑 MC-501",
+      "expect": "转绿",
+      "command": "SUITE_SERVER_PORT=8972 SUITE_STUB_PORT=8973 tsx --env-file=<env> scripts/suite.ts",
+      "last_result": "pass",
+      "evidence": "work/fix-f/suite-red-n1.log → work/fix-f/reg-suite.log（470/470）"
+    },
+    {
+      "kind": "property",
+      "given": "同类输入/重复执行",
+      "expect": "保持通过（幂等、不依赖遗留数据）",
+      "command": "SUITE_SERVER_PORT=8972 SUITE_STUB_PORT=8973 tsx --env-file=<env> scripts/suite.ts",
+      "last_result": "pass",
+      "evidence": "work/fix-f/suite-red-n1.log → work/fix-f/reg-suite.log（470/470）"
+    }
+  ],
+  "regression": {
+    "command": "bash work/fix-f/run-regression.sh（8/8 PASS）",
+    "evidence": "work/fix-f/reg-*.log"
+  },
+  "rollback": "git revert 88e6b51",
+  "fixed_by": "fixer-F",
+  "verified_by": null,
+  "notes": "R2 复验由独立验证会话与独立验收会话执行。"
+}

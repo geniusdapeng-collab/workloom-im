@@ -1,0 +1,37 @@
++ env RUN_DB_TESTS=1 pnpm -C /Users/mac/WorkLoom-fleet/.wt-mcd-m6/packages/runtime test
+
+> @workloom/runtime@0.1.0 test /Users/mac/WorkLoom-fleet/.wt-mcd-m6/packages/runtime
+> vitest run
+
+
+ RUN  v5.0.1 /Users/mac/WorkLoom-fleet/.wt-mcd-m6/packages/runtime
+
+ ❯ src/runtime.test.ts (20 tests | 1 failed) 239ms
+   ❯ PG 集成 Quest 循环（种子库） (7)
+     × H-5 replay 断点续跑幂等：重复运行不产生重复事件 8ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/runtime.test.ts > PG 集成 Quest 循环（种子库） > H-5 replay 断点续跑幂等：重复运行不产生重复事件
+AssertionError: expected 'paused' to be 'completed' // Object.is equality
+
+Expected: "completed"
+Received: "paused"
+
+ ❯ src/runtime.test.ts:291:23
+    289|     const tid = await newThread("对账任务");
+    290|     const r1 = await runQuest(app, gw, scope, { threadId: tid, goal: "…
+    291|     expect(r1.status).toBe("completed");
+       |                       ^
+    292|     const n1 = (await threadEvents(tid)).length;
+    293|     // 模拟 kill -9 后重放：再跑一次同一线程
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 25 passed (26)
+   Start at  02:38:41
+   Duration  470ms (tests 54%, transform 31%, import 14%, worker 1%)
+
+ ELIFECYCLE  Test failed. See above for more details.

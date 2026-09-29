@@ -1,0 +1,60 @@
+{
+  "id": "MC-101",
+  "kind": "problem",
+  "level": "L4",
+  "severity": "P1",
+  "batch": 1,
+  "state": "open",
+  "title": "审批通过后线程不自动续跑：任务停在 pending_review，需人工再点『推进』",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "apps/server/src/runtime/scheduler.ts:84@4ff9943",
+      "note": "调度器只挑 status='queued' 的线程；pending_review 不在扫描集合，也没有『审批通过 → 重新入队』路径"
+    },
+    {
+      "type": "code",
+      "ref": "packages/base/review-console/approvals.ts:296@4ff9943",
+      "note": "decide() 只在 reject 分支联动线程（cancelled）；approve/edit 不改线程状态"
+    },
+    {
+      "type": "code",
+      "ref": "apps/web/src/pages/p4/P4.tsx:139@4ff9943",
+      "note": "审批台三手势落库后只 load() 刷新列表，不调 threads.run"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m1-approval-resume.log",
+      "note": "真机实测：T-127 关卡 approve 后 60s，线程仍 pending_review，事件数 4→4（无续跑）"
+    },
+    {
+      "type": "code",
+      "ref": "scripts/acceptance/outcome.mjs:135@4ff9943",
+      "note": "RDAS O 域测量注释假定『手势后的续跑是异步的（服务端 fire-and-forget）』，与基座实现不符"
+    }
+  ],
+  "root_cause": {
+    "file": "apps/server/src/runtime/scheduler.ts",
+    "line": 84,
+    "commit": "4ff9943",
+    "symbol": "nextQueuedThread"
+  },
+  "trigger_path": "threads.dispatch(runImmediately) → 步骤越围栏 → pending_review → 审批台点『通过』 → 线程状态与事件都不再变化；客户必须自己找到任务页点『推进』才继续，且界面没有提示",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "T-12x 的步骤关卡被 approvals.decide(approve)",
+      "expect": "60s 内线程离开 pending_review（进入 running/completed 或下一关卡）",
+      "command": "cd <repo> && set -a && . ./.env && set +a && MCD_BASE=http://127.0.0.1:8899 node outputs/mine-clear/T-2026-0929-0200/assertions/m1-approval-resume.mjs",
+      "last_result": "fail"
+    },
+    {
+      "kind": "property",
+      "given": "任意步骤级审批被批准",
+      "expect": "线程不会无限期停在 pending_review：要么自动续跑，要么写入显式的『等待人工推进』状态并在 UI 呈现",
+      "command": "同上（脚本不依赖具体线程号，自行派遣新线程）",
+      "last_result": "fail"
+    }
+  ],
+  "notes": "与 MC-105（RDAS outcome 调不存在的过程）同源：验收器与基座对『审批后续跑』的假设不一致。"
+}

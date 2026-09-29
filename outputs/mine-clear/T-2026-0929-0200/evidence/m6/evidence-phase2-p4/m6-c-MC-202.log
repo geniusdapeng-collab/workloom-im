@@ -1,0 +1,2 @@
++ bash /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-202 --repo /Users/mac/WorkLoom-fleet/.wt-mcd-m6
+PASS  MC-202 :: CNB 侧存在桌面发布流水线

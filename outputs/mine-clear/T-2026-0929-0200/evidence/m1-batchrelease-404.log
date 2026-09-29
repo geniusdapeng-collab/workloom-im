@@ -1,0 +1,5 @@
+## MC-105: RDAS outcome 依赖的 approvals.batchRelease（scripts/acceptance/outcome.mjs:148）
+POST /trpc/approvals.batchRelease →
+{"error":{"message":"No procedure found on path \"approvals.batchRelease\"","code":-32004,"data":{"code":"NOT_FOUND","httpStatus":404,"stack":"TRPCError: No procedure found on path \"approvals.batchRelease\"\n    at <anonymous> (/Users/mac/WorkLoom-fleet/.wt-mcd-im/node_modules/.pnpm/@trpc+server@11.19.0_typescript@7.0.2/node_modules/@trpc/server/src/unstable-core-do-not-import/http/resolveRespons
+源码检索（应无输出，表示 base 未实现该过程）：
+(none)

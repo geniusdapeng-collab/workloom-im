@@ -1,0 +1,57 @@
+{
+  "id": "MC-303",
+  "kind": "problem",
+  "level": "L2",
+  "severity": "P1",
+  "batch": 1,
+  "state": "open",
+  "title": "dispatch(runImmediately) 与 threads.run 绕过行业规划器：同一目标两条路径产出不同计划，围栏判定全部退化",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "apps/server/src/trpc/router.ts:1190-1193@4ff9943f0e5b331619a67db06af32ec09e9d8616",
+      "note": "dispatch 的 runImmediately 分支直呼 runQuest(app, gateway, scope, {threadId, goal, presetKey, llmCall})——未传 fallbackPlanner；对比 apps/server/src/runtime/thread-runner.ts:245-260 的 runQuestForThread 才注入 industryPlannerFactory"
+    },
+    {
+      "type": "code",
+      "ref": "apps/server/src/trpc/router.ts:1344-1346@4ff9943f0e5b331619a67db06af32ec09e9d8616",
+      "note": "threads.run（UI「执行或从中断处继续」/追问）同样直呼 runQuest，未走 runQuestForThread"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m2/m2-05-state-machine.json",
+      "note": "H1 断言实测（红）：同一目标两侧计划不一致——立即执行=[s1:pms.price.read:pms.price.read:{} / s2:competitor.fetch:{} / s3:pms.price.write:{}]，调度器=[s1:pms.price.read:{\"room_type\":\"主打房型\"} / s2:price.adjust:pms.price.write:{...}]；即立即执行入口未走行业规划器（空参 + 工具名当动作名）"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m2/m2-03-fault-injection.json",
+      "note": "C1：行业路径缺基准价时按 W-01 挂「人工裁决」（params_incomplete + R1/R2 求值异常说明）——与通用路径的「无规则命中」是两种完全不同的语义"
+    }
+  ],
+  "root_cause": {
+    "file": "apps/server/src/trpc/router.ts",
+    "line": 1191,
+    "commit": "4ff9943f0e5b331619a67db06af32ec09e9d8616",
+    "symbol": "threadsRouter.dispatch / threadsRouter.run"
+  },
+  "trigger_path": "任何走「立即执行」或「继续/追问」的入口：P1 启航（runImmediately）、StarRing 派活、P8 名册派单、失败重试。行业规划器只在调度器拾取 queued 线程时生效。",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "同一目标「把雅致大床房调价到 510 元」分别用 runImmediately=true 与 =false 派遣",
+      "expect": "两次计划一致（步数、action 词表、params 是否含业务参数），且 runImmediately 路径同样命中价格围栏词表（rule_impact 非空或明确标注缺参）",
+      "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2x$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+      "last_result": "fail",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m2/m2-05-state-machine.raw.json"
+    },
+    {
+      "kind": "property",
+      "given": "任意行业目标与任意入口（dispatch/run/调度器）",
+      "expect": "计划生成入口唯一（runQuestForThread），计划步数与 action/objectType 词表不随入口变化",
+      "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2x2$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+      "last_result": "fail",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m2/m2-05-state-machine.raw.json"
+    }
+  ],
+  "notes": "修复方向：dispatch 的 runImmediately 分支与 threads.run 改为调用 runQuestForThread（同样注入 industry planner + toolExecutor + 覆盖度提示），或把 fallbackPlanner 的注入下沉到 runQuest 的默认值。"
+}

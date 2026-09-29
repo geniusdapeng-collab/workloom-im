@@ -1,0 +1,6 @@
+· threadId=T-127 kind=routed
+· 派发后状态=pending_review（期望 pending_review）事件=4
+· decide -> 200 {"approvalId":"apr-e-10342","status":"approved","deduped":false,"gestureEventId":"E-10343"}
+
+结论：审批通过后 60s 内 → status=pending_review events=4→4
+✗ 线程停在 pending_review：审批通过未触发自动续跑（需人工再点推进）

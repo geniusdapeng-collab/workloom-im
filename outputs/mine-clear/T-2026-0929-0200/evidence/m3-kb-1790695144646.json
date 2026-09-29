@@ -1,0 +1,338 @@
+{
+  "probe": "m3-kb-linkage",
+  "started_at": "2026-09-29T15:19:04.346Z",
+  "base": "http://127.0.0.1:8899",
+  "workspaceSlug": "ai-pm-demo",
+  "memberNo": "MEM-001",
+  "mark": "M3KB1790695144346",
+  "assertions": [
+    {
+      "name": "B 端登录",
+      "ok": true,
+      "detail": "ws-aipm-demo"
+    },
+    {
+      "name": "C 端会话建立（h5 演示直登）",
+      "ok": true,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "name": "存在知识集可挂载探针文档",
+      "ok": true,
+      "detail": {
+        "collections": [
+          "需求池",
+          "竞品档案",
+          "用户反馈",
+          "产出档案",
+          "评测中心"
+        ]
+      }
+    },
+    {
+      "name": "探针口令在变更前不可检索（基线）",
+      "ok": true,
+      "detail": {
+        "hits": 0
+      }
+    },
+    {
+      "name": "上传返回 documentId",
+      "ok": true,
+      "detail": {
+        "documentId": "kbd-mumtnkha001d4cq",
+        "version": 1,
+        "chunks": 1
+      }
+    },
+    {
+      "name": "新文档落 pending_review",
+      "ok": true,
+      "detail": {
+        "status": "pending_review",
+        "version": 1
+      }
+    },
+    {
+      "name": "待审区可见新文档",
+      "ok": true,
+      "detail": {
+        "pending": 1
+      }
+    },
+    {
+      "name": "待审文档不入检索索引（承诺口径）",
+      "ok": true,
+      "detail": {
+        "hits": 0
+      }
+    },
+    {
+      "name": "上传动作不产生 pending 审批（变更前对照）",
+      "ok": true,
+      "detail": {
+        "before": 2,
+        "after": 2
+      }
+    },
+    {
+      "name": "approveDocument 成功",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "eventId": "E-10355"
+      }
+    },
+    {
+      "name": "文档状态 → active",
+      "ok": true,
+      "detail": {
+        "status": "active"
+      }
+    },
+    {
+      "name": "生效后可检索（索引面联动）",
+      "ok": true,
+      "detail": {
+        "hits": 1,
+        "first": "M3 联动探针知识条目 M3KB1790695144346"
+      }
+    },
+    {
+      "name": "待审区已移除该文档",
+      "ok": true,
+      "detail": {
+        "pending": 0
+      }
+    },
+    {
+      "name": "审批中心出现 kb.publish 记录（承诺联动）",
+      "ok": true,
+      "detail": {
+        "count": 3
+      }
+    },
+    {
+      "name": "[联动断点候选] 审批记录是 pending —— 但动作已执行、文档已生效（事后审批）",
+      "ok": false,
+      "detail": {
+        "approval_status": "pending",
+        "doc_status": "active",
+        "executed_at_doc": true
+      }
+    },
+    {
+      "name": "C 端问答能引用生效后的知识（问答入口数据源覆盖）",
+      "ok": true,
+      "detail": {
+        "answer": "本条目由 M3 联动探针写入（标记 M3KB1790695144346）。\n\n- 探针口令：北极星布草协议\n- 布草更换周期：72 小时\n- 生效范围：仅用于排雷证据取证，不属于经营数据"
+      }
+    },
+    {
+      "name": "[联动断点候选] 审批被驳回后，知识库状态与检索面未回滚（两面矛盾）",
+      "ok": true,
+      "detail": {
+        "approval": "rejected",
+        "doc": "active",
+        "hits": 1
+      }
+    }
+  ],
+  "c_session": {
+    "status": 200,
+    "user": {
+      "id": "cu-mumtnkdr00141qw",
+      "workspaceId": "ws-aipm-demo",
+      "channel": "h5",
+      "openid": "m3-probe-M3KB1790695144346",
+      "nickname": "M3 探针客户",
+      "memberId": null,
+      "verified": false,
+      "createdAt": "2026-09-29T15:19:04.429Z",
+      "authMode": "demo"
+    },
+    "error": null
+  },
+  "before": {
+    "docsBefore": 48,
+    "pendingBefore": 0,
+    "approvals": 2,
+    "searchHits": 0
+  },
+  "chat_before": {
+    "status": 200,
+    "data": {
+      "conversationId": "cvn-mumtnkh1001dyn5",
+      "intent": "kb_qa",
+      "answer": "抱歉，这个问题我暂时无法准确回答，不敢随意编造。已为您准备好工单草稿，确认后转人工跟进；您也可以换个说法再问我。",
+      "confidence": 0,
+      "citations": [],
+      "cards": [],
+      "ticket": null,
+      "ticketDraft": {
+        "kind": "other",
+        "title": "知识库未覆盖咨询：布草更换周期是多久？",
+        "payload": {
+          "text": "布草更换周期是多久？",
+          "intent": "kb_qa",
+          "topScore": null
+        }
+      },
+      "latencyMs": 5,
+      "mock": true
+    }
+  },
+  "upload": {
+    "documentId": "kbd-mumtnkha001d4cq",
+    "version": 1,
+    "chunks": 1
+  },
+  "approve_document": {
+    "status": 200,
+    "data": {
+      "ok": true,
+      "eventId": "E-10355"
+    }
+  },
+  "approval_after_approve": {
+    "count": 3,
+    "phantom": {
+      "approval_id": "apr-e-10355",
+      "tenant_id": "demo",
+      "workspace_id": "ws-aipm-demo",
+      "event_id": "E-10355",
+      "channel": "inapp",
+      "status": "pending",
+      "gesture": null,
+      "snapshot": {
+        "after": {
+          "documentId": "kbd-mumtnkha001d4cq",
+          "fence_action": "kb.publish"
+        },
+        "high_risk": false
+      },
+      "decided_by": null,
+      "decided_at": null,
+      "created_at": "2026-09-29T15:19:04.584Z",
+      "tier": "l2_captain",
+      "payload": {
+        "who": {
+          "id": "MEM-001",
+          "type": "human"
+        },
+        "object": {
+          "id": "kbd-mumtnkha001d4cq",
+          "type": "kb_document"
+        },
+        "context": {
+          "time": "2026-09-29T15:19:04.585Z",
+          "channel": "inapp",
+          "tenant_id": "demo",
+          "workspace_id": "ws-aipm-demo"
+        },
+        "decision": {
+          "after": {
+            "title": "M3 联动探针知识条目 M3KB1790695144346",
+            "status": "active",
+            "version": 1
+          },
+          "action": "kb.publish"
+        },
+        "event_id": "E-10355",
+        "rule_impact": []
+      },
+      "event": {
+        "who": {
+          "id": "MEM-001",
+          "type": "human"
+        },
+        "object": {
+          "id": "kbd-mumtnkha001d4cq",
+          "type": "kb_document"
+        },
+        "context": {
+          "time": "2026-09-29T15:19:04.585Z",
+          "channel": "inapp",
+          "tenant_id": "demo",
+          "workspace_id": "ws-aipm-demo"
+        },
+        "decision": {
+          "after": {
+            "title": "M3 联动探针知识条目 M3KB1790695144346",
+            "status": "active",
+            "version": 1
+          },
+          "action": "kb.publish"
+        },
+        "event_id": "E-10355",
+        "rule_impact": []
+      }
+    }
+  },
+  "chat_after": {
+    "status": 200,
+    "data": {
+      "conversationId": "cvn-mumtnkit002qm3u",
+      "intent": "kb_qa",
+      "answer": "本条目由 M3 联动探针写入（标记 M3KB1790695144346）。\n\n- 探针口令：北极星布草协议\n- 布草更换周期：72 小时\n- 生效范围：仅用于排雷证据取证，不属于经营数据",
+      "confidence": 0.8685,
+      "citations": [
+        {
+          "documentTitle": "M3 联动探针知识条目 M3KB1790695144346",
+          "heading": "",
+          "content": "# M3 联动探针知识条目 M3KB1790695144346\n\n本条目由 M3 联动探针写入（标记 M3KB1790695144346）。\n\n- 探针口令：北极星布草协议\n- 布草更换周期：72 小时\n- 生效范围：仅用于排雷证据取证，不属于经营数据"
+        }
+      ],
+      "cards": [],
+      "ticket": null,
+      "ticketDraft": null,
+      "latencyMs": 3,
+      "mock": true
+    }
+  },
+  "reject": {
+    "status": 200,
+    "data": {
+      "approvalId": "apr-e-10355",
+      "status": "rejected",
+      "deduped": false,
+      "gestureEventId": "E-10356"
+    }
+  },
+  "after_reject": {
+    "doc_status": "active",
+    "search_hits": 1
+  },
+  "db": {
+    "events": [
+      {
+        "action": "kb.document.upsert",
+        "actor": "MEM-001",
+        "event_id": "E-10354",
+        "created_at": "2026-09-29T15:19:04.562Z"
+      },
+      {
+        "action": "kb.publish",
+        "actor": "MEM-001",
+        "event_id": "E-10355",
+        "created_at": "2026-09-29T15:19:04.585Z"
+      }
+    ],
+    "approvals": [
+      {
+        "approval_id": "apr-e-10355",
+        "status": "rejected",
+        "decided_by": "MEM-001",
+        "snapshot": {
+          "after": {
+            "documentId": "kbd-mumtnkha001d4cq",
+            "fence_action": "kb.publish"
+          },
+          "high_risk": false
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+
+ RUN  v5.0.1 /Users/mac/WorkLoom-fleet/.wt-mcd-fe/apps/server
+
+
+ Test Files  1 passed (1)
+      Tests  101 passed (101)
+   Start at  02:23:01
+   Duration  2.63s (tests 97%, transform 1%, import 1%)
+

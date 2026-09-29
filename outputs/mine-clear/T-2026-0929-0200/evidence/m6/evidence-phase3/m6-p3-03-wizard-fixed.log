@@ -1,0 +1,10 @@
+OK   向导前出厂价带在位（4 档） —— {"亲子双床房":[480,560],"商旅大床房":[360,420],"美团大床房":[380,440],"雅致大床房":[420,480]}
+OK   owner 登录
+OK   workspace.configure 返回 200 —— status=200
+OK   向导后 price_bands 仍为同样 4 档（合并语义） —— {"亲子双床房":[480,560],"商旅大床房":[360,420],"美团大床房":[380,440],"雅致大床房":[420,480]}
+OK   向导字段已写入且与价带共存 —— ["name","note","source","industry","price_bands","configured_at","configured_by"]
+OK   dispatch 建线程 —— threadId=T-152
+OK   向导后同目标线程 completed（R1 自动） —— status=completed
+FAIL 无 params_incomplete 遗留 —— {"approval_id":"apr-e-11608","pi":"true"}
+
+verdict: FAIL (1)

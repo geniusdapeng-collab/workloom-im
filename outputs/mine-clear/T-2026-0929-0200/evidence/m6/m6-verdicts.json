@@ -1,0 +1,472 @@
+{
+  "schema": "workloom.mine-clear/m6-verdicts@1",
+  "task_id": "T-2026-0929-0200",
+  "verifier": "mcd_verify",
+  "acceptance_commit_phase1": "388c8c81299a01b91b61ad82bbbacc9aaa65f22f",
+  "acceptance_commit_phase2": "0c0a1ad（task/T-2026-0929-0200-fe；待父会话合入 task/T-2026-0929-0200）",
+  "environment": "local-preview",
+  "independent_worktree": "/Users/mac/WorkLoom-fleet/.wt-mcd-m6",
+  "independent_databases": [
+    "wl_mcd_m6_suite",
+    "wl_mcd_m6_factory",
+    "wl_mcd_m6_amp",
+    "wl_mcd_m6_p2",
+    "wl_mcd_m6_p3",
+    "wl_mcd_m6_p4"
+  ],
+  "verdicts": [
+    {
+      "card": "MC-401",
+      "covers": [
+        "MC-102"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-clean/m6-a04-fence-rule-change.log"
+      ]
+    },
+    {
+      "card": "MC-402",
+      "covers": [
+        "MC-109"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-clean/m6-a04-fence-rule-change.log",
+        "work/m6/evidence-clean/m6-a06b-when-verdict.log"
+      ]
+    },
+    {
+      "card": "MC-403",
+      "covers": [
+        "MC-103"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-clean/m6-a05-fence-when-blocked.log",
+        "work/m6/evidence-clean/m6-a06-fence-when-allowed.log",
+        "work/m6/evidence-clean/m6-a14-when-retry-probe.log"
+      ]
+    },
+    {
+      "card": "MC-411",
+      "covers": [
+        "MC-301"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-clean/m6-a09-m2-02-concurrency.log"
+      ]
+    },
+    {
+      "card": "MC-412",
+      "covers": [
+        "MC-302"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-clean/m6-a09-m2-02-concurrency.log"
+      ]
+    },
+    {
+      "card": "MC-413",
+      "covers": [
+        "MC-303"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-clean/m6-a12-m2-05-state-machine.log"
+      ],
+      "note": "H1/I1 通过；J1 受 M6-F1 影响"
+    },
+    {
+      "card": "MC-414",
+      "covers": [
+        "MC-304"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-clean/m6-a11-m2-04-boundaries.log",
+        "work/m6/evidence-clean/m6-a08-m2-01-main-loop.log"
+      ]
+    },
+    {
+      "card": "MC-415",
+      "covers": [
+        "MC-305"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-clean/m6-a08-m2-01-main-loop.log",
+        "work/m6/evidence-clean/m6-a12-m2-05-state-machine.log"
+      ]
+    },
+    {
+      "card": "MC-416",
+      "covers": [
+        "MC-306"
+      ],
+      "verdict": "pass_with_finding",
+      "evidence": [
+        "work/m6/evidence-factory/m6-new-01-wizard-impact.log"
+      ],
+      "note": "出厂态可达；向导后失效（M6-F1）"
+    },
+    {
+      "card": "MC-421",
+      "covers": [
+        "MC-108"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-clean/m6-a02-highrisk-batch.log"
+      ]
+    },
+    {
+      "card": "MC-422",
+      "covers": [
+        "MC-101",
+        "MC-104"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-clean/m6-a01-approval-resume.log"
+      ]
+    },
+    {
+      "card": "MC-423",
+      "covers": [
+        "MC-106"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-clean/m6-a03-approval-reuse.log"
+      ]
+    },
+    {
+      "card": "MC-424",
+      "covers": [
+        "MC-107",
+        "MC-205"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-clean/m6-d05-suite-clean.log",
+        "work/m6/evidence-factory/m6-a15-suite-port-occupied.log"
+      ]
+    },
+    {
+      "card": "MC-431",
+      "covers": [
+        "MC-105"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-clean/m6-a07-outcome-trpc-surface.log",
+        "work/m6/evidence-clean/m6-a16-outcome-suite.log"
+      ]
+    },
+    {
+      "card": "MC-432",
+      "covers": [
+        "MC-201"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-clean/m6-c-MC-201.log"
+      ],
+      "grade": "B"
+    },
+    {
+      "card": "MC-433",
+      "covers": [
+        "MC-202"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-clean/m6-c-MC-202.log"
+      ],
+      "grade": "B",
+      "note": "流水线未实跑"
+    },
+    {
+      "card": "MC-434",
+      "covers": [
+        "MC-203"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-clean/m6-c-MC-203.log",
+        "work/m6/evidence/m6-d07-release-gate-prod.log"
+      ]
+    },
+    {
+      "card": "MC-435",
+      "covers": [
+        "MC-204"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-clean/m6-c-MC-204.log",
+        "work/m6/evidence-clean/m6-d12-server-dbgate.log"
+      ]
+    },
+    {
+      "card": "MC-436",
+      "covers": [
+        "MC-206"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-clean/m6-c-MC-206.log"
+      ]
+    },
+    {
+      "card": "MC-437",
+      "covers": [
+        "MC-207"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-clean/m6-c-MC-207.log"
+      ]
+    },
+    {
+      "card": "MC-438",
+      "covers": [
+        "MC-208"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-clean/m6-c-MC-208.log",
+        "work/m6/evidence/m6-d02-test.log"
+      ]
+    },
+    {
+      "card": "MC-439",
+      "covers": [
+        "MC-209"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-factory/m6-c-MC-209-amp.log"
+      ]
+    },
+    {
+      "card": "MC-440",
+      "covers": [
+        "MC-210"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-phase3/m6-p3-04-gate-anomalous.log"
+      ],
+      "note": "phase-3 复验通过（MC-464 真门禁报 499700 处异常）"
+    },
+    {
+      "card": "MC-441",
+      "covers": [
+        "MC-110"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-p3/m6-f1-01-kb-publish-gate.log",
+        "work/m6/evidence-p3/m6-b02-linkage-kb.log"
+      ]
+    },
+    {
+      "card": "MC-442",
+      "covers": [
+        "MC-111"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-p3/m6-f1-02-ask-coverage.log",
+        "work/m6/evidence-p3/m6-b03-linkage-ask.log"
+      ]
+    },
+    {
+      "card": "MC-443",
+      "covers": [
+        "MC-112"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-p3/m6-f1-03-ticket-reassign.log",
+        "work/m6/evidence-p3/m6-b04-linkage-ticket.log"
+      ]
+    },
+    {
+      "card": "MC-444",
+      "covers": [
+        "MC-113"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-p3/m6-f1-04-inbox-unified.log"
+      ]
+    },
+    {
+      "card": "MC-445",
+      "covers": [
+        "MC-114"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-p3/m6-f1-05-floor-blocked-asking.log",
+        "work/m6/evidence-p3/m6-b01-linkage-thread.log"
+      ]
+    },
+    {
+      "card": "MC-461",
+      "covers": [
+        "MC-501"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-phase3/m6-p3-01-suite-fresh.log"
+      ]
+    },
+    {
+      "card": "MC-462",
+      "covers": [
+        "MC-502"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-phase3/m6-p3-06b-root-test-db.log"
+      ]
+    },
+    {
+      "card": "MC-463",
+      "covers": [
+        "MC-503"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-phase3/m6-p3-03b-wizard-fixed.log"
+      ]
+    },
+    {
+      "card": "MC-464",
+      "covers": [
+        "MC-504"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-phase3/m6-p3-04-gate-anomalous.log"
+      ]
+    },
+    {
+      "card": "MC-465",
+      "covers": [
+        "MC-505"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-phase3/m6-p3-07-axe.log"
+      ]
+    },
+    {
+      "card": "MC-466",
+      "covers": [
+        "MC-506"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-phase3/m6-p3-07b-brake.log"
+      ]
+    },
+    {
+      "card": "MC-467",
+      "covers": [
+        "MC-507"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-phase3/m6-p3-02-suite-with-leftovers.log"
+      ]
+    },
+    {
+      "card": "MC-468",
+      "covers": [
+        "MC-508"
+      ],
+      "verdict": "pass",
+      "evidence": [
+        "work/m6/evidence-phase3/m6-p3-05-outcome-no-pollution.log"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "M6-F1",
+      "severity": "P1",
+      "title": "落地向导整块替换 business，清空出厂 price_bands → R1/R2 再失效",
+      "files": [
+        "apps/server/src/trpc/router.ts:723",
+        "scripts/seed.ts:185-192",
+        "apps/server/src/industry/hotel/acquisition-planner.ts:113"
+      ],
+      "repro": [
+        "work/m6/repro-wizard-clobber.mjs",
+        "work/m6/repro-wizard-impact.mjs"
+      ]
+    },
+    {
+      "id": "M6-F2",
+      "severity": "P2",
+      "title": "release-gate 验链摘要解析失败，异常账本仍报工具故障",
+      "files": [
+        "scripts/release-gate.ts:60-72",
+        "scripts/release-gate.ts:431-451"
+      ],
+      "repro": [
+        "work/m6/evidence-factory/m6-c-MC-440-gate-anomalous2.log"
+      ]
+    },
+    {
+      "id": "M6-N1",
+      "severity": "P3",
+      "title": "suite R-06 对历史遗留 L2 待批敏感（>20 条时误红）",
+      "files": [
+        "scripts/suite.ts:2686"
+      ],
+      "note": "干净库 463/463；仅测试健壮性"
+    },
+    {
+      "id": "M6-N2",
+      "severity": "P3",
+      "title": "outcome.mjs 介入回退 rows[0] 会挑到无关 L4 待批行 → O 域 trial 误判未通过",
+      "files": [
+        "scripts/acceptance/outcome.mjs:189"
+      ],
+      "evidence": [
+        "work/m6/evidence-p4/m6-a16b-outcome-suite.log"
+      ]
+    },
+    {
+      "id": "M6-F3",
+      "severity": "P2",
+      "title": "m2-01 断言与上游 kind 标记漂移（假红）→ 已立新卡 MC-509",
+      "files": [
+        "packages/runtime/src/loop.ts:350",
+        "packages/runtime/src/loop.ts:946"
+      ],
+      "repro": [
+        "work/m6/evidence-phase3/exp-m2-01-bands2.log"
+      ]
+    }
+  ],
+  "open_cards_not_covered": [
+    "MC-509（M6-F3 断言漂移，待更新断言）"
+  ],
+  "coverage": {
+    "fix_cards_total": 36,
+    "verified_pass": 35,
+    "verified_fail": 0,
+    "open_assertion_drift": 1,
+    "not_covered": 0
+  },
+  "acceptance_commit_phase3": "31282ce（merge 修复批 F，含上游 bfd5fe6；tree 见 git rev-parse 31282ce^{tree}）"
+}

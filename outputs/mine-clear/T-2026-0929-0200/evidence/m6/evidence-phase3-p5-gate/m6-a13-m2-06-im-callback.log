@@ -1,0 +1,12 @@
++ node /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/assertions/m2-06-im-callback.mjs
+• 已绑定测试 openid :: {"member":"MEM-002","channel":"dingtalk","openid":"ou-m2-m2muna39rj","before":{}}
+✓ A1 待审线程就绪（pending_review + approvalId） :: {"threadId":"T-189","approvalId":"apr-e-12038","status":"pending_review"}
+✓ B1 未验签通道下冒名 openid 被拒（403，P0-1 降级纪律） :: {"status":403,"message":"未验签通道回调仅允许本人操作：operatorOpenId 须为当前会话成员 MEM-002 在 dingtalk 绑定的 openid（P0-1 开发降级）"}
+✓ B2 冒名被拒后审批未落库 :: {"status":"pending"}
+✓ C1 本人 IM 手势放行成功（unsigned 标注） :: {"approvalId":"apr-e-12038","status":"approved","deduped":false,"operator":"MEM-002","unsigned":true}
+✓ C2 重复回调幂等（deduped=true） :: {"approvalId":"apr-e-12038","status":"approved","deduped":true,"operator":"MEM-002","unsigned":true}
+✓ C3 手势事件只有一条（重复回调不重复入账） :: {"n":1}
+✓ D1 IM 通道批准后线程自动续跑（21s 内离开 pending_review） :: {"observed":{"ok":true,"status":"queued","progress_done":1,"progress_total":2},"waitedMs":2,"note":"已续跑"}
+✓ E1 用例环境已恢复（openid 绑定还原） :: {"after":{}}
+
+M2-06 IM 手势回调：9/9 通过（证据 /Users/mac/Documents/Codex/2026-09-29/https-cnb-cool-workloom-ai-workloom-5/work/m6/out-p5/evidence/m2/m2-06-im-callback.json）

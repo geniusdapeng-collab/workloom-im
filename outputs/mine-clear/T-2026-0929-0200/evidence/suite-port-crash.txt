@@ -1,0 +1,23 @@
+# pnpm suite 在 8791 被占时崩溃
+
+    at Server.setupListenHandle [as _listen2] (node:net:2167:16)
+    at listenInCluster (node:net:2224:12)
+    at node:net:2448:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:2203:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '127.0.0.1',
+  port: 8791
+}
+
+Node.js v24.19.0
+ ELIFECYCLE  Command failed with exit code 1.
+───── [suite] exit=1 duration=5s
+### fresh install gate finished 2026-09-29T15:12:24Z
+
+## 源码位置
+2448:const STUB_PORT = 8791;

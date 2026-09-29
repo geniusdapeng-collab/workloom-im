@@ -1,0 +1,71 @@
+{
+  "id": "MC-414",
+  "kind": "fix",
+  "covers": [
+    "MC-304"
+  ],
+  "level": "L4",
+  "severity": "P1",
+  "batch": 1,
+  "title": "行业语义域声明 + 能力试算选岗：口语目标不再静默落到无关岗位「完成」",
+  "state": "fixed",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "apps/server/src/industry/hotel/acquisition-planner.ts#claimsHotelDomain@6828469",
+      "note": "行业词表（口碑/投诉/客服/答复/回评、上调/下调/加价/减价/提价、巡检、送物…）与规划分支同源，模块加载时 registerIndustryGoalClaim(claimsHotelDomain) 注册"
+    },
+    {
+      "type": "code",
+      "ref": "apps/server/src/runtime/thread-runner.ts#resolveDispatchPreset@6828469",
+      "note": "通用路由未命中 → 按行业声明逐岗位试算（industry-plan）→ 仍无命中才走显式兜底（fallback，日志 + 响应 presetSelection=fallback + notice）"
+    },
+    {
+      "type": "log",
+      "ref": "evidence/fix-c/final-m2-05.log",
+      "note": "I1：「处理一条差评并回复」→ preset_key=review-agent，review.* 步骤 2 条，挂起 pending_review（修复前 competitor-agent/competitor.crawl 1 步 completed）"
+    },
+    {
+      "type": "log",
+      "ref": "evidence/fix-c/m2-04-boundaries.json",
+      "note": "无域目标（500 字长标题 / 注入 payload）仍可正常派遣（21/21 全绿）——兜底路径保留且已可见，不做硬拒绝"
+    }
+  ],
+  "root_cause": {
+    "file": "apps/server/src/runtime/thread-runner.ts",
+    "line": 107,
+    "symbol": "resolveDispatchPresetKey",
+    "commit": "4ff9943"
+  },
+  "fix_plan": "① 词表进行业包：acquisition-planner 增加 claimsHotelDomain（与规划分支共用同一批常量）并向基座注册；② 基座新增 registerIndustryGoalClaim 与 resolveDispatchPreset（返回来源），未命中时按岗位能力试算；③ 兜底保留但显式化（日志 + 响应字段），不再静默。",
+  "blast_radius": "hotel 工作区：口碑/投诉/客服/答复/回评 与 常用调价动词目标改派正确岗位；其它行业包未声明 claim → 行为与今一致；无域目标仍走原兜底（不然 m2-02 B1/B2、m2-04 B3/B6、m2-05 C1 会硬红：中性标题派遣被拒会破坏并发/边界断言）。",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "标题「处理一条差评并回复」",
+      "expect": "命中持有 review.reply 的岗位并产出 review.* 步骤（不得由无关工具完成）",
+      "command": "同 FIX-C-03 命令",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-c/final-m2-01.log"
+    },
+    {
+      "kind": "property",
+      "given": "任意目标文本",
+      "expect": "行业声明能判定的目标不得落到无关岗位；无法判定时兜底必须可见（presetSelection/notice + 日志）",
+      "command": "同 FIX-C-03 命令 + apps/server 单测（claimsHotelDomain 15 例）",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-c/final-m2-01.log"
+    }
+  ],
+  "regression": {
+    "command": "pnpm -C apps/server test && node outputs/mine-clear/T-2026-0929-0200/assertions/m2-04-boundaries.mjs",
+    "evidence": "evidence/fix-c/m2-04-boundaries.json"
+  },
+  "rollback": "回滚 f199d92 中 thread-runner.ts + acquisition-planner.ts：恢复 ready[0] 静默兜底（假交付风险回归）。",
+  "fixed_by": "fixer-C",
+  "verified_by": null,
+  "conflict_paths": [
+    "apps/server/src/runtime/thread-runner.ts",
+    "apps/server/src/industry/hotel/acquisition-planner.ts"
+  ]
+}

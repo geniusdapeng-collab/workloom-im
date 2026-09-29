@@ -1,0 +1,17 @@
++ node /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-thread.mjs
+✓ 登录（owner） :: {"role":"owner","workspaceId":"ws-yunqi"}
+
+—— S0 变更前：threads.list=50，pending 审批=34 ——
+
+✓ 派遣返回 threadId（意图路由未判为含糊） :: {"kind":"routed","mode":"quest","status":"pending_review"}
+✓ 派遣后线程 → pending_review（围栏挂起） :: {"status":"pending_review","progress":"1/2","preset":"pricing-agent"}
+✓ 线程详情给出 pending_approval_id（X-02 直达入口） :: {"pending_approval_id":"apr-e-10492"}
+✓ 审批行已落库且 pending（事实源） :: {"approvalId":"apr-e-10492","row":{"approval_id":"apr-e-10492","status":"pending","tier":"l2_captain","channel":"inapp","decided_by":null,"decided_at":null,"expires_at":"2026-09-30T18:10:03.657Z"}}
+✗ 数字职场该员工进入 asking 且 approvalId 直达 :: [{"presetKey":"desktop-agent","state":"asking","currentThread":null,"pendingTier":"l4_chairman","approvalId":"apr-boost-i2","celebrating":false,"statusLine":"请示待裁：inspection.scan"},{"presetKey":"reconcile-agent","state":"asking","currentThread":null,"pendingTier":"l4_chairman","approvalId":"apr-e-se
+✓ 批准手势成功 :: {"approvalId":"apr-e-10492","status":"approved","deduped":false,"gestureEventId":"E-10493"}
+✓ 审批状态已落库 approved :: {"approval_id":"apr-e-10492","status":"approved","tier":"l2_captain","channel":"inapp","decided_by":"MEM-001","decided_at":"2026-09-29T18:10:04.731Z","expires_at":"2026-09-30T18:10:03.657Z"}
+✓ [联动断点候选] 批准后线程是否自动续跑（无客户端介入） :: {"status":"completed","age_s":20,"error":null}
+✓ 客户端 threads.run 可续跑（路径本身可用） :: {"status":"completed","run":"completed"}
+✓ 续跑写动作携带审批引用（#34 授权留痕） :: {"events":[{"action":"thread.dispatch","basis":null},{"action":"pms.price.read","basis":null},{"action":"price.adjust","basis":["越围栏挂起：围栏无法求值（缺参数）→ 一律人工裁决：R1: - 期望数字，得到 undefined；R2: < 期望数字，得到 undefined"]},{"action":"approval.gesture","basis":null},{"action":"price.adjust","basis":["经审批 apr-e-10492 
+
+联动探针 1：10/11 通过；证据 → /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/evidence/m3-thread-1790705427896.json

@@ -1,0 +1,233 @@
+{
+  "title": "M2-01 主链路闭环",
+  "started_at": "2026-09-29T15:48:23.345Z",
+  "finished_at": "2026-09-29T15:48:44.619Z",
+  "base": "http://127.0.0.1:8901",
+  "suffix": "m2a234823",
+  "total": 22,
+  "passed": 20,
+  "failed": 1,
+  "checks": [
+    {
+      "name": "seeded sessions",
+      "ok": null,
+      "detail": {
+        "owner": "owner",
+        "manager": "manager",
+        "readonly": "readonly"
+      }
+    },
+    {
+      "name": "dispatch 建线程且路由为 quest",
+      "ok": true,
+      "detail": {
+        "status": 200,
+        "d": {
+          "kind": "routed",
+          "mode": "quest",
+          "via": "rule",
+          "threadId": "T-156",
+          "status": "pending_review",
+          "stepsDone": 2,
+          "stepsTotal": 3
+        }
+      }
+    },
+    {
+      "name": "dispatch 停在 pending_review（存在未放行写步骤）",
+      "ok": true,
+      "detail": {
+        "kind": "routed",
+        "mode": "quest",
+        "via": "rule",
+        "threadId": "T-156",
+        "status": "pending_review",
+        "stepsDone": 2,
+        "stepsTotal": 3
+      }
+    },
+    {
+      "name": "threads.get 返回 pending_approval_id",
+      "ok": true,
+      "detail": {
+        "approvalId": "apr-e-9275",
+        "status": "pending_review"
+      }
+    },
+    {
+      "name": "approvals 行为 pending 且快照声明 gate",
+      "ok": true,
+      "detail": {
+        "status": "pending",
+        "tier": "l2_captain",
+        "gate": true,
+        "step": "s3",
+        "action": "pms.price.write"
+      }
+    },
+    {
+      "name": "挂起事件落账（basis 标注越围栏挂起）",
+      "ok": true,
+      "detail": {
+        "event_id": "E-9275",
+        "basis": [
+          "越围栏挂起：写类动作无规则命中 → default_level=review"
+        ],
+        "rule_impact": []
+      }
+    },
+    {
+      "name": "统一队列可见该审批",
+      "ok": true,
+      "detail": {
+        "queueSize": 23
+      }
+    },
+    {
+      "name": "readonly 审批被拒（403/FORBIDDEN）",
+      "ok": true,
+      "detail": {
+        "status": 403,
+        "code": "FORBIDDEN",
+        "body": "{\"error\":{\"message\":\"当前成员没有“审批裁决”权限。\",\"code\":-32003,\"data\":{\"code\":\"FORBIDDEN\",\"httpStatus\":403,\"stack\":\"TRPCError: 当前成员没有“审批裁决”权限。\\n    at <anonymous> (/Users/"
+      }
+    },
+    {
+      "name": "readonly 被拒后审批仍为 pending（未落库）",
+      "ok": true,
+      "detail": {
+        "status": "pending"
+      }
+    },
+    {
+      "name": "非法手势被拒（400/BAD_REQUEST）",
+      "ok": true,
+      "detail": {
+        "status": 400,
+        "code": "BAD_REQUEST",
+        "message": "[\n  {\n    \"code\": \"invalid_value\",\n    \"values\": [\n      \"approve\",\n      \"edit\",\n      \"reject\"\n    ],\n    \"path\": [\n      \"gesture\"\n    ],\n    \"message\": \"Invalid option: expected one of \\\"approve\\\"|\\\"edit\\\"|\\\"reject\\\"\"\n  }\n]"
+      }
+    },
+    {
+      "name": "空理由驳回被拒（L5.2）",
+      "ok": true,
+      "detail": {
+        "status": 400,
+        "message": "驳回必须选择原因枚举（L5.2）"
+      }
+    },
+    {
+      "name": "两次非法手势后审批状态未变",
+      "ok": true,
+      "detail": {
+        "status": "pending",
+        "gesture": null
+      }
+    },
+    {
+      "name": "manager 采纳成功",
+      "ok": true,
+      "detail": {
+        "approvalId": "apr-e-9275",
+        "status": "approved",
+        "deduped": false,
+        "gestureEventId": "E-9276"
+      }
+    },
+    {
+      "name": "手势事件经网关落账（唯一一条）",
+      "ok": true,
+      "detail": {
+        "count": 1,
+        "after": {
+          "weight": 1,
+          "gesture": "approve",
+          "approvalId": "apr-e-9275"
+        }
+      }
+    },
+    {
+      "name": "审批通过后服务端自动续跑（21s 内线程自达 completed）",
+      "ok": false,
+      "detail": {
+        "observed": {
+          "ok": false,
+          "status": "pending_review",
+          "progress_done": 2,
+          "progress_total": 3
+        },
+        "waitedMs": 21069,
+        "note": "未自动续跑：审批通过了但线程停在 pending_review（仅客户端触发 threads.run 才会推进）"
+      }
+    },
+    {
+      "name": "停摆期间该步骤无执行回执事件（确为未推进）",
+      "ok": true,
+      "detail": {
+        "n": 0
+      }
+    },
+    {
+      "name": "threads.run 携带已批准步骤直接执行 → completed",
+      "ok": true,
+      "detail": {
+        "status": 200,
+        "runData": {
+          "threadId": "T-156",
+          "status": "completed",
+          "stepsDone": 3,
+          "stepsTotal": 3,
+          "unverified": []
+        }
+      }
+    },
+    {
+      "name": "终态一致：completed + progress 收敛 + 无遗留审批",
+      "ok": true,
+      "detail": {
+        "status": "completed",
+        "done": 3,
+        "total": 3,
+        "pending": null
+      }
+    },
+    {
+      "name": "执行事件带可核验回执（receipt.synced=true, mode=simulated）且标注审批来源",
+      "ok": true,
+      "detail": {
+        "receipt": {
+          "mode": "simulated",
+          "synced": true,
+          "verified_at": "2026-09-29T15:48:44.545Z",
+          "snapshot_uri": "workloom-sim://receipt/pms.price.write/mumuppxd"
+        },
+        "basis": [
+          "经审批 apr-e-9275 批准执行（E3.3 恢复闭环）"
+        ],
+        "approval_ref": null
+      }
+    },
+    {
+      "name": "属性：completed 线程的执行事件全部 receipt.synced=true（全工作区）",
+      "ok": true,
+      "detail": {
+        "offenders": [],
+        "note": "反例即 E3.7「无回执不得宣称完成」被破坏"
+      }
+    },
+    {
+      "name": "settledSince 流水含该线程（结算投影）",
+      "ok": true,
+      "detail": {
+        "n": 5
+      }
+    },
+    {
+      "name": "行动消息流投影含挂起 + 执行 + 手势链路（≥3 条）",
+      "ok": true,
+      "detail": {
+        "n": 5
+      }
+    }
+  ]
+}

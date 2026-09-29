@@ -1,0 +1,57 @@
+{
+  "id": "MC-306",
+  "kind": "problem",
+  "level": "L2",
+  "severity": "P2",
+  "batch": 2,
+  "state": "open",
+  "title": "出厂一店一档缺 business.price_bands：行业规划器取不到价格锚点，R1「≤8% 自动」永不可达、R2「保底价熔断」永不触发，调价 100% 转人工",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "apps/server/src/industry/hotel/acquisition-planner.ts:32-79@4ff9943f0e5b331619a67db06af32ec09e9d8616",
+      "note": "PlanningArchive 约定 business.price_bands（房型 → [低, 高]）作为唯一价格锚点来源；取不到锚点时**不造数**，省略 before/after，交围栏失败关闭"
+    },
+    {
+      "type": "code",
+      "ref": "scripts/seed.ts:579@4ff9943f0e5b331619a67db06af32ec09e9d8616",
+      "note": "种子档案 = { ...yunqiArchive(), dataMode: 'simulated' }；yunqiArchive 实际键为 sop/charter/audience/property/forbidden/inspection/competitors/history_curve/brand_guideline —— 无 business/price_bands（实测库内 jsonb_object_keys 确认）"
+    },
+    {
+      "type": "db",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m2/m2-03-fault-injection.json",
+      "note": "实测 C1：「把某房型调价到 510 元」→ 围栏无法求值（R1/R2 缺 before/after）→ W-01 人工裁决（params_incomplete=true）——保底价 ¥380（档案 forbidden 明写）在这条链路上根本没机会熔断"
+    },
+    {
+      "type": "db",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m2/m2-05-state-machine.json",
+      "note": "J1 断言实测（红）：出厂档案下「把雅致大床房调价上调 3%」→ approval.params_incomplete=true、warning 显示 R1/R2 求值异常（before/after 缺失），线程 pending_review。对照实验（A1/A2/B1/B2 绿）：临时注入 price_bands（雅致大床房 420–480）后，同一目标 +3% → R1 命中自动执行、completed；目标 300 元 → R2 命中熔断 paused（rule_impact=R2:blocked）。差异根因即价带字段缺失"
+    }
+  ],
+  "root_cause": {
+    "file": "scripts/seed.ts",
+    "line": 579,
+    "commit": "4ff9943f0e5b331619a67db06af32ec09e9d8616",
+    "symbol": "yunqiArchive (seed) / archiveOf + roomAnchorsOf (industry planner)"
+  },
+  "trigger_path": "客户按出厂种子启动 → 任何调价目标：行业规划器取不到锚点 → 步骤无 before/after → R1/R2 求值异常 → 全部落人工裁决；「涨幅 ≤8% 自动执行」「保底价熔断」两个卖点在真机上都无法演示。",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "出厂种子档案 + 目标「把雅致大床房调价上调 3%」（价带内）",
+      "expect": "R1 命中并自动执行（线程 completed、无人工审批、事件 rule_impact 含 R1）",
+      "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2g$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+      "last_result": "fail",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m2/m2-05-state-machine.raw.json"
+    },
+    {
+      "kind": "sample",
+      "given": "出厂种子档案 + 目标「把雅致大床房调价到 300 元」（低于 ¥380 保底）",
+      "expect": "R2 命中熔断（线程 paused、事件 rule_impact=R2:blocked）",
+      "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2g2$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+      "last_result": "fail",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m2/m2-05-state-machine.raw.json"
+    }
+  ],
+  "notes": "契约错配嫌疑：一店一档实际结构（property/forbidden/history_curve）与 PlanningArchive 期望（business/entity_card/content_assets/conversion_assets）不一致——建议 M1 静态卡一并核对是否有同源字段错配；修复可择一：种子补价带，或规划器改从 forbidden/history_curve 推导锚点并保持 fail-closed 语义。"
+}

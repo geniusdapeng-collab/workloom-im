@@ -1,0 +1,45 @@
+{
+  "id": "MC-107",
+  "kind": "problem",
+  "level": "L2",
+  "severity": "P2",
+  "batch": 3,
+  "state": "open",
+  "title": "全场景套件硬编码 STUB_PORT=8791：端口被占用即整轮中止，且无预检提示",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "scripts/suite.ts:2448@4ff9943",
+      "note": "const STUB_PORT = 8791（无环境变量覆盖），listen 失败直接抛未捕获异常"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m1-suite-port.log",
+      "note": "实测：本机另一会话的服务占用 8791 → 套件在 D24 段 EADDRINUSE 崩溃，整轮中止（此时 8787 已有 SUITE_SERVER_PORT 覆盖与占用预检，8791 没有）"
+    }
+  ],
+  "root_cause": {
+    "file": "scripts/suite.ts",
+    "line": 2448,
+    "commit": "4ff9943",
+    "symbol": "STUB_PORT"
+  },
+  "trigger_path": "同机并行跑两个验收/排雷会话（甲方机器常见）→ 第二个会话的套件在 stub 段崩溃，无法得到完整门禁结果",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "8791 被其他进程占用时运行套件，并设置 SUITE_STUB_PORT=8913",
+      "expect": "套件使用 8913 并在 stub 段通过（不因 8791 占用而崩溃）",
+      "command": "cd <repo> && SUITE_SERVER_PORT=8911 SUITE_STUB_PORT=8913 node_modules/.bin/tsx --env-file=<env> scripts/suite.ts",
+      "last_result": "fail"
+    },
+    {
+      "kind": "property",
+      "given": "任意被占用的套件端口",
+      "expect": "套件在启动前给出可操作的错误（端口 + 覆盖变量名），不出现未捕获 EADDRINUSE",
+      "command": "同上（先占端口再跑）",
+      "last_result": "fail"
+    }
+  ],
+  "notes": "非产品缺陷，属交付/验收工具可用性；影响并行验收与复跑效率。"
+}

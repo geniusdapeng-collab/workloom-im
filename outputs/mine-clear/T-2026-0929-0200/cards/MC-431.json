@@ -1,0 +1,53 @@
+{
+  "id": "MC-431",
+  "kind": "fix",
+  "batch": 1,
+  "state": "fixed",
+  "title": "RDAS O 域改用既有审批过程 + 恢复 fence.activeRules 端点",
+  "covers": [
+    "MC-105"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "scripts/acceptance/outcome.mjs:1@b08082b",
+      "note": "修复提交 b08082b"
+    },
+    {
+      "type": "log",
+      "ref": "work/fix-d/assert-sweep.log",
+      "note": "9/9 tRPC 过程已注册（基线 2 个 404）"
+    }
+  ],
+  "fix_plan": "见 work/fix-d/REPORT-fix-d-service-acceptance.md 对应卡片小节（提交 b08082b）",
+  "blast_radius": "见报告对应小节",
+  "conflict_paths": [
+    "scripts/acceptance/outcome.mjs"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "复跑 MC-105 的验收断言",
+      "expect": "9/9 tRPC 过程已注册（基线 2 个 404）",
+      "command": "bash work/fix-d/assert-sweep.sh",
+      "last_result": "pass",
+      "evidence": "work/fix-d/assert-sweep.log"
+    },
+    {
+      "kind": "property",
+      "given": "MC-105 的修复语义在任意同类输入下成立",
+      "expect": "同一断言脚本在重复运行下保持通过（幂等）",
+      "command": "bash work/fix-d/assert-sweep.sh",
+      "last_result": "pass",
+      "evidence": "work/fix-d/assert-sweep.log"
+    }
+  ],
+  "regression": {
+    "command": "pnpm suite && pnpm test && pnpm typecheck",
+    "evidence": "work/fix-d/suite.log; work/fix-d/root-test.log"
+  },
+  "rollback": "git revert b08082b",
+  "fixed_by": "fix_d_service_acceptance",
+  "verified_by": null,
+  "notes": ""
+}

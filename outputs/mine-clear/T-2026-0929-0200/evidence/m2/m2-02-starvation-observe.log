@@ -1,0 +1,9 @@
+# 观测：队列 15 > 上限 10 时调度器是否推进
+2026-09-29T15:13:16.251Z queued=15 last_update=Tue Sep 29 2026 23:11:39 GMT+0800 (China Standard Time)
+# 追加并发派遣探针 HTTP=429 code=TOO_MANY_REQUESTS msg=并发上限 10/工作区（L3.1/G11），已超出请稍后或排队
+2026-09-29T15:13:23.261Z queued=15 last_update=Tue Sep 29 2026 23:11:39 GMT+0800 (China Standard Time) t+7s
+2026-09-29T15:13:30.277Z queued=15 last_update=Tue Sep 29 2026 23:11:39 GMT+0800 (China Standard Time) t+14s
+2026-09-29T15:13:37.288Z queued=15 last_update=Tue Sep 29 2026 23:11:39 GMT+0800 (China Standard Time) t+21s
+2026-09-29T15:13:44.306Z queued=15 last_update=Tue Sep 29 2026 23:11:39 GMT+0800 (China Standard Time) t+28s
+2026-09-29T15:13:51.318Z queued=15 last_update=Tue Sep 29 2026 23:11:39 GMT+0800 (China Standard Time) t+35s
+# 终态分布 [{"status":"queued","n":15},{"status":"pending_review","n":3},{"status":"completed","n":2},{"status":"running","n":1}]

@@ -1,0 +1,213 @@
+{
+  "sop": [
+    "差评 24 小时内响应",
+    "调价须附竞对依据",
+    "夜间对账三轮比对"
+  ],
+  "charter": {
+    "mode": "trial",
+    "grant": {
+      "clauses": [
+        "自主调价",
+        "自主采购",
+        "自主对外回复",
+        "试用降档规则",
+        "AI 非法律责任主体·授权人承担经营决策责任"
+      ],
+      "event_id": "E-GRANT-DEMO01",
+      "granted_at": "2026-09-20T14:57:53.157Z",
+      "granted_by": "MEM-001",
+      "trial_days": 7,
+      "shadow_days": 3,
+      "retain_until": null,
+      "trial_ends_at": "2026-10-04T14:57:53.157Z",
+      "disclosure_version": "risk-v1"
+    },
+    "version": 1,
+    "autonomy": {
+      "caps": {
+        "campaign": {
+          "label": "营销支出上限",
+          "limit": 2000
+        },
+        "procurement": {
+          "label": "采购金额上限",
+          "limit": 5000
+        }
+      },
+      "ranges": {
+        "price-change-ratio": {
+          "label": "价格调整比例",
+          "lower": 0.85,
+          "upper": 1.15,
+          "anchor": 1
+        }
+      }
+    },
+    "briefing": {
+      "daily": "08:30",
+      "weekly": "Mon 09:00",
+      "channel": "both",
+      "monthly": "1st 10:00"
+    },
+    "escalate": [
+      "修改保底价/安全禁区相关",
+      "单月累计让利超上限",
+      "围栏规则放宽（任何放宽）",
+      "新渠道/新平台上线",
+      "对外公开承诺（赔偿/免费/声明）",
+      "宪章变更"
+    ],
+    "identity": {
+      "name": "数字总经理",
+      "persona": "稳健经营型"
+    },
+    "updated_at": "2026-09-29T14:57:53.157Z",
+    "circuit_breaker": {
+      "kpi_floor": {
+        "occ": 0.7
+      },
+      "tightened": false,
+      "window_days": 14
+    }
+  },
+  "audience": {
+    "亲子": 0.25,
+    "情侣": 0.2,
+    "商旅客": 0.55
+  },
+  "dataMode": "simulated",
+  "property": {
+    "city": "杭州",
+    "name": "云栖酒店",
+    "star": "四钻",
+    "rooms": 86
+  },
+  "forbidden": [
+    {
+      "rule": "美团大床房不低于 ¥380",
+      "scope": "room_price"
+    },
+    {
+      "rule": "不承诺档案之外的补偿金额",
+      "scope": "review"
+    }
+  ],
+  "inspection": {
+    "reviews": [
+      {
+        "id": "rv-ctrip-9901",
+        "score": 5,
+        "channel": "携程"
+      },
+      {
+        "id": "rv-meituan-1032",
+        "score": 2,
+        "channel": "美团"
+      }
+    ],
+    "channels": [
+      {
+        "price": 458,
+        "parity": true,
+        "status": "online",
+        "channel": "美团"
+      },
+      {
+        "price": 458,
+        "parity": true,
+        "status": "online",
+        "channel": "携程"
+      },
+      {
+        "price": 438,
+        "parity": false,
+        "status": "online",
+        "channel": "飞猪"
+      }
+    ],
+    "stateUnits": [
+      {
+        "unit": "大床房",
+        "synced": true
+      },
+      {
+        "unit": "双床房",
+        "synced": true
+      },
+      {
+        "unit": "亲子房",
+        "synced": false
+      }
+    ],
+    "violations": []
+  },
+  "competitors": [
+    {
+      "name": "西湖云舍酒店",
+      "channels": [
+        "美团",
+        "携程"
+      ],
+      "price_band": [
+        420,
+        680
+      ]
+    },
+    {
+      "name": "溪上云居民宿",
+      "channels": [
+        "美团"
+      ],
+      "price_band": [
+        360,
+        520
+      ]
+    },
+    {
+      "name": "云栖轻奢酒店",
+      "channels": [
+        "携程",
+        "飞猪"
+      ],
+      "price_band": [
+        460,
+        760
+      ]
+    }
+  ],
+  "history_curve": {
+    "2026-06": {
+      "adr": 468,
+      "occ": 0.71,
+      "revpar": 332
+    },
+    "2026-07": {
+      "adr": 512,
+      "occ": 0.83,
+      "revpar": 425
+    },
+    "2026-08": {
+      "adr": 496,
+      "occ": 0.78,
+      "revpar": 387
+    }
+  },
+  "brand_guideline": {
+    "tone": "真诚克制，不夸大、不承诺档案外补偿",
+    "image_rules": "首图实拍、无水印、16:9",
+    "banned_words": [
+      "最低价全网保证",
+      "百分百满意"
+    ]
+  },
+  "llmVerification": {
+    "model": "",
+    "baseUrl": "",
+    "provider": "mock",
+    "verified": false,
+    "verifiedAt": null,
+    "verifiedBy": null,
+    "credentialFingerprint": "cbac735f6c2e5a151ae103169d531c8984a6d0b0549a41e665af574874a08ae5"
+  }
+}

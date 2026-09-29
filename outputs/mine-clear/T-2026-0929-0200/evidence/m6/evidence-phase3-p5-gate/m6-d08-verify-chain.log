@@ -1,0 +1,317 @@
++ pnpm -C /Users/mac/WorkLoom-fleet/.wt-mcd-m6 db:verify-chain
+
+> workloom-im@0.1.1 db:verify-chain /Users/mac/WorkLoom-fleet/.wt-mcd-m6
+> tsx --env-file=.env scripts/verify-chain.ts
+
+✓ [demo/ws-aipm-demo] 28 条，六项检查全过 · 容忍 seq 小空洞 4454（ON CONFLICT 消耗）
+✓ [it-onb-tenant-d93af277f30d/it-onb-ws-d93af277f30d] 7 条，六项检查全过
+✓ [tenant-chaos-stmun9wo2d/ws-chaos-stmun9wo2d] 1 条，六项检查全过
+✓ [tenant-chaos-stmun9x0gg/ws-chaos-stmun9x0gg] 1 条，六项检查全过
+✓ [tenant-chaos-stmuna4y0v/ws-chaos-stmuna4y0v] 1 条，六项检查全过
+✓ [tenant-demo/ws-bundle-1790722617840-dgmob] 5 条，六项检查全过
+✓ [tenant-demo/ws-bundle-1790722814512-4veqp] 5 条，六项检查全过
+✓ [tenant-demo/ws-conc-stmun9wo2d] 1 条，六项检查全过
+✓ [tenant-demo/ws-conc-stmun9x0gg] 1 条，六项检查全过
+✓ [tenant-demo/ws-conc-stmuna4y0v] 1 条，六项检查全过
+✓ [tenant-demo/ws-night-shift-contract] 8 条，六项检查全过 · 容忍 seq 小空洞 7（ON CONFLICT 消耗）
+✓ [tenant-demo/ws-other-muna0g6p] 1 条，六项检查全过
+✓ [tenant-demo/ws-other-muna4o5j] 1 条，六项检查全过
+✓ [tenant-demo/ws-suite-b-stmun9wo2d] 1 条，六项检查全过
+✓ [tenant-demo/ws-suite-b-stmun9x0gg] 1 条，六项检查全过
+✓ [tenant-demo/ws-suite-b-stmuna4y0v] 1 条，六项检查全过
+✓ [tenant-demo/ws-suite-c-stmun9wo2d] 1 条，六项检查全过
+✓ [tenant-demo/ws-suite-c-stmun9x0gg] 1 条，六项检查全过
+✓ [tenant-demo/ws-suite-c-stmuna4y0v] 1 条，六项检查全过
+✓ [tenant-demo/ws-yunqi] 4521 条，六项检查全过 · 容忍 seq 小空洞 59（ON CONFLICT 消耗）
+✓ [tenant-t26-muna0g1j/ws-t26] 1 条，六项检查全过
+✓ [tenant-t26-muna4nza/ws-t26] 1 条，六项检查全过
+✓ [tn-hp01-ledger-muna0rpc9a6d/ws-hp01-ledger-muna0rpc9a6d] 5 条，六项检查全过 · 容忍 seq 小空洞 1（ON CONFLICT 消耗）
+
+===== 结构化验证报告（JSON） =====
+{
+  "ok": true,
+  "workspaces": 23,
+  "total_events": 4595,
+  "total_issues": 0,
+  "issue_kinds": [],
+  "segments": [
+    {
+      "workspace_id": "ws-aipm-demo",
+      "tenant_id": "demo",
+      "events": 28,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 4454,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "it-onb-ws-d93af277f30d",
+      "tenant_id": "it-onb-tenant-d93af277f30d",
+      "events": 7,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-chaos-stmun9wo2d",
+      "tenant_id": "tenant-chaos-stmun9wo2d",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-chaos-stmun9x0gg",
+      "tenant_id": "tenant-chaos-stmun9x0gg",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-chaos-stmuna4y0v",
+      "tenant_id": "tenant-chaos-stmuna4y0v",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-bundle-1790722617840-dgmob",
+      "tenant_id": "tenant-demo",
+      "events": 5,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-bundle-1790722814512-4veqp",
+      "tenant_id": "tenant-demo",
+      "events": 5,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-conc-stmun9wo2d",
+      "tenant_id": "tenant-demo",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-conc-stmun9x0gg",
+      "tenant_id": "tenant-demo",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-conc-stmuna4y0v",
+      "tenant_id": "tenant-demo",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-night-shift-contract",
+      "tenant_id": "tenant-demo",
+      "events": 8,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 7,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 1,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-other-muna0g6p",
+      "tenant_id": "tenant-demo",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-other-muna4o5j",
+      "tenant_id": "tenant-demo",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-suite-b-stmun9wo2d",
+      "tenant_id": "tenant-demo",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-suite-b-stmun9x0gg",
+      "tenant_id": "tenant-demo",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-suite-b-stmuna4y0v",
+      "tenant_id": "tenant-demo",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-suite-c-stmun9wo2d",
+      "tenant_id": "tenant-demo",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-suite-c-stmun9x0gg",
+      "tenant_id": "tenant-demo",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-suite-c-stmuna4y0v",
+      "tenant_id": "tenant-demo",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-yunqi",
+      "tenant_id": "tenant-demo",
+      "events": 4521,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 59,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 49,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-t26",
+      "tenant_id": "tenant-t26-muna0g1j",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-t26",
+      "tenant_id": "tenant-t26-muna4nza",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-hp01-ledger-muna0rpc9a6d",
+      "tenant_id": "tn-hp01-ledger-muna0rpc9a6d",
+      "events": 5,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 1,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    }
+  ]
+}
+
+✅ 全库验证通过：23 个 workspace 段 / 4595 条事件，六项检查全绿

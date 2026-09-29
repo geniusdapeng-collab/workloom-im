@@ -1,0 +1,292 @@
+{
+  "title": "M2-05 状态机遍历",
+  "started_at": "2026-09-29T17:20:34.271Z",
+  "finished_at": "2026-09-29T17:21:08.338Z",
+  "base": "http://127.0.0.1:8951",
+  "suffix": "fixc-final05",
+  "total": 20,
+  "passed": 16,
+  "failed": 0,
+  "checks": [
+    {
+      "name": "S0 线程状态分布（跑前）",
+      "ok": null,
+      "detail": [
+        {
+          "status": "completed",
+          "n": 49
+        },
+        {
+          "status": "pending_review",
+          "n": 31
+        },
+        {
+          "status": "paused",
+          "n": 4
+        },
+        {
+          "status": "failed",
+          "n": 3
+        },
+        {
+          "status": "cancelled",
+          "n": 3
+        }
+      ]
+    },
+    {
+      "name": "S0 审批状态分布（跑前）",
+      "ok": null,
+      "detail": [
+        {
+          "status": "pending",
+          "n": 28
+        },
+        {
+          "status": "expired",
+          "n": 12
+        },
+        {
+          "status": "approved",
+          "n": 8
+        },
+        {
+          "status": "rejected",
+          "n": 3
+        }
+      ]
+    },
+    {
+      "name": "H1 两条入口（立即执行 / 调度器）对同一目标产出一致计划",
+      "ok": true,
+      "detail": {
+        "immediate": [
+          "s1:pms.price.read:pms.price.read:{\"room_type\":\"雅致大床房\"}",
+          "s2:price.adjust:pms.price.write:{\"price\":519,\"room_type\":\"雅致大床房\"}"
+        ],
+        "scheduler": [
+          "s1:pms.price.read:pms.price.read:{\"room_type\":\"雅致大床房\"}",
+          "s2:price.adjust:pms.price.write:{\"price\":519,\"room_type\":\"雅致大床房\"}"
+        ],
+        "verdict": "一致"
+      }
+    },
+    {
+      "name": "I1 「差评并回复」目标必须由持有 review.reply 的岗位执行（不得无关工具「完成」）",
+      "ok": true,
+      "detail": {
+        "thread": "T-193",
+        "row": {
+          "status": "pending_review",
+          "preset_key": "review-agent",
+          "review_steps": 2,
+          "exec_steps": 1
+        },
+        "verdict": "命中口碑/回复链"
+      }
+    },
+    {
+      "name": "J1 出厂档案下价带内调价应命中 R1 自动执行（不得因缺价带一律转人工）",
+      "ok": true,
+      "detail": {
+        "thread": "T-194",
+        "threadStatus": "completed",
+        "approval": null,
+        "params_incomplete": null,
+        "warning": "",
+        "verdict": "按 R1 自动执行"
+      }
+    },
+    {
+      "name": "S1 已注入价带（雅致大床房 420–480 / 美团大床房 380–440）",
+      "ok": null,
+      "detail": {
+        "hadBandsBefore": true
+      }
+    },
+    {
+      "name": "A1 auto 视窗内的调价线程跑完（非挂起）",
+      "ok": true,
+      "detail": {
+        "threadId": "T-195",
+        "row": {
+          "status": "completed",
+          "error": null,
+          "progress_done": 2,
+          "progress_total": 2
+        }
+      }
+    },
+    {
+      "name": "A2 写步骤命中 R1（rule_impact 非空）→ 免审批直接执行且带回执",
+      "ok": true,
+      "detail": {
+        "writeEv": {
+          "step": "s2",
+          "action": "price.adjust",
+          "before": "{\"price\": 450}",
+          "after": "{\"price\": 463.5, \"result\": {\"input\": {\"price\": 463.5, \"room_type\": \"雅致大床房\"}, \"state\": \"simulated\"}}",
+          "impacts": 1,
+          "synced": "true",
+          "basis": null
+        },
+        "approvals": 0
+      }
+    },
+    {
+      "name": "B1 越保底价 → 熔断暂停（paused）",
+      "ok": true,
+      "detail": {
+        "threadId": "T-196",
+        "row": {
+          "status": "paused",
+          "error": "围栏熔断：保底价熔断、写类动作无规则命中 → default_level=review",
+          "progress_done": 1,
+          "progress_total": 2
+        }
+      }
+    },
+    {
+      "name": "B2 熔断事件写明命中规则（R2）与依据，且不产生审批行",
+      "ok": true,
+      "detail": {
+        "basis": "[\"熔断：保底价熔断、写类动作无规则命中 → default_level=review\"]",
+        "impacts": [
+          "R2:blocked"
+        ]
+      }
+    },
+    {
+      "name": "B3 熔断线程重跑不得放行（终态仍非 completed）",
+      "ok": true,
+      "detail": {
+        "retryResult": "paused",
+        "row": {
+          "status": "paused",
+          "error": "围栏熔断：保底价熔断、写类动作无规则命中 → default_level=review",
+          "progress_done": 1,
+          "progress_total": 2
+        },
+        "note": "重跑会按同一围栏重新判定：仍被熔断或转人审，不会自动放行"
+      }
+    },
+    {
+      "name": "C1 真实数据态无连接器 → 线程 failed（无回执不得宣称完成）",
+      "ok": true,
+      "detail": {
+        "threadId": "T-197",
+        "row": {
+          "status": "failed",
+          "error": "步骤 s1 无回执，标「未核实」",
+          "progress_done": 1,
+          "progress_total": 1
+        }
+      }
+    },
+    {
+      "name": "C2 未核实步骤如实写 receipt.synced=false（不是省略字段）",
+      "ok": true,
+      "detail": {
+        "total": 1,
+        "unsynced": 1
+      }
+    },
+    {
+      "name": "C3 无回执线程重跑不得直接变 completed（E3.7 回归）",
+      "ok": true,
+      "detail": {
+        "runResult": "failed",
+        "row": {
+          "status": "failed",
+          "error": "步骤 s1 无回执，标「未核实」",
+          "progress_done": 1,
+          "progress_total": 1
+        },
+        "verdict": "未被绕过"
+      }
+    },
+    {
+      "name": "D1 驳回步骤级审批 → 线程转 cancelled（GR-10 联动）",
+      "ok": true,
+      "detail": {
+        "approvalId": "apr-e-9401",
+        "decide": {
+          "approvalId": "apr-e-9401",
+          "status": "rejected",
+          "deduped": false,
+          "gestureEventId": "E-9402"
+        },
+        "row": {
+          "status": "cancelled",
+          "error": "步骤被驳回：price.too_high",
+          "progress_done": 1,
+          "progress_total": 2
+        }
+      }
+    },
+    {
+      "name": "E1 过期审批被扫描标 expired 且有事件",
+      "ok": true,
+      "detail": {
+        "approvalId": "apr-e-9405",
+        "status": "expired",
+        "sweep": 1
+      }
+    },
+    {
+      "name": "E2 审批过期后线程仍在 pending_review（线程状态无出口，需人工处理）",
+      "ok": true,
+      "detail": {
+        "thread": "T-199",
+        "threadStatus": "pending_review",
+        "note": "审批终态（expired/rejected）与线程状态未联动：expired 线程既不能自动续跑也不转终态"
+      }
+    },
+    {
+      "name": "F1 用例环境已恢复（价带移除、未遗留 dataMode 覆盖）",
+      "ok": true,
+      "detail": {
+        "bands": null,
+        "mode": "simulated"
+      }
+    },
+    {
+      "name": "G1 过期审批可由人工重跑恢复（生成新审批行）",
+      "ok": true,
+      "detail": {
+        "old": "apr-e-9405",
+        "latest": {
+          "approval_id": "apr-e-9407",
+          "status": "pending"
+        },
+        "runStatus": "pending_review"
+      }
+    },
+    {
+      "name": "S9 线程状态分布（跑后）",
+      "ok": null,
+      "detail": [
+        {
+          "status": "completed",
+          "n": 51
+        },
+        {
+          "status": "pending_review",
+          "n": 35
+        },
+        {
+          "status": "paused",
+          "n": 5
+        },
+        {
+          "status": "failed",
+          "n": 4
+        },
+        {
+          "status": "cancelled",
+          "n": 4
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "id": "MC-403",
+  "kind": "fix",
+  "batch": 2,
+  "state": "fixed",
+  "title": "基线 when 改写走显式放行位（allowWhenChange），指引可达",
+  "covers": [
+    "MC-103"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "apps/server/src/trpc/router.ts:2237@4e52948",
+      "note": "fence.confirmDryRun 新增 allowWhenChange 入参 + dry-run 归属/pending 校验 + 事件留痕"
+    },
+    {
+      "type": "code",
+      "ref": "packages/base/fence-engine/lifecycle.ts:223@4e52948",
+      "note": "放行事实经 fenceActivationFromProposal 带到激活期"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/green-2-when-blocked.log",
+      "note": "无放行位 → 400 且文案给出可达参数"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/green-3-when-allowed.log",
+      "note": "MCD_ALLOW_WHEN=1 → 端到端生效"
+    }
+  ],
+  "fix_plan": "confirmDryRun 接受 allowWhenChange 并校验 dry-run 归属，守卫显式放行 when 改写；拒绝文案指名可达路径",
+  "blast_radius": "围栏提案 API 契约（新增可选字段，向后兼容）；P5 规则中心（后续可接入开关）",
+  "conflict_paths": [
+    "apps/server/src/trpc/router.ts",
+    "packages/base/fence-engine/dsl.ts"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "基线规则 when 改写请求（MCD_WHEN=true）",
+      "expect": "不带放行位 400；带 allowWhenChange=true 时审批后生效",
+      "command": "MCD_WHEN=true [MCD_ALLOW_WHEN=1] node outputs/mine-clear/T-2026-0929-0200/assertions/m1-fence-rule-change.mjs",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/green-3-when-allowed.log"
+    },
+    {
+      "kind": "property",
+      "given": "任意拒绝消息中提到的开关/参数",
+      "expect": "该开关在至少一条产品路径上可被设置并留痕",
+      "command": "node work/fix-b/when-retry-probe.mjs（8/8 OK）",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/when-retry-probe.log"
+    }
+  ],
+  "regression": {
+    "command": "RUN_DB_TESTS=1 vitest run packages/base/fence-engine && pnpm typecheck",
+    "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/vitest-fence-2.log"
+  },
+  "rollback": "revert 4e52948",
+  "fixed_by": "fixer-B",
+  "verified_by": null,
+  "notes": ""
+}

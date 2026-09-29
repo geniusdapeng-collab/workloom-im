@@ -1,0 +1,53 @@
+{
+  "id": "MC-432",
+  "kind": "fix",
+  "batch": 1,
+  "state": "fixed",
+  "title": "客户文档与产线产物命名/校验口径对齐 + 命名门禁",
+  "covers": [
+    "MC-201"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "README.md:1@42ac6dc",
+      "note": "修复提交 42ac6dc"
+    },
+    {
+      "type": "log",
+      "ref": "work/fix-d/assert-sweep.log",
+      "note": "命名门禁 PASS（三处一致）"
+    }
+  ],
+  "fix_plan": "见 work/fix-d/REPORT-fix-d-service-acceptance.md 对应卡片小节（提交 42ac6dc）",
+  "blast_radius": "见报告对应小节",
+  "conflict_paths": [
+    "README.md"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "复跑 MC-201 的验收断言",
+      "expect": "命名门禁 PASS（三处一致）",
+      "command": "bash work/fix-d/assert-sweep.sh",
+      "last_result": "pass",
+      "evidence": "work/fix-d/assert-sweep.log"
+    },
+    {
+      "kind": "property",
+      "given": "MC-201 的修复语义在任意同类输入下成立",
+      "expect": "同一断言脚本在重复运行下保持通过（幂等）",
+      "command": "bash work/fix-d/assert-sweep.sh",
+      "last_result": "pass",
+      "evidence": "work/fix-d/assert-sweep.log"
+    }
+  ],
+  "regression": {
+    "command": "pnpm suite && pnpm test && pnpm typecheck",
+    "evidence": "work/fix-d/suite.log; work/fix-d/root-test.log"
+  },
+  "rollback": "git revert 42ac6dc",
+  "fixed_by": "fix_d_service_acceptance",
+  "verified_by": null,
+  "notes": ""
+}

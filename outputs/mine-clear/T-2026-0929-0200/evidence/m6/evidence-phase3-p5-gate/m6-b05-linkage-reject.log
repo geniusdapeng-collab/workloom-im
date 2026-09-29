@@ -1,0 +1,10 @@
++ node /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-reject.mjs
+✓ 登录 :: "ws-yunqi"
+✓ 派遣建档 :: {"threadId":"T-196","status":"pending_review"}
+✓ 挂起进审批（pending_review + 审批单号） :: {"status":"pending_review","approvalId":"apr-e-12064"}
+✓ 驳回手势成功 :: {"approvalId":"apr-e-12064","status":"rejected","deduped":false,"gestureEventId":"E-12065"}
+✓ [联动] 驳回后线程转 cancelled（GR-10 终态联动） :: {"status":"cancelled"}
+✓ [联动断点候选] 线程事件流包含本次人工决策（approval.gesture） :: {"actions":["thread.dispatch","pms.price.read","price.adjust","approval.gesture"]}
+✓ [联动] 结算流水（X-08）能看到该 cancelled 线程 :: {"ids":["T-196","T-195","T-194","T-193","T-192","T-191","T-190","T-189","T-187","T-186"]}
+
+联动探针 5：7/7 通过；证据 → /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/evidence/m3-reject-1790722779447.json

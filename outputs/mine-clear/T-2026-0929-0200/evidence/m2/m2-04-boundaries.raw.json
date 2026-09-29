@@ -1,0 +1,38 @@
+{
+  "created": [
+    "T-176",
+    "T-177",
+    "T-178",
+    "T-179"
+  ],
+  "sqlRes": {
+    "status": 200,
+    "code": null,
+    "data": {
+      "kind": "routed",
+      "mode": "quest",
+      "via": "rule",
+      "threadId": "T-177",
+      "status": "completed",
+      "stepsDone": 1,
+      "stepsTotal": 1
+    },
+    "message": ""
+  },
+  "tplRes": {
+    "status": 200,
+    "code": null,
+    "data": {
+      "kind": "routed",
+      "mode": "quest",
+      "via": "rule",
+      "threadId": "T-178",
+      "status": "completed",
+      "stepsDone": 1,
+      "stepsTotal": 1
+    },
+    "message": ""
+  },
+  "cross": null,
+  "approvalId": "apr-e-9330"
+}

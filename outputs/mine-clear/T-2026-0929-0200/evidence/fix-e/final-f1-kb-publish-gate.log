@@ -1,0 +1,21 @@
+✓ B 端登录 :: "ws-aipm-demo"
+✓ 基线：探针标记不可检索 :: {"mark":"F1KB1790706124110"}
+✓ 存在知识集 :: ["需求池","竞品档案","用户反馈"]
+✓ 上传返回 documentId :: {"documentId":"kbd-mun06wdu001cbe2","version":1,"chunks":1}
+✓ 新文档落 pending_review
+✓ 待审期间不可检索（发布门禁）
+✓ approveDocument 成功 :: {"ok":true,"status":"active","eventId":"E-10823","approvalId":"apr-e-10823","deduped":false}
+✓ 文档状态 → active
+✓ 生效后进入检索
+✓ 落 kb.publish 五元事件 :: [{"event_id":"E-10823","action":"kb.publish"}]
+✓ 审批台不留「已执行却待办」幽灵条目 :: {"before":4,"after":4}
+✓ 审批记录为 approved + 决策人/时间/手势齐备（不可回滚的当场留痕） :: {"status":"approved","decided_by":"MEM-001","decided_at":"2026-09-29T18:22:04.164Z","gesture":{"type":"approve","weight":1,"reason_text":"待审区「批准生效」（逐条人审）"},"snapshot":{"after":{"documentId":"kbd-mun06wdu001cbe2","fence_action":"kb.publish"},"basis":"批准动作的当场留痕（不可回滚）；撤回请走知识库「停用」，同样写事件留痕（MC-110）","post_hoc":true,"high_risk":false}}
+✓ 重复批准幂等（不重复落事件/审批行） :: {"deduped":true,"events":1}
+✓ 哈希链自检（内联 canonicalJson/hash 与生产逐条一致） :: {"checked":50,"bad":0,"firstBad":null}
+✓ （制造存量场景）pending kb.publish 行已落库 :: {"ghostId":"apr-ghost-f1kb1790706124110"}
+✓ 驳回手势成功 :: {"approvalId":"apr-ghost-f1kb1790706124110","status":"rejected","deduped":false,"gestureEventId":"E-10824"}
+✓ 驳回即不可检索（文档退回 pending_review） :: {"doc":"pending_review","hits":0}
+✓ 存量待审行批准 → 文档重新生效且可检索 :: {"approval":"approved","doc":"active"}
+✓ 事件留痕可追溯到发布/撤回动作 :: {"hint":"1 次发布 + 1 次撤回 + 1 次重新发布"}
+
+f1 知识发布门禁：19/19 通过；证据 → /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-kb-1790706124251.json

@@ -1,0 +1,24 @@
++ node /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/assertions/m2-01-main-loop.mjs
+• seeded sessions :: {"owner":"owner","manager":"manager","readonly":"readonly"}
+✓ dispatch 建线程且路由为 quest :: {"status":200,"d":{"kind":"routed","mode":"quest","via":"rule","threadId":"T-158","status":"pending_review","stepsDone":1,"stepsTotal":2,"warnings":["当前部署未配置工具执行桥，写动作（pms.price.write、ota.price.write）将以「未核实」收尾"]}}
+✓ dispatch 停在 pending_review（存在未放行写步骤） :: {"kind":"routed","mode":"quest","via":"rule","threadId":"T-158","status":"pending_review","stepsDone":1,"stepsTotal":2,"warnings":["当前部署未配置工具执行桥，写动作（pms.price.write、ota.price.write）将以「未核实」收尾"]}
+✓ threads.get 返回 pending_approval_id :: {"approvalId":"apr-e-11930","status":"pending_review"}
+✓ approvals 行为 pending 且快照声明 gate :: {"status":"pending","tier":"l2_captain","gate":true,"step":"s2","action":"price.adjust"}
+✗ 挂起事件落账（basis 标注越围栏挂起）
+✓ 统一队列可见该审批 :: {"queueSize":50}
+✓ readonly 审批被拒（403/FORBIDDEN） :: {"status":403,"code":"FORBIDDEN","body":"{\"error\":{\"message\":\"当前成员没有“审批裁决”权限。\",\"code\":-32003,\"data\":{\"code\":\"FORBIDDEN\",\"httpStatus\":403,\"stack\":\"TRPCError: 当前成员没有“审批裁决”权限。\\n    at <anonymous> (/Users/"}
+✓ readonly 被拒后审批仍为 pending（未落库） :: {"status":"pending"}
+✓ 非法手势被拒（400/BAD_REQUEST） :: {"status":400,"code":"BAD_REQUEST","message":"[\n  {\n    \"code\": \"invalid_value\",\n    \"values\": [\n      \"approve\",\n      \"edit\",\n      \"reject\"\n    ],\n    \"path\": [\n      \"gesture\"\n    ],\n    \"message\": \"Invalid…
+✓ 空理由驳回被拒（L5.2） :: {"status":400,"message":"驳回必须选择原因枚举（L5.2）"}
+✓ 两次非法手势后审批状态未变 :: {"status":"pending","gesture":null}
+✓ manager 采纳成功 :: {"approvalId":"apr-e-11930","status":"approved","deduped":false,"gestureEventId":"E-11931"}
+✓ 手势事件经网关落账（唯一一条） :: {"count":1,"after":{"weight":1,"gesture":"approve","thread_id":"T-158","approvalId":"apr-e-11930"}}
+✓ 审批通过后服务端自动续跑（21s 内线程自达 completed） :: {"observed":{"ok":true,"status":"completed","progress_done":2,"progress_total":2},"waitedMs":3018,"note":"已自动续跑"}
+✓ threads.run 携带已批准步骤直接执行 → completed :: {"status":200,"runData":{"threadId":"T-158","status":"completed","stepsDone":2,"stepsTotal":2,"unverified":[],"planVersion":1,"planReused":true,"planRelevance":{"relevant":true,"matched":[]},"warnings":["当前部署未配置工具执行桥，写动作（pms.price.write、ota…
+✓ 终态一致：completed + progress 收敛 + 无遗留审批 :: {"status":"completed","done":2,"total":2,"pending":null}
+✓ 执行事件带可核验回执（receipt.synced=true, mode=simulated）且标注审批来源 :: {"receipt":{"mode":"simulated","synced":true,"verified_at":"2026-09-29T22:57:36.423Z","snapshot_uri":"workloom-sim://receipt/pms.price.write/muna18rr"},"basis":["经审批 apr-e-11930 批准执行（E3.3 恢复闭环）","演示模式回执（dataMode=simulated）"],"approval_ref":…
+✓ 属性：completed 线程的执行事件全部 receipt.synced=true（全工作区） :: {"offenders":[],"note":"反例即 E3.7「无回执不得宣称完成」被破坏"}
+✓ settledSince 流水含该线程（结算投影） :: {"n":50}
+✓ 行动消息流投影含挂起 + 执行 + 手势链路（≥3 条） :: {"n":5}
+
+M2-01 主链路闭环：20/21 通过（证据 /Users/mac/Documents/Codex/2026-09-29/https-cnb-cool-workloom-ai-workloom-5/work/m6/out-p5/evidence/m2/m2-01-main-loop.json）

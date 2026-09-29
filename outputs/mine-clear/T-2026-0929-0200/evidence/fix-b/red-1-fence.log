@@ -1,0 +1,21 @@
+
+=== attempt 1: R7 -> level=review
+- dryRun: 200 dryRunId=fdr-r7-mumvpqmj
+- confirmDryRun: 200 eventId=E-9100
+- decide: 200 status=approved
+- fence.rules readback: fr-r7-vnext-ws-yunqi/v2/review/active
+
+=== attempt 2: R7 -> level=block
+- dryRun: 200 dryRunId=fdr-r7-mumvpqou
+- confirmDryRun: 200 eventId=E-9102
+- decide: 200 status=approved
+- fence.rules readback: fr-r7-vnext-ws-yunqi/v2/review/active
+
+=== 第 3 次：放宽提案（level=auto）→ confirmDryRun 200（未拒绝：基线锚点已丢失）
+
+=== verdict
+attempt1: OK (approved+applied)
+attempt2: OK (approved+applied)
+attempt3 (loosen): FAILED (guard let it through)
+attempt2 readback: [{"id":"fr-r7-vnext-ws-yunqi","version":"v2","level":"review","status":"active"}]
+attempt2 生效校验：FAILED（回读 level 与提案不一致）

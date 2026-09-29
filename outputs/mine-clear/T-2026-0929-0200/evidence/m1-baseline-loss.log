@@ -1,0 +1,48 @@
+## MC-109: 首次自定义后基线标记丢失 → 可把已加严的规则放宽回 auto（INV-7）
+前置：R7 已被自定义为 review/active（is_baseline=false，原始基线行 rolled_back）
+
+--- 当前 R7 行状态（特权直查）
+BEGIN
+ set_config 
+------------
+ ws-yunqi
+(1 row)
+
+          id          | rule_id |      version      | level  | is_baseline |   status    
+----------------------+---------+-------------------+--------+-------------+-------------
+ fr-r7-v1-ws-yunqi    | R7      | hotel-baseline/v1 | auto   | t           | rolled_back
+ fr-r7-vnext-ws-yunqi | R7      | v2                | review | f           | active
+(2 rows)
+
+COMMIT
+
+--- 提案 level=auto（放宽）→ 审批 → 回读
+- confirmDryRun: 200 eventId=E-10374
+- decide: 200 status=approved
+- fence.rules readback: fr-r7-vnext-ws-yunqi/v2/review/active
+
+=== attempt 2: R7 -> level=auto
+- dryRun: 200 dryRunId=fdr-r7-mumtuozm
+- confirmDryRun: 200 eventId=E-10376
+- decide: 200 status=approved
+- fence.rules readback: fr-r7-vnext-ws-yunqi/v2/review/active
+
+=== verdict
+attempt1: OK (approved+applied)
+attempt2: OK (approved+applied)
+attempt2 readback: [{"id":"fr-r7-vnext-ws-yunqi","version":"v2","level":"review","status":"active"}]
+
+--- 回读 R7 行
+BEGIN
+ set_config 
+------------
+ ws-yunqi
+(1 row)
+
+          id          | rule_id |      version      | level  | is_baseline |   status    
+----------------------+---------+-------------------+--------+-------------+-------------
+ fr-r7-v1-ws-yunqi    | R7      | hotel-baseline/v1 | auto   | t           | rolled_back
+ fr-r7-vnext-ws-yunqi | R7      | v2                | review | f           | active
+(2 rows)
+
+COMMIT

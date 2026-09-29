@@ -1,0 +1,111 @@
+{
+  "probe": "m3-reject-linkage",
+  "started_at": "2026-09-29T15:41:45.505Z",
+  "base": "http://127.0.0.1:8899",
+  "goal": "把周日招牌菜调价 3%（M3 驳回探针 1790696505505）",
+  "assertions": [
+    {
+      "name": "登录",
+      "ok": true,
+      "detail": "ws-yunqi"
+    },
+    {
+      "name": "派遣建档",
+      "ok": true,
+      "detail": {
+        "threadId": "T-136",
+        "status": "pending_review"
+      }
+    },
+    {
+      "name": "挂起进审批（pending_review + 审批单号）",
+      "ok": true,
+      "detail": {
+        "status": "pending_review",
+        "approvalId": "apr-e-10406"
+      }
+    },
+    {
+      "name": "驳回手势成功",
+      "ok": true,
+      "detail": {
+        "approvalId": "apr-e-10406",
+        "status": "rejected",
+        "deduped": false,
+        "gestureEventId": "E-10407"
+      }
+    },
+    {
+      "name": "[联动] 驳回后线程转 cancelled（GR-10 终态联动）",
+      "ok": true,
+      "detail": {
+        "status": "cancelled"
+      }
+    },
+    {
+      "name": "[联动断点候选] 线程事件流包含本次人工决策（approval.gesture）",
+      "ok": false,
+      "detail": {
+        "actions": [
+          "thread.dispatch",
+          "pms.price.read",
+          "competitor.fetch",
+          "pms.price.write"
+        ]
+      }
+    },
+    {
+      "name": "[联动] 结算流水（X-08）能看到该 cancelled 线程",
+      "ok": true,
+      "detail": {
+        "ids": [
+          "T-136",
+          "T-135"
+        ]
+      }
+    }
+  ],
+  "pending": {
+    "id": "T-136",
+    "title": "把周日招牌菜调价 3%（M3 驳回探针 1790696505505）",
+    "mode": "quest",
+    "status": "pending_review",
+    "progress_done": 2,
+    "progress_total": 3,
+    "created_by": "MEM-001",
+    "agent_id": "agt-pricing-agent",
+    "created_at": "2026-09-29T15:41:45.570Z",
+    "updated_at": "2026-09-29T15:41:45.619Z",
+    "pending_approval_id": "apr-e-10406",
+    "preset_key": "pricing-agent"
+  },
+  "reject": {
+    "status": 200,
+    "data": {
+      "approvalId": "apr-e-10406",
+      "status": "rejected",
+      "deduped": false,
+      "gestureEventId": "E-10407"
+    }
+  },
+  "thread_after": {
+    "id": "T-136",
+    "title": "把周日招牌菜调价 3%（M3 驳回探针 1790696505505）",
+    "mode": "quest",
+    "status": "cancelled",
+    "progress_done": 2,
+    "progress_total": 3,
+    "created_by": "MEM-001",
+    "agent_id": "agt-pricing-agent",
+    "created_at": "2026-09-29T15:41:45.570Z",
+    "updated_at": "2026-09-29T15:41:46.700Z",
+    "pending_approval_id": null,
+    "preset_key": "pricing-agent"
+  },
+  "thread_events": [
+    "thread.dispatch",
+    "pms.price.read",
+    "competitor.fetch",
+    "pms.price.write"
+  ]
+}

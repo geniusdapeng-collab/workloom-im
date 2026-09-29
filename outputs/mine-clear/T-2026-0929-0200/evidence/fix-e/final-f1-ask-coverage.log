@@ -1,0 +1,23 @@
+✓ B 端登录 :: "ws-yunqi"
+库内事实： {"approvals":30,"threads":5,"tickets":41,"night":{"run_date":"2099-08-01-stmun044pz","status":"ready"}}
+✓ approvals：答案给出被问域事实 :: {"answer":"关于「当前有多少待审批事项？」：\n· 当前待审批：30 项（决断队列）\n· 事件库规模：1770 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。"}
+✓ approvals：账本 basis 记录取数来源 :: {"basis":["取数来源：biz_events、biz_events 近窗聚合、approvals、c_tickets、threads、fence_rules、org_memory、night_runs","已遵守组织记忆 5 条（M3 偏好注入）"]}
+✓ approvals：答案数字与库内待审批计数一致 :: {"expected":30,"answer":"关于「当前有多少待审批事项？」：\n· 当前待审批：30 项（决断队列）\n· 事件库规模：1770 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。"}
+✓ approvals：知识库噪声未进入取数来源（相关性下限生效） :: {"sources":"取数来源：biz_events、biz_events 近窗聚合、approvals、c_tickets、threads、fence_rules、org_memory、night_runs"}
+✓ approvals：不出现知识库事实 :: {"answer":"关于「当前有多少待审批事项？」：\n· 当前待审批：30 项（决断队列）\n· 事件库规模：1770 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。"}
+✓ threads：答案给出被问域事实 :: {"answer":"关于「现在有多少进行中的任务？」：\n· 进行中线程：6 条\n· 事件库规模：1772 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。"}
+✓ threads：账本 basis 记录取数来源 :: {"basis":["取数来源：biz_events、biz_events 近窗聚合、c_tickets、threads、fence_rules、org_memory、night_runs","已遵守组织记忆 5 条（M3 偏好注入）"]}
+✓ threads：答案数字与库内进行中线程一致（含本次 ask 线程） :: {"expected":[5,6],"got":6,"answer":"关于「现在有多少进行中的任务？」：\n· 进行中线程：6 条\n· 事件库规模：1772 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。"}
+✓ tickets：答案给出被问域事实 :: {"answer":"关于「今天服务台收到多少工单，处理进度怎么样？」：\n· 服务台工单：41 条未办结（SLA 超时 1 条）\n· 事件库规模：1774 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。"}
+✓ tickets：账本 basis 记录取数来源 :: {"basis":["取数来源：biz_events、biz_events 近窗聚合、c_tickets、threads、fence_rules、org_memory、night_runs","已遵守组织记忆 5 条（M3 偏好注入）"]}
+✓ tickets：答案数字与库内未办结工单一致 :: {"expected":41,"answer":"关于「今天服务台收到多少工单，处理进度怎么样？」：\n· 服务台工单：41 条未办结（SLA 超时 1 条）\n· 事件库规模：1774 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。"}
+✓ tickets：账本来源含 c_tickets :: {"sources":"取数来源：biz_events、biz_events 近窗聚合、c_tickets、threads、fence_rules、org_memory、night_runs"}
+✓ night：答案给出被问域事实 :: {"answer":"关于「昨晚夜班完成了哪些工作？」：\n· 最近夜班：2099-08-01-stmun044pz 班次待开工（候选 0 项）\n· 事件库规模：1776 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。"}
+✓ night：账本 basis 记录取数来源 :: {"basis":["取数来源：biz_events、biz_events 近窗聚合、c_tickets、threads、fence_rules、org_memory、night_runs","已遵守组织记忆 5 条（M3 偏好注入）"]}
+✓ night：答案引用最近班次日期 :: {"expected":{"run_date":"2099-08-01-stmun044pz","status":"ready"},"answer":"关于「昨晚夜班完成了哪些工作？」：\n· 最近夜班：2099-08-01-stmun044pz 班次待开工（候选 0 项）\n· 事件库规模：1776 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。"}
+✓ night：账本来源含 night_runs :: {"sources":"取数来源：biz_events、biz_events 近窗聚合、c_tickets、threads、fence_rules、org_memory、night_runs"}
+✓ kb：答案给出被问域事实 :: {"answer":"关于「住客问：房间里的毛巾多久更换一次？」：\n· 知识库·住客常见问答·网络与设施（房间里USB口不能充电怎么办？）：可先换用床头五孔插座；USB口故障请致电前台0报修，工程部会在120分钟内上门处理。\n以上内容来自知识库检索，可下钻溯源。"}
+✓ kb：账本 basis 记录取数来源 :: {"basis":["取数来源：kb:kbd-faq-network、biz_events、biz_events 近窗聚合、c_tickets、threads、fence_rules、org_memory、night_runs","已遵守组织记忆 5 条（M3 偏好注入）"]}
+✓ kb：KB-only 答案不得声称『数字来自事件库实时取数』 :: {"answer":"关于「住客问：房间里的毛巾多久更换一次？」：\n· 知识库·住客常见问答·网络与设施（房间里USB口不能充电怎么办？）：可先换用床头五孔插座；USB口故障请致电前台0报修，工程部会在120分钟内上门处理。\n以上内容来自知识库检索，可下钻溯源。"}
+
+f1 ask 覆盖：20/20 通过；证据 → /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-ask-1790706124455.json

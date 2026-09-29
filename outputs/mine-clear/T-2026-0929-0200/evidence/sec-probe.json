@@ -1,0 +1,447 @@
+{
+  "base": "http://127.0.0.1:8921",
+  "results": [
+    {
+      "id": "SEC-BIND-01 服务只监听回环地址",
+      "ok": true,
+      "detail": "127.0.0.1:8921"
+    },
+    {
+      "id": "SEC-CORS-01 非回环来源不回 ACAO",
+      "ok": true,
+      "detail": {
+        "acao": null
+      }
+    },
+    {
+      "id": "SEC-CORS-02 回环来源放行",
+      "ok": true,
+      "detail": {
+        "acao": "http://127.0.0.1:5321",
+        "acac": "true"
+      }
+    },
+    {
+      "id": "SEC-CORS-03 非回环来源的 tRPC 响应不回 ACAO",
+      "ok": true,
+      "detail": {
+        "status": 404
+      }
+    },
+    {
+      "id": "SEC-DEMO-01 生产档下匿名设备可签发 C 端会话（出厂 .env 默认）",
+      "ok": true,
+      "detail": {
+        "status": 200,
+        "hasToken": true
+      }
+    },
+    {
+      "id": "SEC-DEMO-02 匿名会话可读服务前台数据",
+      "ok": true,
+      "detail": {
+        "status": 200,
+        "sample": "{\"notifications\":[]}"
+      }
+    },
+    {
+      "id": "SEC-DEMO-03 匿名会话可消耗对话（LLM）链路",
+      "ok": true,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "id": "SEC-TENANT-00 云栖线程建立（取证前置）",
+      "ok": true,
+      "detail": {
+        "status": 200,
+        "threadId": "T-129"
+      }
+    },
+    {
+      "id": "SEC-TENANT-01 跨工作区读线程不泄露（返回空/错误）",
+      "ok": true,
+      "detail": {
+        "status": 200,
+        "body": "{\"result\":{\"data\":null}}"
+      }
+    },
+    {
+      "id": "SEC-TENANT-02 跨工作区读线程事件流不泄露",
+      "ok": true,
+      "detail": {
+        "status": 200,
+        "body": "{\"result\":{\"data\":[]}}"
+      }
+    },
+    {
+      "id": "SEC-TENANT-00b 正对照：本区凭据可读到该线程",
+      "ok": true,
+      "detail": {
+        "body": "{\"result\":{\"data\":{\"id\":\"T-129\",\"title\":\"M4 越权探针：云栖酒店调价\",\"mode\":\"quest\",\"status\":\"queued\",\"progress_done\":0,\"progress_total\":0,\"created_by\":\"MEM-001\",\"agent_id\":\"agt-pricing-agent\",\"created_at\":\"2026-"
+      }
+    },
+    {
+      "id": "SEC-TENANT-03 跨工作区审批裁决被拒且不改状态",
+      "ok": true,
+      "detail": {
+        "status": 400,
+        "code": "BAD_REQUEST",
+        "before": "pending",
+        "after": "pending"
+      }
+    },
+    {
+      "id": "SEC-TENANT-04 审批队列仅含本工作区条目",
+      "ok": true,
+      "detail": {
+        "listed": 2,
+        "dbOwn": 2,
+        "foreignVisible": []
+      }
+    },
+    {
+      "id": "SEC-ROLE-01 readonly 角色派发任务被拒（403）",
+      "ok": true,
+      "detail": {
+        "status": 403,
+        "code": "FORBIDDEN"
+      }
+    },
+    {
+      "id": "SEC-ROLE-02 readonly 角色审批被拒",
+      "ok": true,
+      "detail": {
+        "status": 403
+      }
+    },
+    {
+      "id": "SEC-CUSER-00 C 端建单（取证前置）",
+      "ok": true,
+      "detail": {
+        "status": 200,
+        "ticketId": "tck-mumtpdnm0010dou"
+      }
+    },
+    {
+      "id": "SEC-CUSER-01 他用户凭证读不到本人工单",
+      "ok": true,
+      "detail": {
+        "mineStatus": 200,
+        "otherStatus": 404,
+        "otherBody": "{\"error\":\"工单不存在\",\"requestId\":\"f3cc1da4-602c-4b83-be70-797b5ea8567c\"}"
+      }
+    },
+    {
+      "id": "SEC-CINPUT-01 /c/chat 文本超 2000 字被拒",
+      "ok": true,
+      "detail": {
+        "status": 400
+      }
+    },
+    {
+      "id": "SEC-CINPUT-02 /c/tickets 非法 kind 被拒",
+      "ok": true,
+      "detail": {
+        "status": 400
+      }
+    },
+    {
+      "id": "SEC-CRATE-01 C 端每用户限流触发 429",
+      "ok": true,
+      "detail": {
+        "saw": 429
+      }
+    },
+    {
+      "id": "SEC-INJ-01 注入式标题不破坏数据库（biz_events 仍在）",
+      "ok": true,
+      "detail": {
+        "regclass": "biz_events"
+      }
+    },
+    {
+      "id": "SEC-INJ-02 注入式标题按字面存储（未被解释执行/截断破坏）",
+      "ok": true,
+      "detail": {
+        "stored": "'; DROP TABLE biz_events; -- <script>alert(1)</script> \\u0000 ${jndi:ldap://x}"
+      }
+    },
+    {
+      "id": "SEC-INJ-03 超长标题被拒绝或截断（不落 20000 字）",
+      "ok": true,
+      "detail": {
+        "status": 400,
+        "maxStoredTitleLen": 500
+      }
+    },
+    {
+      "id": "SEC-BATCH-01 高危审批批量采纳必须逐条跳过（l4_chairman）",
+      "ok": true,
+      "detail": {
+        "requested": 5,
+        "approved": 0,
+        "skipped": 5,
+        "stillPending": 5
+      }
+    },
+    {
+      "id": "SEC-AUTH-01 无令牌访问受保护过程 → 401",
+      "ok": true,
+      "detail": {
+        "status": 401
+      }
+    },
+    {
+      "id": "SEC-AUTH-02 伪造令牌 → 401",
+      "ok": true,
+      "detail": {
+        "status": 401
+      }
+    },
+    {
+      "id": "SEC-AUTH-03 错误密钥签发的令牌 → 401",
+      "ok": true,
+      "detail": {
+        "status": 401
+      }
+    },
+    {
+      "id": "SEC-AUTH-04 生产档演示直登被拒（403）",
+      "ok": true,
+      "detail": {
+        "status": 403,
+        "code": "FORBIDDEN"
+      }
+    }
+  ],
+  "raw": {
+    "bind": "COMMAND   PID USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME\nnode    80745  mac   15u  IPv4 0xa244bd8233a4127a      0t0  TCP 127.0.0.1:8921 (LISTEN)\n",
+    "cors": {
+      "evil": {
+        "access-control-allow-credentials": "true",
+        "connection": "keep-alive",
+        "content-length": "42",
+        "content-type": "application/json",
+        "date": "Tue, 29 Sep 2026 15:20:28 GMT",
+        "keep-alive": "timeout=5",
+        "vary": "Origin"
+      },
+      "loop": {
+        "access-control-allow-credentials": "true",
+        "access-control-allow-origin": "http://127.0.0.1:5321",
+        "connection": "keep-alive",
+        "content-length": "42",
+        "content-type": "application/json",
+        "date": "Tue, 29 Sep 2026 15:20:28 GMT",
+        "keep-alive": "timeout=5",
+        "vary": "Origin"
+      },
+      "evilPost": {
+        "access-control-allow-credentials": "true",
+        "connection": "keep-alive",
+        "content-length": "136",
+        "content-type": "application/json",
+        "date": "Tue, 29 Sep 2026 15:20:28 GMT",
+        "keep-alive": "timeout=5",
+        "vary": "trpc-accept, accept, Origin"
+      }
+    },
+    "anonSession": {
+      "status": 200,
+      "body": "{\"token\":\"eyJhbGciOiJIUzI1NiJ9.eyJ3b3Jrc3BhY2VJZCI6IndzLWFpcG0tZGVtbyIsImNVc2VySWQiOiJjdS1tdW10cGRrdzAwNTF5Ym8iLCJjaGFubmVsIjoiaDUiLCJzY29wZSI6ImMtdXNlciIsImlhdCI6MTc5MDY5NTIyOCwiaXNzIjoid29ya2xvb20tYyIsImV4cCI6MTc5MDczODQyOH0.Pg8lJJrQmtbB-nlYWsIi2gCj81Euj9suf-k7w2lPKYI\",\"user\":{\"id\":\"cu-mumtpdkw0051ybo\",\"workspaceId\":\"ws-aipm-demo\",\"channel\":\"h5\",\"openid\":\"probe-anon-mumtpdkr\",\"nickname\":\"匿名探针\",\""
+    },
+    "anonNotifications": {
+      "status": 200,
+      "body": "{\"notifications\":[]}"
+    },
+    "anonChat": {
+      "status": 200,
+      "body": "{\"conversationId\":\"cvn-mumtpdlt003652n\",\"intent\":\"kb_qa\",\"answer\":\"抱歉，这个问题我暂时无法准确回答，不敢随意编造。已为您准备好工单草稿，确认后转人工跟进；您也可以换个说法再问我。\",\"confidence\":0,\"citations\":[],\"cards\":[],\"ticket\":null,\"ticketDraft\":{\"kind\":\"other\",\"title\":\"知识库未覆盖咨询：你好，请问酒店有什么房型？\",\"payload\":{\"text\":\"你好，请问酒店有什么房型？\",\"intent\":\"kb_qa\",\"topScore\":null}},\"latencyMs\":4,\"mock\":true}"
+    },
+    "crossTenant": {
+      "create": {
+        "result": {
+          "data": {
+            "kind": "routed",
+            "mode": "quest",
+            "via": "rule",
+            "threadId": "T-129",
+            "status": "queued"
+          }
+        }
+      },
+      "threadId": "T-129",
+      "dbWorkspace": "ws-yunqi",
+      "crossRead": {
+        "result": {
+          "data": null
+        }
+      },
+      "crossEvents": "{\"result\":{\"data\":[]}}",
+      "ownRead": "{\"result\":{\"data\":{\"id\":\"T-129\",\"title\":\"M4 越权探针：云栖酒店调价\",\"mode\":\"quest\",\"status\":\"queued\",\"progress_done\":0,\"progress_total\":0,\"created_by\":\"MEM-001\",\"agent_id\":\"agt-pricing-agent\",\"created_at\":\"2026-",
+      "crossDecide": {
+        "error": {
+          "message": "审批 apr-b6-high-mumtcjm9 不存在",
+          "code": -32600,
+          "data": {
+            "code": "BAD_REQUEST",
+            "httpStatus": 400,
+            "path": "approvals.decide"
+          }
+        }
+      },
+      "crossDecideId": "apr-b6-high-mumtcjm9",
+      "crossDecideStatus": {
+        "before": "pending",
+        "after": "pending"
+      },
+      "ownQueue": {
+        "count": 2,
+        "dbOwnCount": 2,
+        "foreignVisible": []
+      }
+    },
+    "readonlyWrite": {
+      "error": {
+        "message": "当前成员没有“任务派发”权限。",
+        "code": -32003,
+        "data": {
+          "code": "FORBIDDEN",
+          "httpStatus": 403,
+          "path": "threads.dispatch"
+        }
+      }
+    },
+    "readonlyDecide": {
+      "error": {
+        "message": "当前成员没有“审批裁决”权限。",
+        "code": -32003,
+        "data": {
+          "code": "FORBIDDEN",
+          "httpStatus": 403,
+          "path": "approvals.decide"
+        }
+      }
+    },
+    "cTicket": {
+      "status": 200,
+      "body": "{\"ticket\":{\"id\":\"tck-mumtpdnm0010dou\",\"workspaceId\":\"ws-aipm-demo\",\"cUserId\":\"cu-mumtpdn1006ae8x\",\"conversationId\":null,\"kind\":\"complaint\",\"title\":\"M4 隔离探针工单\",\"payload\":{\"note\":\"A 用户\"},\"status\":\"assigned\",\"priority\":\"normal\",\"dept\":\"客户服务团队\",\"assignee\":null,\"ratingScore\":null,\"ratingComment\":null,\"re"
+    },
+    "cTicketIsolation": {
+      "mine": 200,
+      "other": 404,
+      "otherBody": "{\"error\":\"工单不存在\",\"requestId\":\"f3cc1da4-602c-4b83-be70-797b5ea8567c\"}"
+    },
+    "cChatOverLong": {
+      "status": 400,
+      "body": "{\"error\":\"text 超长（≤2000 字符）\"}"
+    },
+    "cTicketKind": {
+      "status": 400
+    },
+    "cRateLimit": {
+      "saw429": true
+    },
+    "injection": {
+      "dispatch": {
+        "result": {
+          "data": {
+            "kind": "routed",
+            "mode": "quest",
+            "via": "rule",
+            "threadId": "T-130",
+            "status": "queued"
+          }
+        }
+      },
+      "stored": "'; DROP TABLE biz_events; -- <script>alert(1)</script> \\u0000 ${jndi:ldap://x}"
+    },
+    "longTitle": {
+      "status": 400,
+      "body": "{\"error\":{\"message\":\"[\\n  {\\n    \\\"origin\\\": \\\"string\\\",\\n    \\\"code\\\": \\\"too_big\\\",\\n    \\\"maximum\\\": 500,\\n    \\\"inclusive\\\": true,\\n    \\\"path\\\": [\\n      \\\"title\\\"\\n    ],\\n    \\\"message\\\": \\\"Too ",
+      "maxTitleLen": 500
+    },
+    "highRiskIds": [
+      "apr-b6-high-mumtcjm9",
+      "apr-b6-hr-mumtcjm5",
+      "apr-b6-queue-mumtcjl2",
+      "apr-b6-ro-mumtcjmh",
+      "apr-boost-i1"
+    ],
+    "batchApprove": {
+      "result": {
+        "data": {
+          "approved": [],
+          "skipped": [
+            {
+              "id": "apr-b6-high-mumtcjm9",
+              "reason": "高危项不可批量采纳（须逐条）"
+            },
+            {
+              "id": "apr-b6-hr-mumtcjm5",
+              "reason": "高危项不可批量采纳（须逐条）"
+            },
+            {
+              "id": "apr-b6-queue-mumtcjl2",
+              "reason": "高危项不可批量采纳（须逐条）"
+            },
+            {
+              "id": "apr-b6-ro-mumtcjmh",
+              "reason": "高危项不可批量采纳（须逐条）"
+            },
+            {
+              "id": "apr-boost-i1",
+              "reason": "高危项不可批量采纳（须逐条）"
+            }
+          ]
+        }
+      }
+    },
+    "batchApproveAfter": [
+      {
+        "approval_id": "apr-b6-high-mumtcjm9",
+        "status": "pending"
+      },
+      {
+        "approval_id": "apr-b6-queue-mumtcjl2",
+        "status": "pending"
+      },
+      {
+        "approval_id": "apr-b6-ro-mumtcjmh",
+        "status": "pending"
+      },
+      {
+        "approval_id": "apr-boost-i1",
+        "status": "pending"
+      },
+      {
+        "approval_id": "apr-b6-hr-mumtcjm5",
+        "status": "pending"
+      }
+    ],
+    "noAuth": {
+      "error": {
+        "message": "未认证（缺少有效 JWT）",
+        "code": -32001,
+        "data": {
+          "code": "UNAUTHORIZED",
+          "httpStatus": 401,
+          "path": "threads.list"
+        }
+      }
+    },
+    "loginAs": {
+      "error": {
+        "message": "演示身份入口仅供本机开发使用，请通过正式账号登录",
+        "code": -32003,
+        "data": {
+          "code": "FORBIDDEN",
+          "httpStatus": 403,
+          "path": "auth.loginAs"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+## MC-107: suite 硬编码 STUB_PORT=8791；与其他会话端口冲突时整轮中止
+2448:const STUB_PORT = 8791;
+2474:  await new Promise<void>((r) => llmStub!.listen(STUB_PORT, "127.0.0.1", () => r()));
+2477:    body: { provider: "e2e-stub", baseUrl: `http://127.0.0.1:${STUB_PORT}/v1`, apiKey: "sk-e2e-dummy-1234567890", model: "stub-real-1" },
+2527:  await new Promise<void>((r) => llmStub!.listen(STUB_PORT, "127.0.0.1", () => r()));
+2528:  await api("/trpc/onboarding.saveLlmConfig", { method: "POST", token: tokenOwner, body: { provider: "e2e-stub", baseUrl: `http://127.0.0.1:${STUB_PORT}/v1`, apiKey: "sk-e2e-dummy", model: "stub-real-1" } });
+--- 复现日志（本机 8791 由另一会话的服务占用）
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:2203:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '127.0.0.1',
+  port: 8791
+}
+
+Node.js v24.19.0
+--- 8791 持有者
+COMMAND   PID USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+node    39064  mac   14u  IPv4 0xf465ed5824d5f168      0t0  TCP 127.0.0.1:8791 (LISTEN)

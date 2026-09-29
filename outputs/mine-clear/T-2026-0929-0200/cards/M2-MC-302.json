@@ -1,0 +1,52 @@
+{
+  "id": "MC-302",
+  "kind": "problem",
+  "level": "L3",
+  "severity": "P1",
+  "batch": 0,
+  "state": "open",
+  "title": "调度器饥饿：queued ≥ 并发上限时拒绝拾取任何线程，工作区队列永久停摆（没有出口的状态）",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "apps/server/src/runtime/scheduler.ts:71-90@4ff9943f0e5b331619a67db06af32ec09e9d8616",
+      "note": "nextQueuedThread 把 `status='queued'` 计入并发统计，且 `count >= MAX_CONCURRENT_THREADS` 时直接 return undefined → 整个工作区本轮不拾取；而 queued 只能由调度器自己消化，形成自锁（恰好 10 条 queued 也会死）"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m2/m2-02-starvation-observe.log",
+      "note": "现场：queued=15 / fresh running=0，35 秒（5 个调度周期）零推进，max(updated_at) 冻结；期间新派遣正确返回 429（守卫本身工作）"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m2/m2-02-concurrency.json",
+      "note": "B4 断言红：start{n:15,last:15:49:01.932Z} → after35s{n:15,last:15:49:01.932Z}；B5：15 条只能靠用户逐条 threads.run 才能排空（人工解锁，非自愈）"
+    }
+  ],
+  "root_cause": {
+    "file": "apps/server/src/runtime/scheduler.ts",
+    "line": 78,
+    "commit": "4ff9943f0e5b331619a67db06af32ec09e9d8616",
+    "symbol": "nextQueuedThread / sweepQueuedThreads"
+  },
+  "trigger_path": "任何使 queued ≥ 10 的时序：并发派遣穿透（MC-201）、批量派活脚本、VPC 场景下调度器关闭期间累积、night-shift resume 一次性回灌 >10 条 queued（packages/base/night-shift/scheduler.ts:252）等。触发后无自动恢复路径。",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "构造 queued=10+（并发派遣 15 条或等价批量回灌）后等待 60s",
+      "expect": "队列至少推进 1 条（queued 数下降或出现 running/completed/pending_review），不得全部滞留",
+      "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2q$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-02-concurrency.mjs",
+      "last_result": "fail",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m2/m2-02-concurrency.json"
+    },
+    {
+      "kind": "property",
+      "given": "任意 queued+running 组合（含 ≥ 上限）",
+      "expect": "只要存在 queued 且 running 新鲜数 < 10，调度器每轮必须拾取 min(batch, 10-running) 条",
+      "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2q2$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-02-concurrency.mjs",
+      "last_result": "fail",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m2/m2-02-concurrency.json"
+    }
+  ],
+  "notes": "修复方向：并发守卫只统计「新鲜 running」（queued 不再占名额），或 `>= MAX` 改为「按剩余额度拾取」；另建议给排队加 TTL/告警。历史上 N-15 已修过「僵尸 running 占配额」，本次是同一守卫的另一个方向的空转。"
+}

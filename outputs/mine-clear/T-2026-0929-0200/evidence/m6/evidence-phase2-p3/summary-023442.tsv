@@ -1,0 +1,5 @@
+m6-b01-linkage-thread	PASS	rc=0
+m6-b02-linkage-kb	PASS	rc=0
+m6-b03-linkage-ask	PASS	rc=0
+m6-b04-linkage-ticket	PASS	rc=0
+m6-b05-linkage-reject	PASS	rc=0

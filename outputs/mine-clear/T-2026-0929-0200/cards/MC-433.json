@@ -1,0 +1,53 @@
+{
+  "id": "MC-433",
+  "kind": "fix",
+  "batch": 1,
+  "state": "fixed",
+  "title": "桌面发布通道迁入 CNB（四段流水线 + 发布助手）",
+  "covers": [
+    "MC-202"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": ".cnb.yml:1@f8ea186",
+      "note": "修复提交 f8ea186"
+    },
+    {
+      "type": "log",
+      "ref": "work/fix-d/assert-sweep.log",
+      "note": "YAML 解析通过；mac/win 实跑待自托管节点（未验证项）"
+    }
+  ],
+  "fix_plan": "见 work/fix-d/REPORT-fix-d-service-acceptance.md 对应卡片小节（提交 f8ea186）",
+  "blast_radius": "见报告对应小节",
+  "conflict_paths": [
+    ".cnb.yml"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "复跑 MC-202 的验收断言",
+      "expect": "YAML 解析通过；mac/win 实跑待自托管节点（未验证项）",
+      "command": "bash work/fix-d/assert-sweep.sh",
+      "last_result": "pass",
+      "evidence": "work/fix-d/assert-sweep.log"
+    },
+    {
+      "kind": "property",
+      "given": "MC-202 的修复语义在任意同类输入下成立",
+      "expect": "同一断言脚本在重复运行下保持通过（幂等）",
+      "command": "bash work/fix-d/assert-sweep.sh",
+      "last_result": "pass",
+      "evidence": "work/fix-d/assert-sweep.log"
+    }
+  ],
+  "regression": {
+    "command": "pnpm suite && pnpm test && pnpm typecheck",
+    "evidence": "work/fix-d/suite.log; work/fix-d/root-test.log"
+  },
+  "rollback": "git revert f8ea186",
+  "fixed_by": "fix_d_service_acceptance",
+  "verified_by": null,
+  "notes": ""
+}

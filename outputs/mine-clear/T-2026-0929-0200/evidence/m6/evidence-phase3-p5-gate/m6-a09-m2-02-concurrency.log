@@ -1,0 +1,18 @@
++ node /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/assertions/m2-02-concurrency.mjs
+✓ A0 目标审批行就绪 :: {"approvalId":"apr-e-11935","threadId":"T-159"}
+✓ A1 8 路并发 decide：恰一条真正生效 :: {"decided":1,"deduped":7,"failed":[]}
+✓ A2 其余并发请求幂等返回（200/deduped），无 500 :: {"failed":[]}
+✓ A3 手势事件只落一条（并发不重复写入账本） :: {"n":1}
+✓ A4 审批终态唯一且已落 decided_by :: {"status":"approved","decided_by":"MEM-001"}
+✓ B1 并发派遣不超过 L3.1 上限（抢占前余量 9，并发 15） :: {"preexisting":1,"capacity":9,"accepted":9,"rejected":6,"firstReject":{"i":5,"status":429,"code":"TOO_MANY_REQUESTS","message":"并发上限 10/工作区（L3.1/G11），已超出请稍后或排队"},"verdict":"未穿透"}
+✓ B2 超限请求返回 429 且有可读原因 :: {"sample":{"i":5,"status":429,"code":"TOO_MANY_REQUESTS","message":"并发上限 10/工作区（L3.1/G11），已超出请稍后或排队"}}
+✓ B3 超限时线程未建档（拒绝就拒绝，不落半截数据） :: {"rejectedWithId":0}
+✓ B4 队列 ≥ 并发上限时调度器仍推进（不得整体停摆） :: {"start":{"n":10,"last":"2026-09-29T22:57:38.401Z"},"after35s":{"n":4,"last":"2026-09-29T22:57:38.401Z"},"acceptedByBurst":9,"verdict":"有推进"}
+✓ B5 人工可解锁（threads.run 逐个排空）但需逐个用户操作 :: {"drained":4,"left":0,"sample":[{"id":"T-165","status":200,"result":"completed"},{"id":"T-166","status":200,"result":"completed"},{"id":"T-167","status":200,"result":"completed"}]}
+✓ C1 并发写库后哈希链验证通过（verify-chain 退出码 0） :: {"exit":0,"tail":"    } |   ] | } |  | ✅ 全库验证通过：16 个 workspace 段 / 2969 条事件，六项检查全绿 | "}
+• D0 待审行样本 :: {"n":3}
+✓ D1 竞态下审批终态唯一（不得出现「已采纳但被写成 expired」） :: {"sweepStatus":200,"decide":{"status":400,"code":"BAD_REQUEST","message":"快照已过期（2026-09-29T21:57:45.829Z），审批标记 expired（E5.3/F5.7）"},"finalRow":{"status":"expired","decided_by":null},"events":["approval.expired"],"verdict":"未观察到覆盖"}
+✓ D2 竞态下不出现双事件（approval.expired 与 approval.gesture 同时存在） :: {"actions":["approval.expired"]}
+• D3 二次扫描（应幂等：不重复处理终态行） :: {"expired":[],"keptHighRisk":["apr-b6-hr-muna0gh9","apr-l4-stmun9wo2d","apr-l4-stmun9x0gg","apr-suite-stmun9wo2d-5ny990","apr-suite-stmun9x0gg-q06fy1"]}
+
+M2-02 并发竞争：15/15 通过（证据 /Users/mac/Documents/Codex/2026-09-29/https-cnb-cool-workloom-ai-workloom-5/work/m6/out-p5/evidence/m2/m2-02-concurrency.json）

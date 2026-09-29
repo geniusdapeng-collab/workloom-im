@@ -1,0 +1,83 @@
+{
+  "id": "MC-101",
+  "kind": "problem",
+  "level": "L4",
+  "severity": "P1",
+  "batch": 1,
+  "state": "open",
+  "title": "审批通过后线程不自动续跑：任务停在 pending_review，需人工再点『推进』",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "apps/server/src/runtime/scheduler.ts:84@4ff9943",
+      "note": "调度器只挑 status='queued' 的线程；pending_review 不在扫描集合，也没有『审批通过 → 重新入队』路径"
+    },
+    {
+      "type": "code",
+      "ref": "packages/base/review-console/approvals.ts:296@4ff9943",
+      "note": "decide() 只在 reject 分支联动线程（cancelled）；approve/edit 不改线程状态"
+    },
+    {
+      "type": "code",
+      "ref": "apps/web/src/pages/p4/P4.tsx:139@4ff9943",
+      "note": "审批台三手势落库后只 load() 刷新列表，不调 threads.run"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m1-approval-resume.log",
+      "note": "真机实测：T-127 关卡 approve 后 60s，线程仍 pending_review，事件数 4→4（无续跑）"
+    },
+    {
+      "type": "code",
+      "ref": "scripts/acceptance/outcome.mjs:135@4ff9943",
+      "note": "RDAS O 域测量注释假定『手势后的续跑是异步的（服务端 fire-and-forget）』，与基座实现不符"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-thread-1790694619945.json",
+      "note": "M3 联动探针（逐面取证）：批准 apr-e-10347 后等 20s（>2 个调度周期），threads.get/list 仍 pending_review（age 21s）；同期 approvals 台 pending 23→22、theater.pendingByTier l2_captain 6→5 —— 待办面已清零而执行面仍挂起，没有任何面提示『已批准、待续跑』"
+    },
+    {
+      "type": "code",
+      "ref": "packages/base/im-channels/callback.ts:132@4ff9943",
+      "note": "IM 通道手势回调（移动/钉钉等入口）同样只调 decide()，不触发续跑——换审批入口也不解决，非 PC 端场景批完即断"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-thread-1790696247065.json",
+      "note": "复跑（修正断言口径后）：派遣 T-137 → pending_review(apr-e-10395) → approve → 20s 后仍 pending_review(age 21s) → threads.run 才 completed；同轮证明 #34 授权留痕正常（basis『经审批 apr-e-10395 批准执行』）"
+    }
+  ],
+  "root_cause": {
+    "file": "apps/server/src/runtime/scheduler.ts",
+    "line": 84,
+    "commit": "4ff9943",
+    "symbol": "nextQueuedThread"
+  },
+  "trigger_path": "threads.dispatch(runImmediately) → 步骤越围栏 → pending_review → 审批台点『通过』 → 线程状态与事件都不再变化；客户必须自己找到任务页点『推进』才继续，且界面没有提示",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "T-12x 的步骤关卡被 approvals.decide(approve)",
+      "expect": "60s 内线程离开 pending_review（进入 running/completed 或下一关卡）",
+      "command": "cd <repo> && set -a && . ./.env && set +a && MCD_BASE=http://127.0.0.1:8899 node outputs/mine-clear/T-2026-0929-0200/assertions/m1-approval-resume.mjs",
+      "last_result": "fail"
+    },
+    {
+      "kind": "property",
+      "given": "任意步骤级审批被批准",
+      "expect": "线程不会无限期停在 pending_review：要么自动续跑，要么写入显式的『等待人工推进』状态并在 UI 呈现",
+      "command": "同上（脚本不依赖具体线程号，自行派遣新线程）",
+      "last_result": "fail"
+    },
+    {
+      "kind": "property",
+      "given": "任意入口（PC 审批台 / 移动 B 端 / IM 通道回调）批准同一条步骤级审批",
+      "expect": "各面口径一致：批准后 60s 内要么线程离开 pending_review，要么所有面都显示『已批准·待人工推进』且给出推进入口；不得出现待办面清零而执行面挂起",
+      "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8899 node outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-thread.mjs（含各面快照与 20s 自动续跑窗口）",
+      "last_result": "fail",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-thread-1790694619945.json"
+    }
+  ],
+  "notes": "与 MC-105（RDAS outcome 调不存在的过程）同源：验收器与基座对『审批后续跑』的假设不一致。M3 联动探针补充：跨面（审批台/剧场/统一待办/IM 通道）口径已在 evidence/m3-thread-1790694619945.json 取证（mcd_linkage）。"
+}

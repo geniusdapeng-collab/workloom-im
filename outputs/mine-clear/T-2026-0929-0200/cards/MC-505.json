@@ -1,0 +1,51 @@
+{
+  "id": "MC-505",
+  "kind": "problem",
+  "level": "L4",
+  "severity": "P2",
+  "batch": 2,
+  "state": "fixed",
+  "title": "/memory 来源清算下拉框无访问名（axe select-name critical）",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "apps/web/src/pages/p23/P23.tsx:372@6a49b30",
+      "note": "修复提交 6a49b30（fixer-F）"
+    },
+    {
+      "type": "log",
+      "ref": "work/fix-f/axe-memory-before.log → final-r2f5.log（0 违规）",
+      "note": "红→绿对照（fixer-F 原始日志）"
+    }
+  ],
+  "root_cause": {
+    "file": "apps/web/src/pages/p23/P23.tsx",
+    "line": 372,
+    "commit": "b67d651",
+    "symbol": "见 FIX-F-REPORT.md"
+  },
+  "trigger_path": "独立验收（RDAS v3.1 / 独立验证会话）在冻结基线 b67d651 上复现；详见 ACCEPTANCE-REPORT.md / VERIFY-REPORT.md",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "复跑 MC-505 的验收场景",
+      "expect": "红→绿（见修复卡断言）",
+      "command": "node work/fix-f/axe-memory-ff.mjs",
+      "last_result": "pass",
+      "evidence": "work/fix-f/axe-memory-before.log → final-r2f5.log（0 违规）"
+    },
+    {
+      "kind": "property",
+      "given": "同一场景在干净库与污染库下重复执行",
+      "expect": "结论一致（不因遗留数据波动）",
+      "command": "node work/fix-f/axe-memory-ff.mjs",
+      "last_result": "pass",
+      "evidence": "work/fix-f/axe-memory-before.log → final-r2f5.log（0 违规）"
+    }
+  ],
+  "regression": {
+    "command": "node work/fix-f/axe-memory-ff.mjs",
+    "evidence": "work/fix-f/axe-memory-before.log → final-r2f5.log（0 违规）"
+  },
+  "notes": "来源：独立验收/独立验证会话（非修复者自报）。"
+}

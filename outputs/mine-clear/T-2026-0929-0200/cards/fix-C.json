@@ -1,0 +1,377 @@
+[
+  {
+    "id": "MC-411",
+    "kind": "fix",
+    "covers": [
+      "MC-301"
+    ],
+    "level": "L3",
+    "severity": "P1",
+    "batch": 1,
+    "title": "派遣「计数 + 建档」同事务串行化：L3.1 工作区并发上限不可被并发请求击穿",
+    "state": "fixed",
+    "evidence": [
+      {
+        "type": "code",
+        "ref": "apps/server/src/trpc/router.ts#threads.dispatch",
+        "note": "BEGIN 后先取 pg_advisory_xact_lock(hashtext('thread-dispatch:<workspace>'))，再做 queued+新鲜 running 计数与建档；超限在锁内抛 TOO_MANY_REQUESTS"
+      },
+      {
+        "type": "log",
+        "ref": "evidence/fix-c/final-m2-02.log",
+        "note": "B1 15 路并发：accepted=10 / rejected=5（全 429「并发上限 10/工作区（L3.1/G11）」）；B3 被拒请求 0 建档"
+      },
+      {
+        "type": "log",
+        "ref": "evidence/fix-c/red-m2-02.log",
+        "note": "修复前同口径红：15/15 全部放行（并发穿透）"
+      }
+    ],
+    "root_cause": {
+      "file": "apps/server/src/trpc/router.ts",
+      "line": 1114,
+      "symbol": "threadsRouter.dispatch",
+      "commit": "4ff9943"
+    },
+    "fix_plan": "dispatch 事务内加工作区级事务 advisory lock（hashtext 键），锁内完成 RLS 上下文 → 计数 → 建档 → 派遣事件；锁随 COMMIT/ROLLBACK 释放。",
+    "blast_radius": "同工作区并发派遣被串行化（毫秒级持锁）；跨工作区互不影响；被拒请求整体回滚（无半截线程/事件）。未改调度器侧口径（见 FIX-C-02）。",
+    "assertions": [
+      {
+        "kind": "sample",
+        "given": "ws-yunqi 抢占前 queued+running=0，15 路并发 threads.dispatch",
+        "expect": "接受数 ≤10，其余 429 且不建档",
+        "command": "M2_REPO=/Users/mac/WorkLoom-fleet/.wt-mcd-fc M2_BASE=http://127.0.0.1:8951 M2_ENV_FILE=work/env-fc M2_OUT=work/fix-c/m2out node outputs/mine-clear/T-2026-0929-0200/assertions/m2-02-concurrency.mjs",
+        "last_result": "pass"
+      },
+      {
+        "kind": "property",
+        "given": "任意并发度 N 与抢占前占用 K",
+        "expect": "任意时刻 count(queued ∪ 新鲜 running) ≤ 10",
+        "command": "同上",
+        "last_result": "pass"
+      }
+    ],
+    "regression": {
+      "command": "M2_REPO=/Users/mac/WorkLoom-fleet/.wt-mcd-fc M2_BASE=http://127.0.0.1:8951 M2_ENV_FILE=work/env-fc node outputs/mine-clear/T-2026-0929-0200/assertions/m2-02-concurrency.mjs",
+      "evidence": "evidence/fix-c/final-m2-02.log"
+    },
+    "rollback": "回滚 f199d92（router.ts 部分）：删除事务内 advisory lock 一行即可恢复旧口径（并发穿透风险回归）。",
+    "fixed_by": "fixer-C",
+    "verified_by": null
+  },
+  {
+    "id": "MC-412",
+    "kind": "fix",
+    "covers": [
+      "MC-302"
+    ],
+    "level": "L3",
+    "severity": "P1",
+    "batch": 0,
+    "title": "调度器并发守卫只统计新鲜 running：queued≥上限不再自锁停摆",
+    "state": "fixed",
+    "evidence": [
+      {
+        "type": "code",
+        "ref": "apps/server/src/runtime/scheduler.ts#nextQueuedThread",
+        "note": "计数改为 status='running' AND updated_at 新鲜；queued 不再占运行位；一次取前 10 条跳过本进程 in-flight"
+      },
+      {
+        "type": "log",
+        "ref": "evidence/fix-c/final-m2-02.log",
+        "note": "B4：queued 10 → 7（35s 窗口内首轮 7s 即推进）；修复前 red-m2-02.log 同场景 35s 零推进"
+      },
+      {
+        "type": "log",
+        "ref": "evidence/fix-c/red-m2-02.log",
+        "note": "修复前：start{n:15,last:…} → after35s{n:15,last:…}（零推进），B5 需人工逐条 threads.run 解锁"
+      }
+    ],
+    "root_cause": {
+      "file": "apps/server/src/runtime/scheduler.ts",
+      "line": 78,
+      "symbol": "nextQueuedThread",
+      "commit": "4ff9943"
+    },
+    "fix_plan": "把并发守卫口径从「queued+running」改为「新鲜 running」；L3.1 上限仍由派遣入口把关（queued+running ≤10），调度器只限制运行位。",
+    "blast_radius": "调度器不再因队列长度停止拾取；批次仍受 WORKLOOM_SCHEDULER_BATCH（默认 3）与运行位上限约束；重启恢复（stale running → paused）未动。",
+    "assertions": [
+      {
+        "kind": "sample",
+        "given": "构造 queued=10+（并发派遣或批量回灌）后等待 35s",
+        "expect": "队列至少推进 1 条（queued 数下降）",
+        "command": "同 FIX-C-01 命令",
+        "last_result": "pass"
+      },
+      {
+        "kind": "property",
+        "given": "任意 queued+running 组合（含 ≥ 上限）",
+        "expect": "只要存在 queued 且新鲜 running <10，调度器每轮拾取 min(batch, 余量)",
+        "command": "同 FIX-C-01 命令",
+        "last_result": "pass"
+      }
+    ],
+    "regression": {
+      "command": "同 FIX-C-01 回归命令",
+      "evidence": "evidence/fix-c/final-m2-02.log"
+    },
+    "rollback": "回滚 ef20ae7：恢复 queued+running 计数与 LIMIT 1 选择（停摆风险回归）。",
+    "fixed_by": "fixer-C",
+    "verified_by": null
+  },
+  {
+    "id": "MC-413",
+    "kind": "fix",
+    "covers": [
+      "MC-303"
+    ],
+    "level": "L2",
+    "severity": "P1",
+    "batch": 1,
+    "title": "计划生成入口唯一化：dispatch(runImmediately) 与 threads.run 统一走 runQuestForThread",
+    "state": "fixed",
+    "evidence": [
+      {
+        "type": "code",
+        "ref": "apps/server/src/trpc/router.ts#threads.dispatch",
+        "note": "runImmediately 分支改调 runQuestForThread（行业规划器/工具执行器/对象词表/覆盖度提示同一条装配路径）"
+      },
+      {
+        "type": "code",
+        "ref": "apps/server/src/trpc/router.ts#threads.run",
+        "note": "续跑/追问分支改调 runQuestForThread；返回值兼容（status/stepsDone/stepsTotal + warnings）"
+      },
+      {
+        "type": "log",
+        "ref": "evidence/fix-c/final-m2-05.log",
+        "note": "H1：同一目标两条入口计划逐字段一致（均 pms.price.read{room_type} + price.adjust{price:519}）"
+      },
+      {
+        "type": "log",
+        "ref": "evidence/fix-c/m2-01-main-loop.json",
+        "note": "挂起事件 W-01 文案随新口径更新为带「越围栏挂起：」机器前缀（见 FIX-C-05 说明），m2-01 该断言保持绿"
+      }
+    ],
+    "root_cause": {
+      "file": "apps/server/src/trpc/router.ts",
+      "line": 1191,
+      "symbol": "threadsRouter.dispatch / threadsRouter.run",
+      "commit": "4ff9943"
+    },
+    "fix_plan": "两处直呼 runQuest 的调用点统一替换为 runQuestForThread（装配点已在 runtime/thread-runner.ts 收敛）。",
+    "blast_radius": "立即执行入口的计划形态改变（空参通用计划 → 行业确定性计划）——这正是卡面要求；由此 W-01 缺参挂起的 basis 文案成为该路径的主文案，loop.ts 为其补上「越围栏挂起：」机器前缀（FIX-C-05），否则冻结的 m2-01 断言会由绿转红。",
+    "assertions": [
+      {
+        "kind": "sample",
+        "given": "同一目标「把雅致大床房调价到 519 元」分别 runImmediately=true/false",
+        "expect": "两次计划步数/action/params 一致",
+        "command": "M2_REPO=… M2_BASE=http://127.0.0.1:8951 … node outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+        "last_result": "pass"
+      },
+      {
+        "kind": "property",
+        "given": "任意行业目标与任意入口（dispatch/run/调度器）",
+        "expect": "计划生成入口唯一，计划不随入口漂移",
+        "command": "同上",
+        "last_result": "pass"
+      }
+    ],
+    "regression": {
+      "command": "M2_REPO=/Users/mac/WorkLoom-fleet/.wt-mcd-fc M2_BASE=http://127.0.0.1:8951 M2_ENV_FILE=work/env-fc node outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+      "evidence": "evidence/fix-c/final-m2-05.log"
+    },
+    "rollback": "回滚 f199d92 中 router.ts 两处调用点；注意同时回滚 loop.ts 的 W-01 前缀变更，否则 m2-01 断言口径不一致。",
+    "fixed_by": "fixer-C",
+    "verified_by": null
+  },
+  {
+    "id": "MC-414",
+    "kind": "fix",
+    "covers": [
+      "MC-304"
+    ],
+    "level": "L4",
+    "severity": "P1",
+    "batch": 1,
+    "title": "行业语义域声明 + 能力试算选岗：口语目标不再静默落到无关岗位「完成」",
+    "state": "fixed",
+    "evidence": [
+      {
+        "type": "code",
+        "ref": "apps/server/src/industry/hotel/acquisition-planner.ts#claimsHotelDomain",
+        "note": "行业词表（口碑/投诉/客服/答复/回评、上调/下调/加价/减价/提价、巡检、送物…）与规划分支同源，模块加载时 registerIndustryGoalClaim(claimsHotelDomain) 注册"
+      },
+      {
+        "type": "code",
+        "ref": "apps/server/src/runtime/thread-runner.ts#resolveDispatchPreset",
+        "note": "通用路由未命中 → 按行业声明逐岗位试算（industry-plan）→ 仍无命中才走显式兜底（fallback，日志 + 响应 presetSelection=fallback + notice）"
+      },
+      {
+        "type": "log",
+        "ref": "evidence/fix-c/final-m2-05.log",
+        "note": "I1：「处理一条差评并回复」→ preset_key=review-agent，review.* 步骤 2 条，挂起 pending_review（修复前 competitor-agent/competitor.crawl 1 步 completed）"
+      },
+      {
+        "type": "log",
+        "ref": "evidence/fix-c/m2-04-boundaries.json",
+        "note": "无域目标（500 字长标题 / 注入 payload）仍可正常派遣（21/21 全绿）——兜底路径保留且已可见，不做硬拒绝"
+      }
+    ],
+    "root_cause": {
+      "file": "apps/server/src/runtime/thread-runner.ts",
+      "line": 107,
+      "symbol": "resolveDispatchPresetKey",
+      "commit": "4ff9943"
+    },
+    "fix_plan": "① 词表进行业包：acquisition-planner 增加 claimsHotelDomain（与规划分支共用同一批常量）并向基座注册；② 基座新增 registerIndustryGoalClaim 与 resolveDispatchPreset（返回来源），未命中时按岗位能力试算；③ 兜底保留但显式化（日志 + 响应字段），不再静默。",
+    "blast_radius": "hotel 工作区：口碑/投诉/客服/答复/回评 与 常用调价动词目标改派正确岗位；其它行业包未声明 claim → 行为与今一致；无域目标仍走原兜底（不然 m2-02 B1/B2、m2-04 B3/B6、m2-05 C1 会硬红：中性标题派遣被拒会破坏并发/边界断言）。",
+    "assertions": [
+      {
+        "kind": "sample",
+        "given": "标题「处理一条差评并回复」",
+        "expect": "命中持有 review.reply 的岗位并产出 review.* 步骤（不得由无关工具完成）",
+        "command": "同 FIX-C-03 命令",
+        "last_result": "pass"
+      },
+      {
+        "kind": "property",
+        "given": "任意目标文本",
+        "expect": "行业声明能判定的目标不得落到无关岗位；无法判定时兜底必须可见（presetSelection/notice + 日志）",
+        "command": "同 FIX-C-03 命令 + apps/server 单测（claimsHotelDomain 15 例）",
+        "last_result": "pass"
+      }
+    ],
+    "regression": {
+      "command": "pnpm -C apps/server test && node outputs/mine-clear/T-2026-0929-0200/assertions/m2-04-boundaries.mjs",
+      "evidence": "evidence/fix-c/m2-04-boundaries.json"
+    },
+    "rollback": "回滚 f199d92 中 thread-runner.ts + acquisition-planner.ts：恢复 ready[0] 静默兜底（假交付风险回归）。",
+    "fixed_by": "fixer-C",
+    "verified_by": null
+  },
+  {
+    "id": "MC-415",
+    "kind": "fix",
+    "covers": [
+      "MC-305"
+    ],
+    "level": "L1",
+    "severity": "P1",
+    "batch": 1,
+    "title": "replay 断点锚点必须是「有真实回执」的步骤：无回执线程重跑不再直接 completed",
+    "state": "fixed",
+    "evidence": [
+      {
+        "type": "code",
+        "ref": "packages/runtime/src/loop.ts#existingStepIds",
+        "note": "done 集合只收 receipt.synced===true 且非 block/review 的步骤（stepReceiptVerified 导出供单测）"
+      },
+      {
+        "type": "code",
+        "ref": "packages/runtime/src/loop.ts#runQuest",
+        "note": "W-01 缺参挂起补「越围栏挂起：」机器前缀（与 replay 标记语义一致，原因仍写在文案与快照里）；completed 时清 error"
+      },
+      {
+        "type": "log",
+        "ref": "evidence/fix-c/final-m2-05.log",
+        "note": "C1 failed（无回执）→ C3 重跑仍 failed（修复前重跑即 completed）"
+      },
+      {
+        "type": "log",
+        "ref": "evidence/fix-c/m2-01-main-loop.json",
+        "note": "「挂起事件落账（basis 标注越围栏挂起）」在新口径下保持绿；「属性：completed 线程执行事件全部 synced=true」绿"
+      }
+    ],
+    "root_cause": {
+      "file": "packages/runtime/src/loop.ts",
+      "line": 231,
+      "symbol": "existingStepIds / runQuest 尾部 unverified 判定",
+      "commit": "4ff9943"
+    },
+    "fix_plan": "existingStepIds 增加 receipt.synced===true 门槛；completed 落库时清 error；W-01 basis 增加机器前缀（兼容 m2-01 冻结断言与 replay 标记）。",
+    "blast_radius": "所有 failed/中断线程重跑时会重新执行未核实步骤（合规所需的重试，次数增加但不再谎报完成）；历史 completed 线程重跑行为不变（其步骤有回执）；依赖旧 W-01 文案前缀的消费方（仅 loop.ts 自身 replay 判定）已同步。",
+    "assertions": [
+      {
+        "kind": "sample",
+        "given": "dataMode=real（无连接器）跑写步骤 → failed → 再调 threads.run",
+        "expect": "重跑后不得为 completed（仍 failed / 重新产生回执后才行）",
+        "command": "同 FIX-C-03 命令",
+        "last_result": "pass"
+      },
+      {
+        "kind": "property",
+        "given": "任意 completed 线程",
+        "expect": "其已执行步骤的最新事件均 receipt.synced=true",
+        "command": "m2-01 属性断言 + m2-05 C1/C2/C3",
+        "last_result": "pass"
+      }
+    ],
+    "regression": {
+      "command": "pnpm -C packages/runtime test && node outputs/mine-clear/T-2026-0929-0200/assertions/m2-01-main-loop.mjs",
+      "evidence": "evidence/fix-c/final-m2-05.log + evidence/fix-c/reg-m2-01b.log"
+    },
+    "rollback": "回滚 6828469：恢复「有 step_id 即视为已完成」的旧 replay 口径（E3.7 被绕过风险回归）。",
+    "fixed_by": "fixer-C",
+    "verified_by": null
+  },
+  {
+    "id": "MC-416",
+    "kind": "fix",
+    "covers": [
+      "MC-306"
+    ],
+    "level": "L2",
+    "severity": "P2",
+    "batch": 2,
+    "title": "酒店演示种子补齐 business.price_bands：R1「≤8% 自动」/ R2「保底价熔断」出厂可达",
+    "state": "fixed",
+    "evidence": [
+      {
+        "type": "code",
+        "ref": "scripts/seed.ts#yunqiArchive",
+        "note": "新增 business.price_bands（雅致大床房 420–480 / 美团大床房 380–440 / 亲子双床房 480–560 / 商旅大床房 360–420），与 R2 保底价 ¥380、forbidden 同源"
+      },
+      {
+        "type": "db",
+        "ref": "wl_mcd_fc profiles.archive",
+        "note": "seed 幂等复跑后回读 archive->'business'->'price_bands' 非空（两次 seed：新写入 0 条事件、幂等跳过 100 条）"
+      },
+      {
+        "type": "log",
+        "ref": "evidence/fix-c/final-m2-05.log",
+        "note": "J1 出厂档案下 +3% 调价 → R1 命中自动执行 completed（修复前 params_incomplete 一律转人工）；A2 rule_impact=R1 有回执；B2 300 元 → R2:blocked paused"
+      }
+    ],
+    "root_cause": {
+      "file": "scripts/seed.ts",
+      "line": 174,
+      "symbol": "yunqiArchive",
+      "commit": "4ff9943"
+    },
+    "fix_plan": "在酒店演示种子的一店一档补 business.price_bands（行业规划器唯一价格锚点来源）；不改 bundles/**（资产摘要被 bundle.json integrity 索引锁定，改文件需同步重算摘要，超出本批范围）。",
+    "blast_radius": "只影响 hotel 演示种子（scripts/seed*.ts 在 base-sync 排除清单内）；其它 bundle 不受影响。注意：m2-05 用例末尾会把 archive-'business' 当作「用例注入物」移除，复跑 J1 前需重新 seed。",
+    "assertions": [
+      {
+        "kind": "sample",
+        "given": "出厂种子 + 「把雅致大床房调价上调 3%」（价带内）",
+        "expect": "R1 命中自动执行、线程 completed、无人工审批",
+        "command": "同 FIX-C-03 命令",
+        "last_result": "pass"
+      },
+      {
+        "kind": "sample",
+        "given": "出厂种子 + 「把雅致大床房调价到 300 元」（低于 ¥380 保底）",
+        "expect": "R2 命中熔断（paused + rule_impact=R2:blocked）",
+        "command": "同 FIX-C-03 命令",
+        "last_result": "pass"
+      }
+    ],
+    "regression": {
+      "command": "BUNDLE_DIR=bundles/hotel tsx --env-file=work/env-fc scripts/seed.ts && node outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+      "evidence": "evidence/fix-c/final-m2-05.log"
+    },
+    "rollback": "回滚 528823a（scripts/seed.ts）：删除 business 块；已 seed 的库执行同一 seed 幂等覆盖即可回到无价带形态。",
+    "fixed_by": "fixer-C",
+    "verified_by": null
+  }
+]

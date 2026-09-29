@@ -1,0 +1,58 @@
+{
+  "id": "MC-466",
+  "kind": "fix",
+  "batch": 2,
+  "state": "fixed",
+  "title": "R2 修复：顶栏紧急制动恒禁用（未接 onConfirm）+ 演示区无夜班班次 → 制动链路不可执行",
+  "covers": [
+    "MC-506"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "apps/web/src/shell/Bridge.tsx:220@4d5242c",
+      "note": "修复提交 4d5242c"
+    },
+    {
+      "type": "log",
+      "ref": "work/fix-f/final-r2f6.log（11/11）+ brake-after.png",
+      "note": "红→绿对照"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/FIX-F-REPORT.md",
+      "note": "修复报告（根因/修法/回归/回滚）"
+    }
+  ],
+  "fix_plan": "见 FIX-F-REPORT.md §3（根因 + 代码级修法 + 证据）",
+  "blast_radius": "见 FIX-F-REPORT.md 对应小节",
+  "conflict_paths": [
+    "apps/web/src/shell/Bridge.tsx"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "复跑 MC-506",
+      "expect": "转绿",
+      "command": "node work/fix-f/assert-r2f6-brake.mjs",
+      "last_result": "pass",
+      "evidence": "work/fix-f/final-r2f6.log（11/11）+ brake-after.png"
+    },
+    {
+      "kind": "property",
+      "given": "同类输入/重复执行",
+      "expect": "保持通过（幂等、不依赖遗留数据）",
+      "command": "node work/fix-f/assert-r2f6-brake.mjs",
+      "last_result": "pass",
+      "evidence": "work/fix-f/final-r2f6.log（11/11）+ brake-after.png"
+    }
+  ],
+  "regression": {
+    "command": "bash work/fix-f/run-regression.sh（8/8 PASS）",
+    "evidence": "work/fix-f/reg-*.log"
+  },
+  "rollback": "git revert 4d5242c",
+  "fixed_by": "fixer-F",
+  "verified_by": null,
+  "notes": "R2 复验由独立验证会话与独立验收会话执行。"
+}

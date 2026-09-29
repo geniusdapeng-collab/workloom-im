@@ -1,0 +1,131 @@
+{
+  "probe": "f1-inbox-unified",
+  "started_at": "2026-09-29T18:20:38.414Z",
+  "base": "http://127.0.0.1:8981",
+  "mark": "F1IN1790706038414",
+  "assertions": [
+    {
+      "name": "演示成员登录（ai-pm-demo）",
+      "ok": true
+    },
+    {
+      "name": "统一待办非空（修复前恒 groups:[]）",
+      "ok": true,
+      "detail": [
+        {
+          "workspaceId": "ws-aipm-demo",
+          "slug": "ai-pm-demo",
+          "workspaceName": "织元产品部（AI 产品经理示例团队）",
+          "tenantName": "织元演示租户",
+          "role": "owner",
+          "industry": "ai-pm",
+          "pendingApprovals": 4,
+          "pendingTickets": 2
+        }
+      ]
+    },
+    {
+      "name": "返回 ai-pm-demo 分组且字段齐备",
+      "ok": true,
+      "detail": {
+        "workspaceId": "ws-aipm-demo",
+        "slug": "ai-pm-demo",
+        "workspaceName": "织元产品部（AI 产品经理示例团队）",
+        "tenantName": "织元演示租户",
+        "role": "owner",
+        "industry": "ai-pm",
+        "pendingApprovals": 4,
+        "pendingTickets": 2
+      }
+    },
+    {
+      "name": "pendingApprovals 与库内 pending 审批数一致",
+      "ok": true,
+      "detail": {
+        "api": 4,
+        "db": 4
+      }
+    },
+    {
+      "name": "pendingTickets 与库内未办结工单数一致",
+      "ok": true,
+      "detail": {
+        "api": 2,
+        "db": 2
+      }
+    },
+    {
+      "name": "C 端新建工单成功",
+      "ok": true,
+      "detail": "tck-mun0529k002blzh"
+    },
+    {
+      "name": "新工单即刻进入统一待办（+1）",
+      "ok": true,
+      "detail": {
+        "before": 2,
+        "after": 3
+      }
+    },
+    {
+      "name": "酒店演示成员看到自家分组且计数一致",
+      "ok": true,
+      "detail": {
+        "group": {
+          "workspaceId": "ws-yunqi",
+          "slug": "yunqi-hotel",
+          "workspaceName": "云栖酒店",
+          "tenantName": "演示租户",
+          "role": "owner",
+          "industry": "hotel",
+          "pendingApprovals": 30,
+          "pendingTickets": 41
+        },
+        "db": {
+          "approvals": 30,
+          "tickets": 41
+        }
+      }
+    },
+    {
+      "name": "跨店隔离：两个演示账号各自只看到自己的工作区",
+      "ok": true,
+      "detail": {
+        "aipm": [
+          "ws-aipm-demo"
+        ],
+        "hotel": [
+          "ws-yunqi"
+        ]
+      }
+    },
+    {
+      "name": "出厂种子成员全部挂账号（account_id 回填）",
+      "ok": true,
+      "detail": [
+        {
+          "workspace_id": "ws-aipm-demo",
+          "total": 3,
+          "bound": 3
+        },
+        {
+          "workspace_id": "ws-yunqi",
+          "total": 3,
+          "bound": 3
+        }
+      ]
+    }
+  ],
+  "members": [
+    {
+      "workspace_id": "ws-aipm-demo",
+      "total": 3,
+      "bound": 3
+    },
+    {
+      "workspace_id": "ws-yunqi",
+      "total": 3,
+      "bound": 3
+    }
+  ]
+}

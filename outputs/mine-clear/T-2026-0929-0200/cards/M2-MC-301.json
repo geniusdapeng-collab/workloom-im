@@ -1,0 +1,47 @@
+{
+  "id": "MC-301",
+  "kind": "problem",
+  "level": "L3",
+  "severity": "P1",
+  "batch": 1,
+  "state": "open",
+  "title": "并发派遣穿透 L3.1 工作区并发上限（计数与建档非原子，15 路并发全部放行）",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "apps/server/src/trpc/router.ts:1114-1122@4ff9943f0e5b331619a67db06af32ec09e9d8616",
+      "note": "dispatch 先在事务内 count(queued+running)，再 INSERT 建档：两步之间无锁、无唯一约束/预约位兜底（同文件 1130 起的 insertWithReadableId 只保证号源，不保证配额）"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m2/m2-02-concurrency.json",
+      "note": "B1 实测：抢占前 queued+running=0（容量 10），15 路并发 dispatch 全部 200（应 10 通过/5 个 429）；同一时刻单发探针能正确返回 429「并发上限 10/工作区（L3.1/G11）」"
+    }
+  ],
+  "root_cause": {
+    "file": "apps/server/src/trpc/router.ts",
+    "line": 1114,
+    "commit": "4ff9943f0e5b331619a67db06af32ec09e9d8616",
+    "symbol": "threadsRouter.dispatch"
+  },
+  "trigger_path": "同一工作区在数毫秒内并发提交 ≥ 容量余量+1 条任务（多端同时派活、脚本批量派活、名册批量派单）；每个请求都读到「未超限」快照后各自 INSERT。",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "ws-yunqi 抢占前 queued+running=0；15 路并发 threads.dispatch（runImmediately=false）",
+      "expect": "HTTP 200 的接受数 ≤ 10 且其余为 429（code=TOO_MANY_REQUESTS）",
+      "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2c$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-02-concurrency.mjs",
+      "last_result": "fail",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m2/m2-02-concurrency.json"
+    },
+    {
+      "kind": "property",
+      "given": "任意并发度 N 与任意抢占前占用 K",
+      "expect": "任何时刻 count(status='queued' OR 新鲜 running) ≤ 10（MAX_CONCURRENT_THREADS）",
+      "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2p$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-02-concurrency.mjs",
+      "last_result": "fail",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m2/m2-02-concurrency.json"
+    }
+  ],
+  "notes": "与 MC-202 组合后果放大：穿透后队列 >10 会直接触发调度器饥饿。修复方向：单语句原子预约（INSERT ... SELECT ... WHERE (SELECT count(*) ...) < 10，或 advisory lock/唯一预约表），插入失败即 429。"
+}

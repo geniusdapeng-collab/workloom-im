@@ -1,0 +1,53 @@
+{
+  "id": "MC-438",
+  "kind": "fix",
+  "batch": 1,
+  "state": "fixed",
+  "title": "桌面首启随机化 C 端会话密钥",
+  "covers": [
+    "MC-208"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "apps/desktop/electron/bootstrap.cjs:1@3aaa776",
+      "note": "修复提交 3aaa776"
+    },
+    {
+      "type": "log",
+      "ref": "work/fix-d/assert-sweep.log",
+      "note": "bootstrap 单测 40/40；SERVICE_C_SECRET 随机化"
+    }
+  ],
+  "fix_plan": "见 work/fix-d/REPORT-fix-d-service-acceptance.md 对应卡片小节（提交 3aaa776）",
+  "blast_radius": "见报告对应小节",
+  "conflict_paths": [
+    "apps/desktop/electron/bootstrap.cjs"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "复跑 MC-208 的验收断言",
+      "expect": "bootstrap 单测 40/40；SERVICE_C_SECRET 随机化",
+      "command": "bash work/fix-d/assert-sweep.sh",
+      "last_result": "pass",
+      "evidence": "work/fix-d/assert-sweep.log"
+    },
+    {
+      "kind": "property",
+      "given": "MC-208 的修复语义在任意同类输入下成立",
+      "expect": "同一断言脚本在重复运行下保持通过（幂等）",
+      "command": "bash work/fix-d/assert-sweep.sh",
+      "last_result": "pass",
+      "evidence": "work/fix-d/assert-sweep.log"
+    }
+  ],
+  "regression": {
+    "command": "pnpm suite && pnpm test && pnpm typecheck",
+    "evidence": "work/fix-d/suite.log; work/fix-d/root-test.log"
+  },
+  "rollback": "git revert 3aaa776",
+  "fixed_by": "fix_d_service_acceptance",
+  "verified_by": null,
+  "notes": ""
+}

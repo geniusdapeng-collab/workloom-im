@@ -1,0 +1,60 @@
+{
+  "id": "MC-112",
+  "kind": "problem",
+  "level": "L1",
+  "severity": "P2",
+  "batch": 2,
+  "state": "open",
+  "title": "重复派单返回 500：工单建单即自动 assigned，service.tickets.assign 再派触发 assigned→assigned 非法迁移；E2E 用例名承诺 409 但断言只验『有错』",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "apps/server/src/service/ticket.ts:174@4ff9943",
+      "note": "assignTicketOn：先 assertTransition(from,'assigned')，从 assigned 再派直接抛 TicketTransitionError→ServiceHttpError(409)"
+    },
+    {
+      "type": "code",
+      "ref": "apps/server/src/service/gateway.ts:210@4ff9943",
+      "note": "createTicketFlow：C 端建单链路 createTicketOn → assignTicketOn（自动派单），因此产线工单一律从 created 直接到 assigned，B 端『分派』入口只对 DB 造出的 created 单有效"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-ticket-1790695253479.json",
+      "note": "真机实测：service.tickets.assign 对 assigned 单返回 500 {\"code\":-32603,\"httpStatus\":500,\"message\":\"工单状态机非法迁移：assigned → assigned\"}（tRPC 层未把 ServiceHttpError 映射为 409）"
+    },
+    {
+      "type": "code",
+      "ref": "apps/server/src/service/e2e.test.ts:952@4ff9943",
+      "note": "用例名『tickets.assign 对 assigned 单重复分派 → 409 语义错误』，断言只有 expect(r.error).not.toBeNull() 与 code!=='0'——500 也能通过，弱断言掩盖了语义偏差"
+    }
+  ],
+  "root_cause": {
+    "file": "apps/server/src/service/ticket.ts",
+    "line": 174,
+    "commit": "4ff9943",
+    "symbol": "assignTicketOn"
+  },
+  "trigger_path": "任意对 status=assigned 的工单调用 service.tickets.assign（P22 在 created 才渲染『分派』按钮，但 API/自动化/并发双操作员可达）→ 500 INTERNAL_SERVER_ERROR；期望是幂等成功（改派/换部门）或 409 语义错误。",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "C 端新建工单（自动 assigned）后，B 端调用 service.tickets.assign(ticketId, dept, assignee)",
+      "expect": "200 幂等改派（保留新 dept/assignee 且不重复迁移）或明确 409 语义错误；不得 500",
+      "command": "cd <repo> && node outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-ticket.mjs",
+      "last_result": "fail",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-ticket-1790695253479.json"
+    },
+    {
+      "kind": "property",
+      "given": "任意 (工单状态 × 重复派单) 组合",
+      "expect": "重复派单不产生 5xx，且 c_ticket_events 不出现重复 assign 记录；错误必须带可判定的状态码语义",
+      "command": "同上（脚本对新建单连调两次 assign 并断言状态码集合）",
+      "last_result": "fail",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-ticket-1790695253479.json"
+    }
+  ],
+  "fix_plan": "ticket.ts：assignTicketOn 对 from==='assigned' 走『原地改派』分支（仅更新 dept/assignee + 记 assign 事件，不做状态迁移）；router 层把 ServiceHttpError 映射为 TRPCError（409/404）以对齐网关语义；e2e 用例改为断言 code/HTTP 语义。",
+  "blast_radius": "影响 P22 工单台分派、C 端自动派单链路与 e2e 用例；改派语义变化会进入 c_ticket_events 时间线（客户侧可见）。",
+  "conflict_paths": ["apps/server/src/service/ticket.ts", "apps/server/src/service/router.ts", "apps/server/src/service/e2e.test.ts"],
+  "notes": "M3 联动探针 3（mcd_linkage）。"
+}

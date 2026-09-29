@@ -1,0 +1,65 @@
+{
+  "id": "MC-412",
+  "kind": "fix",
+  "covers": [
+    "MC-302"
+  ],
+  "level": "L3",
+  "severity": "P1",
+  "batch": 0,
+  "title": "调度器并发守卫只统计新鲜 running：queued≥上限不再自锁停摆",
+  "state": "fixed",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "apps/server/src/runtime/scheduler.ts#nextQueuedThread@6828469",
+      "note": "计数改为 status='running' AND updated_at 新鲜；queued 不再占运行位；一次取前 10 条跳过本进程 in-flight"
+    },
+    {
+      "type": "log",
+      "ref": "evidence/fix-c/final-m2-02.log",
+      "note": "B4：queued 10 → 7（35s 窗口内首轮 7s 即推进）；修复前 red-m2-02.log 同场景 35s 零推进"
+    },
+    {
+      "type": "log",
+      "ref": "evidence/fix-c/red-m2-02.log",
+      "note": "修复前：start{n:15,last:…} → after35s{n:15,last:…}（零推进），B5 需人工逐条 threads.run 解锁"
+    }
+  ],
+  "root_cause": {
+    "file": "apps/server/src/runtime/scheduler.ts",
+    "line": 78,
+    "symbol": "nextQueuedThread",
+    "commit": "4ff9943"
+  },
+  "fix_plan": "把并发守卫口径从「queued+running」改为「新鲜 running」；L3.1 上限仍由派遣入口把关（queued+running ≤10），调度器只限制运行位。",
+  "blast_radius": "调度器不再因队列长度停止拾取；批次仍受 WORKLOOM_SCHEDULER_BATCH（默认 3）与运行位上限约束；重启恢复（stale running → paused）未动。",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "构造 queued=10+（并发派遣或批量回灌）后等待 35s",
+      "expect": "队列至少推进 1 条（queued 数下降）",
+      "command": "同 FIX-C-01 命令",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-c/final-m2-02.log"
+    },
+    {
+      "kind": "property",
+      "given": "任意 queued+running 组合（含 ≥ 上限）",
+      "expect": "只要存在 queued 且新鲜 running <10，调度器每轮拾取 min(batch, 余量)",
+      "command": "同 FIX-C-01 命令",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-c/final-m2-02.log"
+    }
+  ],
+  "regression": {
+    "command": "同 FIX-C-01 回归命令",
+    "evidence": "evidence/fix-c/final-m2-02.log"
+  },
+  "rollback": "回滚 ef20ae7：恢复 queued+running 计数与 LIMIT 1 选择（停摆风险回归）。",
+  "fixed_by": "fixer-C",
+  "verified_by": null,
+  "conflict_paths": [
+    "apps/server/src/runtime/scheduler.ts"
+  ]
+}

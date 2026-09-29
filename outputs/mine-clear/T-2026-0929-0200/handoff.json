@@ -1,0 +1,1809 @@
+{
+  "schema": "workloom.mine-clear/handoff@1",
+  "task_id": "T-2026-0929-0200",
+  "repo": ".wt-mcd-im",
+  "generated_at": "2026-09-29T23:16:48.382Z",
+  "audit_baseline": "4ff9943f0e5b331619a67db06af32ec09e9d8616",
+  "repair_baseline": null,
+  "acceptance_baseline": null,
+  "environment_claim": "local-preview",
+  "invariants": [
+    {
+      "id": "INV-1",
+      "text": "租户边界覆盖数据库 RLS、运行时上下文、事件、缓存和外部连接器。",
+      "source": "AGENTS.md#4.1"
+    },
+    {
+      "id": "INV-2",
+      "text": "经营事件、审批和关键回执只增不改；纠正通过新事件表达，不静默覆盖证据。",
+      "source": "AGENTS.md#4.2"
+    },
+    {
+      "id": "INV-3",
+      "text": "所有外部或变更性动作及其子调用，统一经过权限、PII、围栏和审批链路。",
+      "source": "AGENTS.md#4.3"
+    },
+    {
+      "id": "INV-4",
+      "text": "涉钱、敏感数据、群发、公开发布、交易和破坏性变更必须按高风险处理并由人审批。",
+      "source": "AGENTS.md#4.4"
+    },
+    {
+      "id": "INV-5",
+      "text": "没有真实回执就不能标记完成；mock、模拟和体验模式在数据结构与界面上都要明确区分。",
+      "source": "AGENTS.md#4.5"
+    },
+    {
+      "id": "INV-6",
+      "text": "客户原始经营数据不得上行；蜂群只接受白名单化、最小化、匿名化且可审计的元数据或派生经验。",
+      "source": "AGENTS.md#4.6"
+    },
+    {
+      "id": "INV-7",
+      "text": "租户覆盖层只能收紧围栏，不能放宽平台不可变红线。",
+      "source": "AGENTS.md#4.7"
+    },
+    {
+      "id": "INV-8",
+      "text": "模型、提示词、技能、bundle、策略和热更新必须先评测再灰度，且始终可回滚。",
+      "source": "AGENTS.md#4.8"
+    },
+    {
+      "id": "INV-9",
+      "text": "platform-ops、平台账户运营和平台秘密只属于 Andromeda。",
+      "source": "AGENTS.md#4.9"
+    },
+    {
+      "id": "INV-10",
+      "text": "Tiger 在获得单独的合规审查和用户明确授权前，只能模拟或纸面交易。",
+      "source": "AGENTS.md#4.10"
+    },
+    {
+      "id": "INV-11",
+      "text": "令牌、密码、API key、私钥、客户凭证和私密客户数据不得进入源码、文档、上下文、提示词、日志或提交。",
+      "source": "AGENTS.md#4.11"
+    },
+    {
+      "id": "INV-12",
+      "text": "个性化与行业扩展不得形成公共机制的第二事实源。",
+      "source": "AGENTS.md#4.12"
+    }
+  ],
+  "closed_problems": [
+    {
+      "id": "MC-101",
+      "title": "审批通过后线程不自动续跑：任务停在 pending_review，需人工再点『推进』",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a01-approval-resume.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "T-12x 的步骤关卡被 approvals.decide(approve)",
+          "expect": "60s 内线程离开 pending_review（进入 running/completed 或下一关卡）",
+          "command": "cd <repo> && set -a && . ./.env && set +a && MCD_BASE=http://127.0.0.1:8899 node outputs/mine-clear/T-2026-0929-0200/assertions/m1-approval-resume.mjs",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意步骤级审批被批准",
+          "expect": "线程不会无限期停在 pending_review：要么自动续跑，要么写入显式的『等待人工推进』状态并在 UI 呈现",
+          "command": "同上（脚本不依赖具体线程号，自行派遣新线程）",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意入口（PC 审批台 / 移动 B 端 / IM 通道回调）批准同一条步骤级审批",
+          "expect": "各面口径一致：批准后 60s 内要么线程离开 pending_review，要么所有面都显示『已批准·待人工推进』且给出推进入口；不得出现待办面清零而执行面挂起",
+          "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8899 node outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-thread.mjs（含各面快照与 20s 自动续跑窗口）",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-102",
+      "title": "同一 rule_id 的第二次加严提案『已批准』但规则静默不生效（行 id 固定 + 激活幂等早退）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a04-fence-rule-change.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "对 R7 连续两次加严提案（review → block）并各自批准",
+          "expect": "第二次批准后 fence.rules 回读 level=block，且版本号递增（旧版 rolled_back）",
+          "command": "cd <repo> && set -a && . ./.env && set +a && MCD_BASE=http://127.0.0.1:8899 node outputs/mine-clear/T-2026-0929-0200/assertions/m1-fence-rule-change.mjs",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意 rule_id 的任意次合法加严提案",
+          "expect": "批准即生效，或明确拒绝并给出可复现原因；不存在『已批准但规则未变』的中间态",
+          "command": "同上（循环 N 次并对 fence.rules 回读断言）",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-103",
+      "title": "基线 when 变更的错误文案指向 allowWhenChange，但产品路径没有这个参数（指引不可达）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a05-fence-when-blocked.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "对基线规则提交 when 变更提案（MCD_WHEN='true'）",
+          "expect": "either 提供显式放行入参（dry-run+人工确认后生效）或错误文案改为『当前版本不支持改写基线条件』并给出替代路径",
+          "command": "cd <repo> && MCD_WHEN=true node outputs/mine-clear/T-2026-0929-0200/assertions/m1-fence-rule-change.mjs",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意拒绝消息里提到的开关/参数",
+          "expect": "该开关在至少一条产品路径上可被设置（可被 API 调用验证），否则不得出现在提示文案中",
+          "command": "grep -rn allowWhenChange apps packages scripts（产品调用点应为 1+）",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-104",
+      "title": "人工审批决定不进线程时间线：approval.gesture 事件缺 session_id",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a01-approval-resume.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "对某线程步骤关卡执行 approvals.decide(approve)",
+          "expect": "threads.events 返回该线程的事件列表包含 approval.gesture（且带 approvalId/gesture）",
+          "command": "cd <repo> && set -a && . ./.env && set +a && MCD_BASE=http://127.0.0.1:8899 node outputs/mine-clear/T-2026-0929-0200/assertions/m1-approval-resume.mjs（脚本打印线程时间线动作列表）",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意审批手势（approve/edit/reject）",
+          "expect": "决策事件归属到被审批步骤所属线程（session_id 或等价的 links 投影），线程维度可完整回放",
+          "command": "同上 + DB 直查 approval.gesture 的 session_id 非 NULL",
+          "last_result": "fail"
+        },
+        {
+          "kind": "sample",
+          "given": "对新派遣线程的关卡执行 approvals.decide(reject, reasonEnum=price.too_high)",
+          "expect": "threads.events(threadId) 的动作序列包含 approval.gesture；且线程状态为 cancelled（联动本身已通过）",
+          "command": "cd <repo> && node outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-reject.mjs",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-105",
+      "title": "RDAS O 域执行器调用不存在的过程 approvals.batchRelease（404），自主交付率测量失真",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a07-outcome-trpc-surface.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "以 owner 身份 POST /trpc/approvals.batchRelease",
+          "expect": "200 且返回 released 列表（或在 base 未实现时执行器明确降级并记录来源），而不是 404",
+          "command": "cd <repo> && set -a && . ./.env && set +a && curl -s -X POST $MCD_BASE/trpc/approvals.batchRelease -H \"authorization: Bearer $TOKEN\" -d '{}' | head -c 200",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意一次 O 域验收运行",
+          "expect": "执行器引用的每个 tRPC 过程都在目标仓存在（启动前自检），缺失即 fail-fast 而不是静默降级",
+          "command": "node scripts/acceptance/outcome.mjs --help / 自检脚本遍历 trpc 调用面",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-106",
+      "title": "高危写动作的审批引用可复用：无消费语义，且无绑定字段的审批被当作通用授权",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a03-approval-reuse.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "同一 approvalRef 连续两次高危写动作（action=desktop.gui）",
+          "expect": "第二次被拒（逐次授权/一次性消费），或系统显式记录这是一次通用授权并留痕",
+          "command": "cd <repo> && node_modules/.bin/tsx --env-file=.env outputs/mine-clear/T-2026-0929-0200/assertions/m1-approval-reuse.mts",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意 snapshot 缺少 object/action 绑定的 approved 审批",
+          "expect": "不得作为高危写动作的授权依据（缺少绑定即拒绝，而不是放行）",
+          "command": "同上（脚本夹具即无绑定快照）",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-108",
+      "title": "高危岗位守卫空转：装配产出的 highRisk 无人消费，高危关卡可被批量放行（INV-4）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a02-highrisk-batch.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "desktop-agent 的写入步骤产生的待审批关卡",
+          "expect": "batchApprove 跳过该关卡并给出『高危项不可批量采纳（须逐条）』",
+          "command": "cd <repo> && set -a && . ./.env && set +a && MCD_BASE=http://127.0.0.1:8899 node outputs/mine-clear/T-2026-0929-0200/assertions/m1-highrisk-batch.mjs",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意 meta.high_risk=true 岗位的任意写步骤",
+          "expect": "关卡快照带 high_risk=true 且不可批量放行；执行路径携带逐次授权引用（gateway 段③可达）",
+          "command": "同上 + 特权直查 approvals.snapshot->>'high_risk'",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-109",
+      "title": "首次自定义后规则丢失基线锚点：『只能收紧』守卫对该 rule_id 失效（当前被 MC-102 的静默 no-op 掩盖）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a04-fence-rule-change.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "R7 已自定义为 review（is_baseline=false，基线行 rolled_back）后，提交 level=auto 的放宽提案",
+          "expect": "提案被拒（基线只可加严），或明确标注该规则已脱离平台基线并列出补偿控制",
+          "command": "cd <repo> && MCD_LEVEL1=auto MCD_LEVEL2=auto node outputs/mine-clear/T-2026-0929-0200/assertions/m1-fence-rule-change.mjs（观察 confirmDryRun 是否 400）",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意被自定义过的平台基线规则",
+          "expect": "平台基线的收紧下界始终可判定（锚点不丢），放宽路径必须被拒或显式留痕审批",
+          "command": "同上 + 特权直查 fence_rules 的 is_baseline/status 组合",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-107",
+      "title": "全场景套件硬编码 STUB_PORT=8791：端口被占用即整轮中止，且无预检提示",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-d05-suite-clean.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "8791 被其他进程占用时运行套件，并设置 SUITE_STUB_PORT=8913",
+          "expect": "套件使用 8913 并在 stub 段通过（不因 8791 占用而崩溃）",
+          "command": "cd <repo> && SUITE_SERVER_PORT=8911 SUITE_STUB_PORT=8913 node_modules/.bin/tsx --env-file=<env> scripts/suite.ts",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意被占用的套件端口",
+          "expect": "套件在启动前给出可操作的错误（端口 + 覆盖变量名），不出现未捕获 EADDRINUSE",
+          "command": "同上（先占端口再跑）",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-110",
+      "title": "知识库待审批准先执行后补审批：幽灵待办 + 驳回不回滚（审批台/知识库/客户问答三面互相矛盾）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-p3/m6-f1-01-kb-publish-gate.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "ws-aipm-demo 上传文档 kbd-* 后调用 service.kb.approveDocument",
+          "expect": "审批记录不得与已执行动作矛盾：pending 期间不得已生效；或批准后审批行直接 approved（当前实测 pending + 已生效）",
+          "command": "cd <repo> && node outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-kb.mjs",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意已生效知识文档的 kb.publish 审批",
+          "expect": "任何手势（approve/reject）后『审批台状态』与『检索/C 端问答可见性』不矛盾：驳回即不可检索，或声明该审批为不可回滚的事后留痕并在 UI 标注",
+          "command": "同上（脚本内 reject 后回读 kb_documents.status 与 service.kb.search 命中）",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-111",
+      "title": "B 端 ask 助手答非所问：KB 命中挤占全部答案预算，系统事实不可见，仍声明『以上数字均来自事件库实时取数』",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-p3/m6-f1-02-ask-coverage.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "ws-yunqi 以 owner 提问『当前有多少待审批事项？』（同批还问线程/工单/夜班/客房用品）",
+          "expect": "答案包含当前待审批条数（形如「N 项」或「无」），不得用知识库 FAQ 代替；且答案未引用 KB 时不得出现『以上数字均来自事件库实时取数』",
+          "command": "cd <repo> && node outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-ask.mjs yunqi-hotel",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意工作区 + 任意问题",
+          "expect": "系统事实（审批/线程/工单/夜班）不因 KB 命中而全部消失：答案要么给被问域的数字，要么明确说明该域未接入事实面；KB 事实必须过相关性下限",
+          "command": "同上（脚本对 5 类问题逐一断言 ledger_sources 覆盖）",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-112",
+      "title": "重复派单返回 500：工单建单即自动 assigned，service.tickets.assign 再派触发 assigned→assigned 非法迁移；E2E 用例名承诺 409 但断言只验『有错』",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-p3/m6-f1-03-ticket-reassign.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "C 端新建工单（自动 assigned）后，B 端调用 service.tickets.assign(ticketId, dept, assignee)",
+          "expect": "200 幂等改派（保留新 dept/assignee 且不重复迁移）或明确 409 语义错误；不得 500",
+          "command": "cd <repo> && node outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-ticket.mjs",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意 (工单状态 × 重复派单) 组合",
+          "expect": "重复派单不产生 5xx，且 c_ticket_events 不出现重复 assign 记录；错误必须带可判定的状态码语义",
+          "command": "同上（脚本对新建单连调两次 assign 并断言状态码集合）",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-113",
+      "title": "P28 统一待办对出厂演示工作区恒为空：依赖 members.account_id（种子不建账号），且只统计审批、未纳入工单/告警",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-p3/m6-f1-04-inbox-unified.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "演示成员 MEM-001（ws-yunqi / ai-pm-demo）调用 accounts.inbox.unified",
+          "expect": "groups 非空且该工作区 pendingApprovals 等于 approvals pending 计数（当前实测 groups=[]）",
+          "command": "cd <repo> && node outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-thread.mjs（脚本 S0/S2 面快照含 accounts.inbox.unified）",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意有 pending 审批或未完结工单的工作区",
+          "expect": "该工作区成员在统一待办可见对应计数；若必须绑定账号，则页面给出绑定入口并说明原因，而不是静默空列表",
+          "command": "同上 + node .../m3-linkage-ticket.mjs（建单后复查 inbox）",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-114",
+      "title": "数字职场优先级压制：有 pending 请示的员工被 blocked 态覆盖，楼层不显示请示与审批直达号",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-p3/m6-f1-05-floor-blocked-asking.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "pricing-agent 既有 30 分钟内的 blocked 事件、又有新建的 pending 审批（apr-e-10347）",
+          "expect": "captain.theater.floor 中该员工条目仍给出待审批信息（pendingTier=l2_captain 且 approvalId=apr-e-10347），或显式并列 blocked+asking 两个信号",
+          "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8899 node outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-thread.mjs",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意 (blocked, asking) 组合状态",
+          "expect": "楼层投影不隐藏待人工裁决项：任何存在 pending 审批的员工，其 approvalId 必在楼层可见（信息不丢失）",
+          "command": "同上（脚本断言 asking 条目 approvalId 命中新审批单号）",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-201",
+      "title": "客户安装指引承诺的 WorkLoom-macOS.zip 在发布产线不存在（产物名/格式/校验算法三处不一致）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-c-MC-201.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "README.md + docs/01 + docs/02 + 桌面发布工作流",
+          "expect": "文档中出现的每个安装包名都能在产线 INSTALLERS 清单中找到（当前 WorkLoom-macOS.zip 不在）",
+          "command": "bash outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-201 --repo .",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意一份面向客户的文档",
+          "expect": "文档声明的产物名、归档格式与校验算法与发布工作流产出的资产三者一致",
+          "command": "bash outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-201 --repo .",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-202",
+      "title": "桌面安装包发布链路只存在于 GitHub Actions，CNB（本仓事实源）没有任何桌面发布流水线",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-c-MC-202.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "的 .cnb.yml",
+          "expect": ".cnb.yml 内存在桌面安装包发布流水线（或文档明确声明发布通道），当前 grep 零命中",
+          "command": "bash outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-202 --repo .",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意一次发布动作",
+          "expect": "该动作能在唯一事实源（CNB）内完成：跑流水线 → 产出资产 → 落地可下载地址",
+          "command": "bash outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-202 --repo .",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-203",
+      "title": "发布红线门禁 release:gate 与生产档运行时互斥：同一 DB 上生产档 5/11、开发档 11/11",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-c-MC-203.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "NODE_ENV=production 的实例 + 同一 DB",
+          "expect": "门禁要么给出生产档可用的身份通道并跑到 11/11，要么显式声明「本门禁不适用于生产档」并拒绝给出发布结论",
+          "command": "bash outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-203 --repo .",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意交付形态（dev / desktop / deployed）",
+          "expect": "门禁结论与交付形态解耦：任一门禁项不得依赖仅在该形态下可用的调试入口",
+          "command": "bash outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-203 --repo .",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-204",
+      "title": "server E2E 门禁固定端口 8795 且不校验实例归属：端口被占时对「别人的服务」断言，可假红也可假绿",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-c-MC-204.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "先占用 8795 的任意进程，再运行 pnpm -C apps/server test（RUN_DB_TESTS=1）",
+          "expect": "套件 fail closed：报出端口被占用 / 实例归属不符，且不执行任何业务断言",
+          "command": "bash outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-204 --repo .",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意端口占用状态",
+          "expect": "测试只对本次自己拉起的实例断言（端口可配置且启动后校验实例归属）",
+          "command": "bash outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-204 --repo .",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-205",
+      "title": "全场景套件 stub 端口 8791 硬编码且无环境变量覆盖：端口被占即 EADDRINUSE 直接崩",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-d05-suite-clean.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "8791 被占用 + pnpm suite",
+          "expect": "套件改用可配置端口（SUITE_STUB_PORT）或自动择空闲端口，仍能跑完全部用例",
+          "command": "bash outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-205 --repo .",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意宿主端口占用状态",
+          "expect": "套件用到的所有监听端口都可从外部注入，且默认值与宿主常见占用不冲突",
+          "command": "bash outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-205 --repo .",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-206",
+      "title": "tRPC 未配置错误脱敏：5xx 把内部实现细节（表名/约束名/权限原文）原样回传客户端",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-c-MC-206.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "临时收回 workloom_app 对 approvals 的 SELECT 后调用 approvals.list",
+          "expect": "响应体 message 为通用文案，不含 permission denied / table / constraint 等内部字样",
+          "command": "bash outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-206 --repo . --base http://127.0.0.1:8926",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意 5xx",
+          "expect": "客户端只收到请求指纹与通用错误文案，细节仅存在于服务端日志与事件账本",
+          "command": "bash outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-206 --repo . --base http://127.0.0.1:8926",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-207",
+      "title": "演示档开关在非演示场景仍然生效：出厂 .env.example 显式 SERVICE_C_DEMO_AUTH=true，生产档仍可匿名换取 C 端会话",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-c-MC-207.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "NODE_ENV=production 且未显式配置渠道凭据的实例",
+          "expect": "POST /c/session（h5、无 entryToken）被拒（4xx/503），而不是 200 + token",
+          "command": "bash outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-207 --repo . --base http://127.0.0.1:8926",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意非演示部署",
+          "expect": "演示类开关（匿名直登、任意来源 CORS）在生产/预览脚本中显式关闭，并有一次启动自检",
+          "command": "bash outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-207 --repo . --base http://127.0.0.1:8926",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-208",
+      "title": "桌面首启只随机化 JWT_SECRET / PII_SALT，C 端会话签名密钥保持出厂常量（全机同钥）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-c-MC-208.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "首装后的桌面 .env",
+          "expect": "SERVICE_C_SECRET 与 .env.example 中的出厂常量不同（已随机化）",
+          "command": "bash outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-208 --repo .",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意一次首装",
+          "expect": "所有签名/脱敏密钥都随机化且长度达标（≥32），重复启动不轮换既有值",
+          "command": "bash outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-208 --repo .",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-209",
+      "title": "审批队列/任务列表的 ORDER BY 无覆盖索引：每次请求对全量 (workspace,status) 行排序",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-factory/m6-c-MC-209-amp.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "20k 审批 + 100k 账本的工作区",
+          "expect": "队列查询走 (workspace_id,status,created_at DESC) 覆盖索引，不出现对全量行的 Sort",
+          "command": "bash outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-209 --repo .",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意工作区行数",
+          "expect": "列表类接口的耗时随「返回条数」而非「工作区总行数」增长（p95 ≤ 50ms @ 20k 行）",
+          "command": "bash outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-209 --repo .",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-210",
+      "title": "发布门禁的哈希链校验用 execSync 默认 1MB 缓冲：账本大批异常时门禁报 ENOBUFS 而非「链断」",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T23:11:47.312Z",
+      "verification_evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m6/evidence-phase3/m6-p3-04-gate-anomalous.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "含大批异常事件的账本（100k 级）",
+          "expect": "门禁稳定输出「验链失败：N 处异常」并保留可诊断信息，而不是 ENOBUFS",
+          "command": "bash outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-210 --repo .",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意账本规模",
+          "expect": "门禁对子进程输出设上限或用摘要口径（异常明细落文件），stdout 体积与账本规模解耦",
+          "command": "bash outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-210 --repo .",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-301",
+      "title": "并发派遣穿透 L3.1 工作区并发上限（计数与建档非原子，15 路并发全部放行）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a09-m2-02-concurrency.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "ws-yunqi 抢占前 queued+running=0；15 路并发 threads.dispatch（runImmediately=false）",
+          "expect": "HTTP 200 的接受数 ≤ 10 且其余为 429（code=TOO_MANY_REQUESTS）",
+          "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2c$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-02-concurrency.mjs",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意并发度 N 与任意抢占前占用 K",
+          "expect": "任何时刻 count(status='queued' OR 新鲜 running) ≤ 10（MAX_CONCURRENT_THREADS）",
+          "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2p$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-02-concurrency.mjs",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-302",
+      "title": "调度器饥饿：queued ≥ 并发上限时拒绝拾取任何线程，工作区队列永久停摆（没有出口的状态）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a09-m2-02-concurrency.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "构造 queued=10+（并发派遣 15 条或等价批量回灌）后等待 60s",
+          "expect": "队列至少推进 1 条（queued 数下降或出现 running/completed/pending_review），不得全部滞留",
+          "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2q$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-02-concurrency.mjs",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意 queued+running 组合（含 ≥ 上限）",
+          "expect": "只要存在 queued 且 running 新鲜数 < 10，调度器每轮必须拾取 min(batch, 10-running) 条",
+          "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2q2$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-02-concurrency.mjs",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-303",
+      "title": "dispatch(runImmediately) 与 threads.run 绕过行业规划器：同一目标两条路径产出不同计划，围栏判定全部退化",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a12-m2-05-state-machine.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "同一目标「把雅致大床房调价到 510 元」分别用 runImmediately=true 与 =false 派遣",
+          "expect": "两次计划一致（步数、action 词表、params 是否含业务参数），且 runImmediately 路径同样命中价格围栏词表（rule_impact 非空或明确标注缺参）",
+          "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2x$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意行业目标与任意入口（dispatch/run/调度器）",
+          "expect": "计划生成入口唯一（runQuestForThread），计划步数与 action/objectType 词表不随入口变化",
+          "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2x2$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-304",
+      "title": "语义路由缺口：无路由关键词的目标落到「preset_key 字母序第一个就绪岗位」，无关步骤被执行并标记 completed（假交付）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a11-m2-04-boundaries.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "标题「处理一条差评并回复」",
+          "expect": "命中持有 review.reply 的岗位（review-agent）并产出 review.reply 步骤；不得由 competitor.crawl 之类的无关工具「完成」",
+          "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2r$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意目标文本",
+          "expect": "plan 中每一步的工具都必须与该目标语义域相容；无法判定域时不得挑选无关岗位静默执行（应反问或缺省拒绝）",
+          "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2r2$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-305",
+      "title": "「无回执不算完成」只挡首跑：failed（未核实）线程重跑即变 completed，且 error 仍写着「无回执」（E3.7 被 replay 绕过）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a08-m2-01-main-loop.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "dataMode=real（无连接器）跑一条写步骤线程 → failed → 再调 threads.run 一次",
+          "expect": "重跑后状态不得为 completed（应仍 failed/requires-human，或重新产生回执后才行）",
+          "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2e$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意线程终态为 completed",
+          "expect": "该线程每个已执行步骤对应的最新事件都满足 receipt.synced=true（或状态里显式标注 simulated 且 as-designed）；不得存在 synced=false 的步骤",
+          "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2e2$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-306",
+      "title": "出厂一店一档缺 business.price_bands：行业规划器取不到价格锚点，R1「≤8% 自动」永不可达、R2「保底价熔断」永不触发，调价 100% 转人工",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-factory/m6-new-01-wizard-impact.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "出厂种子档案 + 目标「把雅致大床房调价上调 3%」（价带内）",
+          "expect": "R1 命中并自动执行（线程 completed、无人工审批、事件 rule_impact 含 R1）",
+          "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2g$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+          "last_result": "fail"
+        },
+        {
+          "kind": "sample",
+          "given": "出厂种子档案 + 目标「把雅致大床房调价到 300 元」（低于 ¥380 保底）",
+          "expect": "R2 命中熔断（线程 paused、事件 rule_impact=R2:blocked）",
+          "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2g2$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+          "last_result": "fail"
+        }
+      ]
+    },
+    {
+      "id": "MC-401",
+      "title": "围栏规则行版本化：同一 rule_id 可重复提案且批准即生效",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a04-fence-rule-change.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "R7 连续两次加严（review → block）并逐次批准",
+          "expect": "第二次批准后 level=block 生效且版本递增（v3），旧租户行 rolled_back",
+          "command": "WORKTREE=/Users/mac/WorkLoom-fleet/.wt-mcd-fb bash work/with-server.sh work/env-fb -- node outputs/mine-clear/T-2026-0929-0200/assertions/m1-fence-rule-change.mjs",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "任意 rule_id 的任意次合法加严提案",
+          "expect": "批准即生效，不存在『已批准但规则未变』的静默中间态",
+          "command": "同上（脚本循环两次加严 + 回读比对）",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-402",
+      "title": "覆盖层锚点不丢：平台基线行保持 active，单调守卫取最严 active 行为基准",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a04-fence-rule-change.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "R7 已自定义为 review 后提交 level=auto 放宽提案",
+          "expect": "confirmDryRun 400（基线只可加严）",
+          "command": "同上断言脚本第 3 段",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "任意被自定义过的平台基线规则",
+          "expect": "收紧下界始终可判定（锚点不丢），放宽路径被拒",
+          "command": "同上 + DB 直查 is_baseline/status 组合",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-403",
+      "title": "基线 when 改写走显式放行位（allowWhenChange），指引可达",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a05-fence-when-blocked.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "基线规则 when 改写请求（MCD_WHEN=true）",
+          "expect": "不带放行位 400；带 allowWhenChange=true 时审批后生效",
+          "command": "MCD_WHEN=true [MCD_ALLOW_WHEN=1] node outputs/mine-clear/T-2026-0929-0200/assertions/m1-fence-rule-change.mjs",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "任意拒绝消息中提到的开关/参数",
+          "expect": "该开关在至少一条产品路径上可被设置并留痕",
+          "command": "node work/fix-b/when-retry-probe.mjs（8/8 OK）",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-412",
+      "title": "调度器并发守卫只统计新鲜 running：queued≥上限不再自锁停摆",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a09-m2-02-concurrency.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "构造 queued=10+（并发派遣或批量回灌）后等待 35s",
+          "expect": "队列至少推进 1 条（queued 数下降）",
+          "command": "同 FIX-C-01 命令",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "任意 queued+running 组合（含 ≥ 上限）",
+          "expect": "只要存在 queued 且新鲜 running <10，调度器每轮拾取 min(batch, 余量)",
+          "command": "同 FIX-C-01 命令",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-414",
+      "title": "行业语义域声明 + 能力试算选岗：口语目标不再静默落到无关岗位「完成」",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a11-m2-04-boundaries.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "标题「处理一条差评并回复」",
+          "expect": "命中持有 review.reply 的岗位并产出 review.* 步骤（不得由无关工具完成）",
+          "command": "同 FIX-C-03 命令",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "任意目标文本",
+          "expect": "行业声明能判定的目标不得落到无关岗位；无法判定时兜底必须可见（presetSelection/notice + 日志）",
+          "command": "同 FIX-C-03 命令 + apps/server 单测（claimsHotelDomain 15 例）",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-415",
+      "title": "replay 断点锚点必须是「有真实回执」的步骤：无回执线程重跑不再直接 completed",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a08-m2-01-main-loop.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "dataMode=real（无连接器）跑写步骤 → failed → 再调 threads.run",
+          "expect": "重跑后不得为 completed（仍 failed / 重新产生回执后才行）",
+          "command": "同 FIX-C-03 命令",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "任意 completed 线程",
+          "expect": "其已执行步骤的最新事件均 receipt.synced=true",
+          "command": "m2-01 属性断言 + m2-05 C1/C2/C3",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-416",
+      "title": "酒店演示种子补齐 business.price_bands：R1「≤8% 自动」/ R2「保底价熔断」出厂可达",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-factory/m6-new-01-wizard-impact.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "出厂种子 + 「把雅致大床房调价上调 3%」（价带内）",
+          "expect": "R1 命中自动执行、线程 completed、无人工审批",
+          "command": "同 FIX-C-03 命令",
+          "last_result": "pass"
+        },
+        {
+          "kind": "sample",
+          "given": "出厂种子 + 「把雅致大床房调价到 300 元」（低于 ¥380 保底）",
+          "expect": "R2 命中熔断（paused + rule_impact=R2:blocked）",
+          "command": "同 FIX-C-03 命令",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-411",
+      "title": "派遣「计数 + 建档」同事务串行化：L3.1 工作区并发上限不可被并发请求击穿",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a09-m2-02-concurrency.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "ws-yunqi 抢占前 queued+running=0，15 路并发 threads.dispatch",
+          "expect": "接受数 ≤10，其余 429 且不建档",
+          "command": "M2_REPO=/Users/mac/WorkLoom-fleet/.wt-mcd-fc M2_BASE=http://127.0.0.1:8951 M2_ENV_FILE=work/env-fc M2_OUT=work/fix-c/m2out node outputs/mine-clear/T-2026-0929-0200/assertions/m2-02-concurrency.mjs",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "任意并发度 N 与抢占前占用 K",
+          "expect": "任意时刻 count(queued ∪ 新鲜 running) ≤ 10",
+          "command": "M2_REPO=/Users/mac/WorkLoom-fleet/.wt-mcd-fc M2_BASE=http://127.0.0.1:8951 M2_ENV_FILE=work/env-fc M2_OUT=work/fix-c/m2out node outputs/mine-clear/T-2026-0929-0200/assertions/m2-02-concurrency.mjs",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-413",
+      "title": "计划生成入口唯一化：dispatch(runImmediately) 与 threads.run 统一走 runQuestForThread",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a12-m2-05-state-machine.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "同一目标「把雅致大床房调价到 519 元」分别 runImmediately=true/false",
+          "expect": "两次计划步数/action/params 一致",
+          "command": "M2_REPO=… M2_BASE=http://127.0.0.1:8951 … node outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "任意行业目标与任意入口（dispatch/run/调度器）",
+          "expect": "计划生成入口唯一，计划不随入口漂移",
+          "command": "M2_REPO=… M2_BASE=http://127.0.0.1:8951 … node outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-421",
+      "title": "高危岗位守卫接线：写步骤强制人审 + 快照带 high_risk",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a02-highrisk-batch.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "desktop-agent（high_risk=true，desktop.gui=write）的步骤关卡",
+          "expect": "batchApprove 跳过该关卡（高危项不可批量采纳）",
+          "command": "WORKTREE=<repo> bash work/with-server.sh work/env-verify -- node outputs/mine-clear/T-2026-0929-0200/assertions/m1-highrisk-batch.mjs",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "任意 meta.high_risk=true 岗位的任意写步骤",
+          "expect": "关卡快照 high_risk=true 且不可批量放行；执行路径携带逐次授权引用",
+          "command": "同上 + 直查 approvals.snapshot->>'high_risk'",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-422",
+      "title": "审批采纳/编辑后自动续跑 + 手势事件归属线程",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a01-approval-resume.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "步骤级关卡被 approvals.decide(approve)",
+          "expect": "60s 内线程离开 pending_review 并最终 completed",
+          "command": "WORKTREE=<repo> bash work/with-server.sh work/env-verify -- node outputs/mine-clear/T-2026-0929-0200/assertions/m1-approval-resume.mjs",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "任意审批手势（approve/edit/reject）",
+          "expect": "决策事件出现在所属线程的事件时间线（session_id 非空）",
+          "command": "同上（脚本打印线程时间线动作列表）",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-423",
+      "title": "高危逐次授权 fail-closed：绑定齐备校验 + 一次性消费",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a03-approval-reuse.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "同一 approvalRef 两次高危写动作",
+          "expect": "第二次被拒（一次性授权）",
+          "command": "node_modules/.bin/tsx --env-file=<env-verify> outputs/mine-clear/T-2026-0929-0200/assertions/m1-approval-reuse.mts",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "任意 snapshot 缺少 object/action 绑定的 approved 审批",
+          "expect": "不得作为高危写动作授权（两次都拒）",
+          "command": "同上（场景 A）",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-424",
+      "title": "全场景套件端口可覆盖 + 占用预检",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-d05-suite-clean.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "8791 被外部进程占用，设置 SUITE_STUB_PORT=8973",
+          "expect": "套件使用 8973 完成整轮，不因 8791 占用崩溃",
+          "command": "SUITE_SERVER_PORT=8972 SUITE_STUB_PORT=8973 node_modules/.bin/tsx --env-file=<env-verify> scripts/suite.ts",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "任意被占用的套件端口",
+          "expect": "启动前 fail-fast，错误含端口与覆盖变量名",
+          "command": "同上（先占用端口再跑）",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-431",
+      "title": "RDAS O 域改用既有审批过程 + 恢复 fence.activeRules 端点",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-a07-outcome-trpc-surface.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-105 的验收断言",
+          "expect": "9/9 tRPC 过程已注册（基线 2 个 404）",
+          "command": "bash work/fix-d/assert-sweep.sh",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "MC-105 的修复语义在任意同类输入下成立",
+          "expect": "同一断言脚本在重复运行下保持通过（幂等）",
+          "command": "bash work/fix-d/assert-sweep.sh",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-432",
+      "title": "客户文档与产线产物命名/校验口径对齐 + 命名门禁",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-c-MC-201.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-201 的验收断言",
+          "expect": "命名门禁 PASS（三处一致）",
+          "command": "bash work/fix-d/assert-sweep.sh",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "MC-201 的修复语义在任意同类输入下成立",
+          "expect": "同一断言脚本在重复运行下保持通过（幂等）",
+          "command": "bash work/fix-d/assert-sweep.sh",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-433",
+      "title": "桌面发布通道迁入 CNB（四段流水线 + 发布助手）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-c-MC-202.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-202 的验收断言",
+          "expect": "YAML 解析通过；mac/win 实跑待自托管节点（未验证项）",
+          "command": "bash work/fix-d/assert-sweep.sh",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "MC-202 的修复语义在任意同类输入下成立",
+          "expect": "同一断言脚本在重复运行下保持通过（幂等）",
+          "command": "bash work/fix-d/assert-sweep.sh",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-434",
+      "title": "发布门禁生产档身份通道（三级回落）+ 档位显式声明",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-c-MC-203.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-203 的验收断言",
+          "expect": "生产档 11/11（基线 5/11）",
+          "command": "bash work/fix-d/assert-sweep.sh",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "MC-203 的修复语义在任意同类输入下成立",
+          "expect": "同一断言脚本在重复运行下保持通过（幂等）",
+          "command": "bash work/fix-d/assert-sweep.sh",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-435",
+      "title": "server E2E 端口可注入 + 实例归属校验（fail-closed）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-c-MC-204.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-204 的验收断言",
+          "expect": "同形劫持 → 实例归属不符，fail-closed",
+          "command": "bash work/fix-d/assert-sweep.sh",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "MC-204 的修复语义在任意同类输入下成立",
+          "expect": "同一断言脚本在重复运行下保持通过（幂等）",
+          "command": "bash work/fix-d/assert-sweep.sh",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-436",
+      "title": "tRPC 5xx 错误脱敏（ref 与服务端日志同源）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-c-MC-206.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-206 的验收断言",
+          "expect": "5xx 响应不含表名/约束名；日志保留原文",
+          "command": "bash work/fix-d/assert-sweep.sh",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "MC-206 的修复语义在任意同类输入下成立",
+          "expect": "同一断言脚本在重复运行下保持通过（幂等）",
+          "command": "bash work/fix-d/assert-sweep.sh",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-437",
+      "title": "生产档强制关闭演示直登（含 .env.example 语义）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-c-MC-207.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-207 的验收断言",
+          "expect": "生产档 POST /c/session → 503；开发档 200",
+          "command": "bash work/fix-d/assert-sweep.sh",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "MC-207 的修复语义在任意同类输入下成立",
+          "expect": "同一断言脚本在重复运行下保持通过（幂等）",
+          "command": "bash work/fix-d/assert-sweep.sh",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-438",
+      "title": "桌面首启随机化 C 端会话密钥",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-clean/m6-c-MC-208.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-208 的验收断言",
+          "expect": "bootstrap 单测 40/40；SERVICE_C_SECRET 随机化",
+          "command": "bash work/fix-d/assert-sweep.sh",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "MC-208 的修复语义在任意同类输入下成立",
+          "expect": "同一断言脚本在重复运行下保持通过（幂等）",
+          "command": "bash work/fix-d/assert-sweep.sh",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-439",
+      "title": "审批队列/任务列表补 ORDER BY 覆盖索引",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-factory/m6-c-MC-209-amp.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-209 的验收断言",
+          "expect": "EXPLAIN 走 Index Scan（16k 行不再全量 Sort）",
+          "command": "bash work/fix-d/assert-sweep.sh",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "MC-209 的修复语义在任意同类输入下成立",
+          "expect": "同一断言脚本在重复运行下保持通过（幂等）",
+          "command": "bash work/fix-d/assert-sweep.sh",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-440",
+      "title": "验链摘要口径 + maxBuffer（ENOBUFS 不再伪装链断）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T23:11:47.312Z",
+      "verification_evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m6/evidence-phase3/m6-p3-04-gate-anomalous.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-210 的验收断言",
+          "expect": "异常库输出 6.5KB（原 160MB）；T-03 报『N 处异常』",
+          "command": "bash work/fix-d/assert-sweep.sh",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "MC-210 的修复语义在任意同类输入下成立",
+          "expect": "同一断言脚本在重复运行下保持通过（幂等）",
+          "command": "bash work/fix-d/assert-sweep.sh",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-441",
+      "title": "知识发布当场人审留痕 + kb.publish 裁决联动（驳回即退出检索）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-p3/m6-f1-01-kb-publish-gate.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "ws-aipm-demo 上传文档后调用 service.kb.approveDocument，再对该记录重复批准",
+          "expect": "文档 active 且可检索；审批记录 approved（带决策人/手势）；pending 列表无该文档；重复批准 deduped 且不新增事件",
+          "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app:workloom_dev_app@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway:workloom_dev_gateway@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-kb-publish-gate.mjs",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "任意 kb.publish 审批（含修复前遗留的 pending 行）被 approve/edit/reject",
+          "expect": "approve/edit → 文档生效；reject → 文档退回 pending_review 且检索不可见（两面不再矛盾）；重复回调幂等",
+          "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app:workloom_dev_app@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway:workloom_dev_gateway@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-kb-publish-gate.mjs",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-442",
+      "title": "ask 事实面被问域优先 + 知识库相关性下限 + 工单/夜班事实面",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-p3/m6-f1-02-ask-coverage.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "ws-yunqi 出厂 mock 态依次提问：待审批 / 进行中任务 / 工单 / 夜班 / 毛巾更换",
+          "expect": "四类系统问题给出当前真实数字（与库内计数一致），知识型问题引用知识库；approvals 取数来源无 kb:；KB-only 答案不声称「数字来自事件库」",
+          "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app:workloom_dev_app@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway:workloom_dev_gateway@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-ask-coverage.mjs",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "任意工作区任意问题（纯函数口径 + 真机 5 问）",
+          "expect": "被问域事实排序先于知识库；落款与正文实际取数来源一致；KB 命中必须过相关性下限",
+          "command": "cd <repo> && node outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-ask.mjs yunqi-hotel（+ pnpm -C packages/runtime test / pnpm suite 的同名纯函数断言）",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-443",
+      "title": "重复派单原地改派 + 服务层语义错误映射（不再 500）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-p3/m6-f1-03-ticket-reassign.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "C 端建单（自动 assigned）后 B 端重复派单（同值 / 异值），再对已办结单派单",
+          "expect": "同值 200 且不重复落 assign 事件；异值 200 且 dept/assignee 更新、状态不变；已办结 409 CONFLICT；不存在 404 NOT_FOUND",
+          "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app:workloom_dev_app@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway:workloom_dev_gateway@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-ticket-reassign.mjs",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "任意 (工单状态 × 重复派单) 组合",
+          "expect": "不产生 5xx；同值派单幂等；非法迁移返回可判定的 409 契约文案",
+          "command": "同上 + RUN_DB_TESTS=1 pnpm -C apps/server exec vitest run src/service/e2e.test.ts",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-444",
+      "title": "演示种子补全局账号 + 统一待办纳入未办结工单",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-p3/m6-f1-04-inbox-unified.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "演示成员 MEM-001 调用 accounts.inbox.unified（ai-pm-demo 与 yunqi-hotel）",
+          "expect": "groups 非空且分店计数与库内 pending 审批/未办结工单一致；C 端建单后 pendingTickets +1、办结后回落",
+          "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app:workloom_dev_app@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway:workloom_dev_gateway@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-inbox-unified.mjs",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "任意有 pending 审批或未完结工单的工作区成员",
+          "expect": "该成员在统一待办看到对应计数；无账号绑定的成员由种子/注册流程保证绑定（仍有 UI 提示而非静默空列表）",
+          "command": "同上 + DATABASE_APP_URL=... psql 直查 members.account_id 覆盖",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-445",
+      "title": "数字职场遇阻与请示共存 + 待裁总数",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T18:45:02.030Z",
+      "verification_evidence": "work/m6/... + outputs/mine-clear/T-2026-0929-0200/evidence/m6/m6-verdicts.json :: work/m6/evidence-p3/m6-f1-05-floor-blocked-asking.log",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "ws-yunqi 派遣高风险调价（触发围栏挂起）后读 captain.theater",
+          "expect": "该员工条目 state=blocked 且带 approvalId/pendingTier/asking=true/pendingCount≥1，statusLine 同时含「遇阻」与「请示待裁」",
+          "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 node outputs/mine-clear/T-2026-0929-0200/assertions/f1-floor-blocked-asking.mjs",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "任意 (blocked, asking) 组合状态",
+          "expect": "楼层不隐藏待人工裁决项：条目必带审批直达号与待裁总数，点击可直达审批卡（不再被遇阻态吃掉）",
+          "command": "同上 + MCD_BASE=... node outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-thread.mjs",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-501",
+      "title": "验收门禁假红：Z-11 启动补扫夹具缺 snapshot.action（被 MC-106 fail-closed 正确拒绝）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T23:11:47.312Z",
+      "verification_evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m6/evidence-phase3/m6-p3-01-suite-fresh.log + evidence/m6/m6-verdicts.json",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-501 的验收场景",
+          "expect": "红→绿（见修复卡断言）",
+          "command": "SUITE_SERVER_PORT=8972 SUITE_STUB_PORT=8973 tsx --env-file=<env> scripts/suite.ts",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "同一场景在干净库与污染库下重复执行",
+          "expect": "结论一致（不因遗留数据波动）",
+          "command": "SUITE_SERVER_PORT=8972 SUITE_STUB_PORT=8973 tsx --env-file=<env> scripts/suite.ts",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-502",
+      "title": "单测断言与产品口径漂移：未绑定/已消费两条拒绝文案与顺序不一致（2 败）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T23:11:47.312Z",
+      "verification_evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m6/evidence-phase3/m6-p3-06b-root-test-db.log + evidence/m6/m6-verdicts.json",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-502 的验收场景",
+          "expect": "红→绿（见修复卡断言）",
+          "command": "RUN_DB_TESTS=1 pnpm test",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "同一场景在干净库与污染库下重复执行",
+          "expect": "结论一致（不因遗留数据波动）",
+          "command": "RUN_DB_TESTS=1 pnpm test",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-503",
+      "title": "落地向导整块替换 archive.business → 清空出厂价带，R1/R2 可达性失效",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T23:11:47.312Z",
+      "verification_evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m6/evidence-phase3/m6-p3-03b-wizard-fixed.log + evidence/m6/m6-verdicts.json",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-503 的验收场景",
+          "expect": "红→绿（见修复卡断言）",
+          "command": "node work/fix-f/assert-r2f3-wizard.mjs",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "同一场景在干净库与污染库下重复执行",
+          "expect": "结论一致（不因遗留数据波动）",
+          "command": "node work/fix-f/assert-r2f3-wizard.mjs",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-504",
+      "title": "release-gate 验链摘要解析取 `{` 之后全文 → JSON.parse 抛错，异常规模丢失",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T23:11:47.312Z",
+      "verification_evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m6/evidence-phase3/m6-p3-04-gate-anomalous.log + evidence/m6/m6-verdicts.json",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-504 的验收场景",
+          "expect": "红→绿（见修复卡断言）",
+          "command": "node work/fix-f/assert-r2f4-parse.mts",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "同一场景在干净库与污染库下重复执行",
+          "expect": "结论一致（不因遗留数据波动）",
+          "command": "node work/fix-f/assert-r2f4-parse.mts",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-505",
+      "title": "/memory 来源清算下拉框无访问名（axe select-name critical）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T23:11:47.312Z",
+      "verification_evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m6/evidence-phase3/m6-p3-07-axe.log + evidence/m6/m6-verdicts.json",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-505 的验收场景",
+          "expect": "红→绿（见修复卡断言）",
+          "command": "node work/fix-f/axe-memory-ff.mjs",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "同一场景在干净库与污染库下重复执行",
+          "expect": "结论一致（不因遗留数据波动）",
+          "command": "node work/fix-f/axe-memory-ff.mjs",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-506",
+      "title": "顶栏紧急制动恒禁用（未接 onConfirm）+ 演示区无夜班班次 → 制动链路不可执行",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T23:11:47.312Z",
+      "verification_evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m6/evidence-phase3/m6-p3-07b-brake.log + evidence/m6/m6-verdicts.json",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-506 的验收场景",
+          "expect": "红→绿（见修复卡断言）",
+          "command": "node work/fix-f/assert-r2f6-brake.mjs",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "同一场景在干净库与污染库下重复执行",
+          "expect": "结论一致（不因遗留数据波动）",
+          "command": "node work/fix-f/assert-r2f6-brake.mjs",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-507",
+      "title": "套件 R-06 对遗留 pending 敏感（污染库假红 469/470）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T23:11:47.312Z",
+      "verification_evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m6/evidence-phase3/m6-p3-02-suite-with-leftovers.log + evidence/m6/m6-verdicts.json",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-507 的验收场景",
+          "expect": "红→绿（见修复卡断言）",
+          "command": "注入 25 条遗留 L2 待批后跑套件",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "同一场景在干净库与污染库下重复执行",
+          "expect": "结论一致（不因遗留数据波动）",
+          "command": "注入 25 条遗留 L2 待批后跑套件",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-508",
+      "title": "O 域验收介入器回退到无关 L4 待批行 → trial 假失败、pass@1 波动",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T23:11:47.312Z",
+      "verification_evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m6/evidence-phase3/m6-p3-05-outcome-no-pollution.log + evidence/m6/m6-verdicts.json",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-508 的验收场景",
+          "expect": "红→绿（见修复卡断言）",
+          "command": "污染库对照：旧实现改无关行 vs 新实现 0 条改动",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "同一场景在干净库与污染库下重复执行",
+          "expect": "结论一致（不因遗留数据波动）",
+          "command": "污染库对照：旧实现改无关行 vs 新实现 0 条改动",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-461",
+      "title": "R2 修复：验收门禁假红：Z-11 启动补扫夹具缺 snapshot.action（被 MC-106 fail-closed 正确拒绝）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T23:11:47.312Z",
+      "verification_evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m6/evidence-phase3/m6-p3-01-suite-fresh.log + evidence/m6/m6-verdicts.json",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-501",
+          "expect": "转绿",
+          "command": "SUITE_SERVER_PORT=8972 SUITE_STUB_PORT=8973 tsx --env-file=<env> scripts/suite.ts",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "同类输入/重复执行",
+          "expect": "保持通过（幂等、不依赖遗留数据）",
+          "command": "SUITE_SERVER_PORT=8972 SUITE_STUB_PORT=8973 tsx --env-file=<env> scripts/suite.ts",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-462",
+      "title": "R2 修复：单测断言与产品口径漂移：未绑定/已消费两条拒绝文案与顺序不一致（2 败）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T23:11:47.312Z",
+      "verification_evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m6/evidence-phase3/m6-p3-06b-root-test-db.log + evidence/m6/m6-verdicts.json",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-502",
+          "expect": "转绿",
+          "command": "RUN_DB_TESTS=1 pnpm test",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "同类输入/重复执行",
+          "expect": "保持通过（幂等、不依赖遗留数据）",
+          "command": "RUN_DB_TESTS=1 pnpm test",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-463",
+      "title": "R2 修复：落地向导整块替换 archive.business → 清空出厂价带，R1/R2 可达性失效",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T23:11:47.312Z",
+      "verification_evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m6/evidence-phase3/m6-p3-03b-wizard-fixed.log + evidence/m6/m6-verdicts.json",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-503",
+          "expect": "转绿",
+          "command": "node work/fix-f/assert-r2f3-wizard.mjs",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "同类输入/重复执行",
+          "expect": "保持通过（幂等、不依赖遗留数据）",
+          "command": "node work/fix-f/assert-r2f3-wizard.mjs",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-464",
+      "title": "R2 修复：release-gate 验链摘要解析取 `{` 之后全文 → JSON.parse 抛错，异常规模丢失",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T23:11:47.312Z",
+      "verification_evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m6/evidence-phase3/m6-p3-04-gate-anomalous.log + evidence/m6/m6-verdicts.json",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-504",
+          "expect": "转绿",
+          "command": "node work/fix-f/assert-r2f4-parse.mts",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "同类输入/重复执行",
+          "expect": "保持通过（幂等、不依赖遗留数据）",
+          "command": "node work/fix-f/assert-r2f4-parse.mts",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-465",
+      "title": "R2 修复：/memory 来源清算下拉框无访问名（axe select-name critical）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T23:11:47.312Z",
+      "verification_evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m6/evidence-phase3/m6-p3-07-axe.log + evidence/m6/m6-verdicts.json",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-505",
+          "expect": "转绿",
+          "command": "node work/fix-f/axe-memory-ff.mjs",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "同类输入/重复执行",
+          "expect": "保持通过（幂等、不依赖遗留数据）",
+          "command": "node work/fix-f/axe-memory-ff.mjs",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-466",
+      "title": "R2 修复：顶栏紧急制动恒禁用（未接 onConfirm）+ 演示区无夜班班次 → 制动链路不可执行",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T23:11:47.312Z",
+      "verification_evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m6/evidence-phase3/m6-p3-07b-brake.log + evidence/m6/m6-verdicts.json",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-506",
+          "expect": "转绿",
+          "command": "node work/fix-f/assert-r2f6-brake.mjs",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "同类输入/重复执行",
+          "expect": "保持通过（幂等、不依赖遗留数据）",
+          "command": "node work/fix-f/assert-r2f6-brake.mjs",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-467",
+      "title": "R2 修复：套件 R-06 对遗留 pending 敏感（污染库假红 469/470）",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T23:11:47.312Z",
+      "verification_evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m6/evidence-phase3/m6-p3-02-suite-with-leftovers.log + evidence/m6/m6-verdicts.json",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-507",
+          "expect": "转绿",
+          "command": "注入 25 条遗留 L2 待批后跑套件",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "同类输入/重复执行",
+          "expect": "保持通过（幂等、不依赖遗留数据）",
+          "command": "注入 25 条遗留 L2 待批后跑套件",
+          "last_result": "pass"
+        }
+      ]
+    },
+    {
+      "id": "MC-468",
+      "title": "R2 修复：O 域验收介入器回退到无关 L4 待批行 → trial 假失败、pass@1 波动",
+      "verified_by": "mcd_verify",
+      "verified_at": "2026-09-29T23:11:47.312Z",
+      "verification_evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m6/evidence-phase3/m6-p3-05-outcome-no-pollution.log + evidence/m6/m6-verdicts.json",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "复跑 MC-508",
+          "expect": "转绿",
+          "command": "污染库对照：旧实现改无关行 vs 新实现 0 条改动",
+          "last_result": "pass"
+        },
+        {
+          "kind": "property",
+          "given": "同类输入/重复执行",
+          "expect": "保持通过（幂等、不依赖遗留数据）",
+          "command": "污染库对照：旧实现改无关行 vs 新实现 0 条改动",
+          "last_result": "pass"
+        }
+      ]
+    }
+  ],
+  "open_problems": [
+    {
+      "id": "MC-509",
+      "kind": "problem",
+      "state": "open",
+      "severity": "P2",
+      "title": "m2-01 断言与上游挂起标记漂移：basis 前缀被 decision.kind=review 取代（假红）",
+      "evidence": "packages/runtime/src/loop.ts:350@31282ce",
+      "root_cause": "scripts 断言（outputs 内探针）:0@31282ce",
+      "fix_plan": null,
+      "regression": "M2_REPO=<repo> M2_BASE=<base> M2_ENV_FILE=<env> node outputs/mine-clear/T-2026-0929-0200/assertions/m2-01-main-loop.mjs（更新断言接受 decision.kind=review 后应 21/21）"
+    }
+  ],
+  "acceptance_commands": [
+    "pnpm acceptance:profile:check",
+    "node scripts/acceptance/fleet-run.mjs --repo .wt-mcd-im --env local-preview",
+    "node scripts/acceptance/fleet-run.mjs --repo .wt-mcd-im --env local-preview --live-only   # 生产最小侵入档"
+  ],
+  "notes": "环境档位为 local-preview：报告只能写『本机预览结构验收』，不得写『生产实测通过』（RDAS v3.1 §0）"
+}

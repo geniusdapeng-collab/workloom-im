@@ -1,0 +1,58 @@
+{
+  "id": "MC-421",
+  "kind": "fix",
+  "batch": 0,
+  "state": "fixed",
+  "title": "高危岗位守卫接线：写步骤强制人审 + 快照带 high_risk",
+  "covers": [
+    "MC-108"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "packages/runtime/src/loop.ts:534@af56831",
+      "note": "步骤审批快照补 high_risk: preset.highRisk"
+    },
+    {
+      "type": "code",
+      "ref": "packages/runtime/src/loop.ts:461@af56831",
+      "note": "三处 actor 补 highRisk，网关段③在 Quest 路径可达"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m5-merge-m1-highrisk-batch.log",
+      "note": "合并后复跑：batchApprove 跳过并给出『高危项不可批量采纳（须逐条）』"
+    }
+  ],
+  "fix_plan": "装配产出的 preset.highRisk 接入审批快照与网关 actor；高危岗位的写步骤一律不得 auto（block 仍熔断）",
+  "blast_radius": "所有 meta.high_risk=true 岗位的步骤审批与执行；批量放行/超时扫描口径随之收紧",
+  "conflict_paths": [
+    "packages/runtime/src/loop.ts"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "desktop-agent（high_risk=true，desktop.gui=write）的步骤关卡",
+      "expect": "batchApprove 跳过该关卡（高危项不可批量采纳）",
+      "command": "WORKTREE=<repo> bash work/with-server.sh work/env-verify -- node outputs/mine-clear/T-2026-0929-0200/assertions/m1-highrisk-batch.mjs",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m5-merge-m1-highrisk-batch.log"
+    },
+    {
+      "kind": "property",
+      "given": "任意 meta.high_risk=true 岗位的任意写步骤",
+      "expect": "关卡快照 high_risk=true 且不可批量放行；执行路径携带逐次授权引用",
+      "command": "同上 + 直查 approvals.snapshot->>'high_risk'",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m5-merge-m1-highrisk-batch.log"
+    }
+  ],
+  "regression": {
+    "command": "pnpm typecheck && pnpm -C packages/runtime test",
+    "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m5-merge-m1-highrisk-batch.log"
+  },
+  "rollback": "git revert af56831",
+  "fixed_by": "fixer-A",
+  "verified_by": null,
+  "notes": ""
+}

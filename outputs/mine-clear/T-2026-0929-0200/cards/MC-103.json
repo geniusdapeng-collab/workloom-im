@@ -1,0 +1,55 @@
+{
+  "id": "MC-103",
+  "kind": "problem",
+  "level": "L1",
+  "severity": "P2",
+  "batch": 2,
+  "state": "open",
+  "title": "基线 when 变更的错误文案指向 allowWhenChange，但产品路径没有这个参数（指引不可达）",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "packages/base/fence-engine/dsl.ts:197@4ff9943",
+      "note": "拒绝文案：『…须先 dry-run 回放 + 人工确认（L2.4）后以 allowWhenChange 显式放行』"
+    },
+    {
+      "type": "code",
+      "ref": "apps/server/src/trpc/router.ts:2214@4ff9943",
+      "note": "fence.confirmDryRun 的 zod 入参只有 dryRunId + rule{ruleId,name,level,objectTypes,actions,when}，无 allowWhenChange（未知键被 strip）"
+    },
+    {
+      "type": "code",
+      "ref": "apps/server/src/service/bundle.ts:1187@4ff9943",
+      "note": "bundle 激活路径同样不传 allowWhenChange"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m1-allow-when-change.log",
+      "note": "源码检索：allowWhenChange 仅出现在 dsl.ts 与 fence-engine.test.ts，无任何产品调用点"
+    }
+  ],
+  "root_cause": {
+    "file": "apps/server/src/trpc/router.ts",
+    "line": 2214,
+    "commit": "4ff9943",
+    "symbol": "fence.confirmDryRun"
+  },
+  "trigger_path": "客户在规则中心改一条基线规则的条件（when）→ 400 拒绝，提示用 allowWhenChange 放行 → 该参数在 API/SDK/UI 中不存在，客户无路可走",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "对基线规则提交 when 变更提案（MCD_WHEN='true'）",
+      "expect": "either 提供显式放行入参（dry-run+人工确认后生效）或错误文案改为『当前版本不支持改写基线条件』并给出替代路径",
+      "command": "cd <repo> && MCD_WHEN=true node outputs/mine-clear/T-2026-0929-0200/assertions/m1-fence-rule-change.mjs",
+      "last_result": "fail"
+    },
+    {
+      "kind": "property",
+      "given": "任意拒绝消息里提到的开关/参数",
+      "expect": "该开关在至少一条产品路径上可被设置（可被 API 调用验证），否则不得出现在提示文案中",
+      "command": "grep -rn allowWhenChange apps packages scripts（产品调用点应为 1+）",
+      "last_result": "fail"
+    }
+  ],
+  "notes": "若产品决定不支持 when 变更，最小修法是文案与文档对齐；若支持，则需在 confirmDryRun 增加显式确认位并留痕。"
+}

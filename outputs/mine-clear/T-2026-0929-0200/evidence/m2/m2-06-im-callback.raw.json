@@ -1,0 +1,28 @@
+{
+  "threadId": "T-180",
+  "approvalId": "apr-e-9345",
+  "approve": {
+    "approvalId": "apr-e-9345",
+    "status": "approved",
+    "deduped": false,
+    "operator": "MEM-002",
+    "unsigned": true
+  },
+  "dup": {
+    "approvalId": "apr-e-9345",
+    "status": "approved",
+    "deduped": true,
+    "operator": "MEM-002",
+    "unsigned": true
+  },
+  "stall": {
+    "ok": false,
+    "waitedMs": 21099,
+    "last": {
+      "ok": false,
+      "status": "pending_review",
+      "progress_done": 2,
+      "progress_total": 3
+    }
+  }
+}

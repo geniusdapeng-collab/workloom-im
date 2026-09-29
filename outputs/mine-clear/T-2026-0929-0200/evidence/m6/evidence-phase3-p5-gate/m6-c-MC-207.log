@@ -1,0 +1,2 @@
++ bash /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-207 --repo /Users/mac/WorkLoom-fleet/.wt-mcd-m6 --base http://127.0.0.1:8986
+PASS  MC-207 :: 生产档匿名会话被拒（HTTP 503）且不反射任意来源

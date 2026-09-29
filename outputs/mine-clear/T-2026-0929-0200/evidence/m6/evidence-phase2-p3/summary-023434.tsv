@@ -1,0 +1,5 @@
+m6-f1-01-kb-publish-gate	PASS	rc=0
+m6-f1-02-ask-coverage	PASS	rc=0
+m6-f1-03-ticket-reassign	PASS	rc=0
+m6-f1-04-inbox-unified	PASS	rc=0
+m6-f1-05-floor-blocked-asking	PASS	rc=0

@@ -1,0 +1,171 @@
+{
+  "probe": "f1-floor-blocked-asking",
+  "started_at": "2026-09-29T18:20:38.506Z",
+  "base": "http://127.0.0.1:8981",
+  "workspaceSlug": "yunqi-hotel",
+  "goal": "把周日招牌菜调价 8%（F1 楼层探针 1790706038506）",
+  "assertions": [
+    {
+      "name": "登录（owner）",
+      "ok": true,
+      "detail": "ws-yunqi"
+    },
+    {
+      "name": "派遣高风险任务（调价 → 围栏挂起）",
+      "ok": true,
+      "detail": {
+        "threadId": "T-168",
+        "status": "pending_review"
+      }
+    },
+    {
+      "name": "线程进入 pending_review 且带审批单号",
+      "ok": true,
+      "detail": {
+        "id": "T-168",
+        "status": "pending_review",
+        "presetKey": "pricing-agent",
+        "approvalId": "apr-e-10814"
+      }
+    },
+    {
+      "name": "前置：该岗位处于 blocked（近 30 分钟遇阻）——MC-114 场景成立",
+      "ok": true,
+      "detail": {
+        "id": "agt-pricing-agent",
+        "presetKey": "pricing-agent",
+        "name": "收益定价官",
+        "state": "blocked",
+        "stationId": "st-5",
+        "currentThread": null,
+        "pendingTier": "l4_chairman",
+        "approvalId": "apr-suite-stmun044pz-vz2rou",
+        "asking": true,
+        "celebrating": true,
+        "statusLine": "遇阻：price.adjust · 请示待裁：suite.reviewable"
+      }
+    },
+    {
+      "name": "blocked 条目仍下发审批直达号（信息不丢）",
+      "ok": false,
+      "detail": {
+        "approvalId": "apr-e-10814",
+        "entry": {
+          "id": "agt-pricing-agent",
+          "presetKey": "pricing-agent",
+          "name": "收益定价官",
+          "state": "blocked",
+          "stationId": "st-5",
+          "currentThread": null,
+          "pendingTier": "l4_chairman",
+          "approvalId": "apr-suite-stmun044pz-vz2rou",
+          "asking": true,
+          "celebrating": true,
+          "statusLine": "遇阻：price.adjust · 请示待裁：suite.reviewable"
+        }
+      }
+    },
+    {
+      "name": "blocked 条目下发审批分级 pendingTier",
+      "ok": true,
+      "detail": {
+        "pendingTier": "l4_chairman"
+      }
+    },
+    {
+      "name": "blocked 条目带 asking 标志（前端可同时渲染请示入口）",
+      "ok": true,
+      "detail": {
+        "asking": true
+      }
+    },
+    {
+      "name": "statusLine 并列「遇阻」与「请示待裁」两个信号",
+      "ok": true,
+      "detail": {
+        "statusLine": "遇阻：price.adjust · 请示待裁：suite.reviewable"
+      }
+    },
+    {
+      "name": "批准手势成功（收尾）",
+      "ok": true,
+      "detail": {
+        "approvalId": "apr-e-10814",
+        "status": "approved",
+        "deduped": false,
+        "gestureEventId": "E-10815"
+      }
+    },
+    {
+      "name": "批准后线程自动续跑（MC-101 接线未被本批破坏）",
+      "ok": true,
+      "detail": {
+        "status": "queued"
+      }
+    }
+  ],
+  "thread": {
+    "id": "T-168",
+    "status": "pending_review",
+    "presetKey": "pricing-agent",
+    "approvalId": "apr-e-10814"
+  },
+  "floor": [
+    {
+      "presetKey": "competitor-agent",
+      "state": "celebrating",
+      "asking": false,
+      "pendingTier": null,
+      "approvalId": null,
+      "statusLine": "刚完成：ask.answer"
+    },
+    {
+      "presetKey": "content-agent",
+      "state": "blocked",
+      "asking": true,
+      "pendingTier": "l2_captain",
+      "approvalId": "apr-e-10751",
+      "statusLine": "遇阻：z_probe_write · 请示待裁：z_probe_write"
+    },
+    {
+      "presetKey": "desktop-agent",
+      "state": "asking",
+      "asking": false,
+      "pendingTier": "l4_chairman",
+      "approvalId": "apr-boost-i2",
+      "statusLine": "请示待裁：inspection.scan"
+    },
+    {
+      "presetKey": "inspection-agent",
+      "state": "blocked",
+      "asking": false,
+      "pendingTier": null,
+      "approvalId": null,
+      "statusLine": "遇阻：inspect.run.completed"
+    },
+    {
+      "presetKey": "pricing-agent",
+      "state": "blocked",
+      "asking": true,
+      "pendingTier": "l4_chairman",
+      "approvalId": "apr-suite-stmun044pz-vz2rou",
+      "statusLine": "遇阻：price.adjust · 请示待裁：suite.reviewable"
+    },
+    {
+      "presetKey": "reconcile-agent",
+      "state": "asking",
+      "asking": false,
+      "pendingTier": "l4_chairman",
+      "approvalId": "apr-e-seed-8895",
+      "statusLine": "请示待裁：order.refund"
+    },
+    {
+      "presetKey": "review-agent",
+      "state": "blocked",
+      "asking": true,
+      "pendingTier": "l4_chairman",
+      "approvalId": "apr-b6-high-mun03qif",
+      "statusLine": "遇阻：review.reply · 请示待裁：review.reply"
+    }
+  ]
+}

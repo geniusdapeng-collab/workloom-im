@@ -1,0 +1,118 @@
+{
+  "threadId": "T-156",
+  "approvalId": "apr-e-9275",
+  "dispatch": {
+    "kind": "routed",
+    "mode": "quest",
+    "via": "rule",
+    "threadId": "T-156",
+    "status": "pending_review",
+    "stepsDone": 2,
+    "stepsTotal": 3
+  },
+  "threadFinal": {
+    "id": "T-156",
+    "title": "把周五主打款调价 5%（m2a234823-主线）",
+    "mode": "quest",
+    "status": "completed",
+    "progress_done": 3,
+    "progress_total": 3,
+    "created_by": "MEM-001",
+    "agent_id": "agt-pricing-agent",
+    "created_at": "2026-09-29T15:48:23.396Z",
+    "updated_at": "2026-09-29T15:48:44.548Z",
+    "pending_approval_id": null,
+    "preset_key": "pricing-agent"
+  },
+  "execEvent": {
+    "who": {
+      "id": "pricing-agent",
+      "type": "agent",
+      "version": "v2.3"
+    },
+    "object": {
+      "type": "pms_price"
+    },
+    "context": {
+      "time": "2026-09-29T15:48:44.545Z",
+      "tenant_id": "tenant-demo",
+      "workspace_id": "ws-yunqi"
+    },
+    "receipt": {
+      "mode": "simulated",
+      "synced": true,
+      "verified_at": "2026-09-29T15:48:44.545Z",
+      "snapshot_uri": "workloom-sim://receipt/pms.price.write/mumuppxd"
+    },
+    "decision": {
+      "tool": "pms.price.write",
+      "after": {
+        "result": {
+          "input": {},
+          "state": "simulated"
+        }
+      },
+      "basis": [
+        "经审批 apr-e-9275 批准执行（E3.3 恢复闭环）"
+      ],
+      "action": "pms.price.write",
+      "effect": "write",
+      "params": {},
+      "step_id": "s3",
+      "memory_refs": [
+        "mem-reject-price.too_high"
+      ]
+    },
+    "event_id": "E-9277",
+    "model_trace": {
+      "tier": "standard",
+      "credits": 1,
+      "model_id": "simulated-runtime"
+    },
+    "rule_impact": []
+  },
+  "gestureEvent": {
+    "who": {
+      "id": "MEM-002",
+      "type": "human"
+    },
+    "links": [
+      "E-9275"
+    ],
+    "object": {
+      "id": "E-9275",
+      "type": "review"
+    },
+    "context": {
+      "time": "2026-09-29T15:48:23.453Z",
+      "channel": "inapp",
+      "tenant_id": "tenant-demo",
+      "workspace_id": "ws-yunqi"
+    },
+    "decision": {
+      "after": {
+        "weight": 1,
+        "gesture": "approve",
+        "approvalId": "apr-e-9275"
+      },
+      "basis": [
+        "m2a234823 主线采纳"
+      ],
+      "action": "approval.gesture"
+    },
+    "event_id": "E-9276",
+    "rule_impact": []
+  },
+  "stall": {
+    "ok": false,
+    "waitedMs": 21069,
+    "last": {
+      "ok": false,
+      "status": "pending_review",
+      "progress_done": 2,
+      "progress_total": 3
+    }
+  },
+  "elapsedMs": 21221,
+  "title": "把周五主打款调价 5%（m2a234823-主线）"
+}

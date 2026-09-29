@@ -1,0 +1,60 @@
+{
+  "id": "MC-108",
+  "kind": "problem",
+  "level": "L1",
+  "severity": "P0",
+  "batch": 0,
+  "state": "open",
+  "title": "高危岗位守卫空转：装配产出的 highRisk 无人消费，高危关卡可被批量放行（INV-4）",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "packages/runtime/src/assembly.ts:22@4ff9943",
+      "note": "AssembledPreset 声明 highRisk（注释：Y-01 安全级修复位，审批快照据此派生 high_risk）"
+    },
+    {
+      "type": "code",
+      "ref": "packages/runtime/src/loop.ts:534@4ff9943",
+      "note": "步骤审批快照写 gate/tool/step_id/rule_ids/irreversible…但从不写 high_risk；actor 亦不带 highRisk（loop.ts:461/567）"
+    },
+    {
+      "type": "code",
+      "ref": "packages/base/review-console/approvals.ts:62@4ff9943",
+      "note": "批量/超时守卫 isHighRiskApproval 只读 tier=l4_chairman、snapshot.high_risk、snapshot.irreversible 三项"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m1-highrisk-batch.log",
+      "note": "真机实测：desktop-agent（meta.high_risk=true，工具 desktop.gui=write）的关卡 tier=l2_captain、snapshot.high_risk=null → approvals.batchApprove 返回 approved=[apr-e-10358]，skipped=[]"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m1-approval-reuse.log",
+      "note": "同一测试证实高危写动作的逐次授权（gateway 段③）也不可达：actor 不带 highRisk 时检查函数直接 return"
+    }
+  ],
+  "root_cause": {
+    "file": "packages/runtime/src/loop.ts",
+    "line": 534,
+    "commit": "4ff9943",
+    "symbol": "runQuest（步骤审批快照/actor 构造）"
+  },
+  "trigger_path": "用 desktop-agent（或任何 meta.high_risk=true 的岗位）派遣写任务 → 步骤挂起审批 → 审批中心『批量放行』一次通过（应逐条）；执行时 actor 不带 highRisk，段③逐次授权亦不触发",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "desktop-agent 的写入步骤产生的待审批关卡",
+      "expect": "batchApprove 跳过该关卡并给出『高危项不可批量采纳（须逐条）』",
+      "command": "cd <repo> && set -a && . ./.env && set +a && MCD_BASE=http://127.0.0.1:8899 node outputs/mine-clear/T-2026-0929-0200/assertions/m1-highrisk-batch.mjs",
+      "last_result": "fail"
+    },
+    {
+      "kind": "property",
+      "given": "任意 meta.high_risk=true 岗位的任意写步骤",
+      "expect": "关卡快照带 high_risk=true 且不可批量放行；执行路径携带逐次授权引用（gateway 段③可达）",
+      "command": "同上 + 特权直查 approvals.snapshot->>'high_risk'",
+      "last_result": "fail"
+    }
+  ],
+  "notes": "与仓库既有 Y-01/W-04（同型守卫空转）同源；修复需同时覆盖：快照字段、批量守卫、超时扫描（高危不放行）、gateway actor.highRisk。"
+}

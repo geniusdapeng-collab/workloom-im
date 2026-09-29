@@ -1,0 +1,75 @@
+{
+  "id": "MC-443",
+  "kind": "fix",
+  "batch": 2,
+  "state": "fixed",
+  "title": "重复派单原地改派 + 服务层语义错误映射（不再 500）",
+  "covers": [
+    "MC-112"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "apps/server/src/service/ticket.ts:173@036f02b",
+      "note": "assignTicketOn：assigned→assigned 原地改派；同值幂等不落事件；processing/done 仍 409"
+    },
+    {
+      "type": "code",
+      "ref": "apps/server/src/service/router.ts:70@036f02b",
+      "note": "toTrpcServiceError + remapServiceErrorResult（tRPC v11 经 next() 结果取 error.cause 映射 404/409/503）"
+    },
+    {
+      "type": "code",
+      "ref": "apps/server/src/service/router.ts:207@036f02b",
+      "note": "kb/tickets 写过程统一走 svcWriteProcedure（语义码不再被兜成 500）"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-ticket-1790706124591.json",
+      "note": "f1 工单改派 11/11：同值幂等、跨部门留痕、已办结 409 CONFLICT、不存在 404 NOT_FOUND"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-ticket-1790706125123.json",
+      "note": "M3 探针 3 复跑 18/18（B 端派单成功 500→200）"
+    },
+    {
+      "type": "log",
+      "ref": "work/fix-e/e2e.log",
+      "note": "apps/server e2e 101/101（重复派单幂等/改派留痕/409 语义三例）"
+    }
+  ],
+  "fix_plan": "assigned→assigned 定义为原地改派（同值 no-op、异值更新 dept/assignee 并追加 assign 事件且状态不变）；服务路由层把 ServiceHttpError 映射为 TRPCError 语义码（404/409/503），契约文案不再被 5xx 脱敏吞掉",
+  "blast_radius": "P22 工单台派单/改派入口、C 端自动派单链路、c_ticket_events 时间线（改派新增 reassign 语义事件）；所有 service 写过程的错误码口径",
+  "conflict_paths": [
+    "apps/server/src/service/ticket.ts",
+    "apps/server/src/service/router.ts",
+    "apps/server/src/service/e2e.test.ts"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "C 端建单（自动 assigned）后 B 端重复派单（同值 / 异值），再对已办结单派单",
+      "expect": "同值 200 且不重复落 assign 事件；异值 200 且 dept/assignee 更新、状态不变；已办结 409 CONFLICT；不存在 404 NOT_FOUND",
+      "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app:workloom_dev_app@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway:workloom_dev_gateway@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-ticket-reassign.mjs",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-ticket-1790706124591.json"
+    },
+    {
+      "kind": "property",
+      "given": "任意 (工单状态 × 重复派单) 组合",
+      "expect": "不产生 5xx；同值派单幂等；非法迁移返回可判定的 409 契约文案",
+      "command": "同上 + RUN_DB_TESTS=1 pnpm -C apps/server exec vitest run src/service/e2e.test.ts",
+      "last_result": "pass",
+      "evidence": "work/fix-e/e2e.log"
+    }
+  ],
+  "regression": {
+    "command": "pnpm typecheck && pnpm -C apps/server exec vitest run src/service/e2e.test.ts && pnpm suite",
+    "evidence": "work/fix-e/typecheck.log; work/fix-e/e2e.log; work/fix-e/suite.log"
+  },
+  "rollback": "git revert 036f02b",
+  "fixed_by": "fix_e_semantics",
+  "verified_by": null,
+  "notes": ""
+}
