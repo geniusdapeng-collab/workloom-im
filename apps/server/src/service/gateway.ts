@@ -21,6 +21,7 @@ import type { Context, Next } from "hono";
 import { getOwnerPool } from "@workloom/db";
 import {
   CHANNELS, cSecret, exchangeCodeForOpenid, getCUser, h5EntrySecret, issueCToken, listNotifications, pushMessage,
+  resolveDemoAuth,
   resolveCUser, verifyCToken, verifyH5EntryToken, type Channel, type CTokenPayload,
 } from "./channels.js";
 import { handleMessage } from "./dialog.js";
@@ -53,11 +54,37 @@ function projectedDepartment(adapter: ServiceFrontBusinessAdapter | null, kind: 
   return department ? businessDisplayText(department, "ticket.department") : undefined;
 }
 
-/** S2：h5/openid 演示直登开关（开发缺省 true；P1-11：生产环境缺省 false，必须显式配置渠道凭据或显式开启） */
-export const DEMO_AUTH = (process.env.SERVICE_C_DEMO_AUTH ?? (process.env.NODE_ENV === "production" ? "false" : "true")) === "true";
+/**
+ * S2：h5/openid 演示直登开关（开发缺省 true；生产档一律关闭，见 channels.ts#resolveDemoAuth）。
+ * MC-207：出厂 .env.example 曾显式写 true，导致「生产档 + 出厂配置」仍开放匿名会话；
+ * 现在生产档不再接受该开关，且启动自检对「生产档里还留着 true」显式告警。
+ */
+export const DEMO_AUTH = resolveDemoAuth(process.env);
 if (DEMO_AUTH) {
   console.warn("[service-c] SERVICE_C_DEMO_AUTH 已开启：h5/openid 演示直登可用（生产环境必须置 false 并配置渠道 code 交换凭据）");
 }
+
+/**
+ * 启动自检（MC-207 / MC-208）：生产档下把「配置里还留着演示值」这件事在启动时就打出来。
+ * 自检只告警、不阻断启动——桌面自包含运行时也走 NODE_ENV=production，硬拒启会把历史安装
+ * 变成启不来的砖；安全性由「忽略演示开关 + 强制关闭」承担，这里负责让残留配置可见。
+ */
+function cChannelConfigSelfCheck(): void {
+  if (process.env.NODE_ENV !== "production") return;
+  if (process.env.SERVICE_C_DEMO_AUTH === "true") {
+    console.warn(
+      "[service-c][自检] 生产档忽略 SERVICE_C_DEMO_AUTH=true：H5 匿名直登已强制关闭（MC-207）。"
+      + "本机演示请使用开发档（local-preview）；正式 H5 请配置 SERVICE_C_H5_ENTRY_SECRET 与可信身份入口。",
+    );
+  }
+  const secret = process.env.SERVICE_C_SECRET?.trim() ?? "";
+  if (!secret) {
+    console.warn("[service-c][自检] 生产档未配置 SERVICE_C_SECRET：C 端会话签发会失败关闭，请注入高强度随机密钥（MC-208）");
+  } else if (secret.length < 32) {
+    console.warn("[service-c][自检] SERVICE_C_SECRET 长度 <32 字符（或仍为出厂常量）：生产请更换为高强度随机密钥（MC-208）");
+  }
+}
+cChannelConfigSelfCheck();
 
 /** C 端工作区解析仅在建立会话时走 owner 池，并逐个校验配置目标确实存在。 */
 const validatedWorkspaceIds = new Set<string>();

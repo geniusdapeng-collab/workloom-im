@@ -10,7 +10,13 @@ import { fileURLToPath } from "node:url";
 import { SignJWT } from "jose";
 import pg from "pg";
 
-const PORT = 8795;
+/**
+ * MC-204：E2E 端口必须可注入，且探活必须校验实例归属（不能只信 /health 200）：
+ *  - 端口可用 SERVER_E2E_PORT 覆盖（默认 8795）；
+ *  - 拉起子进程时注入随机 instanceId，健康检查回显不一致即视为「端口被别人占用」；
+ *  - 子进程退出（典型：EADDRINUSE）立即 fail closed，并把子进程 stderr 带进错误信息。
+ */
+const PORT = Number(process.env.SERVER_E2E_PORT ?? 8795);
 const BASE = `http://localhost:${PORT}`;
 const ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 const RUN = `e2e-${Date.now().toString(36)}`;
@@ -131,19 +137,48 @@ beforeAll(async () => {
   const workspaceId = FIXTURE_WORKSPACE_ID;
   process.env.SERVICE_C_WORKSPACE_ID = workspaceId;
   fixtureWorkspaceSlug = await resolveWorkspaceSlug();
+  const instanceId = `e2e-${process.pid}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  let childOutput = "";
   server = spawn(process.execPath, ["node_modules/tsx/dist/cli.mjs", "--env-file=.env", "apps/server/src/index.ts"], {
     cwd: ROOT,
-    env: { ...process.env, SERVER_PORT: String(PORT), SERVICE_C_DEMO_AUTH: "true", SERVICE_C_WORKSPACE_ID: workspaceId },
-    stdio: "ignore",
+    env: {
+      ...process.env,
+      SERVER_PORT: String(PORT),
+      SERVER_INSTANCE_ID: instanceId,
+      SERVICE_C_DEMO_AUTH: "true",
+      SERVICE_C_WORKSPACE_ID: workspaceId,
+    },
+    // 不再 stdio:ignore 静默吞掉启动失败：stdout/stderr 收进 childOutput，失败时带进错误信息
+    stdio: ["ignore", "pipe", "pipe"],
     detached: true, // 独立进程组：afterAll 按组杀（tsx 会再派生 node 子进程）
   });
+  server.stdout?.on("data", (chunk: Buffer) => { childOutput += chunk.toString(); });
+  server.stderr?.on("data", (chunk: Buffer) => { childOutput += chunk.toString(); });
+  const childTail = (): string => childOutput.trim().split("\n").slice(-6).join(" | ").slice(-600);
   const deadline = Date.now() + 60_000;
   for (;;) {
+    if (server.exitCode !== null || server.signalCode !== null) {
+      throw new Error(
+        `E2E 子服务提前退出（exitCode=${server.exitCode ?? "signal:" + server.signalCode}）——`
+        + `端口 ${PORT} 很可能已被占用（EADDRINUSE）或启动失败；子进程输出：${childTail() || "（无输出）"}`,
+      );
+    }
+    let ownershipMismatch: string | null = null;
     try {
       const r = await fetch(`${BASE}/health`);
-      if (r.ok) break;
+      const j = (await r.json().catch(() => ({}))) as { ok?: boolean; instanceId?: string };
+      if (r.ok && j.instanceId === instanceId) break;
+      // 应答者不是本次拉起的实例（端口被其它服务占用）：立即 fail closed，绝不对别人的服务断言
+      if (r.ok && j.instanceId !== instanceId) {
+        ownershipMismatch =
+          `端口 ${PORT} 上的 /health 应答者实例归属不符（期望 instanceId=${instanceId}，实得 ${j.instanceId ?? "未提供"}；`
+          + "疑似端口被其它进程占用，E2E 拒绝在外部实例上断言）";
+      }
     } catch { /* 未就绪 */ }
-    if (Date.now() > deadline) throw new Error("8795 服务拉起超时");
+    if (ownershipMismatch) throw new Error(ownershipMismatch);
+    if (Date.now() > deadline) {
+      throw new Error(`端口 ${PORT} 服务拉起超时（实例归属未确认；子进程输出：${childTail() || "（无输出）"}）`);
+    }
     await new Promise((r) => setTimeout(r, 500));
   }
   db = new pg.Client(DB_URL);
