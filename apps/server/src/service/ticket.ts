@@ -2,14 +2,14 @@
  * service · 工单（接口对齐 packages/base/service-ticket 签名；表结构为底座迁移版）
  *  - 状态机（H1/H3）：迁移合法性复用 packages/base/service-ticket 的 assertTicketTransition
  *    （created→assigned→processing→done→closed，created 可直关）；非法跃迁抛 409 语义错误
- *  - 幂等（H1/H3）：ON CONFLICT (workspace_id,idempotency_key) DO NOTHING + 回查返回 {deduped:true}
- *    （删除先查后插竞态窗口）；createTicketOn/assignTicketOn 供网关纳入同一 serviceTx（H2）
+ *  - 幂等（H1/H3）：ON CONFLICT (workspace_id,idempotency_key) DO NOTHING；冲突时核对
+ *    C 用户与不可变建单摘要后才返回 {deduped:true}；createTicketOn/assignTicketOn 供网关复用事务（H2）
  *  - 部门路由表：kind → 默认部门（自动派单）；SLA：sla_due_at 按 kind 时限，超时升级 priority=high + 事件留痕
  *  - 满意度（L9）：仅 status=done 可评且只可评一次（重复评 409）；评分落 payload.rating + 'rate' 事件
  * 全部读写经 svcQuery/serviceTx（RLS 事务上下文）。
  */
 import type pg from "pg";
-import { assertTicketTransition, TicketTransitionError } from "@workloom/base/service-ticket";
+import { assertTicketTransition, TicketTransitionError, ticketRequestFingerprint } from "@workloom/base/service-ticket";
 import { ensureServiceSchema } from "./store.js";
 import { serviceTx, svcQuery } from "./events.js";
 
@@ -110,6 +110,7 @@ export async function createTicketOn(
   input: CreateTicketInput,
 ): Promise<{ ticket: Ticket; deduped: boolean }> {
   const slaHours = SLA_HOURS[input.kind] ?? SLA_HOURS.other!;
+  const requestFingerprint = ticketRequestFingerprint(input);
   const r = await client.query(
     `INSERT INTO c_tickets (id, workspace_id, c_user_id, conversation_id, kind, title, payload, idempotency_key, sla_due_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8, now() + ($9 || ' hours')::interval)
@@ -120,19 +121,35 @@ export async function createTicketOn(
   );
   let row = r.rows[0] as Record<string, unknown> | undefined;
   if (!row) {
-    // 幂等命中：回查原单返回（不重复落流转事件）
+    // 幂等键只定位原单；不得把同租户其他 C 用户的单据当作重放结果返回。
     const cur = await client.query(
       `SELECT * FROM c_tickets WHERE workspace_id=$1 AND idempotency_key=$2`,
       [input.workspaceId, input.idempotencyKey ?? null],
     );
     row = cur.rows[0] as Record<string, unknown> | undefined;
     if (!row) throw new ServiceHttpError("幂等冲突但未查到原单（数据异常）", 500);
+    if (row.c_user_id !== input.cUserId) throw new ServiceHttpError("工单幂等键已被占用，请使用新键重试", 409);
+    const creation = await client.query<{
+      actor_type: string; actor_id: string; detail: Record<string, unknown>;
+    }>(
+      `SELECT actor_type, actor_id, detail FROM c_ticket_events
+       WHERE workspace_id=$1 AND ticket_id=$2 AND action IN ('create','created')
+       ORDER BY id ASC LIMIT 1`,
+      [input.workspaceId, String(row.id)],
+    );
+    const original = creation.rows[0];
+    if (original?.actor_type !== "c_user" || original.actor_id !== input.cUserId ||
+        original.detail?.requestFingerprint !== requestFingerprint) {
+      // 历史事件无摘要时无法核验原始 payload；后续评分/流转可能已改变当前 payload。
+      throw new ServiceHttpError("工单幂等键已被占用，请使用新键重试", 409);
+    }
     return { ticket: ticketOf(row), deduped: true };
   }
   await client.query(
     `INSERT INTO c_ticket_events (workspace_id, ticket_id, action, actor_type, actor_id, detail)
      VALUES ($1,$2,'create','c_user',$3,$4)`,
-    [input.workspaceId, String(row.id), input.cUserId, JSON.stringify({ kind: input.kind, title: input.title })],
+    [input.workspaceId, String(row.id), input.cUserId,
+     JSON.stringify({ kind: input.kind, title: input.title, requestFingerprint })],
   );
   return { ticket: ticketOf(row), deduped: false };
 }
