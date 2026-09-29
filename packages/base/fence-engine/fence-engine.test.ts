@@ -5,8 +5,8 @@
 import { describe, expect, it } from "vitest";
 import { evalCondition, FenceEvalError } from "./expr.js";
 import { judge, judgeSubCall, type RuntimeRule } from "./judge.js";
-import { checkMonotonic, loadFencePack } from "./dsl.js";
-import { fenceActivationFromProposal, fenceRuleRowId } from "./lifecycle.js";
+import { checkCandidateAgainstBaseline, checkMonotonic, loadFencePack } from "./dsl.js";
+import { fenceActivationFromProposal, fenceRuleRowId, ruleVersionNumber } from "./lifecycle.js";
 import { diffDryRunVerdicts } from "./lifecycle.js";
 import { isWriteAction, registerWriteActions } from "../workdata/gateway.js";
 import { readFileSync } from "node:fs";
@@ -338,18 +338,59 @@ d("PG 集成（dry-run / 激活门禁 / 对象写锁）", async () => {
 describe("fenceActivationFromProposal（E1 审批→激活接线）", () => {
   const WS = "ws-yunqi";
 
-  it("fenceRuleRowId 生成口径稳定（与 confirmDryRun 入库一致）", () => {
-    expect(fenceRuleRowId("R7", WS)).toBe("fr-r7-vnext-ws-yunqi");
+  it("MC-102：fenceRuleRowId 带版本号（同一 rule_id 多次提案不撞主键）", () => {
+    expect(fenceRuleRowId("R7", WS, "v2")).toBe("fr-r7-v2-ws-yunqi");
+    expect(fenceRuleRowId("R7", WS, "v3")).toBe("fr-r7-v3-ws-yunqi");
+    expect(fenceRuleRowId("R-PM1", WS, "v2")).toBe("fr-r-pm1-v2-ws-yunqi");
+    expect(fenceRuleRowId("R7", WS, "v2")).not.toBe(fenceRuleRowId("R7", WS, "v3"));
+  });
+
+  it("MC-102：版本号解析只在行尾认数字（hotel-baseline/v1 → 1，v-next → null）", () => {
+    expect(ruleVersionNumber("hotel-baseline/v1")).toBe(1);
+    expect(ruleVersionNumber("v2")).toBe(2);
+    expect(ruleVersionNumber("v10")).toBe(10);
+    expect(ruleVersionNumber("v-next")).toBeNull();
   });
 
   it("fence.rule.propose 事件 → 提取 ruleRowId + dryRunId", () => {
+    // 修复后的事件自带行 ID（提案期分配，带版本号）
+    const payloadWithRowId = {
+      decision: {
+        action: "fence.rule.propose",
+        after: { ruleId: "R7", dryRunId: "fdr-r7-abc", ruleRowId: "fr-r7-v3-ws-yunqi", version: "v3" },
+      },
+    };
+    expect(fenceActivationFromProposal(payloadWithRowId, WS)).toEqual({
+      ruleRowId: "fr-r7-v3-ws-yunqi",
+      dryRunId: "fdr-r7-abc",
+    });
+    // 旧事件（只有版本号）按版本号派生行 ID
+    const payloadWithVersion = {
+      decision: { action: "fence.rule.propose", after: { ruleId: "R7", dryRunId: "fdr-r7-abc", version: "v2" } },
+    };
+    expect(fenceActivationFromProposal(payloadWithVersion, WS)).toEqual({
+      ruleRowId: "fr-r7-v2-ws-yunqi",
+      dryRunId: "fdr-r7-abc",
+    });
+    // MC-103：when 改写放行位随提案事件带到激活期（否则提案期放行、激活期又被守卫拒绝）
+    const payloadWithWhenFlag = {
+      decision: {
+        action: "fence.rule.propose",
+        after: { ruleId: "R7", dryRunId: "fdr-r7-abc", ruleRowId: "fr-r7-v4-ws-yunqi", allowWhenChange: true },
+      },
+    };
+    expect(fenceActivationFromProposal(payloadWithWhenFlag, WS)).toEqual({
+      ruleRowId: "fr-r7-v4-ws-yunqi",
+      dryRunId: "fdr-r7-abc",
+      allowWhenChange: true,
+    });
+  });
+
+  it("无行标识的提案事件返回 null（由调用方按规则反查待激活行）", () => {
     const payload = {
       decision: { action: "fence.rule.propose", after: { ruleId: "R7", dryRunId: "fdr-r7-abc" } },
     };
-    expect(fenceActivationFromProposal(payload, WS)).toEqual({
-      ruleRowId: "fr-r7-vnext-ws-yunqi",
-      dryRunId: "fdr-r7-abc",
-    });
+    expect(fenceActivationFromProposal(payload, WS)).toBeNull();
   });
 
   it("非提案事件 / 缺字段 → null（不激活）", () => {
@@ -357,5 +398,35 @@ describe("fenceActivationFromProposal（E1 审批→激活接线）", () => {
     expect(fenceActivationFromProposal({ decision: { action: "fence.rule.propose", after: { ruleId: "R7" } } }, WS)).toBeNull();
     expect(fenceActivationFromProposal(null, WS)).toBeNull();
     expect(fenceActivationFromProposal({}, WS)).toBeNull();
+  });
+});
+
+/* ================= MC-109：覆盖层锚点（只可加严） ================= */
+
+describe("checkCandidateAgainstBaseline（MC-109 覆盖层锚点）", () => {
+  const base = {
+    rule_id: "R7", version: "v1", name: "例行对账自动执行", is_baseline: false,
+    objectTypes: ["order"], actions: ["order.reconcile"], when: "params.guarantee_anomaly != true",
+  };
+
+  it("无 is_baseline 行时，最严 active 行仍是比较锚点（放宽被拒）", () => {
+    const current: RuntimeRule[] = [{ ...base, level: "review" }];
+    const loosen = checkCandidateAgainstBaseline(current, { ...base, version: "v-next", level: "auto" });
+    expect(loosen.ok).toBe(false);
+    expect(loosen.violations.map((v) => v.reason).join("；")).toContain("放宽");
+    expect(checkCandidateAgainstBaseline(current, { ...base, version: "v-next", level: "block" }).ok).toBe(true);
+  });
+
+  it("平台基线（auto）与客户覆盖行（review）并存时，锚点取更严的一条", () => {
+    const current: RuntimeRule[] = [
+      { ...base, level: "auto", is_baseline: true, version: "hotel-baseline/v1" },
+      { ...base, level: "review", is_baseline: false, version: "v2" },
+    ];
+    expect(checkCandidateAgainstBaseline(current, { ...base, version: "v-next", level: "auto" }).ok).toBe(false);
+    expect(checkCandidateAgainstBaseline(current, { ...base, version: "v-next", level: "block" }).ok).toBe(true);
+  });
+
+  it("同 rule_id 无任何 active 行时放行（首次自定义）", () => {
+    expect(checkCandidateAgainstBaseline([], { ...base, version: "v-next", level: "review" }).ok).toBe(true);
   });
 });
