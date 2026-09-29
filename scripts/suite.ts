@@ -3847,6 +3847,307 @@ z("高危批量守卫：l4_chairman 审批（快照无 high_risk）也必须逐�
   eq(batch2.approved.length, 1, "普通项照批");
 });
 
+/**
+ * Z-2 段（T-2026-0929-0201）：基座同款排雷的**断言兜底**。
+ *
+ * 为什么单独成段：A-01 / A-06 / B-02 / B-07 在基座此前只有修复代码、没有可执行断言——
+ * 正是"改完仍在"最容易复发的一类。这一段的每一条都能被"把缺陷放回去"打成红灯。
+ */
+z("A-01 高危岗位写步骤须逐次授权：围栏判 auto 也不得直接落库，放行后票据一次性消费", async () => {
+  /**
+   * 本仓 `desktop-agent` 是唯一的 `meta.high_risk=true` 岗位（`desktop.gui` 为其唯一写工具）。
+   * 为了让"围栏判 auto 但岗位高危"的组合成立，临时插一条 auto 级探针规则（用例结束清理）。
+   */
+  const probeRuleId = `SUITE-A01-${SFX}`;
+  const probeObject = `suite_desktop_${SFX}`;
+  const probeAction = `desktop.gui`;
+  const owner = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await owner.connect();
+  let tid: string | undefined;
+  try {
+    await owner.query(
+      `INSERT INTO fence_rules (id, rule_id, version, workspace_id, name, level, match_spec, action, is_baseline, status, created_by)
+       VALUES ($1,$2,'v1',$3,'Z-05 探针：高危岗位 × 围栏 auto 写步骤','auto',
+               jsonb_build_object('object_types', jsonb_build_array($4::text), 'actions', jsonb_build_array($5::text), 'when', 'true'),
+               '{}'::jsonb, false, 'active', 'suite')`,
+      [probeRuleId, probeRuleId, zScope.workspaceId, probeObject, probeAction],
+    );
+    tid = await zThread();
+    const plan: QuestPlanner = () => [{
+      stepId: "s1", action: probeAction, objectType: probeObject, tool: probeAction,
+      params: { clicks: 1 }, label: "高危岗位 GUI 写步骤",
+    }];
+    const executedCount = async () => Number((await zQuery<{ c: string }>(
+      `SELECT count(*) AS c FROM biz_events
+        WHERE workspace_id=$1 AND session_id=$2
+          AND payload->'decision'->>'step_id'='s1' AND payload->'decision'->>'kind'='execute'`,
+      [zScope.workspaceId, tid!],
+    )).rows[0]!.c);
+
+    const r1 = await runQuest(app, gw, zScope, {
+      threadId: tid, goal: "让桌面助理执行高危 GUI 写动作", presetKey: "desktop-agent", fallbackPlanner: plan,
+    });
+    eq(r1.status, "pending_review", "高危岗位写步骤必须挂人审（不得按围栏 auto 直接执行）");
+    eq(await executedCount(), 0, "未获批前零执行事件（网关段③必须挡住）");
+    const snap = await zQuery<{ hr: boolean | null }>(
+      `SELECT (snapshot->>'high_risk')::boolean AS hr FROM approvals WHERE approval_id=$1`, [r1.pendingApprovalId!]);
+    eq(snap.rows[0]?.hr, true, "高危岗位挂起的审批必须带 high_risk（不可被批量照批）");
+    const batchGuard = await batchApprove(app, gw, zScope, boss, [r1.pendingApprovalId!]);
+    eq(batchGuard.approved.length, 0, "高危岗位的挂起审批不得被批量照批");
+
+    // 人放行 → 携带 approvalRef 执行落库；票据被原子消费
+    await decide(app, gw, zScope, boss, r1.pendingApprovalId!, { type: "approve" });
+    await runQuest(app, gw, zScope, {
+      threadId: tid, goal: "让桌面助理执行高危 GUI 写动作", presetKey: "desktop-agent", fallbackPlanner: plan,
+    });
+    eq(await executedCount(), 1, "获批后写步骤执行且只执行一次");
+    const consumed = await zQuery<{ consumed_at: Date | null }>(
+      `SELECT consumed_at FROM approvals WHERE approval_id=$1`, [r1.pendingApprovalId!]);
+    assert(consumed.rows[0]?.consumed_at != null, "授权票据必须被消费（L3.5 一次性）");
+
+    // 幂等：重放不得二次执行（一次授权只放行一次）
+    await runQuest(app, gw, zScope, {
+      threadId: tid, goal: "让桌面助理执行高危 GUI 写动作", presetKey: "desktop-agent", fallbackPlanner: plan,
+    });
+    eq(await executedCount(), 1, "重放不得二次执行");
+  } finally {
+    await owner.query(`DELETE FROM fence_rules WHERE rule_id=$1 AND workspace_id=$2`, [probeRuleId, zScope.workspaceId]).catch(() => undefined);
+    if (tid) await zQuery(`DELETE FROM threads WHERE id=$1`, [tid]).catch(() => undefined);
+    await owner.end();
+  }
+});
+
+z("B-02b 已消费票据不得再充当授权：重试必须重新挂人审，不得抛错悬挂线程", async () => {
+  /**
+   * 联动地雷：A-01 把 highRisk 接进 actor + B-02 票据一次性消费之后，
+   * 「票据已被消费、步骤又需要重跑」的组合若仍把死票据当授权，落库会被网关拒绝并抛出，
+   * 线程停在 running（无终态、无法自愈）。正确口径：消费过的票据不构成本轮授权，重新挂人审。
+   */
+  let tid: string | undefined;
+  try {
+    tid = await zThread();
+    // 事件必须挂到本线程（session_id）：否则审批对 approvedStepIds / existingStepIds 双向不可见，
+    // 用例会"因为查不到"而假绿（实测：漏 sessionId 时把 consumed_at 过滤摘掉也照样通过）
+    const ev = await gatewayAppend(gw, { ...zScope, actor: { id: "pricing-agent", type: "agent", fenceBindings: ["R1"] }, sessionId: tid }, {
+      who: { type: "agent", id: "pricing-agent", version: "v2.3" },
+      context: { tenant_id: zScope.tenantId, workspace_id: zScope.workspaceId, time: new Date().toISOString() },
+      object: { type: "suite", id: `suite-z-b02b-${SFX}` },
+      /**
+       * 事件写成挂起判定记录（kind=review）：existingStepIds 会跳过它（不算"已完成步骤"），
+       * approvedStepIds 则能按 session_id + step_id 找到这张审批——于是**唯一**决定
+       * "票据还算不算数"的就是 consumed_at，正是本用例要守的那一条。
+       */
+      decision: { action: "desktop.gui", step_id: "s1", kind: "review", params: { clicks: 1 } },
+      rule_impact: [],
+    });
+    const aprId = `apr-z-consumed-${SFX}`;
+    await zQuery(
+      `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, snapshot, consumed_at)
+       VALUES ($1,$2,$3,$4,'inapp','approved',$5, now())`,
+      [aprId, zScope.tenantId, zScope.workspaceId, ev.eventId,
+        JSON.stringify({ expires_at: new Date(Date.now() + 864e5).toISOString() })],
+    );
+    const plan: QuestPlanner = () => [{
+      stepId: "s1", action: "desktop.gui", objectType: `suite_desktop_${SFX}`, tool: "desktop.gui",
+      params: { clicks: 1 }, label: "已消费票据后的重跑",
+    }];
+    const r = await runQuest(app, gw, zScope, {
+      threadId: tid, goal: "重跑一个已消费票据的步骤", presetKey: "desktop-agent", fallbackPlanner: plan,
+    });
+    eq(r.status, "pending_review", "已消费票据不得充当授权：必须重新挂人审");
+    assert(r.pendingApprovalId !== aprId, "重试必须产生新审批（不得复用死票据）");
+    const alive = await zQuery<{ status: string }>(`SELECT status FROM threads WHERE id=$1`, [tid]);
+    assert(alive.rows[0]!.status !== "running", `线程不得停在 running（实际 ${alive.rows[0]!.status}）`);
+  } finally {
+    if (tid) await zQuery(`DELETE FROM threads WHERE id=$1`, [tid]).catch(() => undefined);
+  }
+});
+
+z("A-06 ask 输出闸门加载失败必须显式标注，不得按空规则集静默放行", async () => {
+  let tid: string | undefined;
+  /**
+   * 只让「闸门读规则」那一条查询失败（`loadAskRules` 的 SQL 特征：`OR workspace_id='*'`），
+   * 事实面统计那条同名表查询照常成功——用来区分"闸门不可用"与"本来就没规则"。
+   * 实现说明：用**包住单个真实连接**的轻量 pool（不用 Proxy 包 pg.Pool——
+   * 代理会破坏连接归还，池被借空后整条套件挂死，growth 侧实测踩过）。
+   */
+  const real = await app.connect();
+  try {
+    tid = await zThread();
+    const broken = {
+      connect: async () => ({
+        query: async (sql: string, params?: unknown[]) => {
+          if (/FROM fence_rules WHERE \(workspace_id=\$1 OR workspace_id='\*'\)/.test(String(sql))) {
+            throw new Error("injected: ask 闸门读规则故障（A-06）");
+          }
+          return real.query(sql as never, params as never);
+        },
+        release: () => undefined,
+      }),
+      query: (sql: string, params?: unknown[]) => real.query(sql as never, params as never),
+    } as unknown as typeof app;
+    const r = await runAsk(broken, gw, zScope, { threadId: tid, goal: "今天经营怎么样？", presetKey: "pricing-agent" });
+    assert(/输出闸门暂不可用/.test(r.answer), `闸门失效必须显式标注（实际答案：${r.answer.slice(0, 80)}）`);
+  } finally {
+    real.release();
+    if (tid) await zQuery(`DELETE FROM threads WHERE id=$1`, [tid]).catch(() => undefined);
+  }
+});
+
+z("B-07 superseded 必须是可查询状态（共享枚举 + 队列过滤）", async () => {
+  const { APPROVAL_STATUSES } = await import("@workloom/shared");
+  assert((APPROVAL_STATUSES as readonly string[]).includes("superseded"), "共享审批状态枚举须含 superseded");
+  // 0047 已把 superseded 写进审批状态 CHECK；共享枚举与 list 入参此前缺该值 → 状态机盲区
+  const ev = await zEvent("suite.z.b07.superseded");
+  const aprId = `apr-z-b07-${SFX}`;
+  await zQuery(
+    `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, snapshot)
+     VALUES ($1,$2,$3,$4,'inapp','superseded','{}')`,
+    [aprId, zScope.tenantId, zScope.workspaceId, ev],
+  );
+  const rows = await listQueue(app, zScope, { status: "superseded" });
+  assert(rows.length > 0, "superseded 审批必须能在队列里查到（此前状态机盲区）");
+  assert(rows.every((r) => r.status === "superseded"), "过滤必须生效");
+  assert(rows.some((r) => r.approval_id === aprId), "现场行必须出现在过滤结果里");
+});
+
+/**
+ * A-03（原子认领）：并发重入必须恰好被拒一路。
+ * 不加 CAS 时两路都会进入步骤循环——写类工具重复执行＝重复扣费/重复发布。
+ */
+z("A-03 线程执行必须原子认领：并发重入只允许一方执行", async () => {
+  const { runQuestForThread } = await import("../apps/server/src/runtime/thread-runner.js");
+  let tid: string | undefined;
+  try {
+    tid = await zThread(); // status=queued
+    /**
+     * 用**确定性现场**代替 race：把线程置为他方已认领的 `running`，入口必须幂等退出。
+     * （并发 Promise.all 的版本会因"先到者已跑完"而偶发假绿——实测一路 pending_review、一路 running 才稳。）
+     */
+    await zQuery(`UPDATE threads SET status='running', updated_at=now() WHERE id=$1`, [tid]);
+    const rejected = await runQuestForThread(zScope, {
+      threadId: tid, goal: "并发认领探针：让岗位执行一件小事", presetRef: "pricing-agent",
+    });
+    eq(rejected.status, "running", "线程已被他方认领时必须幂等退出（不得并发重入）");
+    const ev = await zQuery<{ c: string }>(`SELECT count(*) AS c FROM biz_events WHERE session_id=$1`, [tid]);
+    eq(Number(ev.rows[0]!.c), 0, "被拒的一路不得产生任何事件（零副作用）");
+    // 反向：queued 仍可被正常认领并执行（不得把正常路径一起挡死）
+    await zQuery(`UPDATE threads SET status='queued', updated_at=now() WHERE id=$1`, [tid]);
+    const ok = await runQuestForThread(zScope, {
+      threadId: tid, goal: "并发认领探针：让岗位执行一件小事", presetRef: "pricing-agent",
+    });
+    assert(ok.status !== "running", `queued 线程必须被认领并执行（实际 ${ok.status}）`);
+  } finally {
+    if (tid) {
+      const c = await app.connect();
+      try {
+        await c.query("BEGIN");
+        await c.query("SELECT set_config('app.workspace_id', $1, true)", [zScope.workspaceId]);
+        await c.query("SELECT set_config('app.tenant_id', $1, true)", [zScope.tenantId]);
+        await c.query(`DELETE FROM threads WHERE id=$1`, [tid]);
+        await c.query("COMMIT");
+      } catch (err) {
+        await c.query("ROLLBACK").catch(() => undefined);
+        throw err;
+      } finally {
+        c.release();
+      }
+    }
+  }
+});
+
+/**
+ * B-05/B-06（批准后副作用钩子）：钩子必须在审批提交后回调一次，deduped 不重复触发。
+ * 三路（单笔 decide / 批量 batchApprove / IM 回调）共用同一钩子，这一条守的是钩子本身的接线。
+ */
+z("B-05 批准后副作用钩子：提交后回调一次，deduped 不重复触发", async () => {
+  const ev = await zEvent("suite.z.b05.reviewable");
+  const aprId = `apr-z-b05-${SFX}`;
+  await zQuery(
+    `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, snapshot)
+     VALUES ($1,$2,$3,$4,'inapp','pending',$5)`,
+    [aprId, zScope.tenantId, zScope.workspaceId, ev, JSON.stringify({ after: { v: 1 } })],
+  );
+  const hooked: string[] = [];
+  const r1 = await decide(app, gw, zScope, boss, aprId, { type: "approve" }, undefined, {
+    onApproved: (id) => { hooked.push(id); },
+  });
+  eq(r1.status, "approved", "审批须落 approved");
+  eq(hooked.length, 1, "批准后钩子必须回调一次");
+  eq(hooked[0], aprId, "钩子须收到被批准的审批 ID");
+  // 重复手势 → deduped（幂等）：副作用不得重复触发
+  const r2 = await decide(app, gw, zScope, boss, aprId, { type: "approve" }, undefined, {
+    onApproved: (id) => { hooked.push(id); },
+  });
+  eq(r2.deduped, true, "重复回调须判 deduped");
+  eq(hooked.length, 1, "deduped 不得重复触发副作用");
+  // 驳回不得触发批准后钩子
+  const ev2 = await zEvent("suite.z.b05.rejectable");
+  const aprId2 = `apr-z-b05r-${SFX}`;
+  await zQuery(
+    `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, snapshot)
+     VALUES ($1,$2,$3,$4,'inapp','pending','{}')`,
+    [aprId2, zScope.tenantId, zScope.workspaceId, ev2],
+  );
+  await decide(app, gw, zScope, boss, aprId2, { type: "reject", reasonEnum: "价格口径不合规" }, undefined, {
+    onApproved: (id) => { hooked.push(id); },
+  });
+  eq(hooked.length, 1, "驳回不得触发批准后副作用");
+});
+
+/**
+ * A-05（启动补扫）：审批已通过但线程停在 pending_review 的僵尸线程，启动时必须补续跑。
+ * 造现场：review 判定事件（kind=review，因此不算"已完成步骤"）+ 同一 step 的 approved 审批
+ * → 补扫后该步骤携带 approvalRef 执行，线程离开 pending_review。
+ */
+z("A-05 启动补扫：审批已通过而线程仍挂起时必须补续跑", async () => {
+  const { resumeApprovedPendingThreads } = await import("../apps/server/src/runtime/scheduler.js");
+  let tid: string | undefined;
+  try {
+    tid = await zThread();
+    const evRow = await gatewayAppend(gw, { ...zScope, actor: { id: "desktop-agent", type: "agent", fenceBindings: ["R2"] }, sessionId: tid }, {
+      who: { type: "agent", id: "desktop-agent", version: "v1" },
+      context: { tenant_id: zScope.tenantId, workspace_id: zScope.workspaceId, time: new Date().toISOString() },
+      object: { type: `suite_z05_${SFX}`, id: `suite-z05-${SFX}` },
+      decision: { action: "desktop.gui", step_id: "s1", kind: "review", params: { clicks: 1 } },
+      rule_impact: [],
+    });
+    await zQuery(
+      `UPDATE threads SET status='pending_review', agent_id=(SELECT id FROM agents WHERE workspace_id=$2 AND preset_key='desktop-agent'), updated_at=now()
+        WHERE id=$1`,
+      [tid, zScope.workspaceId],
+    );
+    const aprId = `apr-z-a05-${SFX}`;
+    await zQuery(
+      `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, snapshot)
+       VALUES ($1,$2,$3,$4,'inapp','approved',$5)`,
+      [aprId, zScope.tenantId, zScope.workspaceId, evRow.eventId,
+        JSON.stringify({ before: null, after: { v: 1 }, expires_at: new Date(Date.now() + 864e5).toISOString() })],
+    );
+    const resumed = await resumeApprovedPendingThreads();
+    assert(resumed >= 1, `启动补扫应至少补续跑 1 条僵尸线程（实际 ${resumed}）`);
+    const after = await zQuery<{ status: string }>(`SELECT status FROM threads WHERE id=$1`, [tid]);
+    assert(after.rows[0]!.status !== "pending_review",
+      `补扫后线程必须离开 pending_review（实际 ${after.rows[0]!.status}）`);
+  } finally {
+    if (tid) {
+      const c = await app.connect();
+      try {
+        await c.query("BEGIN");
+        await c.query("SELECT set_config('app.workspace_id', $1, true)", [zScope.workspaceId]);
+        await c.query("SELECT set_config('app.tenant_id', $1, true)", [zScope.tenantId]);
+        await c.query(`DELETE FROM threads WHERE id=$1`, [tid]);
+        await c.query("COMMIT");
+      } catch (err) {
+        await c.query("ROLLBACK").catch(() => undefined);
+        throw err;
+      } finally {
+        c.release();
+      }
+    }
+  }
+});
+
 const svcPassed = await runCases(cases, "服务层用例");
 
 console.log("▸ 启动 HTTP E2E 段（spawn server）……");

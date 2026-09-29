@@ -516,8 +516,15 @@ async function main(): Promise<void> {
     [TENANT_ID, TENANT_NAME],
   );
   await q(
-    `INSERT INTO workspaces (id, tenant_id, name, slug, industry, stage, night_config)
-     VALUES ($1,$2,$3,$4,'hotel','stable',$5) ON CONFLICT (id) DO NOTHING`,
+    /**
+     * `is_example=true`：本工作区由演示种子创建（云栖酒店演示数据集），必须自我声明为示例工作区——
+     * `scripts/reset.sh` 的客户数据守卫是「非示例工作区数必须为 0」，而重置流程本身依赖
+     * 「reset → migrate → seed」闭环；种子不标示例时，`pnpm demo` 第二次起就会被自己的守卫拦住
+     * （实测：全新库 `pnpm db:migrate && pnpm db:seed && pnpm demo` → ❌ 检测到 1 个非演示工作区）。
+     * 与 seed-aipm.ts（is_example=true）同口径。
+     */
+    `INSERT INTO workspaces (id, tenant_id, name, slug, industry, stage, night_config, is_example)
+     VALUES ($1,$2,$3,$4,'hotel','stable',$5,true) ON CONFLICT (id) DO UPDATE SET is_example=true`,
     [
       WS_ID,
       TENANT_ID,

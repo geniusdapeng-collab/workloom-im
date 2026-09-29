@@ -197,7 +197,8 @@ async function loadActiveRules(app: pg.Pool, scope: { tenantId: string; workspac
 
 export interface QuestRunResult {
   threadId: string;
-  status: "completed" | "pending_review" | "failed" | "paused";
+  /** running：A-03 并发重入被 CAS 拒绝（他方正在执行同一线程），调用方应按"已在执行"处理 */
+  status: "completed" | "pending_review" | "failed" | "paused" | "running";
   stepsDone: number;
   stepsTotal: number;
   /** 未核实步骤（E3.7：无回执不得宣称完成） */
@@ -223,11 +224,16 @@ async function existingStepIds(gateway: pg.Pool, scope: { tenantId: string; work
     for (const row of r.rows) {
       const decision = row.payload.decision as Record<string, unknown>;
       const sid = decision.step_id;
-      // #11 修复：只收录真正执行完成（auto）的步骤，排除 block/review 事件
-      // block/review 事件的 basis 以「熔断：」或「越围栏挂起：」开头，从未真正执行
+      /**
+       * #11 修复：只收录真正执行完成（auto）的步骤，排除 block/review 事件。
+       * N-08（T-2026-0929-0201 端口，来源 growth 排雷）：区分**只认显式 kind 字段**，
+       * basis 文案可自由改写（例如不可求值降级、agent 模式逐步确认的说明文字），
+       * 不能靠前缀猜；历史事件没有 kind → 回落 basis 前缀判定（一次性兼容读）。
+       */
+      const kind = typeof decision.kind === "string" ? decision.kind : undefined;
       const basis = Array.isArray(decision.basis) ? decision.basis as string[] : [];
-      const isBlocked = basis.some((b) => b.startsWith("熔断："));
-      const isReview = basis.some((b) => b.startsWith("越围栏挂起："));
+      const isBlocked = kind ? kind === "block" : basis.some((b) => b.startsWith("熔断："));
+      const isReview = kind ? kind === "review" : basis.some((b) => b.startsWith("越围栏挂起："));
       if (typeof sid === "string" && !isBlocked && !isReview) set.add(sid);
     }
     return set;
@@ -253,11 +259,11 @@ async function updateThread(app: pg.Pool, scope: { tenantId: string; workspaceId
       sets.push(`${k} = $${params.length}`);
     }
     await client.query(`UPDATE threads SET ${sets.join(", ")} WHERE id=$1 AND workspace_id=$2`, params);
+    await client.query("COMMIT"); // A-08（端口 growth 排雷）：显式提交，失败即抛（不再 finally 吞错）
   } catch (err) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw err;
   } finally {
-    await client.query("COMMIT").catch(() => undefined);
     client.release();
   }
 }
@@ -282,7 +288,13 @@ async function approvedStepIds(
       `SELECT e.payload->'decision'->>'step_id' AS step_id, a.approval_id
        FROM approvals a JOIN biz_events e ON e.event_id = a.event_id
        WHERE a.workspace_id=$1 AND e.session_id=$2 AND a.status IN ('approved','edited')
-         AND e.payload->'decision'->>'step_id' IS NOT NULL`,
+         AND e.payload->'decision'->>'step_id' IS NOT NULL
+         -- B-03 修复（端口 growth 排雷）：过期审批即使被批也不得驱动步骤执行（消费侧与 decide() 过期口径一致）
+         AND (a.snapshot->>'expires_at' IS NULL OR (a.snapshot->>'expires_at')::timestamptz > now())
+         -- B-02 联动（端口 growth 排雷）：已消费（一次性授权）的票据不再构成"本轮授权"——
+         -- 否则重试会挂着死票据去落库，被网关拒绝后线程停在 running（无终态、无法自愈）。
+         -- 语义：消费过的步骤要再执行，必须重新取得一张新审批（L3.5 逐次授权的原意）。
+         AND a.consumed_at IS NULL`,
       [scope.workspaceId, threadId],
     );
     await client.query("COMMIT");
@@ -419,13 +431,14 @@ export async function runQuest(
       await inTx(app, scope, async (c) => {
         const ev = await gatewayAppendOnClient(c, {
           ...scope,
-          actor: { id: preset.presetKey, type: "agent", fenceBindings: preset.fenceBindings },
+          actor: { id: preset.presetKey, type: "agent", fenceBindings: preset.fenceBindings, ...(preset.highRisk ? { highRisk: true } : {}) },
           sessionId: threadId,
         }, {
           who: { type: "agent", id: preset.presetKey, version: preset.version },
           context: { tenant_id: scope.tenantId, workspace_id: scope.workspaceId, time: new Date().toISOString() },
           object: { type: step.objectType, id: step.objectId },
           decision: {
+            kind: "block",
             action: step.action, tool: step.tool, step_id: step.stepId, effect: effectOf(step.tool), params: step.params,
             basis: [`熔断：${verdict.triggeredBy.join("、")}`],
             ...(prefUsageRecorded ? {} : { memory_refs: preferenceMemoryRefs(prefs) }),
@@ -447,7 +460,19 @@ export async function runQuest(
     // agent 模式（F3.3 逐步商量）：非 block 步骤一律视为 review——每步操作前挂起等人类确认
     //（block 已在上方提前 return；此处重新取宽类型避免控制流收窄误判）
     //（block 已在上方提前 return，此处 level ∈ {auto, review}；agent 模式一律 review）
-    const effectiveLevel: "auto" | "review" | "block" = input.mode === "agent" ? "review" : (verdict.level as "auto" | "review");
+    /**
+     * A-01 联动修复（端口 growth 排雷 T-2026-0929-0003）：高危岗位（`meta.high_risk=true`）的写类动作
+     * 必须**逐次授权**（L3.5）。actor 接入 `preset.highRisk` 后，网关段③ 会在落库时要求 approvalRef；
+     * 若这里仍按围栏判定的 `auto` 直接执行，落库必然被 GatewayReject 抛出——线程停在 running
+     * （无终态、重试复撞死票据），客户看到的是"任务卡住"而不是"等人审批"。
+     * 所以把同一条纪律**前置**到判定处：没有新鲜授权的高危写步骤不进执行分支，直接按人审挂起；
+     * 人放行后携带 approvalRef 执行，落库时仍由网关段③ 二次把关（纵深防御不变）。
+     */
+    const highRiskAuthRequired = preset.highRisk && toolAccess === "write";
+    const effectiveLevel: "auto" | "review" | "block" =
+      input.mode === "agent" || (verdict.level === "auto" && highRiskAuthRequired)
+        ? "review"
+        : (verdict.level as "auto" | "review");
 
     // #34：review 级别但已获人工批准（approved/edited）→ 不二次挂起，携带授权引用执行
     const approvalRef = effectiveLevel === "review" ? approved.get(step.stepId) : undefined;
@@ -458,13 +483,14 @@ export async function runQuest(
       const { approvalId } = await inTx(app, scope, async (c) => {
         const ev = await gatewayAppendOnClient(c, {
           ...scope,
-          actor: { id: preset.presetKey, type: "agent", fenceBindings: preset.fenceBindings },
+          actor: { id: preset.presetKey, type: "agent", fenceBindings: preset.fenceBindings, ...(preset.highRisk ? { highRisk: true } : {}) },
           sessionId: threadId,
         }, {
           who: { type: "agent", id: preset.presetKey, version: preset.version },
           context: { tenant_id: scope.tenantId, workspace_id: scope.workspaceId, time: new Date().toISOString() },
           object: { type: step.objectType, id: step.objectId },
           decision: {
+            kind: "review",
             action: step.action, tool: step.tool, step_id: step.stepId, effect: effectOf(step.tool), params: step.params,
             basis: [
               // W-01：求值异常降级过来的挂起要说清"为什么"，不能让客户以为是越了围栏
@@ -472,7 +498,9 @@ export async function runQuest(
                 ? `围栏无法求值（缺参数）→ 一律人工裁决：${verdict.evalErrors.slice(0, 3).join("；")}`
                 : (verdict.triggeredBy.length
                   ? `越围栏挂起：${verdict.triggeredBy.join("、")}`
-                  : "越围栏挂起：写类动作无规则命中 → default_level=review"),
+                  : (highRiskAuthRequired
+                    ? `高危岗位「${preset.presetKey}」写类动作须逐次授权（L3.5）：围栏判定为 ${verdict.level} 亦须人审放行`
+                    : "越围栏挂起：写类动作无规则命中 → default_level=review")),
             ],
             ...(prefUsageRecorded ? {} : { memory_refs: preferenceMemoryRefs(prefs) }),
           },
@@ -531,6 +559,13 @@ export async function runQuest(
               autonomy_amount: Number.isFinite(amount) ? amount : undefined,
               // CEO 队列据此还原价格上下文（无则按"无判据"保守上浮，不猜价格）
               ...(priceCtx ? { autonomy_band_key: priceCtx.bandKey, base_price: priceCtx.basePrice } : {}),
+              /**
+               * A-01 联动（端口 growth 排雷 T-2026-0929-0003）：岗位级高危标记必须随挂起进快照，
+               * 否则批量采纳守卫（isHighRiskApproval 读 tier / snapshot.high_risk / irreversible）
+               * 对"高危岗位的普通写步骤"仍然空转——一键批量就能把高危岗位的人审关卡放掉。
+               * 三口径与 loop 装配一致：岗位 high_risk ∨ 步骤不可逆 ∨ 董事长级。
+               */
+              high_risk: preset.highRisk || step.context?.irreversible === true || tier === "l4_chairman",
               irreversible: step.context?.irreversible === true,
               affected_domains: Array.isArray(step.context?.affected_domains) ? step.context.affected_domains : [],
               /**
@@ -564,7 +599,7 @@ export async function runQuest(
     await inTx(app, scope, async (c) => {
       const ev = await gatewayAppendOnClient(c, {
         ...scope,
-        actor: { id: preset.presetKey, type: "agent", fenceBindings: preset.fenceBindings },
+        actor: { id: preset.presetKey, type: "agent", fenceBindings: preset.fenceBindings, ...(preset.highRisk ? { highRisk: true } : {}) },
         approvalRef, // #34：已批准步骤携带审批引用（L3.5 授权留痕）
         sessionId: threadId,
       }, {
@@ -572,6 +607,7 @@ export async function runQuest(
         context: { tenant_id: scope.tenantId, workspace_id: scope.workspaceId, time: new Date().toISOString() },
         object: { type: step.objectType, id: step.objectId },
         decision: {
+          kind: "execute",
           /**
            * `tool`：真正执行的工具名（2026-09-24 红队复核补）。LLM 规划的动作名（action）可以是
            * 自造词（实测 T-113：action=publish_article 而实际工具是内部的 ai_task.emit），
