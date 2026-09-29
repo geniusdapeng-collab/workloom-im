@@ -54,7 +54,7 @@ test("glob：** 跨目录，* 不跨目录", () => {
 test("免审白名单只覆盖非执行性根级资产；治理路径保留显式审查", () => {
   assert.equal(isAllowlistedPath(".workloom-base-sync.json"), true);
   assert.equal(isAllowlistedPath("WORKLOOM_PRODUCT_CONTEXT.md"), true);
-  for (const path of ["AGENTS.md", "docs/DEVELOPMENT-PROTOCOL.md", "sync/merge-sync-prs.mjs", ".github/workflows/base-sync-heartbeat.yml", "scripts/acceptance/fleet-run.mjs", "docs/acceptance/ROLLOUT.md"]) {
+  for (const path of ["AGENTS.md", "docs/DEVELOPMENT-PROTOCOL.md", "sync/merge-sync-prs.mjs", ".github/workflows/base-sync-heartbeat.yml", "scripts/acceptance/fleet-run.mjs", "docs/acceptance/ROLLOUT.md", "docs/MINE-CLEAR-DELIVERY-SPEC.md", "docs/mine-clear/ledger.schema.json", "scripts/delivery/mine-clear.mjs"]) {
     assert.equal(isAllowlistedPath(path), false, `${path} 不得免审`);
   }
   assert.equal(isAllowlistedPath("packages/base/fence-engine/index.ts"), false);
