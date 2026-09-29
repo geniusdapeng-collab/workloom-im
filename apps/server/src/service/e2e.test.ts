@@ -78,7 +78,7 @@ async function chat(token: string, text: string, extra: Record<string, unknown> 
   return (await res.json()) as Record<string, unknown>;
 }
 
-interface TrpcResult { status: number; data: unknown; error: { code: number; data?: { code?: string; httpStatus?: number } } | null }
+interface TrpcResult { status: number; data: unknown; error: { code: number; message?: string; data?: { code?: string; httpStatus?: number } } | null }
 
 async function trpc(proc: string, opts: { input?: unknown; token?: string; method?: "query" | "mutation" } = {}): Promise<TrpcResult> {
   const method = opts.method ?? "query";
@@ -919,17 +919,92 @@ fixtureDescribe("G B 端 · KB 管理", () => {
     expect((after.data as { documents: Array<{ id: string }> }).documents.some((x) => x.id === docId)).toBe(false);
   });
 
-  it("approveDocument 联动审批台（五元事件 + approvals 行落库，event_id 关联）", async () => {
+  it("approveDocument 联动审批台（五元事件 + approvals 行落库，event_id 关联；MC-110：记录为 approved 且带决策人）", async () => {
     const ev = await db.query<{ event_id: string }>(
       `SELECT event_id FROM biz_events WHERE payload->'decision'->>'action'='kb.publish' ORDER BY seq DESC LIMIT 1`,
     );
     expect(ev.rows.length).toBeGreaterThan(0);
-    const ap = await db.query<{ approval_id: string; event_id: string; status: string }>(
-      `SELECT approval_id, event_id, status FROM approvals WHERE event_id=$1 AND channel='inapp'`,
+    const ap = await db.query<{ approval_id: string; event_id: string; status: string; decided_by: string | null; gesture: { type?: string } | null; snapshot: { post_hoc?: boolean } }>(
+      `SELECT approval_id, event_id, status, decided_by, gesture, snapshot FROM approvals WHERE event_id=$1 AND channel='inapp'`,
       [ev.rows[0]!.event_id],
     );
     expect(ap.rows.length).toBeGreaterThan(0);
     expect(ap.rows[0]!.event_id).toBe(ev.rows[0]!.event_id);
+    // MC-110：待审区「批准生效」是逐条人审动作本身——审批行当场落 approved（不是 pending 幽灵待办）
+    expect(ap.rows[0]!.status).toBe("approved");
+    expect(ap.rows[0]!.decided_by).toBe("MEM-001");
+    expect(ap.rows[0]!.gesture?.type).toBe("approve");
+    expect(ap.rows[0]!.snapshot?.post_hoc).toBe(true);
+  });
+
+  it("approveDocument 重复调用幂等（deduped，不重复落事件/审批行）", async () => {
+    const before = await db.query<{ c: number }>(
+      `SELECT count(*)::int AS c FROM biz_events WHERE payload->'object'->>'id'=$1 AND payload->'decision'->>'action'='kb.publish'`,
+      [docId],
+    );
+    const r = await trpc("service.kb.approveDocument", { input: { documentId: docId }, token: bToken, method: "mutation" });
+    expect(r.error).toBeNull();
+    expect((r.data as { deduped: boolean }).deduped).toBe(true);
+    const after = await db.query<{ c: number }>(
+      `SELECT count(*)::int AS c FROM biz_events WHERE payload->'object'->>'id'=$1 AND payload->'decision'->>'action'='kb.publish'`,
+      [docId],
+    );
+    expect(after.rows[0]!.c).toBe(before.rows[0]!.c);
+  });
+
+  it("MC-110：kb.publish 审批被驳回 → 文档退回待审且退出检索；再批准 → 恢复生效", async () => {
+    const ev = await db.query<{ event_id: string }>(
+      `SELECT event_id FROM biz_events WHERE payload->'object'->>'id'=$1 AND payload->'decision'->>'action'='kb.publish' ORDER BY seq DESC LIMIT 1`,
+      [docId],
+    );
+    // 复刻"存量待审行"：把该审批行改回 pending（模拟修复前遗留 / 其他通道送审），再走真实 decide 路径
+    const ap = await db.query<{ approval_id: string }>(
+      `UPDATE approvals SET status='pending', gesture=NULL, decided_by=NULL, decided_at=NULL
+        WHERE event_id=$1 AND channel='inapp' RETURNING approval_id`,
+      [ev.rows[0]!.event_id],
+    );
+    const rejected = await trpc("approvals.decide", {
+      // 酒店工作区已装配反馈枚举表（Bundle 第⑧槽）：驳回原因必须命中受控词表
+      input: { approvalId: ap.rows[0]!.approval_id, gesture: "reject", reasonEnum: "reply.fact_wrong", reasonText: "e2e：驳回发布" },
+      token: bToken, method: "mutation",
+    });
+    expect(rejected.error).toBeNull();
+    expect((rejected.data as { status: string }).status).toBe("rejected");
+    const docsAfterReject = await trpc("service.kb.listDocuments", { input: { collectionId: colId }, token: bToken });
+    expect((docsAfterReject.data as { documents: Array<{ id: string; status: string }> }).documents
+      .find((d) => d.id === docId)?.status).toBe("pending_review");
+    const searchAfterReject = await trpc("service.kb.search", { input: { query: `接送机怎么预约 ${RUN}`, limit: 20 }, token: bToken });
+    expect((searchAfterReject.data as { hits: Array<{ documentTitle: string }> }).hits
+      .some((h) => h.documentTitle === `${RUN}-接送机政策`)).toBe(false);
+
+    // 驳回后重新发布：走产品路径（待审区再次「批准生效」）——同一审批行已是终态不可重复裁决（L5.3）
+    const again = await trpc("service.kb.approveDocument", { input: { documentId: docId }, token: bToken, method: "mutation" });
+    expect(again.error).toBeNull();
+    expect((again.data as { status: string; deduped: boolean }).status).toBe("active");
+    expect((again.data as { deduped: boolean }).deduped).toBe(false);
+    const searchAfterApprove = await trpc("service.kb.search", { input: { query: `接送机怎么预约 ${RUN}`, limit: 20 }, token: bToken });
+    expect((searchAfterApprove.data as { hits: Array<{ documentTitle: string }> }).hits
+      .some((h) => h.documentTitle === `${RUN}-接送机政策`)).toBe(true);
+  });
+
+  it("MC-110：待审文档走 setStatus(active) 同样落 approved 审批留痕（无静默发布路径）", async () => {
+    const up = await trpc("service.kb.upsertDocument", {
+      input: {
+        collectionId: colId, title: `${RUN}-直达启用政策`, sourceKind: "manual",
+        contentMd: `## 直达启用\n\n该条走 setStatus(active) 发布（${RUN}），必须同样落审批留痕。\n`,
+      }, token: bToken, method: "mutation",
+    });
+    const newDocId = (up.data as { documentId: string }).documentId;
+    const r = await trpc("service.kb.setStatus", { input: { documentId: newDocId, status: "active" }, token: bToken, method: "mutation" });
+    expect(r.error).toBeNull();
+    expect((r.data as { status: string }).status).toBe("active");
+    const rec = await db.query<{ status: string; decided_by: string | null }>(
+      `SELECT a.status, a.decided_by FROM approvals a JOIN biz_events e ON e.event_id=a.event_id
+        WHERE e.payload->'object'->>'id'=$1 AND e.payload->'decision'->>'action'='kb.publish'`,
+      [newDocId],
+    );
+    expect(rec.rows[0]?.status).toBe("approved");
+    expect(rec.rows[0]?.decided_by).toBe("MEM-001");
   });
 
   it("approveDocument 后检索可见（kb.search 命中）", async () => {
@@ -984,10 +1059,34 @@ fixtureDescribe("G B 端 · 工单消费", () => {
     expect((r.data as { ticket: Record<string, unknown> }).ticket).toMatchObject({ dept: "礼宾部", assignee: "MEM-002", status: "assigned" });
   });
 
-  it("tickets.assign 对 assigned 单重复分派 → 409 语义错误", async () => {
-    const r = await trpc("service.tickets.assign", { input: { ticketId: createdId, dept: "x" }, token: bToken, method: "mutation" });
+  it("MC-112：tickets.assign 对 assigned 单重复分派 → 200 原地改派（同值幂等 / 跨部门留痕）", async () => {
+    const count = async () => (await db.query<{ c: number }>(
+      `SELECT count(*)::int AS c FROM c_ticket_events WHERE workspace_id=$1 AND ticket_id=$2 AND action='assign'`,
+      [FIXTURE_WORKSPACE_ID, createdId],
+    )).rows[0]!.c;
+    const before = await count();
+    const same = await trpc("service.tickets.assign", { input: { ticketId: createdId, dept: "礼宾部", assignee: "MEM-002" }, token: bToken, method: "mutation" });
+    expect(same.error).toBeNull();
+    expect((same.data as { ticket: Record<string, unknown> }).ticket).toMatchObject({ dept: "礼宾部", assignee: "MEM-002", status: "assigned" });
+    expect(await count()).toBe(before); // 同值重复派单：幂等，不重复落事件
+    const moved = await trpc("service.tickets.assign", { input: { ticketId: createdId, dept: "工程维修组", assignee: "MEM-002" }, token: bToken, method: "mutation" });
+    expect(moved.error).toBeNull();
+    expect((moved.data as { ticket: Record<string, unknown> }).ticket).toMatchObject({ dept: "工程维修组", status: "assigned" });
+    expect(await count()).toBe(before + 1); // 真改派：逐条留痕
+  });
+
+  it("MC-112：tickets.assign 已办结单再派 → CONFLICT（409 语义，不是 5xx）", async () => {
+    const doneId = `tck-${RUN}-done`;
+    await db.query(
+      `INSERT INTO c_tickets (id, workspace_id, kind, title, payload, status) VALUES ($1,$2,'other',$3,'{}','done')`,
+      [doneId, FIXTURE_WORKSPACE_ID, `${RUN}-已办结单`],
+    );
+    const r = await trpc("service.tickets.assign", { input: { ticketId: doneId, dept: "客服组" }, token: bToken, method: "mutation" });
     expect(r.error).not.toBeNull();
-    expect(String(r.error!.code)).not.toBe("0");
+    expect(r.error!.data?.code).toBe("CONFLICT");
+    expect(r.error!.data?.httpStatus).toBe(409);
+    // 契约文案不被 5xx 脱敏吞掉：409 属 4xx，客户端拿得到原始原因
+    expect(r.error!.message).toContain("非法迁移");
   });
 
   it("tickets.advance start → processing（留痕）", async () => {

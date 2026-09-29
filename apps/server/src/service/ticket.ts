@@ -159,11 +159,21 @@ export async function createTicket(input: CreateTicketInput): Promise<{ ticket: 
   return serviceTx(input.workspaceId, async (client) => createTicketOn(client, input));
 }
 
-/** 事务内派单（created→assigned 状态机断言 + 'assign' 事件） */
+/**
+ * 事务内派单（created→assigned 状态机断言 + 'assign' 事件）
+ *
+ * MC-112（M3 联动）：C 端建单即自动派单（gateway 建单链路 createTicketOn + assignTicketOn 同一事务），
+ * 因此 B 端「派单」按钮面对的单据**总是** assigned 态——旧口径直接 assertTransition('assigned','assigned')
+ * 抛 409，再被 tRPC 兜成 500：P22 派单/改派入口对任何真实单据都点不动（真机实测 500）。
+ * 现在把 assigned→assigned 定义为**原地改派**：
+ *  - dept/assignee 与现状完全一致 → 幂等 no-op（不写事件、updated_at 不动，`changed:false`）；
+ *  - 有任一字段变化 → 仅更新 dept/assignee（状态不变）并追加一条 'assign' 事件（detail 带 reassigned:true 供时间线区分）。
+ * processing/done/closed 仍走状态机断言（409 语义），由路由层映射为 CONFLICT 而不是 500。
+ */
 export async function assignTicketOn(
   client: pg.PoolClient,
   input: { workspaceId: string; ticketId: string; dept?: string; assignee?: string },
-): Promise<Ticket> {
+): Promise<{ ticket: Ticket; changed: boolean }> {
   const cur = await client.query(
     `SELECT * FROM c_tickets WHERE workspace_id=$1 AND id=$2 FOR UPDATE`,
     [input.workspaceId, input.ticketId],
@@ -171,6 +181,24 @@ export async function assignTicketOn(
   const row = cur.rows[0] as Record<string, unknown> | undefined;
   if (!row) throw new ServiceHttpError(`工单不存在：${input.ticketId}`, 404);
   const from = row.status as TicketStatus;
+  if (from === "assigned") {
+    const dept = input.dept ?? (row.dept as string | null) ?? DEPT_ROUTE[String(row.kind)] ?? DEPT_ROUTE.other!;
+    const assignee = input.assignee ?? (row.assignee as string | null) ?? null;
+    if (dept === (row.dept ?? null) && assignee === (row.assignee ?? null)) {
+      return { ticket: ticketOf(row), changed: false }; // 幂等：重复派单同值 → 无副作用
+    }
+    const upd = await client.query(
+      `UPDATE c_tickets SET dept=$3, assignee=$4, updated_at=now()
+       WHERE workspace_id=$1 AND id=$2 RETURNING *`,
+      [input.workspaceId, input.ticketId, dept, assignee],
+    );
+    await client.query(
+      `INSERT INTO c_ticket_events (workspace_id, ticket_id, action, actor_type, actor_id, detail)
+       VALUES ($1,$2,'assign','system','service-desk',$3)`,
+      [input.workspaceId, input.ticketId, JSON.stringify({ dept, assignee, reassigned: true, from_status: "assigned" })],
+    );
+    return { ticket: ticketOf(upd.rows[0] as Record<string, unknown>), changed: true };
+  }
   assertTransition(from, "assigned");
   const dept = input.dept ?? DEPT_ROUTE[String(row.kind)] ?? DEPT_ROUTE.other!;
   const upd = await client.query(
@@ -183,7 +211,7 @@ export async function assignTicketOn(
      VALUES ($1,$2,'assign','system','service-desk',$3)`,
     [input.workspaceId, input.ticketId, JSON.stringify({ dept, assignee: input.assignee ?? null })],
   );
-  return ticketOf(upd.rows[0] as Record<string, unknown>);
+  return { ticket: ticketOf(upd.rows[0] as Record<string, unknown>), changed: true };
 }
 
 /** 事务内状态推进（D16：供 router/gateway 的 serviceTx 回调复用同一 client，不再嵌套另开连接） */
@@ -243,7 +271,8 @@ export async function assignTicket(input: {
   workspaceId: string; ticketId: string; dept?: string; assignee?: string;
 }): Promise<Ticket> {
   await ensureServiceSchema();
-  return serviceTx(input.workspaceId, async (client) => assignTicketOn(client, input));
+  const r = await serviceTx(input.workspaceId, async (client) => assignTicketOn(client, input));
+  return r.ticket;
 }
 
 export async function advanceTicket(input: {

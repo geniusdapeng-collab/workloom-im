@@ -22,7 +22,7 @@ import {
 } from "@workloom/base/tenancy";
 import { gatewayAppend, gatewayAppendOnClient, insertWithReadableId, MockEmbedder, THREAD_ID_SOURCE, upsertMemoryInTx } from "@workloom/base/workdata";
 import { INTENT_ROUTE_TIMEOUT_DISPATCH_MS, makeReadableId } from "@workloom/shared";
-import { registerAskKbSearch } from "@workloom/runtime";
+import { ASK_KB_MIN_SCORE, registerAskKbSearch } from "@workloom/runtime";
 import {
   loadGoalArchive,
   registerIndustryQuestPlanner,
@@ -30,7 +30,7 @@ import {
   resolveDispatchPresetKey,
   runQuestForThread,
 } from "../runtime/thread-runner.js";
-import { searchKB } from "../service/kb.js";
+import { applyKbPublishAfterApproval, searchKB } from "../service/kb.js";
 import { acquisitionQuestPlanner } from "../industry/hotel/acquisition-planner.js";
 import {
   actionProcedure,
@@ -1503,6 +1503,13 @@ const approvalsRouter = router({
           } finally {
             c2.release();
           }
+        }
+        /**
+         * MC-110 联调接线：kb.publish 审批的裁决必须落到知识库状态——
+         * approve/edit → 文档生效；reject → 文档退回待审并退出检索（历史遗留的幽灵 pending 行同样收敛）。
+         */
+        if (!res.deduped && (res.status === "approved" || res.status === "edited" || res.status === "rejected")) {
+          await applyKbPublishAfterApproval(scopeOf(ctx.identity), input.approvalId);
         }
         return res;
       } catch (err) {
@@ -3681,7 +3688,8 @@ export type { IntelItem, RepoPulse } from "../service/aipm.js";
  */
 registerIndustryQuestPlanner((goal) => acquisitionQuestPlanner(goal));
 registerAskKbSearch(async (scope, question, limit) => {
-  const hits = await searchKB({ workspaceId: scope.workspaceId, query: question, limit });
+  // MC-111：ask 事实面按相关性下限注入（P22 检索面仍用宽召回，默认 0）
+  const hits = await searchKB({ workspaceId: scope.workspaceId, query: question, limit, minScore: ASK_KB_MIN_SCORE });
   return hits.map((hit) => ({
     content: hit.content,
     ...(hit.heading ? { heading: hit.heading } : {}),

@@ -244,7 +244,7 @@ async function createTicketFlow(input: {
       kind: input.kind, title: input.title, payload: input.payload, idempotencyKey: input.idempotencyKey,
     });
     if (deduped) return { ticket, deduped: true }; // 幂等重放：不重复派单/推送/留痕
-    const assigned = await assignTicketOn(client, {
+    const { ticket: assigned } = await assignTicketOn(client, {
       workspaceId: input.workspaceId, ticketId: ticket.id, dept: input.dept,
     });
     const event = await appendEventOn(client, scope, { id: input.cUserId, type: "human" }, {
