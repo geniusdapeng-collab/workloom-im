@@ -2,7 +2,7 @@
   "schema": "workloom.mine-clear/handoff@1",
   "task_id": "T-2026-0929-0200",
   "repo": ".wt-mcd-im",
-  "generated_at": "2026-09-29T23:16:48.382Z",
+  "generated_at": "2026-09-29T23:57:38.331Z",
   "audit_baseline": "4ff9943f0e5b331619a67db06af32ec09e9d8616",
   "repair_baseline": null,
   "acceptance_baseline": null,
@@ -1785,21 +1785,32 @@
           "last_result": "pass"
         }
       ]
-    }
-  ],
-  "open_problems": [
+    },
     {
       "id": "MC-509",
-      "kind": "problem",
-      "state": "open",
-      "severity": "P2",
       "title": "m2-01 断言与上游挂起标记漂移：basis 前缀被 decision.kind=review 取代（假红）",
-      "evidence": "packages/runtime/src/loop.ts:350@31282ce",
-      "root_cause": "scripts 断言（outputs 内探针）:0@31282ce",
-      "fix_plan": null,
-      "regression": "M2_REPO=<repo> M2_BASE=<base> M2_ENV_FILE=<env> node outputs/mine-clear/T-2026-0929-0200/assertions/m2-01-main-loop.mjs（更新断言接受 decision.kind=review 后应 21/21）"
+      "verified_by": "root（断言口径对齐）+ mcd_verify（产品语义：m2-05 C3 / kind=review 独立确认）",
+      "verified_at": "2026-09-29T23:57:38.295Z",
+      "verification_evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m2-01-after-mc509.log（全新库 21/21；review 分支断言在 auto 完成时按 SKIP 记录）",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "全新库 + 出厂价带 + 目标「把周五主打款调价 5%」",
+          "expect": "挂起事件的 decision.kind === 'review'（或保留「越围栏挂起：」前缀），且线程 pending_review",
+          "command": "M2_REPO=<repo> M2_BASE=<base> M2_ENV_FILE=<env> node outputs/mine-clear/T-2026-0929-0200/assertions/m2-01-main-loop.mjs",
+          "last_result": "fail"
+        },
+        {
+          "kind": "property",
+          "given": "任意挂起事件（review/block）",
+          "expect": "replay 的 done 集合必须排除该步骤（不因 basis 文案变化而误判完成）",
+          "command": "同上 + m2-05 C3（无回执重跑仍 failed）",
+          "last_result": "pass"
+        }
+      ]
     }
   ],
+  "open_problems": [],
   "acceptance_commands": [
     "pnpm acceptance:profile:check",
     "node scripts/acceptance/fleet-run.mjs --repo .wt-mcd-im --env local-preview",

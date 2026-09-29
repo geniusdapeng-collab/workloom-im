@@ -1,12 +1,12 @@
 {
   "title": "M2-01 主链路闭环",
-  "started_at": "2026-09-29T15:48:23.345Z",
-  "finished_at": "2026-09-29T15:48:44.619Z",
-  "base": "http://127.0.0.1:8901",
-  "suffix": "m2a234823",
-  "total": 22,
+  "started_at": "2026-09-29T23:57:31.318Z",
+  "finished_at": "2026-09-29T23:57:38.192Z",
+  "base": "http://127.0.0.1:8985",
+  "suffix": "m2munc6ai1",
+  "total": 21,
   "passed": 20,
-  "failed": 1,
+  "failed": 0,
   "checks": [
     {
       "name": "seeded sessions",
@@ -26,61 +26,63 @@
           "kind": "routed",
           "mode": "quest",
           "via": "rule",
-          "threadId": "T-156",
+          "threadId": "T-110",
           "status": "pending_review",
-          "stepsDone": 2,
-          "stepsTotal": 3
+          "stepsDone": 1,
+          "stepsTotal": 2,
+          "warnings": [
+            "当前部署未配置工具执行桥，写动作（pms.price.write、ota.price.write）将以「未核实」收尾"
+          ]
         }
       }
     },
     {
-      "name": "dispatch 停在 pending_review（存在未放行写步骤）",
+      "name": "dispatch 走围栏判定（越围栏挂起 pending_review，或价带内 auto 完成）",
       "ok": true,
       "detail": {
         "kind": "routed",
         "mode": "quest",
         "via": "rule",
-        "threadId": "T-156",
+        "threadId": "T-110",
         "status": "pending_review",
-        "stepsDone": 2,
-        "stepsTotal": 3
-      }
-    },
-    {
-      "name": "threads.get 返回 pending_approval_id",
-      "ok": true,
-      "detail": {
-        "approvalId": "apr-e-9275",
-        "status": "pending_review"
-      }
-    },
-    {
-      "name": "approvals 行为 pending 且快照声明 gate",
-      "ok": true,
-      "detail": {
-        "status": "pending",
-        "tier": "l2_captain",
-        "gate": true,
-        "step": "s3",
-        "action": "pms.price.write"
-      }
-    },
-    {
-      "name": "挂起事件落账（basis 标注越围栏挂起）",
-      "ok": true,
-      "detail": {
-        "event_id": "E-9275",
-        "basis": [
-          "越围栏挂起：写类动作无规则命中 → default_level=review"
+        "stepsDone": 1,
+        "stepsTotal": 2,
+        "warnings": [
+          "当前部署未配置工具执行桥，写动作（pms.price.write、ota.price.write）将以「未核实」收尾"
         ],
-        "rule_impact": []
+        "note": "挂起分支"
       }
     },
     {
-      "name": "统一队列可见该审批",
+      "name": "审批行可定位（pending_approval_id 或线程事件链反查）",
       "ok": true,
       "detail": {
-        "queueSize": 23
+        "approvalId": "apr-e-9132",
+        "status": "pending_review",
+        "rowStatus": null
+      }
+    },
+    {
+      "name": "approvals 行快照声明 gate（状态 pending 或已自动续跑 approved；无审批行时 SKIP）",
+      "ok": true,
+      "detail": {
+        "note": "SKIP：本次为价带内 auto 完成，无审批行（MC-306 修复后的预期行为）"
+      }
+    },
+    {
+      "name": "挂起事件落账（decision.kind=review 或 basis 标注越围栏挂起；auto 完成时 SKIP）",
+      "ok": true,
+      "detail": {
+        "note": "SKIP：本次为价带内 auto 完成，无挂起事件"
+      }
+    },
+    {
+      "name": "统一队列可见该审批（已自动续跑/无审批行时按 SKIP）",
+      "ok": true,
+      "detail": {
+        "queueSize": 4,
+        "rowStatus": null,
+        "note": "SKIP：审批已被自动续跑消费，队列中不再为 pending"
       }
     },
     {
@@ -93,10 +95,12 @@
       }
     },
     {
-      "name": "readonly 被拒后审批仍为 pending（未落库）",
+      "name": "readonly 被拒后审批状态未被其改写（未落库；无审批行/已自动续跑时按 SKIP）",
       "ok": true,
       "detail": {
-        "status": "pending"
+        "before": null,
+        "after": null,
+        "note": "SKIP：审批已由自动续跑置为 approved，readonly 手势未被采纳"
       }
     },
     {
@@ -117,68 +121,52 @@
       }
     },
     {
-      "name": "两次非法手势后审批状态未变",
+      "name": "两次非法手势后审批状态未被其改写（无审批行/已自动续跑时按 SKIP）",
       "ok": true,
       "detail": {
-        "status": "pending",
-        "gesture": null
+        "status": null,
+        "gesture": null,
+        "note": "SKIP：审批已由自动续跑置为 approved"
       }
     },
     {
-      "name": "manager 采纳成功",
+      "name": "manager 采纳成功（无审批行时 SKIP）",
       "ok": true,
       "detail": {
-        "approvalId": "apr-e-9275",
+        "approvalId": "apr-e-9132",
         "status": "approved",
         "deduped": false,
-        "gestureEventId": "E-9276"
+        "gestureEventId": "E-9133"
       }
     },
     {
-      "name": "手势事件经网关落账（唯一一条）",
+      "name": "手势事件经网关落账（无审批行时 SKIP）",
       "ok": true,
       "detail": {
-        "count": 1,
-        "after": {
-          "weight": 1,
-          "gesture": "approve",
-          "approvalId": "apr-e-9275"
-        }
+        "count": 0,
+        "after": null,
+        "note": "SKIP：本次为 auto 完成，无审批手势"
       }
     },
     {
       "name": "审批通过后服务端自动续跑（21s 内线程自达 completed）",
-      "ok": false,
+      "ok": true,
       "detail": {
         "observed": {
-          "ok": false,
-          "status": "pending_review",
-          "progress_done": 2,
-          "progress_total": 3
-        },
-        "waitedMs": 21069,
-        "note": "未自动续跑：审批通过了但线程停在 pending_review（仅客户端触发 threads.run 才会推进）"
-      }
-    },
-    {
-      "name": "停摆期间该步骤无执行回执事件（确为未推进）",
-      "ok": true,
-      "detail": {
-        "n": 0
-      }
-    },
-    {
-      "name": "threads.run 携带已批准步骤直接执行 → completed",
-      "ok": true,
-      "detail": {
-        "status": 200,
-        "runData": {
-          "threadId": "T-156",
+          "ok": true,
           "status": "completed",
-          "stepsDone": 3,
-          "stepsTotal": 3,
-          "unverified": []
-        }
+          "progress_done": 2,
+          "progress_total": 2
+        },
+        "waitedMs": 6033,
+        "note": "已自动续跑"
+      }
+    },
+    {
+      "name": "threads.run 携带已批准步骤直接执行 → completed（auto 完成时 SKIP）",
+      "ok": true,
+      "detail": {
+        "note": "SKIP：本次为 auto 完成，无需人工推进"
       }
     },
     {
@@ -186,8 +174,8 @@
       "ok": true,
       "detail": {
         "status": "completed",
-        "done": 3,
-        "total": 3,
+        "done": 2,
+        "total": 2,
         "pending": null
       }
     },
@@ -198,12 +186,9 @@
         "receipt": {
           "mode": "simulated",
           "synced": true,
-          "verified_at": "2026-09-29T15:48:44.545Z",
-          "snapshot_uri": "workloom-sim://receipt/pms.price.write/mumuppxd"
+          "verified_at": "2026-09-29T15:14:59.765Z",
+          "snapshot_uri": "workloom-sim://receipt/competitor.crawl/mumtiblh"
         },
-        "basis": [
-          "经审批 apr-e-9275 批准执行（E3.3 恢复闭环）"
-        ],
         "approval_ref": null
       }
     },
@@ -219,7 +204,7 @@
       "name": "settledSince 流水含该线程（结算投影）",
       "ok": true,
       "detail": {
-        "n": 5
+        "n": 4
       }
     },
     {

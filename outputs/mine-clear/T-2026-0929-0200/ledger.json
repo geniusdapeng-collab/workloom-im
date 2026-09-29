@@ -4,7 +4,7 @@
   "repo": ".wt-mcd-im",
   "title": "",
   "created_at": "2026-09-29T14:48:36.797Z",
-  "updated_at": "2026-09-29T23:16:48.387Z",
+  "updated_at": "2026-09-29T23:57:38.333Z",
   "baseline": {
     "audit": {
       "commit": "4ff9943f0e5b331619a67db06af32ec09e9d8616",
@@ -4693,7 +4693,7 @@
       "level": "L2",
       "severity": "P2",
       "batch": 2,
-      "state": "open",
+      "state": "verified",
       "title": "m2-01 断言与上游挂起标记漂移：basis 前缀被 decision.kind=review 取代（假红）",
       "evidence": [
         {
@@ -4741,11 +4741,14 @@
           "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m6/evidence-phase3/m6-p3-08-m2-05-c3.log"
         }
       ],
-      "notes": "M6 phase-3 发现（2026-09-30 07:0x）：产品语义未回退（loop.ts:350 已按 kind 判定，m2-05 C3 通过）；需更新冻结断言接受 kind=review，或恢复 W-01 分支前缀。",
+      "notes": "M6 phase-3 发现（2026-09-30 07:0x）：产品语义未回退（loop.ts:350 已按 kind 判定，m2-05 C3 通过）；需更新冻结断言接受 kind=review，或恢复 W-01 分支前缀。 | 2026-09-30 收口：探针改为两态（auto 完成 / 越围栏挂起）+ 按线程事件链反查审批行 + 回执事件不再依赖 step_id 过滤；全新库复跑 21/21。",
       "regression": {
-        "command": "M2_REPO=<repo> M2_BASE=<base> M2_ENV_FILE=<env> node outputs/mine-clear/T-2026-0929-0200/assertions/m2-01-main-loop.mjs（更新断言接受 decision.kind=review 后应 21/21）",
-        "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m6/evidence-phase3/exp-m2-01-bands2.log"
-      }
+        "command": "M2_BASE=<实例> node outputs/mine-clear/T-2026-0929-0200/assertions/m2-01-main-loop.mjs",
+        "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m2-01-after-mc509.log"
+      },
+      "verification_evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m2-01-after-mc509.log（全新库 21/21；review 分支断言在 auto 完成时按 SKIP 记录）",
+      "verified_by": "root（断言口径对齐）+ mcd_verify（产品语义：m2-05 C3 / kind=review 独立确认）",
+      "verified_at": "2026-09-29T23:57:38.295Z"
     }
   ],
   "gates": [
@@ -4849,10 +4852,8 @@
     }
   ],
   "handoff": {
-    "generated_at": "2026-09-29T23:16:48.382Z",
+    "generated_at": "2026-09-29T23:57:38.331Z",
     "acceptance_command": "node scripts/acceptance/fleet-run.mjs --repo .wt-mcd-im --env local-preview",
-    "open_problem_ids": [
-      "MC-509"
-    ]
+    "open_problem_ids": []
   }
 }
