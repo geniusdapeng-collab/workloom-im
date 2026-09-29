@@ -355,9 +355,19 @@ export async function runQuest(
       params: step.params, before: step.before, after: step.after, context: step.context,
     }];
     if (step.tool && step.tool !== step.action) {
+      /**
+       * 执行真相视图（第二视图）：**真实工具 × 步骤声明的对象**，标 `failClosed: true`。
+       * 它承担红队复核要求的那条保证：真正执行的工具没有被任何规则覆盖时，不能被语义视图的
+       * auto 命中冲淡（T-113：action=publish_article 命中 auto，真实工具 ai_task.emit 无规则）。
+       *
+       * 对象类型沿用 `step.objectType` 而不是派生类型——判定器的 `actionMatches` 本来就支持
+       * 命名空间后缀扩展（规则 `price.adjust` 命中真实工具 `pms.price.write`，实测确认），
+       * 因此"声明对象 + 真实工具动作"才是能与规则词表对齐的真相视图。
+       */
       views.push({
         object: { type: step.objectType, id: step.objectId }, action: step.tool, effect: toolAccess,
         params: step.params, before: step.before, after: step.after, context: step.context,
+        failClosed: true,
       });
       /**
        * 第三视图：按**工具名前缀**派生对象视图（与默认规划器 `safeObjectType(tool.name)` 同口径）。
@@ -366,19 +376,18 @@ export async function runQuest(
        * 写步骤一律落 default review（实测 T-104..T-107 全挂）。补上派生视图后，已声明工具（如 content.*）
        * 能被对应规则正常命中；未命中任何视图时仍按 default fail-closed。
        *
-       * 视图角色（2026-09-24 红队复核）：执行真相视图标 `failClosed: true`——工具没被任何规则覆盖时
-       * 必须保留 default 的 fail-closed；语义/自造对象视图只是"标签"，只做加严，不回落 default。
+       * 视图角色（2026-09-29 修口）：派生对象类型是**启发式标签**（`pms.price.write` → `price`），
+       * 只能做加严——命中规则就参与取最严，**未命中不回落 default**。否则只要工具名的命名空间与
+       * 步骤声明对象不同名，就会把已声明工具的正常步骤一律推成 review（本轮实测：hotel 调价步骤
+       * `room_price × pms.price.write` 命中 R1 auto，却被派生视图 `price` 未命中拖成 pending_review，
+       * `packages/runtime/src/runtime.test.ts` 的 3 步自动执行用例直接红）。
+       * 真正兜底的 fail-closed 由上面第二视图承担，语义不变。
        */
       const toolObjectType = safeObjectType(step.tool);
-      const toolView = views[views.length - 1]!;
-      if (toolObjectType === step.objectType) {
-        // 派生对象类型与规划对象一致：工具视图本身就是执行真相视图
-        toolView.failClosed = true;
-      } else {
+      if (toolObjectType && toolObjectType !== step.objectType) {
         views.push({
           object: { type: toolObjectType, id: step.objectId }, action: step.tool, effect: toolAccess,
           params: step.params, before: step.before, after: step.after, context: step.context,
-          failClosed: true,
         });
       }
     }

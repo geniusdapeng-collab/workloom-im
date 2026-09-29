@@ -645,8 +645,10 @@ test("v15 scope 明确保护产品身份、仓级发布器、桌面发布封口�
     /^[0-9a-f]{64}$/.test(entry.sha256) && entry.findings.length > 0 && entry.reason.length > 0
   )));
   assert.deepEqual(scope.acceptedBaseSecretScanFindings["scripts/release-gate.ts"].findings, [
-    { rule: "credential-in-url", line: 21 },
-    { rule: "credential-in-url", line: 22 },
+    // 2026-09-29：release-gate 顶部新增 QUEST 超时旋钮（GATE_QUEST_TIMEOUT_MS）注释块，
+    // 连接串随之下移 7 行——登记随之更新（摘要同步在 sync/base-scope.json）。
+    { rule: "credential-in-url", line: 28 },
+    { rule: "credential-in-url", line: 29 },
   ]);
   assert.ok(scope.exclude.includes("apps/server/src/industry/**"));
   assert.ok(scope.exclude.includes("apps/server/src/service/adapters/**"));
