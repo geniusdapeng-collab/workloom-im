@@ -2252,15 +2252,32 @@ const PORT = Number(process.env.SUITE_SERVER_PORT ?? "8787");
 if (!Number.isInteger(PORT) || PORT < 1024 || PORT > 65535) {
   throw new Error("SUITE_SERVER_PORT 必须是 1024 到 65535 的整数");
 }
+/**
+ * MC-107：LLM stub 端口此前硬编码 8791——本机任何进程占用 8791 都会让整轮套件在 D24 段
+ * EADDRINUSE 崩掉，且错误里没有端口与出路。改为可覆盖（SUITE_STUB_PORT）+ 启动预检。
+ */
+const STUB_PORT = Number(process.env.SUITE_STUB_PORT ?? "8791");
+if (!Number.isInteger(STUB_PORT) || STUB_PORT < 1024 || STUB_PORT > 65535) {
+  throw new Error("SUITE_STUB_PORT 必须是 1024 到 65535 的整数");
+}
 const BASE = `http://localhost:${PORT}`;
 
-async function assertSuitePortAvailable(): Promise<void> {
+/**
+ * 端口占用预检（MC-107）：套件只允许连自己拉起的服务/stub，端口被外部进程占用时必须
+ * 以带端口与覆盖变量名的明确错误**快速失败**，而不是在用例中途 EADDRINUSE 崩掉整轮。
+ */
+async function assertPortAvailable(port: number, label: string, envVar: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const probe = createServer();
-    probe.once("error", () => reject(new Error(`HTTP E2E 端口 ${PORT} 已被占用；拒绝连接到非本套件启动的服务`)));
-    probe.listen(PORT, "127.0.0.1", () => probe.close(() => resolve()));
+    probe.once("error", () => reject(new Error(`${label} ${port} 已被占用；拒绝连接到非本套件启动的服务（可用 ${envVar}=<port> 覆盖）`)));
+    probe.listen(port, "127.0.0.1", () => probe.close(() => resolve()));
   });
 }
+const assertSuitePortAvailable = (): Promise<void> => assertPortAvailable(PORT, "HTTP E2E 端口", "SUITE_SERVER_PORT");
+const assertStubPortAvailable = (): Promise<void> => assertPortAvailable(STUB_PORT, "LLM stub 端口", "SUITE_STUB_PORT");
+// 预检放最前：端口被外部进程占用时立刻失败（带端口与覆盖变量名），不等跑完服务层用例
+await assertSuitePortAvailable();
+await assertStubPortAvailable();
 
 async function api<T = unknown>(path: string, opts: { method?: string; token?: string; body?: unknown } = {}): Promise<{ status: number; data: T }> {
   const res = await fetch(`${BASE}${path}`, {
@@ -2460,7 +2477,15 @@ function defineE2E(): void {
 
 /* ---- D24 落地向导 E2E：模拟态横幅事实源 → 真实模型装配 → ask 真实推理 → 真实模式 ---- */
 let llmStub: Server | null = null;
-const STUB_PORT = 8791;
+/** 起 stub 前的占用预检 + listen 失败的明确错误（带端口与覆盖变量名） */
+async function listenStubOnce(server: Server): Promise<void> {
+  await assertStubPortAvailable();
+  await new Promise<void>((resolve, reject) => {
+    const onError = (err: Error) => reject(new Error(`LLM stub 端口 ${STUB_PORT} 监听失败（可用 SUITE_STUB_PORT=<port> 覆盖）：${err.message}`));
+    server.once("error", onError);
+    server.listen(STUB_PORT, "127.0.0.1", () => { server.off("error", onError); resolve(); });
+  });
+}
 h2("onboarding.status 全模拟运行态（横幅事实源：simulated + mock）", async () => {
   const { data } = await api<{ result?: { data?: { dataMode?: string; llm?: { real?: boolean }; workspace?: { events?: number; agents?: number } } } }>("/trpc/onboarding.status", { token: tokenOwner });
   eq(data.result?.data?.dataMode, "simulated", "种子库默认模拟态");
@@ -2486,7 +2511,7 @@ h2("onboarding.saveLlmConfig 真实试调 → 落盘生效（OpenAI 兼容 stub 
       res.writeHead(404); res.end();
     }
   });
-  await new Promise<void>((r) => llmStub!.listen(STUB_PORT, "127.0.0.1", () => r()));
+  await listenStubOnce(llmStub!);
   const { data } = await api<{ result?: { data?: { ok?: boolean; real?: boolean } }; error?: { message?: string } }>("/trpc/onboarding.saveLlmConfig", {
     method: "POST", token: tokenOwner,
     body: { provider: "e2e-stub", baseUrl: `http://127.0.0.1:${STUB_PORT}/v1`, apiKey: "sk-e2e-dummy-1234567890", model: "stub-real-1" },
@@ -2539,7 +2564,7 @@ h2("融合·LLM 装配后节拍真实推理（runBeat via=llm）→ 还原", asy
       });
     } else { res.writeHead(404); res.end(); }
   });
-  await new Promise<void>((r) => llmStub!.listen(STUB_PORT, "127.0.0.1", () => r()));
+  await listenStubOnce(llmStub!);
   await api("/trpc/onboarding.saveLlmConfig", { method: "POST", token: tokenOwner, body: { provider: "e2e-stub", baseUrl: `http://127.0.0.1:${STUB_PORT}/v1`, apiKey: "sk-e2e-dummy", model: "stub-real-1" } });
   const { data } = await api<{ result?: { data?: { eventId?: string; via?: string } } }>("/trpc/captain.runBeat", { method: "POST", token: tokenOwner, body: { beat: "daily" } });
   eq(data.result?.data?.via, "llm", "节拍走真实模型");
