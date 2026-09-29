@@ -31,7 +31,7 @@ node scripts/delivery/mine-clear.mjs init --repo . --task T-YYYY-MMDD-XXXX
 node scripts/delivery/mine-clear.mjs gate --ledger outputs/mine-clear/<任务号>/ledger.json
 ```
 
-Agent 会话侧另有同名技能 `mine-clear-delivery`（本地 `~/.codex/skills/mine-clear-delivery`），用于在没有仓库 clone 或需要跨仓编排时做入口路由。
+Agent 会话侧另有同名技能 `mine-clear-delivery`（Codex 本地技能，位于 `~/.codex/skills/mine-clear-delivery`，随附执行器离线副本），用于在没有仓库 clone 或需要跨仓编排时做入口路由；未安装该技能的会话直接使用仓内执行器即可。
 
 ---
 
