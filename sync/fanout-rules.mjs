@@ -119,6 +119,11 @@ export const CODE_MERGE_SKIP_PATHS = Object.freeze([
   "docs/REAL-DEVICE-ACCEPTANCE-SPEC.md",
   "docs/acceptance/**",
   "scripts/acceptance/**",
+  // 排雷式交付机制（MCD v1）：规范 / 台账 schema / 执行器会改变交付与验收行为，
+  // 与 RDAS 执行器同档——不进任何无人值守合并车道，由会话显式审查后合并。
+  "docs/MINE-CLEAR-DELIVERY-SPEC.md",
+  "docs/mine-clear/**",
+  "scripts/delivery/**",
   "AGENTS.md",
   "AGENTS.repo.md",
   ".cnb.yml",
