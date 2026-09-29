@@ -2685,8 +2685,20 @@ h2("融合·LLM 降级链：死端配置被拒 → mock 兜底应答不断链", 
 
   RC("L2 裁决节拍：带内批准 / 贴边上浮 L4（公司CEO 自主闭环）", async () => {
     const arc = await getArchive();
-    // 种子 pending 审批行状态备份（裁决节拍会消费全量 L2 队列，用例后恢复，不跨用例污染）
-    const seedPending = (await qApp<{ approval_id: string }>(`SELECT approval_id FROM approvals WHERE workspace_id=$1 AND status='pending'`, [scope.workspaceId])).rows.map((r) => r.approval_id);
+    /**
+     * 队列隔离（M6-N1 / R2）：裁决节拍每轮最多处理 20 条 `l2_captain` 待批——
+     * 历史遗留（前序用例或上一次运行留下的待批）会先吃掉配额，本用例新建的两条永远轮不到，
+     * 于是断言「裁决 0 上浮 20」在污染库上假红（干净库 463/463、污染库假红）。
+     * 快照 pending 行（记录原 tier），临时移出队列，finally 原样恢复——与 R-10/R-12 同口径。
+     */
+    const seedPending = (await qApp<{ approval_id: string; tier: string }>(
+      `SELECT approval_id, tier FROM approvals WHERE workspace_id=$1 AND status='pending'`,
+      [scope.workspaceId],
+    )).rows;
+    await qApp(
+      `UPDATE approvals SET status='rejected' WHERE workspace_id=$1 AND status='pending'`,
+      [scope.workspaceId],
+    );
     try {
       const mk = async (id: string, price: number) => qApp(
         `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, snapshot, tier)
@@ -2703,12 +2715,12 @@ h2("融合·LLM 降级链：死端配置被拒 → mock 兜底应答不断链", 
       assert((await countEvents("ceo.decision")) >= 2, "ceo.decision 留痕");
     } finally {
       await restoreArchive(arc);
-      // 恢复种子审批行（裁决副作用回滚）+ 清理本用例审批行
-      for (const id of seedPending) {
+      // 恢复种子审批行（原 tier 如实回填；裁决副作用回滚）+ 清理本用例审批行
+      for (const row of seedPending) {
         await qApp(
-          `UPDATE approvals SET status='pending', tier='l2_captain', gesture=NULL, decided_by=NULL, decided_at=NULL,
+          `UPDATE approvals SET status='pending', tier=$2, gesture=NULL, decided_by=NULL, decided_at=NULL,
              snapshot = snapshot - 'ceo_escalated' - 'ceo_rationale' WHERE approval_id=$1`,
-          [id],
+          [row.approval_id, row.tier],
         );
       }
       await qApp(`DELETE FROM approvals WHERE approval_id IN ($1,$2)`, [`apr-r05a-${SFX}`, `apr-r05b-${SFX}`]);
@@ -4181,7 +4193,14 @@ z("A-05 启动补扫：审批已通过而线程仍挂起时必须补续跑", asy
       `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, snapshot)
        VALUES ($1,$2,$3,$4,'inapp','approved',$5)`,
       [aprId, zScope.tenantId, zScope.workspaceId, evRow.eventId,
-        JSON.stringify({ before: null, after: { v: 1 }, expires_at: new Date(Date.now() + 864e5).toISOString() })],
+        // MC-106（R2-F1/F2）：补续跑会带着本票据重放 desktop.gui 写步骤，快照必须绑定动作，
+        // 否则被 fail-closed 拒绝——「未绑定任何写动作」会掩盖补扫本身是否工作。
+        JSON.stringify({
+          before: null,
+          after: { v: 1 },
+          action: "desktop.gui",
+          expires_at: new Date(Date.now() + 864e5).toISOString(),
+        })],
     );
     const resumed = await resumeApprovedPendingThreads();
     assert(resumed >= 1, `启动补扫应至少补续跑 1 条僵尸线程（实际 ${resumed}）`);

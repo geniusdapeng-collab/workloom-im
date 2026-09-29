@@ -178,9 +178,11 @@ describe("高风险授权段③（L3.5 + P1-8 验真）", () => {
   });
 
   it("票据一次性消费：已被消费的审批再次验真必须被拒（B-02 / L3.5 逐次授权）", async () => {
+    // MC-106：绑定齐备是放行前置条件；本用例专测「已消费」分支，故票据先绑定本次对象与动作
+    const boundTicket = { object_type: "room_price", object_id: "RT-DLX-KING", action: "desktop.gui" };
     await expect(
       checkHighRiskAuthorization(
-        stubDb([{ status: "approved", snapshot: {} }], { consumed: true }),
+        stubDb([{ status: "approved", snapshot: boundTicket }], { consumed: true }),
         scope, desktop, d(), "apr-1",
       ),
     ).rejects.toThrow(/已被消费/);
@@ -374,7 +376,7 @@ d("PG 集成（H-2/L1.4：幂等丢弃、哈希链序）", async () => {
       await insApr(`apr-p18-unbound-${tag}`, "approved", { expires_at: new Date(Date.now() + 3_600_000).toISOString() });
       await expect(
         gatewayAppend(pool, { ...desktopCtx, approvalRef: `apr-p18-unbound-${tag}` }, ddraft("RT-P18")),
-      ).rejects.toThrow(/缺少绑定/);
+      ).rejects.toThrow(/未绑定任何写动作/);
       // 真实 approved 且绑定相符、未过期 → 放行
       await insApr(`apr-p18-ok-${tag}`, "approved", {
         object_type: "room_price",
@@ -388,7 +390,7 @@ d("PG 集成（H-2/L1.4：幂等丢弃、哈希链序）", async () => {
       // MC-106 一次性消费：同一审批第二次引用必须被拒
       await expect(
         gatewayAppend(pool, { ...desktopCtx, approvalRef: `apr-p18-ok-${tag}` }, ddraft("RT-P18")),
-      ).rejects.toThrow(/已被使用过/);
+      ).rejects.toThrow(/已被消费/);
     } finally {
       const c = await pool.connect();
       try {

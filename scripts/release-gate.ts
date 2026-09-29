@@ -16,6 +16,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { charterSchema } from "@workloom/base/captain";
 import { signDemoToken, type Identity } from "@workloom/base/tenancy";
+// R2-F4/M6-F2：摘要解析器抽为独立模块（scripts/chain-summary.ts），可被断言脚本导入复验
+import { parseChainSummary } from "./chain-summary.js";
 
 const BASE = process.env.SERVER_BASE ?? "http://localhost:8787";
 /**
@@ -47,28 +49,6 @@ async function check(id: string, name: string, fn: () => Promise<string>): Promi
 }
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
-}
-
-interface ChainSummary {
-  ok: boolean;
-  workspaces: number;
-  total_events: number;
-  total_issues: number;
-  issue_kinds?: Array<{ kind: string; count: number }>;
-}
-
-/** 解析 verify-chain 的结构化报告（摘要口径为单行 JSON；完整口径为多行 JSON，两者兼容） */
-function parseChainSummary(out: string): ChainSummary | null {
-  const marker = out.indexOf("===== 结构化验证报告（JSON） =====");
-  if (marker < 0) return null;
-  const start = out.indexOf("{", marker);
-  if (start < 0) return null;
-  try {
-    const parsed = JSON.parse(out.slice(start).trim()) as ChainSummary;
-    return typeof parsed.total_issues === "number" ? parsed : null;
-  } catch {
-    return null;
-  }
 }
 
 /* ================= tRPC 客户端 ================= */

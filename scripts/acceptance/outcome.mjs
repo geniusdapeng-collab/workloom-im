@@ -180,12 +180,20 @@ for (const file of files) {
             const cur = await trpcGet("threads.get", { threadId: trial.threadId });
             trial.status = cur.json?.result?.data?.status ?? trial.status;
             if (["completed", "failed", "paused"].includes(trial.status)) break;
-            const ev = await trpcGet("threads.events", { threadId: trial.threadId });
+            const ev = await trpcGet("threads.events", { threadId: trial.threadId, limit: 200 });
             const ownEvents = new Set((ev.json?.result?.data ?? []).map((e) => e.event_id));
             const releasedIds = await releaseLowRiskApprovals(ownEvents, trial);
             const queue = await trpcGet("approvals.list", { status: "pending" });
             const rows = queue.json?.result?.data ?? [];
-            const first = rows.find((r) => ownEvents.has(r.event_id)) ?? rows[0];
+            /**
+             * M6-N2：只对本 trial 线程链上的关卡落手势。旧实现 `?? rows[0]` 会回退到任意待批行
+             * （实测点到无关的 L4/遗留夹具行）——既改变了他方状态，又让 O 域 pass@1 随库内遗留波动。
+             * 本线程暂无待批关卡时只等待下一轮（推进循环本身受时限约束），并在干预记录里留一次说明。
+             */
+            const first = rows.find((r) => ownEvents.has(r.event_id));
+            if (!first && !trial.interventions.some((i) => i.class === "H1-idle")) {
+              trial.interventions.push({ class: "H1-idle", ok: true, reason: "本线程暂无待批关卡（不对无关待批行落手势，等待下一轮）" });
+            }
             if (first) {
               const body = { approvalId: first.approval_id, gesture };
               if (gesture === "edit") { body.editedAfter = task.editAfter ?? { note: "acceptance-edit" }; body.editKind = "correction"; }
