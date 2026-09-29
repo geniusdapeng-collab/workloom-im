@@ -1234,6 +1234,18 @@ function syncToChild(baseDir, childDir, scope, report, extraExclude = [], option
     const lockfileInputsChanged = plan.operations.some((item) => (
       item.kind === "merge" || /(^|\/)package\.json$/u.test(item.rel)
     ));
+    /**
+     * 清单口径变化（2026-09-29 实测事故）：清单 `docs/OPEN_SOURCE_COMPONENTS.md` 除依赖事实外，
+     * 还由**生成器自身**（`scripts/oss-inventory.mjs`：章节/表头/口径）与**产品派生锁**
+     * （`.workloom-runtime-deps/**`，登记组件当前版本的事实源）决定。二者都在同步范围内，
+     * 但对 `pnpm-lock.yaml` 与各 `package.json` 而言并非"依赖变化"——只按 lockfile 触发会漏算：
+     * 下发了新生成器/新派生锁却没重算清单，子仓 `pnpm oss:check` 立即判红。
+     * （实测 workroom-fox 定向 full 波次：static-gate 报「开源组件清单与仓库事实不一致」。）
+     */
+    const inventoryFactsChanged = lockfileInputsChanged || plan.operations.some((item) => {
+      const rel = String(item.rel ?? "").replace(/^root:/u, "").split("#")[0];
+      return rel === "scripts/oss-inventory.mjs" || rel.startsWith(".workloom-runtime-deps/");
+    });
     if (lockfileInputsChanged) {
       try {
         sh("pnpm", ["install", "--lockfile-only", "--ignore-scripts"], childDir);
@@ -1291,7 +1303,7 @@ function syncToChild(baseDir, childDir, scope, report, extraExclude = [], option
       // 同源工具链，其 CI 的 oss:check 校验根级清单；两处都要按各自事实重算。
       const inventoryRoots = [childDir];
       if (resolve(childDir) !== resolve(repoRoot)) inventoryRoots.push(repoRoot);
-      if (lockfileInputsChanged) {
+      if (inventoryFactsChanged) {
         for (const inventoryRoot of inventoryRoots) {
           const inventoryGenerator = join(inventoryRoot, "scripts/oss-inventory.mjs");
           const inventoryDoc = join(inventoryRoot, "docs/OPEN_SOURCE_COMPONENTS.md");

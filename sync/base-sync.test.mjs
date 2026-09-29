@@ -1825,3 +1825,45 @@ test("新行业已有自定义 verifier 时在基座写入前 fail closed", () =
     rmSync(fx.root, { recursive: true, force: true });
   }
 });
+
+/**
+ * 清单口径触发（2026-09-29 实测事故）：
+ * `.oss-watch-state.json` / `oss-components.json` 本就在同步排除面里，真正会随波次变、
+ * 又不在 lockfile 事实里的清单口径来源是 **生成器自身**（`scripts/oss-inventory.mjs`）
+ * 与 **产品派生锁**（`.workloom-runtime-deps/**`）。只按 lockfile 触发会漏算，
+ * 子仓 `pnpm oss:check` 随即判红（workroom-fox 定向 full 波次实测）。
+ */
+test("只换生成器（不动 package.json / lockfile）也必须重算开源组件清单", () => {
+  const fx = newIndustryFixture();
+  try {
+    write(join(fx.child, "docs/OPEN_SOURCE_COMPONENTS.md"), "stale-inventory\n");
+    commitAll(fx.child, "stale derived inventory before generator swap");
+
+    write(join(fx.base, "scripts/oss-inventory.mjs"), `#!/usr/bin/env node
+import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+const stamp = readFileSync(join(process.cwd(), "scripts/oss-inventory.mjs"), "utf8").length;
+const target = join(process.cwd(), "docs/OPEN_SOURCE_COMPONENTS.md");
+mkdirSync(dirname(target), { recursive: true });
+writeFileSync(target, "regenerated-after-generator-swap:" + stamp + "\\n");
+`);
+    const scope = readScope(fx.base);
+    scope.pollutionGuard.maxFilesPerSync = 40;
+    writeScope(fx.base, scope);
+    commitAll(fx.base, "publish new inventory generator only");
+
+    const result = cli(["pull", "--repo", ".", "--base-dir", fx.base, "--json"], fx.child);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.ossInventoryRefreshed, true, "生成器变化必须触发清单重算");
+    assert.match(
+      readFileSync(join(fx.child, "docs/OPEN_SOURCE_COMPONENTS.md"), "utf8"),
+      /^regenerated-after-generator-swap:\d+\n$/u,
+    );
+    const committed = git(fx.child, "show", "--pretty=format:", "--name-only", "HEAD");
+    assert.match(committed, /docs\/OPEN_SOURCE_COMPONENTS\.md/u);
+    assert.equal(git(fx.child, "status", "--porcelain"), "");
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
