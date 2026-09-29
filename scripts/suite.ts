@@ -3712,23 +3712,36 @@ z("号源：并发取号不重号，且撞手写号段时同事务换号不失�
 });
 
 z("知识库事实：ask 答案必须含知识内容，不被通用统计挤掉", async () => {
+  /**
+   * 纯函数口径（不落库）：X-04 × GR-09 是**组合后**才成立的不变量——
+   * 知识命中必须排在通用统计之前，且 120 字硬闸不能把知识内容吃掉、也不能误报"已截断"。
+   * 不跑真机 ask 是刻意的：各仓工作区与 suite 默认 scope 不同，真机路径会先撞 RLS/FK 而看不到这条不变量
+   * （panda 实测：threads_workspace_id_fkey）。真机端到端由 growth 的 O-05 用例覆盖。
+   */
+  const { mergeKbFacts, composeAskAnswer, ASK_ANSWER_MAX_CHARS } = await import("@workloom/runtime");
   const docId = `doc-suite-${SFX}`;
-  registerAskKbSearch(async () => [
+  // 通用统计刻意造得足够长：旧口径下它们会占满 120 字预算，把知识命中挤掉
+  const baseFacts = {
+    facts: [
+      { label: "近 7 天内容发布", value: "12 次（近 30 天 12 次）" },
+      { label: "近 7 天内容改写", value: "6 次" },
+      { label: "内容排期待执行", value: "0 条" },
+      { label: "近 7 天能见度采集", value: "6 轮" },
+      { label: "近 7 天账号表现", value: "播放量 1.2 万" },
+    ],
+    sources: ["biz_events"],
+  };
+  const merged = mergeKbFacts(baseFacts, [
     { content: "国庆期间全线房源 7.5 折，券后价不低于保底价。", heading: "券后折扣", documentTitle: "国庆促销政策", documentId: docId },
     { content: "客户报暗号「星火」可再减 30 元。", heading: "暗号", documentTitle: "国庆促销政策", documentId: docId },
   ]);
-  try {
-    const tid = await mkThread();
-    const r = await runAsk(app, gw, scope, {
-      threadId: tid, goal: "国庆活动的券后折扣和暗号是什么？", presetKey: "pricing-agent",
-    });
-    // X-04 × GR-09 联动：知识命中必须整体可见（追加在末尾 + 整文硬截 ⇒ 永远被吃掉）
-    assert(r.answer.includes("7.5 折"), `答案须含知识库折扣内容（实际：${r.answer}）`);
-    assert(r.answer.includes("星火"), `答案须含知识库暗号内容（实际：${r.answer}）`);
-    assert(r.answer.includes("知识库·"), "知识命中须标注来源为知识库");
-  } finally {
-    registerAskKbSearch(undefined);
-  }
+  eq(merged.sources[0], `kb:${docId}`, "知识来源必须排在最前（顺序即优先级）");
+  assert(merged.facts[0]!.label.includes("知识库·"), "知识命中必须前置，而不是追加在末尾");
+  const answer = composeAskAnswer("国庆活动的券后折扣和暗号是什么？", merged.facts);
+  assert(answer.includes("7.5 折"), `答案须含知识库折扣内容（实际：${answer}）`);
+  assert(answer.includes("星火"), `答案须含知识库暗号内容（实际：${answer}）`);
+  assert(!answer.includes("已截断"), `知识内容完整时不得标"已截断"（实际：${answer}）`);
+  assert(answer.length <= ASK_ANSWER_MAX_CHARS, `GR-09 硬闸仍须守住（实际 ${answer.length} 字）`);
 });
 
 z("高危批量守卫：l4_chairman 审批（快照无 high_risk）也必须逐条", async () => {
@@ -3743,18 +3756,24 @@ z("高危批量守卫：l4_chairman 审批（快照无 high_risk）也必须逐�
      VALUES ($1,$2,$3,$4,'inapp','pending','l4_chairman',$5)`,
     [l4, zScope.tenantId, zScope.workspaceId, eventId, JSON.stringify({ after: { v: 1 } })],
   );
-  const batch = await batchApprove(app, gw, scope, boss, [l4]);
+  const batch = await batchApprove(app, gw, zScope, boss, [l4]);
   eq(batch.approved.length, 0, "L4 审批不得批量放行");
   eq(batch.skipped.length, 1, "L4 审批被跳过");
   assert((batch.skipped[0]?.reason ?? "").includes("高危"), "跳过原因=高危项须逐条");
   // 超时扫描同口径（L5.4：高危不自动放行）——两处守卫必须共用同一判据
   await zQuery(`UPDATE approvals SET snapshot = snapshot || $2::jsonb WHERE approval_id=$1`,
     [l4, JSON.stringify({ expires_at: new Date(Date.now() - 7200e3).toISOString() })]);
-  const sweep = await expireSweep(app, gw, scope);
+  const sweep = await expireSweep(app, gw, zScope);
   assert(sweep.keptHighRisk.includes(l4), "L4 过期不得自动 expired（保留提醒）");
   // 反向：普通项仍可批量（守卫不得误伤常规通道）
-  const ok = await mkApproval();
-  const batch2 = await batchApprove(app, gw, scope, boss, [ok.approvalId]);
+  const okEvent = await zEvent("suite.z.ordinary");
+  const okId = `apr-z-ok-${SFX}`;
+  await zQuery(
+    `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, snapshot)
+     VALUES ($1,$2,$3,$4,'inapp','pending',$5)`,
+    [okId, zScope.tenantId, zScope.workspaceId, okEvent, JSON.stringify({ after: { v: 2 } })],
+  );
+  const batch2 = await batchApprove(app, gw, zScope, boss, [okId]);
   eq(batch2.approved.length, 1, "普通项照批");
 });
 
