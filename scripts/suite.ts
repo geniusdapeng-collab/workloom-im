@@ -3568,6 +3568,74 @@ await assertGovernanceFixtureReady().catch(async (err) => {
  */
 const z = C("Z");
 
+/**
+ * 工作区口径：各行业仓的演示工作区不同（hotel=ws-yunqi / panda=panda-group / …），
+ * 这套不变量用例必须**运行时解析本仓真实工作区**，不能钉死某一个 slug——
+ * 否则换仓即因外键失败，用例就成了"只在基座成立"的假绿（panda 实测：threads_workspace_id_fkey）。
+ */
+const zScope = await (async () => {
+  const ownerUrl = process.env.DATABASE_URL;
+  if (!ownerUrl) return scope;
+  const client = new pg.Client({ connectionString: ownerUrl });
+  await client.connect();
+  try {
+    // 必须用 owner 连接：RLS 下 suite 自己的 scope（多为 ws-yunqi）在本仓可能根本不存在
+    const prefer = await client.query<{ id: string; tenant_id: string }>(
+      `SELECT id, tenant_id FROM workspaces WHERE id=$1`, [scope.workspaceId]);
+    if (prefer.rows[0]) return { tenantId: prefer.rows[0].tenant_id, workspaceId: prefer.rows[0].id };
+    const any = await client.query<{ id: string; tenant_id: string }>(
+      `SELECT id, tenant_id FROM workspaces ORDER BY id LIMIT 1`);
+    assert(any.rows[0], "本仓至少应有一个工作区（种子未跑？）");
+    return { tenantId: any.rows[0]!.tenant_id, workspaceId: any.rows[0]!.id };
+  } finally {
+    await client.end();
+  }
+})();
+
+/**
+ * 本仓工作区下的查询/写入：RLS 上下文必须跟随 zScope——
+ * 沿用 suite 的 scope 会在"本仓没有该工作区"的仓里被 RLS 拒（panda 实测：row-level security policy for table "threads"）。
+ */
+async function zQuery<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<pg.QueryResult<T>> {
+  const c = await app.connect();
+  try {
+    await c.query("BEGIN");
+    await c.query("SELECT set_config('app.workspace_id', $1, true)", [zScope.workspaceId]);
+    await c.query("SELECT set_config('app.tenant_id', $1, true)", [zScope.tenantId]);
+    const r = await c.query<T>(sql, params);
+    await c.query("COMMIT");
+    return r;
+  } catch (err) {
+    await c.query("ROLLBACK").catch(() => undefined);
+    throw err;
+  } finally {
+    c.release();
+  }
+}
+
+/** 本仓工作区下的事件（不复用 mkEvent：它用 suite 的 scope 写事件） */
+async function zEvent(action: string): Promise<string> {
+  const r = await gatewayAppend(gw, { ...zScope, actor: { id: "pricing-agent", type: "agent", fenceBindings: ["R1"] } }, {
+    who: { type: "agent", id: "pricing-agent", version: "v2.3" },
+    context: { tenant_id: zScope.tenantId, workspace_id: zScope.workspaceId, time: new Date().toISOString() },
+    object: { type: "suite", id: `suite-z-${SFX}-${Math.random().toString(36).slice(2, 8)}` },
+    decision: { action },
+    rule_impact: [],
+  });
+  return r.eventId;
+}
+
+/** 本仓工作区内的临时线程（不复用 suite 的 mkThread：它钉死 ws-yunqi，panda 等仓无此工作区） */
+async function zThread(): Promise<string> {
+  const id = `T-z-${SFX}-${Math.random().toString(36).slice(2, 8)}`;
+  await zQuery(
+    `INSERT INTO threads (id, tenant_id, workspace_id, title, mode, status, created_by)
+     VALUES ($1,$2,$3,$4,'quest','queued','MEM-001')`,
+    [id, zScope.tenantId, zScope.workspaceId, `Z 域线程 ${id}`],
+  );
+  return id;
+}
+
 z("号源：并发取号不重号，且撞手写号段时同事务换号不失败", async () => {
   const { makeReadableId } = await import("@workloom/shared");
   /** 本用例会造"手写高位 id"这类脏数据，结束后自己清干净（可重复跑） */
@@ -3582,10 +3650,10 @@ z("号源：并发取号不重号，且撞手写号段时同事务换号不失�
       `SELECT COALESCE(MAX(NULLIF(regexp_replace(id, '[^0-9]', '', 'g'), '')::bigint), 100) AS m
          FROM threads WHERE id ~ '^T-[0-9]+$'`);
     const highId = `T-${Number(highBase.rows[0]!.m) + 500}`;
-    await qApp(
+    await zQuery(
       `INSERT INTO threads (id, tenant_id, workspace_id, title, mode, status, created_by)
        VALUES ($1,$2,$3,'号源高水位（套件造）','quest','completed','MEM-001')`,
-      [highId, scope.tenantId, scope.workspaceId],
+      [highId, zScope.tenantId, zScope.workspaceId],
     );
     created.push(highId);
     const probes = await Promise.all(Array.from({ length: 12 }, () =>
@@ -3599,10 +3667,10 @@ z("号源：并发取号不重号，且撞手写号段时同事务换号不失�
      */
     const cur = await qApp<{ last_value: string }>(`SELECT last_value FROM public.thread_no_seq`);
     const takenId = makeReadableId("T", Number(cur.rows[0]!.last_value) + 1);
-    await qApp(
+    await zQuery(
       `INSERT INTO threads (id, tenant_id, workspace_id, title, mode, status, created_by)
        VALUES ($1,$2,$3,'号源占位（套件造）','quest','completed','MEM-001')`,
-      [takenId, scope.tenantId, scope.workspaceId],
+      [takenId, zScope.tenantId, zScope.workspaceId],
     );
     created.push(takenId);
     const client = await app.connect();
@@ -3610,13 +3678,13 @@ z("号源：并发取号不重号，且撞手写号段时同事务换号不失�
     let continuedAfterRetry = false;
     try {
       await client.query("BEGIN");
-      await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-      await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+      await client.query("SELECT set_config('app.workspace_id', $1, true)", [zScope.workspaceId]);
+      await client.query("SELECT set_config('app.tenant_id', $1, true)", [zScope.tenantId]);
       allocated = (await insertWithReadableId(client, THREAD_ID_SOURCE, async (id) => {
         await client.query(
           `INSERT INTO threads (id, tenant_id, workspace_id, title, mode, status, created_by)
            VALUES ($1,$2,$3,'撞号重试验证','quest','queued','MEM-001')`,
-          [id, scope.tenantId, scope.workspaceId],
+          [id, zScope.tenantId, zScope.workspaceId],
         );
         return id;
       })).id;
@@ -3625,7 +3693,7 @@ z("号源：并发取号不重号，且撞手写号段时同事务换号不失�
       await client.query(
         `INSERT INTO threads (id, tenant_id, workspace_id, title, mode, status, created_by)
          VALUES ($1,$2,$3,'换号后同事务续写','quest','queued','MEM-001')`,
-        [continuedId, scope.tenantId, scope.workspaceId],
+        [continuedId, zScope.tenantId, zScope.workspaceId],
       );
       created.push(continuedId);
       continuedAfterRetry = true;
@@ -3639,7 +3707,7 @@ z("号源：并发取号不重号，且撞手写号段时同事务换号不失�
     assert(allocated !== takenId, `撞号必须换号（占用 ${takenId}，实得 ${allocated}）`);
     assert(continuedAfterRetry, "换号后同一事务仍可继续写入（未被中止）");
   } finally {
-    if (created.length > 0) await qApp(`DELETE FROM threads WHERE id = ANY($1::text[])`, [created]);
+    if (created.length > 0) await zQuery(`DELETE FROM threads WHERE id = ANY($1::text[])`, [created]);
   }
 });
 
@@ -3668,19 +3736,19 @@ z("高危批量守卫：l4_chairman 审批（快照无 high_risk）也必须逐�
    * 与"快照打标"用例的区别：这里走的是**非 loop.ts 的审批来源**（种子/CEO 队列/技能下发同构），
    * 快照里没有 high_risk 字段、只有权威列 tier —— 旧守卫只看快照，于是这类审批被一键放行。
    */
-  const eventId = await mkEvent("suite.l4.reviewable");
+  const eventId = await zEvent("suite.l4.reviewable");
   const l4 = `apr-l4-${SFX}`;
-  await qApp(
+  await zQuery(
     `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, tier, snapshot)
      VALUES ($1,$2,$3,$4,'inapp','pending','l4_chairman',$5)`,
-    [l4, scope.tenantId, scope.workspaceId, eventId, JSON.stringify({ after: { v: 1 } })],
+    [l4, zScope.tenantId, zScope.workspaceId, eventId, JSON.stringify({ after: { v: 1 } })],
   );
   const batch = await batchApprove(app, gw, scope, boss, [l4]);
   eq(batch.approved.length, 0, "L4 审批不得批量放行");
   eq(batch.skipped.length, 1, "L4 审批被跳过");
   assert((batch.skipped[0]?.reason ?? "").includes("高危"), "跳过原因=高危项须逐条");
   // 超时扫描同口径（L5.4：高危不自动放行）——两处守卫必须共用同一判据
-  await qApp(`UPDATE approvals SET snapshot = snapshot || $2::jsonb WHERE approval_id=$1`,
+  await zQuery(`UPDATE approvals SET snapshot = snapshot || $2::jsonb WHERE approval_id=$1`,
     [l4, JSON.stringify({ expires_at: new Date(Date.now() - 7200e3).toISOString() })]);
   const sweep = await expireSweep(app, gw, scope);
   assert(sweep.keptHighRisk.includes(l4), "L4 过期不得自动 expired（保留提醒）");
