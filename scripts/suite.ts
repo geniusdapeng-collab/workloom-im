@@ -3782,6 +3782,23 @@ z("知识库事实：ask 答案必须含知识内容，不被通用统计挤掉"
   assert(answer.includes("星火"), `答案须含知识库暗号内容（实际：${answer}）`);
   assert(!answer.includes("已截断"), `知识内容完整时不得标"已截断"（实际：${answer}）`);
   assert(answer.length <= ASK_ANSWER_MAX_CHARS, `GR-09 硬闸仍须守住（实际 ${answer.length} 字）`);
+  /**
+   * MC-111（2026-09-30 批 E）：知识库优先级只对"知识型提问"成立——问系统事实（审批/工单/夜班/线程）时，
+   * 被问域事实必须排在知识库之前，且落款必须与正文实际取数来源一致（KB-only 不得声称事件库数字）。
+   */
+  const systemMerged = mergeKbFacts(
+    { facts: [{ label: "当前待审批", value: "3 项（决断队列）", domain: "approvals" }], sources: ["approvals"] },
+    [{ content: "拨0报修后可随时致电前台查询进度。", heading: "维修报修", documentTitle: "住客常见问答", documentId: docId }],
+  );
+  const systemAnswer = composeAskAnswer("当前有多少待审批事项？", systemMerged.facts);
+  assert(systemAnswer.includes("当前待审批：3 项"), `系统问句必须给出被问域事实（实际：${systemAnswer}）`);
+  assert(systemAnswer.indexOf("当前待审批") < systemAnswer.indexOf("知识库·"),
+    `被问域事实必须先于知识库命中（实际：${systemAnswer}）`);
+  const kbOnlyAnswer = composeAskAnswer("暗号是什么？", mergeKbFacts({ facts: [], sources: [] }, [
+    { content: "客户报暗号「星火」可再减 30 元。", heading: "暗号", documentTitle: "国庆促销政策", documentId: docId },
+  ]).facts);
+  assert(!kbOnlyAnswer.includes("以上数字均来自事件库实时取数"),
+    `KB-only 答案不得声称数字来自事件库（实际：${kbOnlyAnswer}）`);
 });
 
 z("缺参写步骤：围栏求值异常必须降级人工裁决，不得假熔断", async () => {

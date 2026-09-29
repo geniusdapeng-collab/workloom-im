@@ -55,6 +55,48 @@ describe("意图路由（F3.2）", () => {
   });
 });
 
+describe("ask 事实面排序与落款（MC-111）", () => {
+  it("被问域事实先于知识库：系统问句不被 FAQ 挤占（纯函数口径）", async () => {
+    const { mergeKbFacts, composeAskAnswer, orderAskFactsForQuestion } = await import("./ask.js");
+    const base = {
+      facts: [
+        { label: "当前待审批", value: "3 项（决断队列）", domain: "approvals" as const },
+        { label: "事件库规模", value: "120 条五元事件（哈希链可验）", domain: "events" as const },
+      ],
+      sources: ["approvals", "biz_events"],
+    };
+    const merged = mergeKbFacts(base, [{
+      content: "拨0报修后可随时致电前台查询进度。", heading: "维修报修", documentTitle: "住客常见问答", documentId: "kbd-repair",
+    }]);
+    const ordered = orderAskFactsForQuestion("当前有多少待审批事项？", merged.facts);
+    expect(ordered[0]!.label).toBe("当前待审批");
+    const answer = composeAskAnswer("当前有多少待审批事项？", merged.facts);
+    expect(answer).toContain("当前待审批：3 项");
+    expect(answer.indexOf("当前待审批")).toBeLessThan(answer.indexOf("知识库·"));
+  });
+
+  it("落款与实际取数来源一致：KB-only 答案不得声称『数字来自事件库实时取数』", async () => {
+    const { mergeKbFacts, composeAskAnswer } = await import("./ask.js");
+    const kbOnly = mergeKbFacts({ facts: [], sources: [] }, [{
+      content: "客户报暗号「星火」可再减 30 元。", heading: "暗号", documentTitle: "国庆促销政策", documentId: "kbd-1",
+    }]);
+    const kbAnswer = composeAskAnswer("国庆暗号是什么？", kbOnly.facts);
+    expect(kbAnswer).toContain("知识库·");
+    expect(kbAnswer).not.toContain("以上数字均来自事件库实时取数");
+    const dbAnswer = composeAskAnswer("当前有多少待审批事项？", [{ label: "当前待审批", value: "2 项（决断队列）", domain: "approvals" }]);
+    expect(dbAnswer).toContain("以上数字均来自事件库实时取数");
+  });
+
+  it("被问域识别：审批/工单/夜班/线程/知识各自命中且不互相冒充", async () => {
+    const { askedAskDomains } = await import("./ask.js");
+    expect(askedAskDomains("当前有多少待审批事项？")).toContain("approvals");
+    expect(askedAskDomains("今天服务台收到多少工单？")).toContain("tickets");
+    expect(askedAskDomains("昨晚夜班完成了哪些工作？")).toContain("night");
+    expect(askedAskDomains("现在有多少进行中的任务？")).toContain("threads");
+    expect(askedAskDomains("房间里的毛巾多久更换一次？")).toEqual(["kb"]);
+  });
+});
+
 describe("计划模板（演示剧本）", async () => {
   const { planQuest } = await import("./loop.js");
   const fakePreset = {
