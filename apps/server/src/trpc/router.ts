@@ -2205,6 +2205,40 @@ const fenceRouter = router({
     }
   }),
 
+  /**
+   * 生效规则（MC-105）：RDAS P 域 / dsh 围栏插件消费的「最小可判定形状」。
+   * 与 `fence.rules` 的区别：只回 `status='active'` 的生效规则（含全局 '*' 基线），
+   * 输出 `{ rule_id, name, level, is_baseline, match: { object_types, actions }, actions, when }`，
+   * 与 packages/runtime/plugins/workloom-fence.plugin.js 的读取口径一致。
+   * 历史缺陷：acceptance/live 链路调用本端点（注释称「本仓已补」）但服务端从未注册 →
+   * 插件把 404 错误体当规则数组 → 工具层整体不可用（P 域实测）。SSOT：复用 loadActiveRulesInTx，
+   * 与激活/提案路径同一判定输入。
+   */
+  activeRules: protectedProcedure.query(async ({ ctx }) => {
+    const scope = scopeOf(ctx.identity);
+    const app = getAppPool();
+    const client = await app.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+      await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+      const active = await loadActiveRulesInTx(client, scope);
+      return active.map((rule) => ({
+        rule_id: rule.rule_id,
+        version: rule.version,
+        name: rule.name,
+        level: rule.level,
+        is_baseline: rule.is_baseline,
+        match: { object_types: rule.objectTypes, actions: rule.actions },
+        actions: rule.actions,
+        when: rule.when,
+      }));
+    } finally {
+      await client.query("COMMIT").catch(() => undefined);
+      client.release();
+    }
+  }),
+
   /** 版本历史（P5E1：active/rolled_back/出厂基线 🔒；单调守卫 L2.1） */
   versions: protectedProcedure.query(async ({ ctx }) => {
     const scope = scopeOf(ctx.identity);

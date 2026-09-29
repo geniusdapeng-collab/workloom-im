@@ -174,11 +174,13 @@ pnpm setup && pnpm preview:all
 
 ### 三分钟启航（Mac 用户，免命令行）
 
-1. **下载**：到 [Releases](https://github.com/workloom-ai/workloom-im/releases) 下载 `WorkLoom-macOS.zip`（约 208 MB，sha256 随附可校验）。
-2. **解压拖入应用程序**：首次打开如遇 Gatekeeper 提示，在「系统设置 → 隐私与安全性」点一次「仍要打开」即可——这是唯一一次需要手动授权。
+1. **下载**：到 [CNB Release](https://cnb.cool/workloom-ai/workloom-im/-/releases) 下载对应架构的安装包——
+   Apple Silicon（M 系列）用 `WorkLoom-mac-arm64.dmg`，Intel 用 `WorkLoom-mac-x64.dmg`；
+   同页附 `WorkLoom-SHA512SUMS.txt`（sha512 校验表，`shasum -a 512` 可逐字节核对）。
+2. **打开 dmg 拖入应用程序**：首次打开如遇 Gatekeeper 提示，在「系统设置 → 隐私与安全性」点一次「仍要打开」即可——这是唯一一次需要手动授权。
 3. **双击 WorkLoom.app**：启动器自动完成一切——内嵌 PostgreSQL 17 + pgvector 初始化、数据库迁移、服务拉起、工作台打开。无需安装任何依赖，无需命令行。
 
-> 系统要求：macOS 13 Ventura +，Apple Silicon（M 系列）。Intel 版后续推出。
+> 系统要求：macOS 13 Ventura +；Apple Silicon（M 系列）与 Intel（x64）均有对应安装包。
 
 ### 开箱即运行态与真实数据接入
 
@@ -610,6 +612,16 @@ LLM_MODEL=deepseek-chat
 - 改完代码必须跑 `pnpm suite`；发布前必须跑 `pnpm release:gate`（未全过禁止发布，见 `docs/release-checklist.md`）
 - **UI 改动必须用浏览器能力实际打开页面截图核对**，禁止「改了就算完成」
 - 改了能力面（脚本/包/技能/演示页）必须跑 `pnpm capabilities` 重新生成人类版导览
+
+### 6.6 桌面安装包发布通道（CNB）
+
+仓库事实源在 CNB（GitHub 账号已失效），桌面安装包在 CNB 流水线内构建与发布：
+
+- **流水线**：`.cnb.yml#desktop-release`（触发 `api_trigger_desktop_release`，须以 `DESKTOP_RELEASE_VERSION=vX.Y.Z` 指定版本）。
+  编排为 `desktop-release-preflight`（发布输入/资产锁/发布策略/命名一致性）→ `desktop-release-macos`（自托管 mac 节点：签名 Bundle → 载荷装配 → dmg arm64/x64 → 验签+公证+拆包验收）→ `desktop-release-windows`（自托管 windows 节点：同源 PG 运行时 → NSIS exe → 拆包验收）→ `desktop-release-finalize`（回读候选字节逐字节复核 sha512，产出 `WorkLoom-SHA512SUMS.txt` 与 `WorkLoom-release-manifest.json`）。
+- **产物名（对外恒定，勿改）**：`WorkLoom-mac-arm64.dmg` / `WorkLoom-mac-x64.dmg` / `WorkLoom-win-x64.exe` + 校验表 `WorkLoom-SHA512SUMS.txt`（sha512）。命名一致性由 `node scripts/desktop-artifact-naming.mjs` 门禁守住（文档 / CNB 流水线 / 发布策略事实源三处口径必须一致）。
+- **前置（组织侧一次性）**：接入自托管 mac / windows 构建节点（组织设置 → 构建节点，tags 分别为 `mac,arm64` 与 `windows`），并在仓库密钥注入桌面签名/公证/Bundle 私钥。缺任一项时流水线 fail-closed（预检列出缺项），**不会**产出未签名或半套制品。当前登记：`BLK-B-01-003`（桌面签名与公证密钥未配置）。
+- **遗留通道**：`.github/workflows/desktop-production-release.yml` 保留为发布策略事实源（`product.manifest.json#release.workflow` 与 release-publisher-policy 门禁按它校验发布纪律），GitHub 侧不再作为供货通道。
 
 ---
 
