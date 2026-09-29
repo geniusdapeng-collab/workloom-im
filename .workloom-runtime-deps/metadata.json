@@ -56,7 +56,7 @@
     },
     {
       "path": "packages/ui/package.json",
-      "sha256": "49bb20f03d7b45359ae69e5f66e65f096aa3e55245a1aea037cbac6c315b8ec9"
+      "sha256": "ef0ee53414e6145881add2ed8a2f6a23545a0ed29c88d5537e0cbb9b52d516ba"
     },
     {
       "path": "pnpm-lock.yaml",
