@@ -109,6 +109,26 @@ export async function seedAiPm(): Promise<void> {
   }
   console.log(`✓ 人类成员 ×${MEMBERS.length}`);
 
+  /**
+   * MC-113：ai-pm 示例团队同样要挂全局账号——P28 统一待办按 `members.account_id` 聚合，
+   * 缺账号时出厂演示工作区恒空（M3 实测 groups:[]）。命名空间与酒店种子隔离（1390000200x）。
+   */
+  for (const m of MEMBERS) {
+    const accountId = `acc-demo-aipm-${m.id.toLowerCase()}`;
+    await q(
+      `INSERT INTO accounts (id, phone, email, display_name, status)
+       VALUES ($1,$2,$3,$4,'active')
+       ON CONFLICT (id) DO UPDATE SET display_name=EXCLUDED.display_name`,
+      [accountId, `1390000200${m.id.slice(-1)}`, `${m.id.toLowerCase()}-aipm@demo.workloom.local`, m.name],
+    );
+    await q(
+      `UPDATE members SET account_id=$1
+        WHERE workspace_id=$2 AND member_no=$3 AND account_id IS DISTINCT FROM $1`,
+      [accountId, WS_ID, m.id],
+    );
+  }
+  console.log(`✓ 演示账号 ×${MEMBERS.length}（P28 统一待办数据源）`);
+
   for (const p of presets) {
     await q(
       `INSERT INTO agents (id, workspace_id, preset_key, name, version, kind, readonly, fence_bindings, skills, status, meta)
