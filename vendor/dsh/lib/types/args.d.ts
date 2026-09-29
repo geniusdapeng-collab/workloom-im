@@ -35,6 +35,14 @@ interface DumpConfigInvocation {
     defaultOnly: boolean;
     patches: string[];
 }
+/** Print declared plugin schemas without mounting the profile. */
+interface DumpConfigSchemaInvocation {
+    mode: 'dump-config-schema';
+    profile: string;
+    /** Shipped template used once to initialize a missing profile. */
+    fromDefaultProfile?: string | undefined;
+    patches: string[];
+}
 /** Manage a profile's plugins: forward `args` to pnpm inside the profile directory. */
 interface PluginInvocation {
     mode: 'plugin';
@@ -43,14 +51,15 @@ interface PluginInvocation {
     args: string[];
 }
 /** The resolved `dsh` invocation. Help, version, and errors exit inside {@link parseDshArgs}. */
-export type DshInvocation = ProfileInvocation | DumpConfigInvocation | PluginInvocation;
+export type DshInvocation = ProfileInvocation | DumpConfigInvocation | DumpConfigSchemaInvocation | PluginInvocation;
 /**
  * Resolve argv into one invocation, or print and exit for help, version, or an
  * error.
  * @param argv - arguments after the Node binary and script.
  * @param version - version string printed by `--version`.
+ * @param manageDesktopProfile - permit Desktop's installed carrier to manage its reserved profile's plugins.
  * @returns the resolved invocation.
  */
-export declare function parseDshArgs(argv: readonly string[], version: string): DshInvocation;
+export declare function parseDshArgs(argv: readonly string[], version: string, manageDesktopProfile?: boolean): DshInvocation;
 export {};
 //# sourceMappingURL=args.d.ts.map
