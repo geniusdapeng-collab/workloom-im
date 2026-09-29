@@ -719,8 +719,18 @@ const onboardingRouter = router({
           `UPDATE workspaces SET name=$2, industry=$3, is_example=false WHERE id=$1`,
           [scope.workspaceId, input.displayName, input.industry],
         );
+        /**
+         * R2-F3 / M6-F1：向导只更新经营主体身份字段，不得整块替换 `business`。
+         * 出厂档案里的 `business.price_bands` 是行业规划器与围栏（R1 涨幅自动 / R2 保底熔断）的
+         * 唯一价格锚点：整块替换会把它清成 null，使价带内调价退化为「缺参数 → 一律人工裁决」
+         * （M6-F1 已复现）。合并语义：既有键保留，向导字段覆盖同名键（jsonb || 右操作数优先）。
+         */
         await client.query(
-          `UPDATE profiles SET archive = jsonb_set(archive, '{business}', $2::jsonb), industry=$3, updated_at=now() WHERE workspace_id=$1`,
+          `UPDATE profiles
+              SET archive = jsonb_set(archive, '{business}', coalesce(archive->'business', '{}'::jsonb) || $2::jsonb),
+                  industry = $3,
+                  updated_at = now()
+            WHERE workspace_id=$1`,
           [scope.workspaceId, JSON.stringify({
             name: input.displayName,
             industry: input.industry,
