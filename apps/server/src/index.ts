@@ -184,6 +184,21 @@ serve({ fetch: app.fetch, port, hostname: host }, (info) => {
    */
   startThreadScheduler();
   /**
+   * A-05 修复（端口 growth 排雷 T-2026-0929-0003）：启动恢复补扫——「步骤审批已 approved
+   * 但线程停 pending_review」的僵尸线程。此前审批通过的自动续跑是 setTimeout fire-and-forget，
+   * 进程在回调执行前重启即永丢（调度器只扫 queued，不接 pending_review）。
+   * 启动时统一补续跑，失败只记日志不阻塞启动。
+   */
+  void (async () => {
+    try {
+      const { resumeApprovedPendingThreads } = await import("./runtime/scheduler.js");
+      const n = await resumeApprovedPendingThreads();
+      if (n > 0) console.log(`[scheduler] 启动恢复：补续跑 ${n} 条「审批已通过但线程挂起」的僵尸线程`);
+    } catch (err) {
+      console.error("[scheduler] 启动恢复补扫失败（不阻塞启动）", err instanceof Error ? err.message : String(err));
+    }
+  })();
+  /**
    * GR-19：装载各行业 ask 事实面——不装的话，右侧对话框问领域问题只会得到
    * 底座通用事实（实测"问什么都是没有相关记录"）。失败不阻塞启动（回落通用事实面）。
    */
