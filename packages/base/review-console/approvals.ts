@@ -180,6 +180,8 @@ export async function decide(
   approvalId: string,
   gesture: GestureInput,
   embedder: Embedder = new MockEmbedder(),
+  /** B-05：批准后副作用钩子（事务提交后调用，deduped 不触发；Quest 续跑/围栏激活/HR 汰换等由调用方注入） */
+  opts?: { onApproved?: (approvalId: string, snapshot: unknown) => Promise<void> | void },
 ): Promise<DecideResult> {
   // L5.1/L5.5 角色校验 + L5.2 手势校验（先校验，不碰库）
   assertApproverRole(actor.role);
@@ -355,10 +357,22 @@ export async function decide(
   if (txResult.kind === "expired") {
     throw new ApprovalError("EXPIRED", `快照已过期（${txResult.expiresAt.toISOString()}），审批标记 expired（E5.3/F5.7）`);
   }
+  /**
+   * B-05/B-06 修复（来源：WorkLoom-growth 排雷 T-2026-0929-0003）：批准后副作用统一钩子。
+   * 此前副作用只挂在单笔 decide 路由——batchApprove、IM 手势回调批准后动作永不执行（批准≠执行断链）；
+   * 且副作用抛错反噬接口（审批已 approved 却 500）。现在在审批事务提交后调用，
+   * 钩子内部各自隔离失败，deduped 不重复触发（与"重试 deduped 副作用不再触发"口径一致）。
+   */
+  if ((txResult.status === "approved" || txResult.status === "edited") && opts?.onApproved) {
+    await opts.onApproved(approvalId, txResult.row.snapshot);
+  }
   return { approvalId, status: txResult.status, deduped: false, gestureEventId: txResult.gestureEventId };
 }
 
 /* ================= 批量采纳（F5.2；仅非高危，P4 原型口径） ================= */
+
+/** B-01：批量守卫的对外/花钱动作识别（快照缺 high_risk 标记时的保守兜底） */
+const BATCH_GUARD_EXTERNAL_ACTION = /^(publish\.|ads\.|geo\.publish|content\.submit|message\.mass|im\.broadcast|trade\.|payment\.)/;
 
 export async function batchApprove(
   app: pg.Pool,
@@ -366,6 +380,8 @@ export async function batchApprove(
   scope: { tenantId: string; workspaceId: string },
   actor: { memberNo: string; role: MemberRole },
   approvalIds: string[],
+  /** B-05：透传给 decide 的批准后副作用钩子（批量批准同样触发 Quest 续跑等联动） */
+  opts?: { onApproved?: (approvalId: string, snapshot: unknown) => Promise<void> | void },
 ): Promise<{ approved: string[]; skipped: Array<{ id: string; reason: string }> }> {
   assertApproverRole(actor.role);
   const approved: string[] = [];
@@ -380,8 +396,21 @@ export async function batchApprove(
     // W-04：判据统一走 isHighRiskApproval（tier=l4_chairman / snapshot.high_risk / snapshot.irreversible），
     // 不再只看某一条快照路径写的 high_risk（那条路径之外全是空转）
     if (isHighRiskApproval(row)) { skipped.push({ id, reason: "高危项不可批量采纳（须逐条）" }); continue; }
+    /**
+     * B-01 修复（守卫空转对症）：高危标记此前靠"生产者自觉写 snapshot.high_risk"，
+     * G8/G9/G10 等对外/花钱门快照从未写过该字段 → 一键批量照批对外发布。
+     * 保守口径（防未来生产者再漏写）：
+     *   ① 董事长级（l4）一律须逐条裁决（已由 isHighRiskApproval 覆盖）；
+     *   ② 快照缺 high_risk 标记且动作属对外/花钱类（发布/投放/外发/群发/交易支付），按高危处理。
+     * 已显式标记 high_risk:false 的 quest 低危步骤（Y-01 三口径派生）不受影响，仍可批量。
+     */
+    const snapAction = (row.snapshot as { action?: string; tool?: string } | null)?.action
+      ?? (row.snapshot as { tool?: string } | null)?.tool ?? "";
+    if (row.snapshot?.high_risk === undefined && BATCH_GUARD_EXTERNAL_ACTION.test(snapAction)) {
+      skipped.push({ id, reason: `对外/花钱类动作（${snapAction}）未标记风险等级，按高危处理须逐条` }); continue;
+    }
     try {
-      await decide(app, gateway, scope, actor, id, { type: "approve" });
+      await decide(app, gateway, scope, actor, id, { type: "approve" }, undefined, opts);
       approved.push(id);
     } catch (err) {
       skipped.push({ id, reason: err instanceof Error ? err.message : String(err) });

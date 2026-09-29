@@ -280,5 +280,6 @@ cat <<EOF
   结构迁移，再通过稳定 UI + 三端客户端基座升级 PR 锁定 @workloom/ui、应用壳
   指纹并执行消费门禁；两阶段
   都通过后才把本仓登记到 workloom-im/sync/child-repos.json。GitHub Actions 使用仓库自带的短期
-  GITHUB_TOKEN 建同步 PR；不要配置或提交个人访问令牌。
+  GITHUB_TOKEN 建同步 PR；个人令牌仅可按 AGENTS.md §7 在当前任务中一次性注入使用，
+  不得配置为长期 secret、不得写入文件或提交。
 EOF

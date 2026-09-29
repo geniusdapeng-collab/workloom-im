@@ -140,7 +140,7 @@ pnpm 10.14 对 URL tarball 生成的 lockfile 只登记 `resolution.tarball`，�
 - Git 远端 URL 永不拼入令牌。确需命令行认证时，引擎只通过临时 Git 环境配置传递 HTTP header，并对错误做二次脱敏；
 - 成功、失败和 dry-run 路径都会清理临时 clone。
 
-不要配置、记录或提交个人访问令牌。同仓 `GITHUB_TOKEN` 创建的事件不保证自动触发后续 PR CI，因此 heartbeat 自身的推送前验证是硬门槛；同步 PR 仍须人工评审，若仓库另有可触发的外部 CI，再把它作为附加门槛。
+个人访问令牌可**按 `AGENTS.md` §7 在会话内一次性使用**（由产品所有者在当前任务中授权，例如触发跨仓 fanout），但不得配置为长期自动化 secret、不得写入任何文件/remote/脚本/日志，也不得提交——令牌永不进入互联网。同仓 `GITHUB_TOKEN` 创建的事件不保证自动触发后续 PR CI，因此 heartbeat 自身的推送前验证是硬门槛；同步 PR 仍须人工评审，若仓库另有可触发的外部 CI，再把它作为附加门槛。
 
 ## 状态与验真语义
 

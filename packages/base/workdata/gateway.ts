@@ -225,6 +225,17 @@ export async function checkHighRiskAuthorization(
   if (actor.type !== "agent" || !actor.highRisk) return;
   // 同段①口径：显式写（含装配期登记的行业工具）才要求逐次授权
   if (!isWriteAction(event.decision.action)) return;
+  /**
+   * 适用面收口（T-2026-0929-0003 联动修复）：逐次授权约束的是**动作执行**，
+   * 不是"围绕该动作的围栏判定留痕"。loop.ts 的 `kind` 取值只有三种：
+   *   - `execute`：真的执行了写动作 → 必须持有逐次授权（本段主体，原语义不变）；
+   *   - `review` ：高危岗位就写动作**请示**（挂起等人审）→ 要求"请示本身"先有授权是死锁，
+   *              实测把 highRisk 接入 actor 后，高危岗位连审批单都建不出来（P0 回归）；
+   *   - `block`  ：围栏熔断的判定留痕，未执行任何动作。
+   * 只豁免这两种**明确的判定记录**；未声明 kind 的调用方（外部集成、压力脚本）
+   * 一律按"要执行写动作"处理，照旧验真 + 一次性消费 —— 不放宽任何执行路径。
+   */
+  if (event.decision.kind === "review" || event.decision.kind === "block") return;
   if (!approvalRef) {
     throw new GatewayReject(
       "authorization",
@@ -263,12 +274,18 @@ export async function checkHighRiskAuthorization(
    * 显式 null 表示这条审批声明自己不绑定该维度（如 desktop 步骤无对象 id），缺 key 表示
    * 这条审批从未被绑定过（captain/skill-ops 等非步骤级路径产生的行），二者语义必须分开。
    */
-  const declaresObject = Object.prototype.hasOwnProperty.call(snap, "object_id")
-    || (typeof snap.object === "object" && snap.object !== null);
-  if (!snap.action || !snapObjectType || !declaresObject) {
+  /**
+   * MC-106：**动作绑定是必备项**（fail-closed）——没有 `action` 的审批（captain 的 HR 汰换、
+   * skill-ops 的分发安装等非步骤级路径产生的行）从未绑定任何写动作，不得作为高危写动作的通行授权。
+   * 对象维度保持「显式声明才校验」：步骤级审批可能没有对象 id（如 desktop 屏幕动作），
+   * 但只要声明了 object_type / object_id，就必须与本次写动作完全一致。
+   * 合并口径说明：云端 main 的步骤快照补写了 object_type/object_id（loop.ts），
+   * 因此「action 必备 + 对象声明即校验」既不放松执行路径，也不误伤正常的步骤续跑。
+   */
+  if (!snap.action) {
     throw new GatewayReject(
       "authorization",
-      `审批「${approvalRef}」缺少绑定（object_type/object_id/action 至少缺一项）——未绑定的审批不得作为高危写动作的通行授权（MC-106 fail-closed）`,
+      `审批「${approvalRef}」未绑定任何写动作（缺 snapshot.action）——未绑定的审批不得作为高危写动作的通行授权（MC-106 fail-closed）`,
     );
   }
   if (snapObjectType && snapObjectType !== event.object.type) {
@@ -296,23 +313,21 @@ export async function checkHighRiskAuthorization(
     );
   }
   /**
-   * MC-106 一次性消费：与事件落库同一事务（本函数所有调用点都在 BEGIN 之后）。
-   * `WHERE ... AND snapshot->>'used_at' IS NULL` 让并发下只有一个事务拿到消费权；
-   * 无返回行 → 该审批已被消费过（逐次授权），拒绝放行。
+   * 一次性消费（合并口径：T-2026-0929-0201 的 `consumed_at` 列 + T-2026-0929-0200 的绑定齐备校验）。
+   * 本函数的每个调用点都已在事务内（gatewayAppend / gatewayAppendOnClient），因此消费与事件落库
+   * 同一 COMMIT：事件回滚则消费回滚，不会出现「票用了事没成」。
+   * `WHERE ... AND consumed_at IS NULL` 让并发下只有一个事务拿到消费权；无更新行即已被消费，拒绝放行。
+   * 语义：一张审批只放行一次高危写落库；重试/重放须重新审批（逐次授权 L3.5）。
    */
-  const consumed = await db.query<{ approval_id: string }>(
-    `UPDATE approvals
-        SET snapshot = jsonb_set(COALESCE(snapshot, '{}'::jsonb), '{used_at}', to_jsonb(now()))
-      WHERE approval_id = $1 AND tenant_id = $2 AND workspace_id = $3
-        AND status = 'approved'
-        AND snapshot->>'used_at' IS NULL
-      RETURNING approval_id`,
+  const consumed = await db.query(
+    `UPDATE approvals SET consumed_at = now()
+      WHERE approval_id = $1 AND tenant_id = $2 AND workspace_id = $3 AND consumed_at IS NULL`,
     [approvalRef, scope.tenantId, scope.workspaceId],
   );
-  if (!consumed.rows[0]) {
+  if ((consumed.rowCount ?? 0) === 0) {
     throw new GatewayReject(
       "authorization",
-      `审批「${approvalRef}」已被使用过（逐次授权：一次审批只放行一次动作，L3.5）`,
+      `审批「${approvalRef}」已被消费（一次性授权，L3.5），同一审批不得驱动第二次写动作，须重新审批`,
     );
   }
 }

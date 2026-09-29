@@ -1058,12 +1058,14 @@ const threadsRouter = router({
          FROM threads WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 50`,
         [scope.workspaceId],
       );
+      // A-08（端口 growth 排雷）：COMMIT 纳入 try 主体——此前在 finally 里 .catch 吞掉，
+      // 提交失败时调用方仍按成功继续（幽灵读/幽灵写）
+      await client.query("COMMIT");
       return r.rows;
     } catch (err) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw err;
     } finally {
-      await client.query("COMMIT").catch(() => undefined);
       client.release();
     }
   }),
@@ -1191,11 +1193,13 @@ const threadsRouter = router({
           },
           rule_impact: [],
         });
+        // A-08 修复（端口 growth 排雷）：COMMIT 纳入 try 主体——此前在 finally 里 .catch(()=>undefined)
+        // 吞掉，COMMIT 失败（连接断开/序列化冲突）时事务实际回滚但调用方按成功继续（幽灵账本）
+        await client.query("COMMIT");
       } catch (err) {
         await client.query("ROLLBACK").catch(() => undefined);
         throw err;
       } finally {
-        await client.query("COMMIT").catch(() => undefined);
         client.release();
       }
       // 派遣事件已随建线程同事务落库（D16；G8 三段瀑布同口径）
@@ -1203,10 +1207,19 @@ const threadsRouter = router({
       // ask 问询：即时应答（B8——取数为真、模型可插拔；不依赖 runImmediately 按钮）
       if (intent.mode === "ask") {
         // N-11：ask 事件归属本工作区实际岗位（此前硬编码 hotel 的 "morning-briefing"，账本张冠李戴）
-        const ra = await runAsk(getAppPool(), getGatewayPool(), scope, {
-          threadId, goal: planningGoal, presetKey, llmCall: llmCall("ask-synthesize", scope),
-        });
-        return { kind: "routed" as const, mode: intent.mode, via: intent.via, threadId, status: ra.status, answer: ra.answer };
+        try {
+          const ra = await runAsk(getAppPool(), getGatewayPool(), scope, {
+            threadId, goal: planningGoal, presetKey, llmCall: llmCall("ask-synthesize", scope),
+          });
+          return { kind: "routed" as const, mode: intent.mode, via: intent.via, threadId, status: ra.status, answer: ra.answer };
+        } catch (err) {
+          // A-02（端口 growth 排雷）：runAsk 已把线程认领为 running，失败必须给终态出口，不得悬挂
+          await getAppPool().query(
+            `UPDATE threads SET status='failed', error=$3, updated_at=now() WHERE id=$1 AND workspace_id=$2 AND status='running'`,
+            [threadId, scope.workspaceId, err instanceof Error ? err.message.slice(0, 500) : String(err).slice(0, 500)],
+          ).catch(() => undefined);
+          throw err;
+        }
       }
       if (input.runImmediately && intent.mode === "quest") {
         /**
@@ -1449,10 +1462,61 @@ async function activateFenceRuleAfterApproval(
   }
 }
 
+/**
+ * B-05/B-06 修复（端口 growth 排雷 T-2026-0929-0003）：批准后副作用统一钩子。
+ *
+ * 缺陷：这两项副作用此前只挂在**单笔 decide 路由**里——批量采纳（batchApprove）与
+ * IM 手势回调（im.callback）批准后什么都不做：围栏提案批了不激活、HR 汰换批了不上岗
+ * （"批准≠执行"）；且副作用抛错会反噬接口（审批已 approved 却 500）。
+ *
+ * 口径：钩子在审批事务**提交后**触发（decide 的 `opts.onApproved`），
+ *  - 围栏激活保持同步 await（既有验收口径：decide 返回即生效）；
+ *  - HR 汰换同样同步执行；
+ *  - 每一项各自隔离 catch，失败只落服务端日志——审批已 approved 的事实不被副作用失败反噬。
+ *
+ * 注：基座的 Quest 续跑语义是**人工"继续推进"**（threads.run），本钩子不引入自动续跑；
+ * 跨重启的遗留挂起由 A-05 启动补扫兜底。
+ */
+async function runPostApprovalSideEffects(
+  scope: { tenantId: string; workspaceId: string },
+  approvalId: string,
+): Promise<void> {
+  try {
+    await activateFenceRuleAfterApproval(scope, approvalId);
+  } catch (err) {
+    console.error(`[approvals] 围栏激活副作用失败 ${approvalId}（审批结果不变）：`, err instanceof Error ? err.message : err);
+  }
+  try {
+    const app = getAppPool();
+    const c = await app.connect();
+    try {
+      await c.query("BEGIN");
+      await c.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+      const snap = await c.query<{ snapshot: Record<string, unknown> }>(
+        `SELECT snapshot FROM approvals WHERE approval_id=$1`, [approvalId],
+      );
+      await c.query("COMMIT");
+      const ss = snap.rows[0]?.snapshot ?? {};
+      if (ss.kind === "hr.replacement" && ss.design && typeof ss.agent_id === "string") {
+        await applyReplacement(app, scope, ss.design as never, ss.agent_id);
+      }
+    } catch (e) {
+      await c.query("ROLLBACK").catch(() => undefined);
+      throw e;
+    } finally {
+      c.release();
+    }
+  } catch (err) {
+    console.error(`[approvals] HR 汰换副作用失败 ${approvalId}（审批结果不变）：`, err instanceof Error ? err.message : err);
+  }
+}
+
 /** approvals router（B6：统一队列/三手势/批量/超时扫描；L5.1 服务端强制鉴权） */
 const approvalsRouter = router({
   list: protectedProcedure
-    .input(z.object({ status: z.enum(["pending", "approved", "edited", "rejected", "expired"]).optional() }).optional())
+    // B-07（端口 growth 排雷）：superseded 入列——0047 已把它写进审批状态 CHECK，
+    // 共享枚举与入参此前没有该值，重规划作废的审批在任何过滤下都不可见（状态机盲区）
+    .input(z.object({ status: z.enum(["pending", "approved", "edited", "rejected", "expired", "superseded"]).optional() }).optional())
     .query(async ({ ctx, input }) => {
       return listQueue(getAppPool(), scopeOf(ctx.identity), { status: input?.status });
     }),
@@ -1478,38 +1542,27 @@ const approvalsRouter = router({
           { memberNo: ctx.identity.memberNo, role: ctx.identity.role },
           input.approvalId,
           { type: input.gesture, reasonEnum: input.reasonEnum, reasonText: input.reasonText, editedAfter: input.editedAfter, editKind: input.editKind },
+          undefined,
+          // B-05/B-06：批准后副作用统一钩子（原先内联在此处的围栏激活 + HR 汰换已收敛进钩子，
+          // 与 batchApprove / IM 回调三路同源；deduped 不触发，各项失败隔离不反噬接口）
+          { onApproved: (id) => runPostApprovalSideEffects(scopeOf(ctx.identity), id) },
         );
-        // E1 联调接线（PF.5/F2.4）：fence.rule.propose 手势通过 → 激活规则版本
-        if (!res.deduped && res.status === "approved") {
-          await activateFenceRuleAfterApproval(scopeOf(ctx.identity), input.approvalId);
-          // D22 汰换重生：hr.replacement 批准 → 旧停用 + 新员工上岗
-          const scope2 = scopeOf(ctx.identity);
-          const app2 = getAppPool();
-          const c2 = await app2.connect();
-          try {
-            await c2.query("BEGIN");
-            await c2.query("SELECT set_config('app.workspace_id', $1, true)", [scope2.workspaceId]);
-            const snap = await c2.query<{ snapshot: Record<string, unknown> }>(
-              `SELECT snapshot FROM approvals WHERE approval_id=$1`, [input.approvalId],
-            );
-            await c2.query("COMMIT");
-            const ss = snap.rows[0]?.snapshot ?? {};
-            if (ss.kind === "hr.replacement" && ss.design && typeof ss.agent_id === "string") {
-              await applyReplacement(app2, scope2, ss.design as never, ss.agent_id);
-            }
-          } catch (e) {
-            await c2.query("ROLLBACK").catch(() => undefined);
-            throw e;
-          } finally {
-            c2.release();
-          }
-        }
         /**
-         * MC-110 联调接线：kb.publish 审批的裁决必须落到知识库状态——
-         * approve/edit → 文档生效；reject → 文档退回待审并退出检索（历史遗留的幽灵 pending 行同样收敛）。
+         * 合并口径（T-2026-0929-0200 × T-2026-0929-0201）：
+         *  - 批准/编辑后的副作用（围栏激活 + HR 汰换 + 知识库生效）统一走云端 main 的
+         *    `runPostApprovalSideEffects` 钩子（decide/batchApprove/IM 回调三路同源，失败隔离）；
+         *  - 驳回仍需收敛知识库状态（MC-110）：`onApproved` 只在 approved/edited 触发，
+         *    因此这里单独补一条 reject 分支，语义与 approve 侧一致（失败不反噬接口）。
          */
-        if (!res.deduped && (res.status === "approved" || res.status === "edited" || res.status === "rejected")) {
-          await applyKbPublishAfterApproval(scopeOf(ctx.identity), input.approvalId);
+        if (!res.deduped && res.status === "rejected") {
+          try {
+            await applyKbPublishAfterApproval(scopeOf(ctx.identity), input.approvalId);
+          } catch (err) {
+            console.error(
+              `[approvals] 知识库驳回回滚副作用失败 ${input.approvalId}（审批结果不变）：`,
+              err instanceof Error ? err.message : err,
+            );
+          }
         }
         return res;
       } catch (err) {
@@ -1533,11 +1586,9 @@ const approvalsRouter = router({
           scopeOf(ctx.identity),
           { memberNo: ctx.identity.memberNo, role: ctx.identity.role },
           input.approvalIds,
+          // B-05：批量批准与单笔 decide 同钩子——围栏激活 / HR 汰换不再只挂在单笔路径
+          { onApproved: (id) => runPostApprovalSideEffects(scopeOf(ctx.identity), id) },
         );
-        // E1 联调接线（PF.5/F2.4）：批量采纳通过项同样触发围栏激活接线（防御性；围栏提案标记 high_risk 本不可批量）
-        for (const id of res.approved) {
-          await activateFenceRuleAfterApproval(scopeOf(ctx.identity), id);
-        }
         return res;
       } catch (err) {
         if (err instanceof ApprovalError) {
@@ -2897,6 +2948,8 @@ const imRouter = router({
           scope,
           input,
           mockDriverFor(input.channel),
+          // B-05：IM 手势批准与端内 decide 同钩子（批准≠执行断链对症）
+          { onApproved: (id) => runPostApprovalSideEffects(scope, id) },
         );
         return { ...r, unsigned: sig.unsigned };
       } catch (err) {

@@ -45,7 +45,7 @@
     "bundle:release": "tsx scripts/bundle-governance.mts --refresh-digests --release",
     "projections:generate": "tsx scripts/generate-client-projections.mts --write",
     "projections:check": "tsx scripts/generate-client-projections.mts",
-    "ui:governance": "node --test scripts/ui-governance-rules.test.mjs && node scripts/verify-ui-governance.mjs",
+    "ui:governance": "node --test scripts/ui-governance-rules.test.mjs scripts/check-webc-shell-contract.test.mjs && node scripts/verify-ui-governance.mjs",
     "ui:governance:test": "node --test scripts/ui-governance-rules.test.mjs",
     "ui:e2e": "playwright test",
     "ui:e2e:update": "playwright test --update-snapshots",

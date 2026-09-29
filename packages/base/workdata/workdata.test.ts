@@ -109,13 +109,16 @@ describe("高风险授权段③（L3.5 + P1-8 验真）", () => {
   const scope = { tenantId: "tenant-demo", workspaceId: "ws-yunqi" };
   /**
    * 审批表桩：模拟 approvals 查询结果（P1-8 段③已改为查表验真）。
-   * `consumed: true` 模拟「该审批已被消费」——MC-106 的一次性消费 UPDATE 返回 0 行。
+   * 合并口径（T-2026-0929-0200 × T-2026-0929-0201）：验真通过后有一次**原子消费**写入
+   * （`UPDATE approvals SET consumed_at=now() ... WHERE consumed_at IS NULL`），rowCount=0 即
+   * 「票据已被消费」拒绝。stub 必须区分 SELECT 与 UPDATE，否则会把消费当成放行
+   * （旧 stub 对任何 SQL 都回同一组 rows，掩盖了消费语义）。
    */
   const stubDb = (rows: Array<{ status: string; snapshot: unknown }>, opts: { consumed?: boolean } = {}) =>
     ({
-      query: async (text: string) => {
-        if (String(text).trim().toUpperCase().startsWith("UPDATE")) {
-          return { rows: opts.consumed ? [] : [{ approval_id: "apr-1" }] };
+      query: async (sql: string) => {
+        if (/UPDATE approvals SET consumed_at/.test(sql)) {
+          return opts.consumed === true ? { rows: [], rowCount: 0 } : { rows: [], rowCount: 1 };
         }
         return { rows };
       },
@@ -164,14 +167,23 @@ describe("高风险授权段③（L3.5 + P1-8 验真）", () => {
     // MC-106：无绑定字段（历史「通用授权」口径）不再放行（fail-closed）
     await expect(
       checkHighRiskAuthorization(stubDb([{ status: "approved", snapshot: {} }]), scope, desktop, d(), "apr-1"),
-    ).rejects.toThrow(/缺少绑定/);
+    ).rejects.toThrow(/未绑定任何写动作/);
     // MC-106：已消费的审批第二次引用被拒（逐次授权）
     await expect(
       checkHighRiskAuthorization(
         stubDb([{ status: "approved", snapshot: { ...bound, used_at: "2026-09-29T00:00:00.000Z" } }], { consumed: true }),
         scope, desktop, d(), "apr-1",
       ),
-    ).rejects.toThrow(/已被使用过/);
+    ).rejects.toThrow(/已被消费/);
+  });
+
+  it("票据一次性消费：已被消费的审批再次验真必须被拒（B-02 / L3.5 逐次授权）", async () => {
+    await expect(
+      checkHighRiskAuthorization(
+        stubDb([{ status: "approved", snapshot: {} }], { consumed: true }),
+        scope, desktop, d(), "apr-1",
+      ),
+    ).rejects.toThrow(/已被消费/);
   });
 
   it("非高危身份不查库直接放行", async () => {

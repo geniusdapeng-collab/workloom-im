@@ -3,18 +3,18 @@
 | 项 | 值 |
 |---|---|
 | 包 | `@deepseek-ai/dsh`（CLI 聚合包；运行时依赖 `@deepseek-ai/dsh-*` / `cordis-plugin-*` 全家桶） |
-| 锁定版本 | `0.1.6-alpha.2`（npm 发布时间 2026-09-17T13:52:10Z；rc.6→rc.8→0.1.1-rc.1→0.1.2-rc.1→0.1.5-rc.2→0.1.6-alpha.2 五次升级） |
-| 来源 | `https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.1.6-alpha.2.tgz`（npmmirror 同源分发） |
-| integrity（入库时实测） | `sha512-PHR/3ZHpJNWXlDQ3U9weFb7calWbSMJd2GD3z2iPJ8zAKL7ipuzyPy5xGbaXf2OA8hc0SAGJeoUW7nfatCNOYw==`（与 registry 元数据逐字符一致 ✅） |
+| 锁定版本 | `0.2.0-rc.2`（npm 发布时间 2026-09-29T09:56:27Z；rc.6→rc.8→0.1.1-rc.1→0.1.2-rc.1→0.1.5-rc.2→0.1.6-alpha.2→0.2.0-rc.2 六次升级） |
+| 来源 | `https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.2.0-rc.2.tgz`（npmmirror 同源分发） |
+| integrity（入库时实测） | `sha512-EAJ3gPNcVt/uv8X19PMm9NkVhWgT7xXNMk0UKCVm+IQ5rpSQOcsMUa0HWlnYYVybKMsccjcRB21vVVsaXQ6IdA==`（与 registry 元数据逐字符一致 ✅；sha1 `dfc8f7e09cfa96b854d6f0cf3a973ce7f2948925` 同步核对） |
 | License | MIT |
 | 上游仓库 | `github.com/deepseek-ai/deepseek-harness`（`apps/cli` 目录） |
-| 入库日期 | 2026-08-16（rc.6）；2026-08-20 升级 rc.8；2026-08-21 升级 0.1.1-rc.1；2026-09-05 升级 0.1.2-rc.1；2026-09-19 升级 0.1.5-rc.2；2026-09-20 升级 0.1.6-alpha.2（alpha 通道，按"任何新版本即触发升级"纪律跟进） |
+| 入库日期 | 2026-08-16（rc.6）；2026-08-20 升级 rc.8；2026-08-21 升级 0.1.1-rc.1；2026-09-05 升级 0.1.2-rc.1；2026-09-19 升级 0.1.5-rc.2；2026-09-20 升级 0.1.6-alpha.2；**2026-09-30 升级 0.2.0-rc.2（本轮；npm `latest`/`next` 同指，首次跨 minor 线）** |
 | 入库方式 | npm tarball 解压至本目录（`--strip-components=1`），未做任何源码修改 |
 
 ## 纪律
 
-- 本目录**只读**：任何修改必须先复制出去再改，保持与上游 0.1.6-alpha.2 字节一致，可审计。
-- 运行时依赖解析仍走 pnpm（`pnpm add @deepseek-ai/dsh@0.1.6-alpha.2` 于使用方包）；本目录是**审计基线 + 文档事实源**，升级前对照 diff。
+- 本目录**只读**：任何修改必须先复制出去再改，保持与上游 0.2.0-rc.2 字节一致，可审计。
+- 运行时依赖解析仍走 pnpm（`pnpm add @deepseek-ai/dsh@0.2.0-rc.2` 于使用方包）；本目录是**审计基线 + 文档事实源**，升级前对照 diff。
 - **升级触发条件（2026-08-20 项目所有者新决策，取代原「稳定 1.x 才升级」旧口径）**：官方仓库任何新版本（**包括 rc/beta/alpha 预发布**）即触发升级，不得等待稳定版、不得以任何理由跳过；升级前跑契约测试/门禁全绿。
 - **0.1.2-rc.1 变更面（0.1.1-rc.1→0.1.2-rc.1 实测 diff）**：
   - **新增嵌入式 profile 形态**：`sdk` / `sdk-minimal`（JSON-RPC stdio 为 SDK client 服务）、`acp`（Agent Client Protocol stdio）——dsh 可作为 agent 服务嵌入外部客户端（编辑器等）；
@@ -56,6 +56,24 @@
 - 安装纪律：**清 lock 重装**（`packages/runtime/dsh-gate`：旧 lock 与 node_modules 移出 → `pnpm install --ignore-workspace`，pnpm 10.14.0 / Node 24.19.0）。
 - E6 dsh-gate 全绿：用例一全链（headless → 工具调用 → 围栏瀑布 deny 优先 → 事件落账，哈希链 24 条逐条重算通过）；用例二 H-5（kill -9 崩溃现场 → 链完整 6 条 + 会话事件重放零重复）。
 - 基座回归：`pnpm test` 全绿（base 679 / server 133 / web 67 / webb 6 / webc 21 + 脚本门禁）；`pnpm runtime:deps:verify` 通过；`pnpm oss:check` 随清单重算转绿。
+
+## 0.2.0-rc.2 变更面（0.1.6-alpha.2→0.2.0-rc.2 实测 diff；2026-09-30 登记）
+
+- **宏观版本线**：`0.1.7-alpha.2` → `0.1.7-rc.1` / `0.1.7-rc.2` → `0.2.0-rc.1` / `0.2.0-rc.2`；本轮取 npm `latest` dist-tag = `0.2.0-rc.2`（与 `next` 同指，`alpha` tag 仍停在 `0.1.7-alpha.2`）。这是本仓**首次跨 minor 线**（0.1 → 0.2）。
+- **依赖面（名称级实测 diff）**：新增 `dsh-agent-preset`、`dsh-experimental-auto-review`、`dsh-experimental-schedule-bundle`、`dsh-experimental-voice-input-bundle`、`dsh-skill-office`、`dsh-tool-workspace-dependencies`；移除 `dsh-experimental-agent-team-web-profile`。
+- **版本声明口径变化（重要）**：家族子包（74 项）由 `^0.1.6-alpha.2` 改为**精确 pin `0.2.0-rc.2`**，cordis 由 `^4.0.2` 改为 `~4.0.4`——上游不再用 caret 表达家族版本，混版风险下降但升级必须整体换。
+- **插件兼容性门禁（新）**：安装与 profile 启动会按插件声明的 DSH peer 范围校验运行时版本；不兼容插件需显式豁免：`dsh plugin allow-version <pkg@ver> --dsh-version <exact> --accept-risk`（配套 `revoke-version` / `version-exemptions`）。**`vendor/dsh-im` 0.2.2 未声明 dsh peer 范围，不受该门禁阻断**；但其上游 npm 已到 4.x，属独立评估项（见任务回执）。
+- **新增 CLI 能力**：`--dump-config-schema`（导入组合树插件声明的 schema，打印 entry/patch 的 JSON Schema 而不装配，用于审查不受信任插件）。
+- **desktop profile 收紧**：npm CLI 拒绝 `--profile desktop` 的插件管理请求，改由 Desktop 内置命令运行时接管。
+- **原生依赖新增**：`koffi`（经 `dsh-subprocess-local` 引入）。pnpm 默认阻断其 install 脚本**不影响运行**——平台预编译包 `@koromix/koffi-<platform>` 随 optional deps 安装（本机实测 `darwin_arm64/koffi.node` 就位）；本次未把它加入 `onlyBuiltDependencies`。
+- **配置样例面变化**：`config/examples/` 不再随包提供「会话内 Schedule」（迁至 `dsh-experimental-schedule-bundle`）。
+
+## 升级验证（2026-09-30 · 0.2.0-rc.2）
+
+- 安装纪律：**清 lock 重装**（`packages/runtime/dsh-gate`：旧 lock 移出至仓外 → `pnpm install --ignore-workspace`，pnpm 10.14.0 / Node 24.19.0），实装 532 包；本机到 `registry.npmjs.org` 存在 socket 超时，本次安装走 `registry.npmmirror.com` 同源镜像，**完整性仍由 vendor tarball 的 sha512 逐字符核对兜底**（见上表 integrity 行）。
+- E6 dsh-gate 全绿：用例一全链（headless → 工具调用 → 围栏瀑布 deny 优先 → 事件落账，哈希链 **24 条**逐条重算通过）；用例二 H-5（kill -9 崩溃现场 → 链完整 **18 条** + 会话事件重放零重复）。
+- 门禁可运行性修复（随本轮一并落地）：`scripts/dsh-gate.sh` 的 Mock LLM/围栏规则源端口改为可由 `DSH_GATE_MOCK_PORT` 覆盖（默认仍 8799）；`settings.yaml` 与 `profile.cordis.patch.yml` 改用 `__MOCK_PORT__` 占位。原因：本机 8799 被常驻进程 `~/.codex/deepseek-proxy/proxy.py` 占用，固定端口会让门禁在并行会话环境下不可运行。
+- 未执行项（如实登记）：本仓 `pnpm test` / `pnpm runtime:deps:verify` 未在本轮重跑——改动面为 vendor 基线与 dsh-gate pin，未触及 `packages/**`、`apps/**` 生产代码；该组件的指定回归即 E6+H-5（`oss-components.json#gate=runtime-gate`），已全绿。
 
 ## 参考文档（上游 repo `docs/`，2026-08-16 核验）
 

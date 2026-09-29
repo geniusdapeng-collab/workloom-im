@@ -463,8 +463,8 @@ function enforceAnswerLimits(text: string): string {
   return `${kept.join("\n").trimEnd()}…（已截断）`;
 }
 
-/** 读取本工作区生效围栏规则（ask 输出闸门用；读失败不阻塞回答，只是闸门退化为仅长度限制） */
-async function loadAskRules(app: pg.Pool, scope: Scope): Promise<RuntimeRule[]> {
+/** 读取本工作区生效围栏规则（ask 输出闸门用；返回 null=加载失败——A-06：与"无规则"区分，闸门失效必须留痕不得静默放行） */
+async function loadAskRules(app: pg.Pool, scope: Scope): Promise<RuntimeRule[] | null> {
   const client = await app.connect();
   try {
     await client.query("BEGIN");
@@ -487,7 +487,8 @@ async function loadAskRules(app: pg.Pool, scope: Scope): Promise<RuntimeRule[]> 
     }));
   } catch {
     await client.query("ROLLBACK").catch(() => undefined);
-    return [];
+    return null; // A-06（端口 growth 排雷 T-2026-0929-0003）：加载失败返回 null（闸门不可用），
+                 // 下游必须显式标注而非按空规则集静默放行（此前行业 ask.deliver 红线会静默失效且无留痕）
   } finally {
     client.release();
   }
@@ -518,6 +519,13 @@ export async function runAsk(
   scope: Scope,
   input: { threadId: string; goal: string; presetKey: string; llmCall?: (prompt: string) => Promise<string> },
 ): Promise<AskResult> {
+  // A-02 修复（端口 growth 排雷 T-2026-0929-0003）：ask 执行期间先认领线程（queued→running CAS）——
+  // 问询全程可能挂较长的 LLM 预算，此前线程一直挂 queued，调度器 7s 扫描会把它当 quest 重入执行
+  // （"今天经营怎么样"被当成真实派单）。失败/无 queued 行时不阻塞回答（幂等）。
+  await app.query(
+    `UPDATE threads SET status='running', updated_at=now() WHERE id=$1 AND workspace_id=$2 AND status='queued'`,
+    [input.threadId, scope.workspaceId],
+  );
   const { facts, sources } = await gatherFacts(app, scope, input.goal);
   // 联网实时检索（ASK_WEB_SEARCH=1）：与库内事实合并，供模型合成
   if ((process.env.ASK_WEB_SEARCH ?? "") === "1") {
@@ -561,7 +569,12 @@ ${input.goal}
   /* ---------- GR-09：三层输出闸门（硬约束 → 事实软校验 → 合成标识） ---------- */
   answer = enforceAnswerLimits(answer);
   const askRules = await loadAskRules(app, scope);
-  const gate = judgeAnswer(askRules, answer);
+  // A-06 修复（端口 growth 排雷）：规则加载失败（DB 抖动等）此前按空规则集恒 auto 静默放行——
+  // 行业 ask.deliver 红线失效且无留痕。现在显式标注闸门不可用（保守口径：可见降级，不假装闸门生效）。
+  if (askRules === null) {
+    answer = `${answer}\n（输出闸门暂不可用，本回答未经行业规则校验，请人工核对关键事实）`;
+  }
+  const gate = judgeAnswer(askRules ?? [], answer);
   if (gate.level === "block") {
     // 行业事实红线：不投递原答案，改为安全回执（并把触发规则写进 basis 供复盘）
     answer = `该回答触发了行业事实红线（${gate.triggeredBy.join("、")}），已拦截。请核对账本事实后人工确认。`;

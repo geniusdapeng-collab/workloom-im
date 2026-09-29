@@ -1,7 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { StartupError, loadLayeredEnv } from "@deepseek-ai/dsh-app-boot";
+import { StartupError, getDshRuntimeVersion, loadLayeredEnv } from "@deepseek-ai/dsh-app-boot";
 import { resolveDshHome } from "@deepseek-ai/dsh-home-paths";
 import { Command, CommanderError, InvalidArgumentError } from "commander";
 import { randomUUID } from "node:crypto";
@@ -62,15 +60,26 @@ function resolveBoot(program, profile, options, args) {
 	const patches = options.patch ?? [];
 	if (patches.includes("")) program.error("error: --patch needs a path");
 	if (options.fromDefaultProfile === "") program.error("error: --from-default-profile needs a name");
-	if (options.dumpConfig !== true && options.dumpDefaultConfig !== true) return {
+	const dumps = [
+		options.dumpConfig,
+		options.dumpDefaultConfig,
+		options.dumpConfigSchema
+	].filter(Boolean);
+	if (dumps.length === 0) return {
 		mode: "profile",
 		profile,
 		fromDefaultProfile: options.fromDefaultProfile,
 		patches,
 		args
 	};
-	if (options.dumpConfig === true && options.dumpDefaultConfig === true) program.error("error: --dump-config and --dump-default-config are mutually exclusive");
+	if (dumps.length > 1) program.error("error: --dump-config, --dump-default-config, and --dump-config-schema are mutually exclusive");
 	if (args.length > 0) program.error(`error: config dumps take no app arguments, got ${args.map((argument) => JSON.stringify(argument)).join(" ")}`);
+	if (options.dumpConfigSchema === true) return {
+		mode: "dump-config-schema",
+		profile,
+		fromDefaultProfile: options.fromDefaultProfile,
+		patches
+	};
 	const defaultOnly = options.dumpDefaultConfig === true;
 	if (defaultOnly && patches.length > 0) program.error("error: --dump-default-config prints the bundle layers and takes no --patch");
 	return {
@@ -86,13 +95,14 @@ function resolveBoot(program, profile, options, args) {
 * error.
 * @param argv - arguments after the Node binary and script.
 * @param version - version string printed by `--version`.
+* @param manageDesktopProfile - permit Desktop's installed carrier to manage its reserved profile's plugins.
 * @returns the resolved invocation.
 */
-function parseDshArgs(argv, version) {
+function parseDshArgs(argv, version, manageDesktopProfile = false) {
 	const first = argv[0];
 	let resolved;
 	const program = new Command();
-	program.name("dsh").version(version, "-V, --version", "output the version number").usage("[--profile] <name> [options] [app-args...]\n       dsh plugin --profile <name> <pnpm-args...>").description("dsh: boot a DeepSeek Harness profile — an ordered stack of plugin-bundle patch layers under your own overrides.").addHelpText("after", HELP_EXAMPLES).exitOverride().helpOption(false).helpCommand(false).allowUnknownOption().passThroughOptions().enablePositionalOptions().argument("[args...]", "arguments for the booted profile's app (see: dsh --profile <name> --help)").option("--profile <name>", "the profile under $DSH_HOME/profiles to boot", selectProfile).option("--from-default-profile <name>", "initialize a new custom profile from a shipped profile template").option("--patch <path>", "extra patch-list overlay applied after the profile layer (repeatable)", collect).option("--dump-config", "print the composed profile tree and exit").option("--dump-default-config", "print the profile tree without its user layer or --patch overlays and exit").action((args, options) => {
+	program.name("dsh").version(version, "-V, --version", "output the version number").usage("[--profile] <name> [options] [app-args...]\n       dsh plugin --profile <name> <pnpm-args...>").description("dsh: boot a DeepSeek Harness profile — an ordered stack of plugin-bundle patch layers under your own overrides.").addHelpText("after", HELP_EXAMPLES).exitOverride().helpOption(false).helpCommand(false).allowUnknownOption().passThroughOptions().enablePositionalOptions().argument("[args...]", "arguments for the booted profile's app (see: dsh --profile <name> --help)").option("--profile <name>", "the profile under $DSH_HOME/profiles to boot", selectProfile).option("--from-default-profile <name>", "initialize a new custom profile from a shipped profile template").option("--patch <path>", "extra patch-list overlay applied after the profile layer (repeatable)", collect).option("--dump-config", "print the composed profile tree and exit").option("--dump-config-schema", "print JSON Schema for profile entries and patches without mounting").option("--dump-default-config", "print the profile tree without its user layer or --patch overlays and exit").action((args, options) => {
 		if (options.profile === void 0) {
 			if (args.some((argument) => argument === "-h" || argument === "--help")) program.help();
 			program.error("error: --profile <name> is required");
@@ -106,11 +116,11 @@ function parseDshArgs(argv, version) {
 		const plugin = program.command("plugin").description("manage a profile's plugins by forwarding the remaining arguments to pnpm in the profile directory");
 		plugin.requiredOption("--profile <name>", "the profile whose plugins to manage (initialized on first use)", selectProfile).allowUnknownOption().argument("[args...]", "pnpm arguments, forwarded verbatim (add <pkg>, remove <pkg>, why <pkg>, ...)").action((args, options) => {
 			if (options.profile === "") program.error("error: --profile needs a name");
-			rejectElectronProfile(plugin, options.profile);
+			if (!manageDesktopProfile) rejectElectronProfile(plugin, options.profile);
 			if (args.length === 0) program.error("error: plugin needs pnpm arguments to forward (e.g. add <package>)");
 			resolved = {
 				mode: "plugin",
-				profile: options.profile,
+				profile: options.profile.toLowerCase() === "desktop" ? "desktop" : options.profile,
 				args
 			};
 		});
@@ -189,17 +199,15 @@ async function reportStartupFailure(error, context, write = writeStderr) {
 * @module @deepseek-ai/dsh/bin
 */
 /* v8 ignore file -- built-bin acceptance exercises this self-executing dispatch. */
-function readVersion() {
-	const manifest = JSON.parse(readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8"));
-	return typeof manifest.version === "string" ? manifest.version : "0.0.0";
-}
 /**
 * Run the public dsh command-line interface.
+* @param options - Package runtime and Desktop profile access supplied by the installation.
 * @returns a promise that settles when the selected command mode finishes.
 */
-async function runCli() {
-	const version = readVersion();
-	const invocation = parseDshArgs(process.argv.slice(2), version);
+async function runCli(options = {}) {
+	const version = getDshRuntimeVersion();
+	const { manageDesktopProfile, ...profileOptions } = options;
+	const invocation = parseDshArgs(process.argv.slice(2), version, manageDesktopProfile);
 	switch (invocation.mode) {
 		case "profile": {
 			const { runProfile } = await import("./profile-boot.js");
@@ -209,7 +217,8 @@ async function runCli() {
 					profile: invocation.profile,
 					fromDefaultProfile: invocation.fromDefaultProfile,
 					patchFiles: invocation.patches,
-					args: invocation.args
+					args: invocation.args,
+					...profileOptions
 				});
 			} catch (error) {
 				if (!(error instanceof StartupError)) throw error;
@@ -223,13 +232,18 @@ async function runCli() {
 			break;
 		}
 		case "plugin": {
-			const { runPlugin } = await import("./plugin-DJ-rVHUS.js");
-			process.exit(await runPlugin(invocation.profile, invocation.args));
+			const { runPlugin } = await import("./plugin-BGnVfe_D.js");
+			process.exit(await runPlugin(invocation.profile, invocation.args, options.packageManager));
 			break;
 		}
 		case "dump-config": {
-			const { runDumpConfig } = await import("./dump-config-Bb5YvFIX.js");
+			const { runDumpConfig } = await import("./dump-config-crgOY3tW.js");
 			runDumpConfig(invocation.profile, invocation.defaultOnly, invocation.patches, invocation.fromDefaultProfile);
+			break;
+		}
+		case "dump-config-schema": {
+			const { runDumpConfigSchema } = await import("./dump-config-schema-DhhNOaro.js");
+			await runDumpConfigSchema(invocation.profile, invocation.patches, invocation.fromDefaultProfile);
 			break;
 		}
 		default: throw new Error(`dsh: unhandled invocation mode ${JSON.stringify(invocation)}`);

@@ -254,6 +254,8 @@ export interface ThreadQuestInput {
   /** GR-01：显式重规划（缺省复用已持久化计划；replan 会失效本线程未决审批） */
   replan?: boolean;
   replanReason?: string;
+  /** A-03：调用方已完成原子认领（调度器单语句 UPDATE 认领）时置 true，跳过入口 CAS */
+  skipClaim?: boolean;
 }
 
 /**
@@ -315,6 +317,50 @@ export interface ThreadQuestOutcome extends QuestRunResult {
  * 线程执行唯一装配点：dispatch(runImmediately) / threads.run / 审批自动续跑 / 调度器都走这里。
  */
 export async function runQuestForThread(scope: Scope, input: ThreadQuestInput): Promise<ThreadQuestOutcome> {
+  /**
+   * A-03 修复（来源：WorkLoom-growth 排雷 T-2026-0929-0003）：执行前原子认领（queued/paused→running CAS）。
+   * 此前 SELECT 取线程到 runQuest 置 running 之间有装配+LLM 规划窗口（最长 120s），
+   * dispatch(runImmediately) / threads.run / 多实例调度器可并发重入同一线程——
+   * 写类工具重复执行＝重复扣费/重复发布。
+   * 调度器已用自己的单语句认领，必须传 skipClaim 跳过本 CAS（否则自相挡死）。
+   */
+  if (!input.skipClaim) {
+    const app0 = getAppPool();
+    const c = await app0.connect();
+    let blocked = false;
+    try {
+      /**
+       * 认领必须带**事务级 RLS 上下文**：threads 表对 app 角色启用 RLS
+       * （`workspace_id = current_setting('app.workspace_id', true)`），
+       * 无 GUC 时那条 UPDATE 匹配 0 行 → CAS 静默空转、并发重入照旧放行
+       * （2026-09-30 实测：线程置 running 后入口仍照常执行并写 3 条事件）。
+       */
+      await c.query("BEGIN");
+      await c.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+      await c.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+      const claimed = await c.query(
+        `UPDATE threads SET status='running', updated_at=now()
+          WHERE id=$1 AND workspace_id=$2 AND status IN ('queued','paused') RETURNING id`,
+        [input.threadId, scope.workspaceId],
+      );
+      if ((claimed.rowCount ?? 0) === 0) {
+        const cur = await c.query<{ status: string }>(
+          `SELECT status FROM threads WHERE id=$1 AND workspace_id=$2`, [input.threadId, scope.workspaceId]);
+        blocked = (cur.rows[0]?.status ?? "unknown") === "running";
+      }
+      await c.query("COMMIT");
+    } catch (err) {
+      await c.query("ROLLBACK").catch(() => undefined);
+      throw err;
+    } finally {
+      c.release();
+    }
+    // 他方正在执行：幂等退出（不并发重入）；
+    // pending_review/completed/failed 等维持原语义（审批续跑/重放由 runQuest 按事件态处理）
+    if (blocked) {
+      return { threadId: input.threadId, status: "running", stepsDone: 0, stepsTotal: 0, unverified: [], presetKey: "" };
+    }
+  }
   const presetKey = await resolveThreadPresetKey(scope, input.presetRef, input.goal);
   const toolExecutor = await loadDeploymentToolExecutor(scope);
   const visualGoal = VISUAL_GOAL_PATTERN.test(input.goal);

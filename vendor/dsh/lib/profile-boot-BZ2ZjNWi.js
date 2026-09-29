@@ -1,8 +1,8 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { PROFILE_PATCH_FILENAME, PROFILE_TEMPLATES, PluginPackages, boot, createProfileResolutionGeneration, healIsolatedProfileModuleFallback, healProfilesModuleFallback, initProfile, installFailLoud, loadOverlayPatches, loadProfile, readProfilePatches, resolveProfileDir } from "@deepseek-ai/dsh-app-boot";
+import { PROFILE_PATCH_FILENAME, PROFILE_TEMPLATES, PluginPackages, boot, createRuntimeResolution, initProfile, installFailLoud, loadOverlayPatches, loadProfile, readProfilePatches, reportSkippedBundles, resolveProfileDir } from "@deepseek-ai/dsh-app-boot";
 import { resolveDshHome } from "@deepseek-ai/dsh-home-paths";
 import { dirname, join, resolve } from "node:path";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { installProxyFromEnvironment } from "@deepseek-ai/dsh-http-proxy";
 import { DSH_LAUNCH_ENVIRONMENT_KEY } from "@deepseek-ai/dsh-launch-environment";
 import { provideCmdline } from "@deepseek-ai/dsh-cmdline";
@@ -185,6 +185,7 @@ function initializeProfileFromDefault(name, fromDefaultProfile, home = resolveDs
 function prepareProfile(name, userLayer = true, fromDefaultProfile) {
 	if (fromDefaultProfile !== void 0) initializeProfileFromDefault(name, fromDefaultProfile);
 	const profile = loadProfile(NAME, name, INSTALL_ANCHOR, void 0, { userLayer });
+	reportSkippedBundles(NAME, profile);
 	writeFileSync(join(profile.dir, PROFILE_ROOT_FILENAME), PROFILE_ROOT_CONFIG);
 	return profile;
 }
@@ -197,22 +198,19 @@ function prepareProfile(name, userLayer = true, fromDefaultProfile) {
 * then the telemetry switch.
 * @param name - the profile name.
 * @param patchFiles - `--patch` overlay paths, in argv order.
-* @param resolutionMode - runtime lookup, disk links, or dual verification of both.
 * @param fromDefaultProfile - shipped template for a missing named profile.
 * @param resolvedProfile - application-owned profile and installation.
 * @returns the profile and its patch layers.
 */
-async function composeProfile(name, patchFiles, resolutionMode, fromDefaultProfile, resolvedProfile) {
+async function composeProfile(name, patchFiles, fromDefaultProfile, resolvedProfile) {
 	const profile = resolvedProfile?.profile ?? prepareProfile(name, true, fromDefaultProfile);
 	if (resolvedProfile !== void 0) writeFileSync(join(profile.dir, PROFILE_ROOT_FILENAME), PROFILE_ROOT_CONFIG);
-	const resolutionOptions = {
-		installAnchor: resolvedProfile?.installAnchor ?? INSTALL_ANCHOR,
-		profile
-	};
-	if (resolvedProfile !== void 0 && resolutionMode !== "runtime") healIsolatedProfileModuleFallback(resolvedProfile);
 	return {
 		profile,
-		resolution: resolutionMode === "runtime" || resolvedProfile !== void 0 ? await createProfileResolutionGeneration(resolutionOptions) : await healProfilesModuleFallback(resolutionOptions),
+		resolution: await createRuntimeResolution({
+			installAnchor: resolvedProfile?.installAnchor ?? INSTALL_ANCHOR,
+			profile
+		}),
 		overlays: patchFiles.flatMap((file) => loadOverlayPatches(NAME, resolve(file)))
 	};
 }
@@ -227,7 +225,6 @@ async function runProfile(options) {
 	const disposeProxy = await installProxyFromEnvironment(options.environment, (message) => {
 		process.stderr.write(`${NAME}: ${message}\n`);
 	});
-	const resolutionMode = process.pkg !== void 0 ? "runtime" : options.resolutionMode ?? "runtime";
 	const app = {};
 	let disposal;
 	const dispose = () => disposal ??= (async () => {
@@ -241,7 +238,7 @@ async function runProfile(options) {
 		if (failures.length > 1) throw new AggregateError(failures, "dsh: profile cleanup failed");
 	})();
 	try {
-		const composed = await composeProfile(options.profile, options.patchFiles, resolutionMode, options.fromDefaultProfile, options.resolvedProfile);
+		const composed = await composeProfile(options.profile, options.patchFiles, options.fromDefaultProfile, options.resolvedProfile);
 		const appReady = createAppReady();
 		const shutdown = createProcessShutdown(dispose);
 		const signalShutdown = new AbortController();
@@ -275,10 +272,7 @@ async function runProfile(options) {
 			app.current = hostCtx;
 			hostCtx.provide("profileContext", profileContext);
 			hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, options.environment);
-			await hostCtx.plugin(PluginPackages, resolutionMode === "link" ? {} : {
-				generation: composed.resolution,
-				behavior: resolutionMode === "dual" ? "verify" : "enforce"
-			});
+			await hostCtx.plugin(PluginPackages, { resolution: composed.resolution });
 			provideCmdline(hostCtx, {
 				args: options.args,
 				exit: (code) => void shutdown.shutdown(code),

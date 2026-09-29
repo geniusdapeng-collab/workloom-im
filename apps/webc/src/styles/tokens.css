@@ -85,16 +85,14 @@ body {
   min-height: 100dvh;
 }
 
+/* 服务前台按真实视口响应，不在宽屏伪装固定 390px 手机壳。 */
 /**
- * 服务前台按真实视口响应，不在宽屏伪装固定 390px 手机壳。
- *
- * 布局契约（2026-09-29 修复，MC-012 同源）：**本块不得声明 display / flex-direction**——
+ * 布局契约（2026-09-29 基座修复 T-2026-0929-0100 同步）：**本块不得声明 display / flex-direction**——
  * 三段式（顶栏 / 主区 / 底栏贴底）由共享壳
  * `.wl-app-shell{display:grid; grid-template-rows:auto minmax(0,1fr) auto}` 负责。
- * 此前这里写 `display:flex`，与共享壳同特异性且在产物 CSS 中更晚出现（实测字节位 65065 vs 31441），
- * 于是覆盖掉 grid：底栏脱离三段式回到普通文档流，真机实测 430×932 下底栏底边停在 689px
- * （差 243px、26% 空白；390×844 同症状）。回归见 `docs/design-system.md` 的壳契约小节与
- * 各仓 `scripts/check-webc-shell-contract.test.ts` / `scripts/check-shell-layout.mjs`。
+ * 此前这里写 `display:flex`，与共享壳同特异性且在产物 CSS 中更晚出现（基座实测字节位 65065 vs 31441），
+ * 于是覆盖掉 grid：底栏脱离三段式回到普通文档流（真机实测 430×932 下底栏底边停在 689px，差 243px）。
+ * 回归：`scripts/check-shell-layout.mjs`（真机几何）与各仓壳契约测试。
  */
 .phone-shell {
   width: 100%;

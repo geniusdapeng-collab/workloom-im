@@ -313,6 +313,16 @@
         }
       ],
       "reason": "发布门禁的 app / owner 连接串均为仓库 docker-compose 中公开的本机测试库默认值；生产连接仍只能来自环境变量。"
+    },
+    "vendor/dsh/package.json": {
+      "sha256": "0a85203e3e907dd2e3bec34324a2494758ca6cdee234b07090a7c8df0b11acac",
+      "findings": [
+        {
+          "rule": "literal-sensitive-assignment",
+          "line": 128
+        }
+      ],
+      "reason": "上游 dsh 0.2.0-rc.2 的 devDependencies 新增包名 @deepseek-ai/dsh-llm-deepseek-api-key，被启发式规则按「api-key + 字符串字面量」误判；该字面量是 npm 版本号 0.2.0-rc.2，不是凭据。vendor/dsh 为上游 tarball 逐字节基线（sha512 已与 registry 核对），按 D12 纪律不得改写，故登记内容绑定放行。"
     }
   },
   "adoptMigrations": {

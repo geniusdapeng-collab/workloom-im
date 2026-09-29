@@ -5,8 +5,8 @@
   "ui": {
     "package": "@workloom/ui",
     "contractVersion": "2.0.0",
-    "candidateVersion": "0.1.15",
-    "latestStableVersion": "0.1.15",
+    "candidateVersion": "0.1.16",
+    "latestStableVersion": "0.1.16",
     "requiredClientPackages": [
       "apps/web/package.json",
       "apps/webb/package.json",
@@ -38,7 +38,8 @@
         "0.1.12": "sha512-Gnik9XEeuCyyfO/y7rpMYveELqPkdV4nRK23+dyb+mM53euEhcHsU2GAaRwJZN95i15RHXMg/GH+ZSxaz5xinA==",
         "0.1.13": "sha512-OMc/kgxi+z6Z1zZGJUf74zcJ7AI+TixWBDIetPDP6kl8X23lGaOhJJuEWAmP8H6ERmRt3v3ce6Fpx3jLh0eeJQ==",
         "0.1.14": "sha512-RUZvMCyvVaqrSUMzBVwr3tK6K8NaT4LTVMnEcPpostX6yIW+cko1fRdLkNh2odeHihT9z8iAR5Yp7u5/qsLW7w==",
-        "0.1.15": "sha512-BSlGdzEftbC08qTOFPNeBO+4jHj2ybX5IoYkprt/SJzCipAAOtK7P4L0hTnfpkfTOrF7u6B+5//nxwgWbD0QXA=="
+        "0.1.15": "sha512-BSlGdzEftbC08qTOFPNeBO+4jHj2ybX5IoYkprt/SJzCipAAOtK7P4L0hTnfpkfTOrF7u6B+5//nxwgWbD0QXA==",
+        "0.1.16": "sha512-yyfv6ahfQ2QdDaq2/ZqT68C0EkHaCT3HK1rULVZteyAc/VdaD8HiXnQEDTFMXrm8reNxuk0pqfl4qKCBvQzjmg=="
       },
       "comment": "2026-09-17 起 @workloom/ui 制品托管在 CNB Release（cnb.cool/workloom-ai/workloom-im），替代已失效的 GitHub Release tarball；type 枚举保留历史值以兼容各仓 state。"
     }
@@ -46,8 +47,8 @@
   "clientFoundation": {
     "schemaVersion": "workloom.client-foundation/v1",
     "stateFile": ".workloom-client-foundation.json",
-    "candidateVersion": "0.1.15",
-    "latestStableVersion": "0.1.15",
+    "candidateVersion": "0.1.16",
+    "latestStableVersion": "0.1.16",
     "stableSourceRefPattern": "refs/tags/ui-v{version}",
     "distribution": "stable-tag-upgrade-pr",
     "maxManagedFiles": 500,
