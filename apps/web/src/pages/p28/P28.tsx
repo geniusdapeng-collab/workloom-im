@@ -70,7 +70,7 @@ export default function P28() {
                 <span className="inline-flex items-center gap-1 text-body text-emerald-500">无待办 <Icon name="check" size={14} /></span>
               )}
               {(g.pendingTickets ?? 0) > 0 && (
-                <div className="mt-1 text-body text-sky-400">{g.pendingTickets} 未办结工单</div>
+                <div className="mt-1 text-body text-holo">{g.pendingTickets} 未办结工单</div>
               )}
             </div>
           </button>
