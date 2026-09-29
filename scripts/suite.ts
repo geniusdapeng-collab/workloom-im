@@ -165,14 +165,21 @@ async function mkEvent(action: string, opts: { sessionId?: string; basis?: strin
   });
   return r.eventId;
 }
-async function mkApproval(opts: { status?: string; highRisk?: boolean; expiresInMs?: number } = {}): Promise<{ approvalId: string; eventId: string }> {
+async function mkApproval(opts: { status?: string; highRisk?: boolean; expiresInMs?: number; snapshotExtra?: Record<string, unknown> } = {}): Promise<{ approvalId: string; eventId: string }> {
   const eventId = await mkEvent("suite.reviewable");
   const approvalId = `apr-suite-${SFX}-${Math.random().toString(36).slice(2, 8)}`;
   await qApp(
     `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, snapshot)
      VALUES ($1,$2,$3,$4,'inapp',$5,$6)`,
     [approvalId, scope.tenantId, scope.workspaceId, eventId, opts.status ?? "pending",
-      JSON.stringify({ before: null, after: { v: 1 }, high_risk: opts.highRisk ?? false, expires_at: new Date(Date.now() + (opts.expiresInMs ?? 864e5)).toISOString() })],
+      JSON.stringify({
+        before: null,
+        after: { v: 1 },
+        high_risk: opts.highRisk ?? false,
+        expires_at: new Date(Date.now() + (opts.expiresInMs ?? 864e5)).toISOString(),
+        // MC-106：需要作为高危写动作逐次授权引用时，调用方补 object_type/object_id/action 绑定
+        ...(opts.snapshotExtra ?? {}),
+      })],
   );
   return { approvalId, eventId };
 }
@@ -273,10 +280,12 @@ b("高危 Agent 写动作缺 approvalRef 被拒（L3.5）", async () => {
 });
 b("高危 Agent 带 approvalRef 放行", async () => {
   // P1-8：approvalRef 必须指向真实审批行——先造行再引用
+  // MC-106：审批必须携带齐备绑定（object_type/object_id/action），且一次性消费
   await qApp(
     `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, tier, snapshot)
-     VALUES ($1,$2,$3,$4,'inapp','approved','l4_chairman','{}') ON CONFLICT (event_id, channel) DO NOTHING`,
-    [`apr-${SFX}`, scope.tenantId, scope.workspaceId, `E-APR-${SFX}`],
+     VALUES ($1,$2,$3,$4,'inapp','approved','l4_chairman',$5) ON CONFLICT (event_id, channel) DO NOTHING`,
+    [`apr-${SFX}`, scope.tenantId, scope.workspaceId, `E-APR-${SFX}`,
+      JSON.stringify({ object_type: "room_price", object_id: `obj-${SFX}`, action: "desktop.gui", expires_at: new Date(Date.now() + 864e5).toISOString() })],
   );
   const r = await gatewayAppend(gw, { ...scope, actor: { id: "desktop-agent", type: "agent", fenceBindings: ["R2"], highRisk: true }, approvalRef: `apr-${SFX}` }, draftOf("desktop.gui", "desktop-agent"));
   assert(r.eventId, "应落库");
@@ -1609,8 +1618,10 @@ l("desktop-agent 高危无逐次授权拒绝", async () => {
 l("desktop-agent 高危带逐次授权放行", async () => {
   await qApp(
     `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, tier, snapshot)
-     VALUES ($1,$2,$3,$4,'inapp','approved','l4_chairman','{}') ON CONFLICT (event_id, channel) DO NOTHING`,
-    [`apr-desktop-${SFX}`, scope.tenantId, scope.workspaceId, `E-APRD-${SFX}`],
+     VALUES ($1,$2,$3,$4,'inapp','approved','l4_chairman',$5) ON CONFLICT (event_id, channel) DO NOTHING`,
+    [`apr-desktop-${SFX}`, scope.tenantId, scope.workspaceId, `E-APRD-${SFX}`,
+      // MC-106：绑定齐备（对象类型/对象 id/动作）——缺绑定不再按通用授权放行
+      JSON.stringify({ object_type: "room_price", object_id: `obj-${SFX}`, action: "desktop.gui", expires_at: new Date(Date.now() + 864e5).toISOString() })],
   );
   const r = await gatewayAppend(gw, { ...scope, actor: { id: "desktop-agent", type: "agent", fenceBindings: ["R2"], highRisk: true }, approvalRef: `apr-desktop-${SFX}` }, draftOf("desktop.gui", "desktop-agent"));
   assert(r.eventId, "授权放行");
@@ -1842,7 +1853,11 @@ o("高危桌面操作授权链：无授权拒 → 审批 → 带授权放行", a
     await gatewayAppend(gw, { ...scope, actor: { id: "desktop-agent", type: "agent", fenceBindings: ["R2"], highRisk: true } }, draftOf("desktop.gui", "desktop-agent"));
   } catch { threw = true; }
   assert(threw, "无授权高危必拒");
-  const { approvalId } = await mkApproval({ highRisk: true });
+  // MC-106：逐次授权引用必须绑定本次对象与动作（缺绑定一律 fail-closed 拒绝）
+  const { approvalId } = await mkApproval({
+    highRisk: true,
+    snapshotExtra: { object_type: "room_price", object_id: `obj-${SFX}`, action: "desktop.gui" },
+  });
   await decide(app, gw, scope, boss, approvalId, { type: "approve" });
   const r = await gatewayAppend(gw, { ...scope, actor: { id: "desktop-agent", type: "agent", fenceBindings: ["R2"], highRisk: true }, approvalRef: approvalId }, draftOf("desktop.gui", "desktop-agent"));
   assert(r.eventId, "授权后放行");
