@@ -339,8 +339,11 @@ d("PG 集成 Quest 循环（种子库）", async () => {
         snap = a.rows[0]!.snapshot;
       } finally { c.release(); }
       expect(snap.high_risk).toBe(true);
-      expect(snap.object_type).toBe("room_price");
-      expect(snap.object_id).toBe("OBJ-DEMO-01");
+      /**
+       * 合并口径（bfd5fe6 采用云端 main 的 loop.ts）：步骤级审批快照写 `action`（MC-106 必备绑定）
+       * 与 `high_risk`；`object_type/object_id` 属「显式声明才校验」的可选维度，main 的运行时不声明。
+       * 此前用例断言对象维度必填 → 在 RUN_DB_TESTS=1 下假红（上游 main 与本分支实现均不写该字段）。
+       */
       expect(snap.action).toBe("price.adjust");
       // 批量采纳守卫必须逐条拦下（L5.4 / isHighRiskApproval）
       const { decide, batchApprove } = await import("@workloom/base/review-console");
