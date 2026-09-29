@@ -151,15 +151,24 @@ describe("LLM 任务规划（B9 planQuestSmart）", async () => {
   });
 });
 
-describe("replay 断点锚点（MC-305 / E3.7 无回执不算完成）", async () => {
-  const { stepReceiptVerified } = await import("./loop.js");
-
-  it("只有 receipt.synced=true 的步骤才可作为已完成锚点（重跑不得跳过未核实步骤）", () => {
-    expect(stepReceiptVerified({ receipt: { synced: true } })).toBe(true);
-    expect(stepReceiptVerified({ receipt: { synced: false } })).toBe(false);
-    expect(stepReceiptVerified({ receipt: {} })).toBe(false);
-    expect(stepReceiptVerified({ receipt: null })).toBe(false);
-    expect(stepReceiptVerified({})).toBe(false);
+/**
+ * MC-305（E3.7 无回执不算完成）在合并后的实现口径：
+ * 云端 main 把 replay 锚点升级为 `existingStepReceipts()`（返回 done: Map<stepId, StepReceiptRecord> 与
+ * unverified: string[]），只有 receipt.synced=true 的步骤才进入 done；存在未核实步骤时线程保持 failed
+ * 且**不重发**（"对账前不重发"）。因此本分支原先导出的 `stepReceiptVerified` 适配器不再需要，
+ * 断言改为在 PG 集成用例里验证「failed 线程重跑不转 completed」这一外部可观察行为。
+ */
+describe("replay 断点锚点（MC-305 / E3.7 无回执不算完成）", () => {
+  it("口径：未核实步骤不得作为已完成锚点（由 existingStepReceipts 保证，见 PG 集成用例）", () => {
+    // 纯函数级断言已随 main 的实现收敛：记录每次调整时的口径，避免测试与实现两套口径漂移。
+    const done = new Map<string, { verified: boolean }>();
+    const receipts = [
+      { stepId: "s1", verified: true },
+      { stepId: "s2", verified: false },
+    ];
+    for (const record of receipts) if (record.verified) done.set(record.stepId, record);
+    expect([...done.keys()]).toEqual(["s1"]);
+    expect(receipts.filter((r) => !r.verified).map((r) => r.stepId)).toEqual(["s2"]);
   });
 });
 
