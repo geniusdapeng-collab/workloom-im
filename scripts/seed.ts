@@ -175,6 +175,21 @@ function loadSkills(): SkillDoc[] {
 function yunqiArchive(): Record<string, unknown> {
   return {
     property: { name: WS_NAME, city: "杭州", rooms: 86, star: "四钻" },
+    /**
+     * MC-306（2026-09-30 排雷修复）：行业规划器（apps/server/src/industry/hotel/acquisition-planner.ts）
+     * 唯一的价格锚点来源就是 `business.price_bands`（房型 → [低位, 高位]，单位元）。
+     * 出厂档案此前缺这一块 → 调价目标推不出 before/after → R1「涨幅 ≤8% 自动」不可达、
+     * R2「保底价 ¥380 熔断」永不触发，所有调价 100% 转人工。
+     * 价带与 R2/forbidden 同源（美团大床房保底 ¥380）：低位即保底线，区间取演示价位的保守带。
+     */
+    business: {
+      price_bands: {
+        雅致大床房: [420, 480],
+        美团大床房: [380, 440],
+        亲子双床房: [480, 560],
+        商旅大床房: [360, 420],
+      },
+    },
     // 数字CEO 宪章（D21，演示：董事长已完成深度授权 → 试用期第 2 天）
     charter: {
       version: 1,

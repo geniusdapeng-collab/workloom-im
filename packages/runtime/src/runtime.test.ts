@@ -109,6 +109,18 @@ describe("LLM 任务规划（B9 planQuestSmart）", async () => {
   });
 });
 
+describe("replay 断点锚点（MC-305 / E3.7 无回执不算完成）", async () => {
+  const { stepReceiptVerified } = await import("./loop.js");
+
+  it("只有 receipt.synced=true 的步骤才可作为已完成锚点（重跑不得跳过未核实步骤）", () => {
+    expect(stepReceiptVerified({ receipt: { synced: true } })).toBe(true);
+    expect(stepReceiptVerified({ receipt: { synced: false } })).toBe(false);
+    expect(stepReceiptVerified({ receipt: {} })).toBe(false);
+    expect(stepReceiptVerified({ receipt: null })).toBe(false);
+    expect(stepReceiptVerified({})).toBe(false);
+  });
+});
+
 /* ================= PG 集成（RUN_DB_TESTS=1） ================= */
 
 /** 行业场景仅存在于测试夹具；生产基座从不内置这些语义。 */

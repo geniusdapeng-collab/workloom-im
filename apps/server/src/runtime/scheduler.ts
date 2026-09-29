@@ -7,7 +7,10 @@
  *
  * 口径：
  *  - 进程内轻量循环（默认 7s，`WORKLOOM_SCHEDULER_MS=0` 关闭；VPC 可关）；
- *  - 每轮扫描各工作区 queued 线程，按创建时间先进先出，遵守 L3.1 并发上限（running+queued 计入）；
+ *  - 每轮扫描各工作区 queued 线程，按创建时间先进先出，只遵守「运行位」上限——
+ *    queued 不占运行配额（MC-302：把 queued 计入并 `>= MAX` 直接 return，
+ *    会让 queued ≥ 上限的工作区永久停摆，队列没有任何出口）；
+ *    L3.1「单工作区 queued+running ≤10」由派遣入口（建线程事务内）把关，调度器不超发运行位；
  *  - 选中的线程走 `runQuestForThread`（与派遣/续跑同一条装配路径；agent 模式跑到第一个 review 点挂起）；
  *  - 启动恢复：`running` 且超过 N 分钟无心跳的线程标 `paused`（可人工续跑），不做静默重放；
  *  - 单进程内同线程互斥（in-flight 集合），失败只落日志并把错误交给线程终态（runQuest 自己写 failed）。
@@ -59,20 +62,27 @@ async function listWorkspaces(app: pg.Pool = getOwnerPool()): Promise<Scope[]> {
   }
 }
 
-/** 单工作区：取一条可执行的 queued 线程（含模式与岗位引用） */
+/**
+ * 单工作区：取一条可执行的 queued 线程（含模式与岗位引用）。
+ *
+ * MC-302（2026-09-30 排雷修复）：
+ *  - 并发守卫只统计「有近期心跳的 running」——queued 是被调度器消费的对象，不能同时占运行位，
+ *    否则 queued ≥ MAX 时本轮拒绝拾取任何线程，队列只能靠人工逐条 `threads.run` 解锁（自锁）；
+ *  - 一次取前若干条排队项并跳过本进程 in-flight，避免队首恰好在本进程执行时整批空转。
+ */
 async function nextQueuedThread(app: pg.Pool, scope: Scope): Promise<QueuedThread | undefined> {
   const client = await app.connect();
   try {
     await client.query("BEGIN");
     await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
     await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
-    // 与派遣入口同口径：只把「有近期心跳的 running」计入并发（僵尸 running 不占配额，见 N-15）
+    // 只把「有近期心跳的 running」计入运行位（僵尸 running 不占配额，见 N-15）
     const staleMin = Number(process.env.WORKLOOM_STALE_RUNNING_MIN ?? DEFAULT_STALE_RUNNING_MIN);
     const running = await client.query<{ c: string }>(
       `SELECT count(*) AS c FROM threads
         WHERE workspace_id=$1
-          AND (status='queued'
-               OR (status='running' AND updated_at > now() - ($2::text || ' minutes')::interval))`,
+          AND status='running'
+          AND updated_at > now() - ($2::text || ' minutes')::interval`,
       [scope.workspaceId, String(Number.isFinite(staleMin) && staleMin > 0 ? staleMin : DEFAULT_STALE_RUNNING_MIN)],
     );
     if (Number(running.rows[0]?.c ?? 0) >= MAX_CONCURRENT_THREADS) {
@@ -82,13 +92,11 @@ async function nextQueuedThread(app: pg.Pool, scope: Scope): Promise<QueuedThrea
     const r = await client.query<QueuedThread>(
       `SELECT id, title, mode, agent_id FROM threads
         WHERE workspace_id=$1 AND status='queued'
-        ORDER BY created_at ASC LIMIT 1`,
+        ORDER BY created_at ASC LIMIT 10`,
       [scope.workspaceId],
     );
     await client.query("COMMIT");
-    const row = r.rows[0];
-    if (!row || inFlight.has(row.id)) return undefined;
-    return row;
+    return r.rows.find((row) => !inFlight.has(row.id));
   } catch (err) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw err;

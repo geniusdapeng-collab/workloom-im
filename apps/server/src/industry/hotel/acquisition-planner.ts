@@ -12,6 +12,7 @@
  */
 import { planQuest, type AssembledPreset, type QuestPlanner, type QuestStep } from "@workloom/runtime";
 import { OFF_PEAK_WINDOW } from "@workloom/shared";
+import { registerIndustryGoalClaim } from "../../runtime/thread-runner.js";
 
 /**
  * 夜班窗口判定（与 trpc 的 inNightWindow / OFF_PEAK_WINDOW 同口径：22:00–08:00，服务器本地时区）。
@@ -54,6 +55,39 @@ function bandMid(band: unknown): number | undefined {
 
 /** 房型词尾最小匹配长度：中文房型词通常 3 字（大床房/双床房/亲子房），太短会跨房型串味 */
 const ROOM_SUFFIX_MIN = 3;
+
+/* -------------------------------------------------------------------------
+ * MC-304：行业语义域词表（只住在行业包；基座不持有任何行业词）。
+ *
+ * 这些正则同时服务两处，避免“规划器认识、派活路由不认识”的双口径漂移：
+ *  ① 本文件的确定性规划分支（下面 acquisitionQuestPlanner 内使用同一常量）；
+ *  ② `claimsHotelDomain`：行业包对「目标 + 岗位能力」是否属于本行业语义域的判定，
+ *     由基座在“通用路由表未命中”时试算（thread-runner.ts#industryPlannerPresetFor）。
+ *
+ * 真机实证（T-122/T-126/T-183）：「处理一条差评并回复」两条入口都被派给 competitor-agent，
+ * 用 competitor.crawl 标 completed —— 根因是域词表不含口语词族 + 兜底取 preset_key 字母序第一。
+ * ------------------------------------------------------------------------- */
+const REVIEW_GOAL = /(差评|评价|口碑|投诉|客服|回复|答复|回评)/;
+const PRICE_GOAL = /(调价|涨价|降价|上调|下调|加价|减价|提价|调高|调低|定价|改价|房价|价格|调[到整])/;
+const SERVICE_GOAL = /(送|维修|报修|打扫|换床单|加床)/;
+const INSPECTION_GOAL = /(巡检|体检|检查|扫描)/;
+const CONTENT_GOAL = /(内容|文案|种草|短视频|发布)/;
+const VISUAL_GOAL = /(海报|配图|封面|生图|出图|主视觉|图片|素材图|生成.{0,12}图|画一?[张幅].{0,12}图|做一?[张幅].{0,12}图)/;
+
+/**
+ * 行业语义域判定：该目标是否落在岗位声明的能力域内（供基座派遣选岗试算）。
+ * 判定与规划分支同源：命中且岗位持有对应工具才算“行业认识这件事、这个岗位也干得了”。
+ */
+export function claimsHotelDomain(goal: string, preset: { tools: Array<{ name: string }> }): boolean {
+  const tools = new Set(preset.tools.map((tool) => tool.name));
+  if (REVIEW_GOAL.test(goal) && tools.has("review.reply")) return true;
+  if ((priceIntentOf(goal) !== null || PRICE_GOAL.test(goal)) && tools.has("pms.price.write")) return true;
+  if (SERVICE_GOAL.test(goal) && tools.has("task.dispatch")) return true;
+  if (INSPECTION_GOAL.test(goal) && tools.has("price.scan")) return true;
+  if (CONTENT_GOAL.test(goal) && tools.has("content.draft")) return true;
+  if (VISUAL_GOAL.test(goal) && tools.has("visualwrite.generate")) return true;
+  return false;
+}
 
 interface RoomAnchor {
   /** 命中的价带 key（写进步骤 params，便于追溯用了哪个价带） */
@@ -153,8 +187,14 @@ export function acquisitionQuestPlanner(goal: string): QuestPlanner {
     const tools = new Set(preset.tools.map((tool) => tool.name));
     const archive = archiveOf(preset);
 
-    // ① 口碑：差评回复（R6 差评必审挂起 → 人批 → 续跑）
-    if (/(差评|评价|口碑|回复).*(回复|处理|跟进)?/.test(goal) && tools.has("review.reply")) {
+    /**
+     * ① 口碑：差评/投诉/客服回复（R6 差评必审挂起 → 人批 → 续跑）。
+     *
+     * MC-304（2026-09-30）：域词表住在行业包（本文件在 base-sync 范围之外），基座只做能力试算——
+     * 此前词表只认「差评/评价/口碑/回复」，客户口语「投诉/客服/答复」既不命中通用路由表
+     * 也不命中本规划器，最后被派给字母序第一个岗位（竞对侦察员）用无关工具“完成”。
+     */
+    if (REVIEW_GOAL.test(goal) && tools.has("review.reply")) {
       return [
         step({ index: 1, action: "review.list", objectType: "review", tool: "review.list", label: "拉取各渠道新评价" }),
         step({
@@ -171,7 +211,8 @@ export function acquisitionQuestPlanner(goal: string): QuestPlanner {
 
     // ② 收益：调价（报价带内 auto / 越带与缺基准 → 围栏失败关闭）
     const priceIntent = priceIntentOf(goal);
-    const mentionsPrice = /(调价|涨价|降价|定价|改价|房价|价格|调[到整])/.test(goal);
+    // MC-304：常用口语动词（上调/下调/加价/减价/提价）与名词词族同权，不再漏派到无关岗位
+    const mentionsPrice = PRICE_GOAL.test(goal);
     if ((priceIntent || mentionsPrice) && tools.has("pms.price.write")) {
       const intent = priceIntent;
       // 锚点只认目标里点到的房型价带（精确 > 词尾，见 roomAnchorsOf）；取不到就不造数
@@ -207,7 +248,7 @@ export function acquisitionQuestPlanner(goal: string): QuestPlanner {
     }
 
     // ③ 客房履约：送物/维修/清洁（工单类型 + 房间号从目标直译）
-    if (/(送|维修|报修|打扫|换床单|加床)/.test(goal) && tools.has("task.dispatch")) {
+    if (SERVICE_GOAL.test(goal) && tools.has("task.dispatch")) {
       const room = /(\d{3,4})\s*(?:房|房间)?/.exec(goal)?.[1];
       const kind = /(维修|报修|坏|故障|漏水|不制冷)/.test(goal) ? "repair" : "delivery";
       return [
@@ -220,7 +261,7 @@ export function acquisitionQuestPlanner(goal: string): QuestPlanner {
     }
 
     // ④ 巡检：渠道/房价/评价三项只读扫描（只读动作恒 auto，异常进事件与告警）
-    if (/(巡检|体检|检查|扫描)/.test(goal) && tools.has("price.scan")) {
+    if (INSPECTION_GOAL.test(goal) && tools.has("price.scan")) {
       const steps: QuestStep[] = [];
       let index = 1;
       for (const [tool, objectType, label] of [
@@ -236,7 +277,7 @@ export function acquisitionQuestPlanner(goal: string): QuestPlanner {
     }
 
     // ⑤ 内容：草稿→发布（发布必审 G9 由围栏把关）
-    if (/(内容|文案|种草|短视频|发布)/.test(goal) && tools.has("content.draft")) {
+    if (CONTENT_GOAL.test(goal) && tools.has("content.draft")) {
       const steps: QuestStep[] = [
         step({ index: 1, action: "content.draft", objectType: "content", tool: "content.draft", params: { brief: goal.slice(0, 120) }, label: "生成内容草稿" }),
       ];
@@ -254,7 +295,7 @@ export function acquisitionQuestPlanner(goal: string): QuestPlanner {
      * 这里做确定性直译：把整句规格作为 prompt 交给 `visualwrite.generate`，
      * 由视觉工位产出成品图并回 sha256 回执；出图即完成，围栏/回执语义不变。
      */
-    if (/(海报|配图|封面|生图|出图|主视觉|图片|素材图|生成.{0,12}图|画一?[张幅].{0,12}图|做一?[张幅].{0,12}图)/.test(goal) && tools.has("visualwrite.generate")) {
+    if (VISUAL_GOAL.test(goal) && tools.has("visualwrite.generate")) {
       return [
         step({
           index: 1,
@@ -271,3 +312,9 @@ export function acquisitionQuestPlanner(goal: string): QuestPlanner {
     return planQuest(goal, preset);
   };
 }
+
+/**
+ * MC-304：语义域判定随模块加载注册（组合根已 import 本模块，派遣前必定就绪）。
+ * 组合根只注册“怎么规划”，这里声明“哪些目标属于本行业语义域”——两者同源、同文件维护。
+ */
+registerIndustryGoalClaim((goal, preset) => claimsHotelDomain(goal, preset));

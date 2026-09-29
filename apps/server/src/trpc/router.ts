@@ -23,7 +23,13 @@ import {
 import { gatewayAppend, gatewayAppendOnClient, insertWithReadableId, MockEmbedder, THREAD_ID_SOURCE, upsertMemoryInTx } from "@workloom/base/workdata";
 import { INTENT_ROUTE_TIMEOUT_DISPATCH_MS, makeReadableId } from "@workloom/shared";
 import { registerAskKbSearch } from "@workloom/runtime";
-import { loadGoalArchive, registerIndustryQuestPlanner, resolveDispatchPresetKey } from "../runtime/thread-runner.js";
+import {
+  loadGoalArchive,
+  registerIndustryQuestPlanner,
+  resolveDispatchPreset,
+  resolveDispatchPresetKey,
+  runQuestForThread,
+} from "../runtime/thread-runner.js";
 import { searchKB } from "../service/kb.js";
 import { acquisitionQuestPlanner } from "../industry/hotel/acquisition-planner.js";
 import {
@@ -45,7 +51,7 @@ import {
   expireSweep,
   listQueue,
 } from "@workloom/base/review-console";
-import { routeIntent, runAsk, runQuest } from "@workloom/runtime";
+import { routeIntent, runAsk } from "@workloom/runtime";
 import { LlmIntentClassifier, type IntentClassifier } from "@workloom/runtime";
 import { providerFromEnv, OpenAiCompatibleProvider } from "@workloom/base/model-router";
 import { routedLlmCall, resetLlmAssembly } from "../service/llm.js";
@@ -1085,7 +1091,14 @@ const threadsRouter = router({
         return { kind: "clarify" as const, question: intent.clarifyQuestion, via: intent.via };
       }
       // N-14：岗位解析带任务语义（视觉/视频/发布/增长四域偏好），不再只认 Bundle 清单顺序
-      const presetKey = input.presetKey ?? (await resolveDispatchPresetKey(scope, input.title));
+      // MC-304：解析结果带来源（语义命中 / 行业能力试算 / 兜底…），兜底派遣不再“静默派给第一个岗位”
+      const presetResolution = input.presetKey
+        ? { presetKey: input.presetKey, selection: "explicit" as const }
+        : await resolveDispatchPreset(scope, input.title);
+      const presetKey = presetResolution.presetKey;
+      const presetNotice = presetResolution.selection === "fallback"
+        ? { presetSelection: "fallback" as const, notice: "未识别任务域：已按兜底岗位派遣，请在任务页核对或改派" }
+        : {};
       /**
        * GR-14：档案读取失败一律 fail-closed（按无档案走并留痕），绝不"猜"目标。
        * 读到了则用全文替换规划目标；线程 title 仍是索引（事件 after 里带 goal_ref 与版本）。
@@ -1104,6 +1117,13 @@ const threadsRouter = router({
         await client.query("BEGIN");
         await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
         await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+        /**
+         * MC-301（2026-09-30 排雷修复）：计数与建档必须原子。
+         * 事务级 advisory lock（按工作区）把同一工作区的并发派遣串行化——此前 N 路并发
+         * 都读到「未超限」快照后各自 INSERT（实测 15/15 全部放行，L3.1 上限形同虚设）。
+         * 锁在 COMMIT/ROLLBACK 时释放，持锁区间只含本工作区的装配/计数/建档/派遣事件。
+         */
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`thread-dispatch:${scope.workspaceId}`]);
         selectedAgent = await runnableAgentOn(client, scope.workspaceId, presetKey);
         /**
          * L3.1：单工作区并发 ≤10，超出排队且可见（须在 RLS 上下文内统计，否则恒 0 行 fail-open）。
@@ -1189,12 +1209,20 @@ const threadsRouter = router({
         return { kind: "routed" as const, mode: intent.mode, via: intent.via, threadId, status: ra.status, answer: ra.answer };
       }
       if (input.runImmediately && intent.mode === "quest") {
-        const r = await runQuest(app, getGatewayPool(), scope, {
-          threadId, goal: planningGoal, presetKey, llmCall: llmCall("quest-plan", scope),
-        });
-        return { kind: "routed" as const, mode: intent.mode, via: intent.via, threadId, status: r.status, stepsDone: r.stepsDone, stepsTotal: r.stepsTotal };
+        /**
+         * MC-303（2026-09-30 排雷修复）：立即执行入口与调度器/续跑共用 runQuestForThread——
+         * 此前直呼 runQuest 未注入行业规划器（fallbackPlanner），同一目标在“立即执行”入口
+         * 得到空参通用计划（工具名当动作名），围栏全部无命中，与调度器口径不一致。
+         */
+        const r = await runQuestForThread(scope, { threadId, goal: planningGoal, presetRef: presetKey });
+        return {
+          kind: "routed" as const, mode: intent.mode, via: intent.via, threadId,
+          status: r.status, stepsDone: r.stepsDone, stepsTotal: r.stepsTotal,
+          ...(r.warnings ? { warnings: r.warnings } : {}),
+          ...presetNotice,
+        };
       }
-      return { kind: "routed" as const, mode: intent.mode, via: intent.via, threadId, status: "queued" as const };
+      return { kind: "routed" as const, mode: intent.mode, via: intent.via, threadId, status: "queued" as const, ...presetNotice };
     }),
 
   /** 线程详情（P2 线程头/信息面板；L7.1 越权返回空） */
@@ -1342,8 +1370,12 @@ const threadsRouter = router({
       if (mode === "ask") {
         return runAsk(app, getGatewayPool(), scope, { threadId: input.threadId, goal: runGoal, presetKey: selectedAgent!.presetKey, llmCall: llmCall("ask-synthesize", scope) });
       }
-      return runQuest(app, getGatewayPool(), scope, {
-        threadId: input.threadId, goal: runGoal, presetKey: selectedAgent!.presetKey, mode, llmCall: llmCall("quest-plan", scope),
+      /**
+       * MC-303（2026-09-30 排雷修复）：UI「执行 / 从中断处继续 / 追问」与调度器同一条装配路径。
+       * 此前直呼 runQuest 不走行业规划器——续跑会用通用模板重排计划（覆盖度/参数与首次执行不一致）。
+       */
+      return runQuestForThread(scope, {
+        threadId: input.threadId, goal: runGoal, presetRef: selectedAgent!.presetKey, mode,
       });
     }),
 });
