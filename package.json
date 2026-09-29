@@ -90,9 +90,7 @@
     "acceptance:soak": "node scripts/acceptance/soak.mjs",
     "acceptance:coverage": "node scripts/acceptance/coverage.mjs",
     "acceptance:report": "node scripts/acceptance/report-v3.mjs",
-    "acceptance:report:v2": "node scripts/acceptance/report.mjs",
-    "mine-clear": "node scripts/delivery/mine-clear.mjs",
-    "mine-clear:test": "node --test scripts/delivery/mine-clear.test.mjs"
+    "acceptance:report:v2": "node scripts/acceptance/report.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",

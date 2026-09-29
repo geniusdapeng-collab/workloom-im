@@ -108,7 +108,6 @@
       script: |
         set -eu
         node --test scripts/verify-ui-consumer.test.mjs sync/base-sync.test.mjs sync/client-foundation.test.mjs sync/set-ui-version.test.mjs sync/ui-upgrade-pr.test.mjs sync/fanout-rules.test.mjs
-        node --test scripts/delivery/mine-clear.test.mjs
         node --test apps/desktop/electron/bootstrap.test.cjs scripts/desktop-bootstrap-db.test.mjs
 
     - name: 三端生产构建

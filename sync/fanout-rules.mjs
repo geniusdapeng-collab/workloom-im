@@ -38,12 +38,6 @@ export const AUTO_MERGE_ALLOWLIST = Object.freeze([
   "docs/REAL-DEVICE-ACCEPTANCE-SPEC.md",
   "docs/acceptance/**",
   "scripts/acceptance/**",
-  // 排雷式交付机制（MCD v1）：规范 + 台账 schema/模板 + 执行器。
-  // 该目录只放"编排与门禁"脚本（本地写台账/证据，不参与产品运行时）；若将来放进运行时代码，
-  // 必须先把它移出本白名单，改走代码合并车道（协议 §9.5）。
-  "docs/MINE-CLEAR-DELIVERY-SPEC.md",
-  "docs/mine-clear/**",
-  "scripts/delivery/**",
   ".workloom-base-sync.json",
   ".github/workflows/base-sync-heartbeat.yml",
   "sync/**",
