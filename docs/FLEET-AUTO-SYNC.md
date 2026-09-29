@@ -76,7 +76,7 @@ node sync/merge-sync-prs.mjs                             # 条件自动合并：
 | 通道 | 令牌 | 能力 | 备注 |
 |---|---|---|---|
 | 定时任务（每 30 分钟） | 触发者（最后改 crontab 的人）的 `CNB_TOKEN` | **默认仅当前仓** | 需要根组织管理员在「组织设置 → 仓库管控」勾选**允许定时任务跨仓操作**，令牌才升级为“根组织范围” |
-| API 触发 `api_trigger_base_sync` | 调用者令牌（例如个人访问令牌） | 调用者本身的权限 | 本地兜底脚本 `fleet-cloud-sync.sh` 走这条；不依赖组织开关 |
+| API 触发 `api_trigger_base_sync` | 调用者令牌（例如个人访问令牌，按 `AGENTS.md` §7 会话内注入、不落盘） | 调用者本身的权限 | 本地兜底脚本 `fleet-cloud-sync.sh` 走这条；不依赖组织开关 |
 | 子仓 PR 门禁 | 子仓自己的 `CNB_TOKEN` | 当前仓 | 子仓流水线不申请任何跨仓权限 |
 
 未开组织开关时，cron 会以 `🔒 权限不足` 告警收尾并**保持绿**（`--tolerate-scope-error`），
