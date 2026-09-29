@@ -391,7 +391,25 @@ export async function runQuest(
         });
       }
     }
-    const verdict = views.length === 1 ? judge(views[0]!, rules, defaultLevel) : judgeViews(views, rules, defaultLevel);
+    const rawVerdict = views.length === 1 ? judge(views[0]!, rules, defaultLevel) : judgeViews(views, rules, defaultLevel);
+
+    /**
+     * W-01（2026-09-29 二次修复，来源：WorkLoom-growth 第三方独立验收；基座 T-2026-0929-0005）：
+     * 写步骤若**全部 block 都来自求值异常**（典型：缺 before/after 撞上 `abs(after.price-before.price)/before.price`
+     * 这类算术型 when），说明缺的是**数据**、不是违了围栏——按 D27「宁可挂起，不误放」降级为强制人审，
+     * 不再把"档案缺字段"误报成"围栏熔断 + 任务已暂停"（客户在 UI 上看到红条"求值异常→block"，且连人审入口都没有）。
+     *
+     * 边界（红线不动）：只要有任意一条规则是**真判 block**（impacts 里的 blocked 多于求值异常数），
+     * 熔断语义原样保留；求值异常本身仍进 rule_impact 留痕，不做静默降级。
+     */
+    const blockedImpacts = rawVerdict.impacts.filter((impact) => impact.result === "blocked").length;
+    const fenceUnevaluable = toolAccess === "write"
+      && rawVerdict.level === "block"
+      && rawVerdict.evalErrors.length > 0
+      && blockedImpacts === rawVerdict.evalErrors.length;
+    const verdict = fenceUnevaluable
+      ? { ...rawVerdict, level: "review" as const, triggeredBy: [] as string[] }
+      : rawVerdict;
 
     await updateThread(app, scope, threadId, { current_action: step.label });
 
@@ -448,7 +466,14 @@ export async function runQuest(
           object: { type: step.objectType, id: step.objectId },
           decision: {
             action: step.action, tool: step.tool, step_id: step.stepId, effect: effectOf(step.tool), params: step.params,
-            basis: [`越围栏挂起：${verdict.triggeredBy.join("、")}`],
+            basis: [
+              // W-01：求值异常降级过来的挂起要说清"为什么"，不能让客户以为是越了围栏
+              fenceUnevaluable
+                ? `围栏无法求值（缺参数）→ 一律人工裁决：${verdict.evalErrors.slice(0, 3).join("；")}`
+                : (verdict.triggeredBy.length
+                  ? `越围栏挂起：${verdict.triggeredBy.join("、")}`
+                  : "越围栏挂起：写类动作无规则命中 → default_level=review"),
+            ],
             ...(prefUsageRecorded ? {} : { memory_refs: preferenceMemoryRefs(prefs) }),
           },
           rule_impact: verdict.impacts,
@@ -508,6 +533,16 @@ export async function runQuest(
               ...(priceCtx ? { autonomy_band_key: priceCtx.bandKey, base_price: priceCtx.basePrice } : {}),
               irreversible: step.context?.irreversible === true,
               affected_domains: Array.isArray(step.context?.affected_domains) ? step.context.affected_domains : [],
+              /**
+               * W-01：求值异常降级来的挂起必须在审批卡上写明"缺参数"，否则客户只看到一张
+               * "越围栏"卡却不知道缺什么（P2 审批卡渲染 snapshot.warning / params_incomplete）。
+               */
+              ...(fenceUnevaluable
+                ? {
+                  params_incomplete: true,
+                  warning: `围栏无法求值（缺参数，已按人工裁决而非熔断处理）：${verdict.evalErrors.slice(0, 3).join("；")}。请补齐参数或驳回。`,
+                }
+                : {}),
               expires_at: new Date(Date.now() + 24 * 3600e3).toISOString(),
             }),
             tier],

@@ -3744,6 +3744,27 @@ z("知识库事实：ask 答案必须含知识内容，不被通用统计挤掉"
   assert(answer.length <= ASK_ANSWER_MAX_CHARS, `GR-09 硬闸仍须守住（实际 ${answer.length} 字）`);
 });
 
+z("缺参写步骤：围栏求值异常必须降级人工裁决，不得假熔断", async () => {
+  /**
+   * 与 geo 工作区同构：写步骤缺 before/after（行业规划器在档案无价带时"宁可不给数"），
+   * 命中 R1/R2 这类**算术型 when** → 旧口径按 E2.1「宁可错杀」判 block →
+   * 客户在 UI 上看到的是"围栏熔断 + 任务已暂停"，且没有人工裁决入口（第三方实拍实证 W-01）。
+   */
+  const tid = await zThread();
+  const planMissingData: QuestPlanner = () => [{
+    stepId: "s1", action: "price.adjust", objectType: "room_price", tool: "pms.price.write",
+    params: { price: 520 }, label: "缺基准价调价（无 before/after）",
+  }];
+  const r = await runQuest(app, gw, zScope, {
+    threadId: tid, goal: "把雅致大床房调价到 520 元", presetKey: "pricing-agent", fallbackPlanner: planMissingData,
+  });
+  eq(r.status, "pending_review", "求值异常不得按熔断处理（必须挂起人审，而不是 paused）");
+  const snap = await zQuery<{ snapshot: { params_incomplete?: boolean; warning?: string } }>(
+    `SELECT snapshot FROM approvals WHERE approval_id=$1`, [r.pendingApprovalId!]);
+  eq(snap.rows[0]?.snapshot.params_incomplete, true, "审批卡须带参数不完整警示");
+  assert((snap.rows[0]?.snapshot.warning ?? "").includes("无法求值"), "警示须说明是缺参数导致围栏算不出来");
+});
+
 z("高危批量守卫：l4_chairman 审批（快照无 high_risk）也必须逐条", async () => {
   /**
    * 与"快照打标"用例的区别：这里走的是**非 loop.ts 的审批来源**（种子/CEO 队列/技能下发同构），
