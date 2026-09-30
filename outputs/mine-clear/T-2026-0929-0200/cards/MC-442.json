@@ -51,7 +51,7 @@
       "kind": "sample",
       "given": "ws-yunqi 出厂 mock 态依次提问：待审批 / 进行中任务 / 工单 / 夜班 / 毛巾更换",
       "expect": "四类系统问题给出当前真实数字（与库内计数一致），知识型问题引用知识库；approvals 取数来源无 kb:；KB-only 答案不声称「数字来自事件库」",
-      "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app:workloom_dev_app@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway:workloom_dev_gateway@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-ask-coverage.mjs",
+      "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app:<redacted>@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway:<redacted>@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-ask-coverage.mjs",
       "last_result": "pass",
       "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-ask-1790706124455.json"
     },

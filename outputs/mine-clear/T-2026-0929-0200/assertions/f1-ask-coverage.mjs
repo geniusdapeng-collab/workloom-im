@@ -22,7 +22,7 @@ const EVIDENCE = join(HERE, "..", "evidence", "fix-e");
 const BASE = process.env.MCD_BASE ?? "http://127.0.0.1:8899";
 const WS_SLUG = process.env.MCD_WS ?? "yunqi-hotel";
 const MEMBER_NO = process.env.MCD_MEMBER ?? "MEM-001";
-const APP_URL = process.env.DATABASE_APP_URL ?? "postgres://workloom_app:workloom_dev_app@127.0.0.1:5432/workloom";
+const APP_URL = process.env.DATABASE_APP_URL ?? "postgres://workloom_app:<redacted>@127.0.0.1:5432/workloom";
 const WS_ID = WS_SLUG === "ai-pm-demo" ? "ws-aipm-demo" : "ws-yunqi";
 
 const out = { probe: "f1-ask-coverage", started_at: new Date().toISOString(), base: BASE, workspaceSlug: WS_SLUG, assertions: [] };

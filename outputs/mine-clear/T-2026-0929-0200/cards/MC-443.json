@@ -51,7 +51,7 @@
       "kind": "sample",
       "given": "C 端建单（自动 assigned）后 B 端重复派单（同值 / 异值），再对已办结单派单",
       "expect": "同值 200 且不重复落 assign 事件；异值 200 且 dept/assignee 更新、状态不变；已办结 409 CONFLICT；不存在 404 NOT_FOUND",
-      "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app:workloom_dev_app@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway:workloom_dev_gateway@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-ticket-reassign.mjs",
+      "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app:<redacted>@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway:<redacted>@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-ticket-reassign.mjs",
       "last_result": "pass",
       "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-ticket-1790706124591.json"
     },

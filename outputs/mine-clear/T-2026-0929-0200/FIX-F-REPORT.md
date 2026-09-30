@@ -117,7 +117,7 @@ a68eed0 fix(scripts): 验链摘要按花括号配平解析，异常规模不再�
 
 ```bash
 # 环境：bash work/fix-f/serve-ff.sh（server 8995）+ bash work/fix-f/serve-web-ff.sh（PC 5395）
-M6_BASE=http://127.0.0.1:8995 M6_DB=postgres://postgres:workloom@127.0.0.1:5432/wl_mcd_ff \
+M6_BASE=http://127.0.0.1:8995 M6_DB=postgres://postgres:<redacted>@127.0.0.1:5432/wl_mcd_ff \
   node work/fix-f/assert-r2f3-wizard.mjs          # R2-F3：8/8
 cd /Users/mac/WorkLoom-fleet/.wt-mcd-ff && node_modules/.bin/tsx \
   work/fix-f/assert-r2f4-parse.mts                # R2-F4：7/7（真实异常库 wl_mcd_d + 健康库）

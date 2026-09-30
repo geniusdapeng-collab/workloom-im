@@ -1314,14 +1314,14 @@
           "kind": "sample",
           "given": "ws-aipm-demo 上传文档后调用 service.kb.approveDocument，再对该记录重复批准",
           "expect": "文档 active 且可检索；审批记录 approved（带决策人/手势）；pending 列表无该文档；重复批准 deduped 且不新增事件",
-          "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app:workloom_dev_app@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway:workloom_dev_gateway@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-kb-publish-gate.mjs",
+          "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app:<redacted>@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway:<redacted>@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-kb-publish-gate.mjs",
           "last_result": "pass"
         },
         {
           "kind": "property",
           "given": "任意 kb.publish 审批（含修复前遗留的 pending 行）被 approve/edit/reject",
           "expect": "approve/edit → 文档生效；reject → 文档退回 pending_review 且检索不可见（两面不再矛盾）；重复回调幂等",
-          "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app:workloom_dev_app@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway:workloom_dev_gateway@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-kb-publish-gate.mjs",
+          "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app:<redacted>@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway:<redacted>@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-kb-publish-gate.mjs",
           "last_result": "pass"
         }
       ]
@@ -1337,7 +1337,7 @@
           "kind": "sample",
           "given": "ws-yunqi 出厂 mock 态依次提问：待审批 / 进行中任务 / 工单 / 夜班 / 毛巾更换",
           "expect": "四类系统问题给出当前真实数字（与库内计数一致），知识型问题引用知识库；approvals 取数来源无 kb:；KB-only 答案不声称「数字来自事件库」",
-          "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app:workloom_dev_app@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway:workloom_dev_gateway@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-ask-coverage.mjs",
+          "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app:<redacted>@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway:<redacted>@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-ask-coverage.mjs",
           "last_result": "pass"
         },
         {
@@ -1360,7 +1360,7 @@
           "kind": "sample",
           "given": "C 端建单（自动 assigned）后 B 端重复派单（同值 / 异值），再对已办结单派单",
           "expect": "同值 200 且不重复落 assign 事件；异值 200 且 dept/assignee 更新、状态不变；已办结 409 CONFLICT；不存在 404 NOT_FOUND",
-          "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app:workloom_dev_app@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway:workloom_dev_gateway@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-ticket-reassign.mjs",
+          "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app:<redacted>@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway:<redacted>@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-ticket-reassign.mjs",
           "last_result": "pass"
         },
         {
@@ -1383,7 +1383,7 @@
           "kind": "sample",
           "given": "演示成员 MEM-001 调用 accounts.inbox.unified（ai-pm-demo 与 yunqi-hotel）",
           "expect": "groups 非空且分店计数与库内 pending 审批/未办结工单一致；C 端建单后 pendingTickets +1、办结后回落",
-          "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app:workloom_dev_app@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway:workloom_dev_gateway@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-inbox-unified.mjs",
+          "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app:<redacted>@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway:<redacted>@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-inbox-unified.mjs",
           "last_result": "pass"
         },
         {

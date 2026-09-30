@@ -30,8 +30,8 @@ const BASE = process.env.MCD_BASE ?? "http://127.0.0.1:8899";
 const WS_SLUG = process.env.MCD_WS ?? "yunqi-hotel";
 const MEMBER_NO = process.env.MCD_MEMBER ?? "MEM-001";
 const GOAL = process.env.MCD_GOAL ?? "把周六招牌菜调价 8%（M3 联动探针）";
-const APP_URL = process.env.DATABASE_APP_URL ?? "postgres://workloom_app:workloom_dev_app@127.0.0.1:5432/workloom";
-const GW_URL = process.env.DATABASE_GATEWAY_URL ?? "postgres://workloom_gateway:workloom_dev_gateway@127.0.0.1:5432/workloom";
+const APP_URL = process.env.DATABASE_APP_URL ?? "postgres://workloom_app:<redacted>@127.0.0.1:5432/workloom";
+const GW_URL = process.env.DATABASE_GATEWAY_URL ?? "postgres://workloom_gateway:<redacted>@127.0.0.1:5432/workloom";
 
 const out = {
   probe: "m3-thread-linkage",

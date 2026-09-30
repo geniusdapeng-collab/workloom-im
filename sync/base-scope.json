@@ -173,7 +173,7 @@
   ],
   "acceptedBaseSecretScanFindings": {
     ".env.example": {
-      "sha256": "816b8a44c892fb5ee5d6bb3be89f031fe53915349249c2f57c34fb0b02a3c7e5",
+      "sha256": "ba5f1958c32f5bc9ec2061f4e8a6291a17244a4b0f5b31f7edad429a45c0d2a2",
       "findings": [
         {
           "rule": "private-key",
@@ -287,7 +287,7 @@
       "reason": "种子预检负向测试连接固定的 127.0.0.1:1 不可达地址，用户名和密码均为 invalid。"
     },
     "scripts/seed-aipm.ts": {
-      "sha256": "bd6cd4e23b3fbb7f765e8dca20c6715b9f8dcebf2388716c239ac1ee44ce819f",
+      "sha256": "b3bb5599958e25b9025e26d5166cc409633c98740707d65c36158af830154708",
       "findings": [
         {
           "rule": "credential-in-url",
@@ -301,7 +301,7 @@
       "reason": "AI 产品经理示例种子只使用仓库 docker-compose 的本机 owner / gateway 测试默认值；生产值只能来自环境变量。"
     },
     "scripts/release-gate.ts": {
-      "sha256": "c928fcf0ac6334cec00f1cff0632a68653a76a8a53e8bab6ea10833ea818c9aa",
+      "sha256": "83ffbd5660b2dc90cf6a856b50c7a314f481778d85e51f6d2f7f5b078210b23b",
       "findings": [
         {
           "rule": "credential-in-url",
