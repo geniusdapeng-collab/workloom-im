@@ -1,0 +1,7 @@
++ node /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/assertions/m1-highrisk-batch.mjs
+- dispatch: 200 threadId=T-129 kind=routed
+- thread status after dispatch: pending_review
+- approval row: {"approval_id":"apr-e-10364","tier":"l2_captain","snap_high_risk":"true","snap_irreversible":"false","tool":"desktop.gui","status":"pending"}
+- isHighRiskApproval(guard view) = true（preset 声明 high_risk=true 的岗位）
+- batchApprove: 200 approved=[] skipped=[{"id":"apr-e-10364","reason":"高危项不可批量采纳（须逐条）"}]
+OK: 高危岗位的关卡被批量放行守卫拦下

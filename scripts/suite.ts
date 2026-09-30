@@ -165,14 +165,21 @@ async function mkEvent(action: string, opts: { sessionId?: string; basis?: strin
   });
   return r.eventId;
 }
-async function mkApproval(opts: { status?: string; highRisk?: boolean; expiresInMs?: number } = {}): Promise<{ approvalId: string; eventId: string }> {
+async function mkApproval(opts: { status?: string; highRisk?: boolean; expiresInMs?: number; snapshotExtra?: Record<string, unknown> } = {}): Promise<{ approvalId: string; eventId: string }> {
   const eventId = await mkEvent("suite.reviewable");
   const approvalId = `apr-suite-${SFX}-${Math.random().toString(36).slice(2, 8)}`;
   await qApp(
     `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, snapshot)
      VALUES ($1,$2,$3,$4,'inapp',$5,$6)`,
     [approvalId, scope.tenantId, scope.workspaceId, eventId, opts.status ?? "pending",
-      JSON.stringify({ before: null, after: { v: 1 }, high_risk: opts.highRisk ?? false, expires_at: new Date(Date.now() + (opts.expiresInMs ?? 864e5)).toISOString() })],
+      JSON.stringify({
+        before: null,
+        after: { v: 1 },
+        high_risk: opts.highRisk ?? false,
+        expires_at: new Date(Date.now() + (opts.expiresInMs ?? 864e5)).toISOString(),
+        // MC-106：需要作为高危写动作逐次授权引用时，调用方补 object_type/object_id/action 绑定
+        ...(opts.snapshotExtra ?? {}),
+      })],
   );
   return { approvalId, eventId };
 }
@@ -273,10 +280,12 @@ b("高危 Agent 写动作缺 approvalRef 被拒（L3.5）", async () => {
 });
 b("高危 Agent 带 approvalRef 放行", async () => {
   // P1-8：approvalRef 必须指向真实审批行——先造行再引用
+  // MC-106：审批必须携带齐备绑定（object_type/object_id/action），且一次性消费
   await qApp(
     `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, tier, snapshot)
-     VALUES ($1,$2,$3,$4,'inapp','approved','l4_chairman','{}') ON CONFLICT (event_id, channel) DO NOTHING`,
-    [`apr-${SFX}`, scope.tenantId, scope.workspaceId, `E-APR-${SFX}`],
+     VALUES ($1,$2,$3,$4,'inapp','approved','l4_chairman',$5) ON CONFLICT (event_id, channel) DO NOTHING`,
+    [`apr-${SFX}`, scope.tenantId, scope.workspaceId, `E-APR-${SFX}`,
+      JSON.stringify({ object_type: "room_price", object_id: `obj-${SFX}`, action: "desktop.gui", expires_at: new Date(Date.now() + 864e5).toISOString() })],
   );
   const r = await gatewayAppend(gw, { ...scope, actor: { id: "desktop-agent", type: "agent", fenceBindings: ["R2"], highRisk: true }, approvalRef: `apr-${SFX}` }, draftOf("desktop.gui", "desktop-agent"));
   assert(r.eventId, "应落库");
@@ -1609,8 +1618,10 @@ l("desktop-agent 高危无逐次授权拒绝", async () => {
 l("desktop-agent 高危带逐次授权放行", async () => {
   await qApp(
     `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, tier, snapshot)
-     VALUES ($1,$2,$3,$4,'inapp','approved','l4_chairman','{}') ON CONFLICT (event_id, channel) DO NOTHING`,
-    [`apr-desktop-${SFX}`, scope.tenantId, scope.workspaceId, `E-APRD-${SFX}`],
+     VALUES ($1,$2,$3,$4,'inapp','approved','l4_chairman',$5) ON CONFLICT (event_id, channel) DO NOTHING`,
+    [`apr-desktop-${SFX}`, scope.tenantId, scope.workspaceId, `E-APRD-${SFX}`,
+      // MC-106：绑定齐备（对象类型/对象 id/动作）——缺绑定不再按通用授权放行
+      JSON.stringify({ object_type: "room_price", object_id: `obj-${SFX}`, action: "desktop.gui", expires_at: new Date(Date.now() + 864e5).toISOString() })],
   );
   const r = await gatewayAppend(gw, { ...scope, actor: { id: "desktop-agent", type: "agent", fenceBindings: ["R2"], highRisk: true }, approvalRef: `apr-desktop-${SFX}` }, draftOf("desktop.gui", "desktop-agent"));
   assert(r.eventId, "授权放行");
@@ -1842,7 +1853,11 @@ o("高危桌面操作授权链：无授权拒 → 审批 → 带授权放行", a
     await gatewayAppend(gw, { ...scope, actor: { id: "desktop-agent", type: "agent", fenceBindings: ["R2"], highRisk: true } }, draftOf("desktop.gui", "desktop-agent"));
   } catch { threw = true; }
   assert(threw, "无授权高危必拒");
-  const { approvalId } = await mkApproval({ highRisk: true });
+  // MC-106：逐次授权引用必须绑定本次对象与动作（缺绑定一律 fail-closed 拒绝）
+  const { approvalId } = await mkApproval({
+    highRisk: true,
+    snapshotExtra: { object_type: "room_price", object_id: `obj-${SFX}`, action: "desktop.gui" },
+  });
   await decide(app, gw, scope, boss, approvalId, { type: "approve" });
   const r = await gatewayAppend(gw, { ...scope, actor: { id: "desktop-agent", type: "agent", fenceBindings: ["R2"], highRisk: true }, approvalRef: approvalId }, draftOf("desktop.gui", "desktop-agent"));
   assert(r.eventId, "授权后放行");
@@ -2237,15 +2252,32 @@ const PORT = Number(process.env.SUITE_SERVER_PORT ?? "8787");
 if (!Number.isInteger(PORT) || PORT < 1024 || PORT > 65535) {
   throw new Error("SUITE_SERVER_PORT 必须是 1024 到 65535 的整数");
 }
+/**
+ * MC-107：LLM stub 端口此前硬编码 8791——本机任何进程占用 8791 都会让整轮套件在 D24 段
+ * EADDRINUSE 崩掉，且错误里没有端口与出路。改为可覆盖（SUITE_STUB_PORT）+ 启动预检。
+ */
+const STUB_PORT = Number(process.env.SUITE_STUB_PORT ?? "8791");
+if (!Number.isInteger(STUB_PORT) || STUB_PORT < 1024 || STUB_PORT > 65535) {
+  throw new Error("SUITE_STUB_PORT 必须是 1024 到 65535 的整数");
+}
 const BASE = `http://localhost:${PORT}`;
 
-async function assertSuitePortAvailable(): Promise<void> {
+/**
+ * 端口占用预检（MC-107）：套件只允许连自己拉起的服务/stub，端口被外部进程占用时必须
+ * 以带端口与覆盖变量名的明确错误**快速失败**，而不是在用例中途 EADDRINUSE 崩掉整轮。
+ */
+async function assertPortAvailable(port: number, label: string, envVar: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const probe = createServer();
-    probe.once("error", () => reject(new Error(`HTTP E2E 端口 ${PORT} 已被占用；拒绝连接到非本套件启动的服务`)));
-    probe.listen(PORT, "127.0.0.1", () => probe.close(() => resolve()));
+    probe.once("error", () => reject(new Error(`${label} ${port} 已被占用；拒绝连接到非本套件启动的服务（可用 ${envVar}=<port> 覆盖）`)));
+    probe.listen(port, "127.0.0.1", () => probe.close(() => resolve()));
   });
 }
+const assertSuitePortAvailable = (): Promise<void> => assertPortAvailable(PORT, "HTTP E2E 端口", "SUITE_SERVER_PORT");
+const assertStubPortAvailable = (): Promise<void> => assertPortAvailable(STUB_PORT, "LLM stub 端口", "SUITE_STUB_PORT");
+// 预检放最前：端口被外部进程占用时立刻失败（带端口与覆盖变量名），不等跑完服务层用例
+await assertSuitePortAvailable();
+await assertStubPortAvailable();
 
 async function api<T = unknown>(path: string, opts: { method?: string; token?: string; body?: unknown } = {}): Promise<{ status: number; data: T }> {
   const res = await fetch(`${BASE}${path}`, {
@@ -2445,7 +2477,15 @@ function defineE2E(): void {
 
 /* ---- D24 落地向导 E2E：模拟态横幅事实源 → 真实模型装配 → ask 真实推理 → 真实模式 ---- */
 let llmStub: Server | null = null;
-const STUB_PORT = 8791;
+/** 起 stub 前的占用预检 + listen 失败的明确错误（带端口与覆盖变量名） */
+async function listenStubOnce(server: Server): Promise<void> {
+  await assertStubPortAvailable();
+  await new Promise<void>((resolve, reject) => {
+    const onError = (err: Error) => reject(new Error(`LLM stub 端口 ${STUB_PORT} 监听失败（可用 SUITE_STUB_PORT=<port> 覆盖）：${err.message}`));
+    server.once("error", onError);
+    server.listen(STUB_PORT, "127.0.0.1", () => { server.off("error", onError); resolve(); });
+  });
+}
 h2("onboarding.status 全模拟运行态（横幅事实源：simulated + mock）", async () => {
   const { data } = await api<{ result?: { data?: { dataMode?: string; llm?: { real?: boolean }; workspace?: { events?: number; agents?: number } } } }>("/trpc/onboarding.status", { token: tokenOwner });
   eq(data.result?.data?.dataMode, "simulated", "种子库默认模拟态");
@@ -2471,7 +2511,7 @@ h2("onboarding.saveLlmConfig 真实试调 → 落盘生效（OpenAI 兼容 stub 
       res.writeHead(404); res.end();
     }
   });
-  await new Promise<void>((r) => llmStub!.listen(STUB_PORT, "127.0.0.1", () => r()));
+  await listenStubOnce(llmStub!);
   const { data } = await api<{ result?: { data?: { ok?: boolean; real?: boolean } }; error?: { message?: string } }>("/trpc/onboarding.saveLlmConfig", {
     method: "POST", token: tokenOwner,
     body: { provider: "e2e-stub", baseUrl: `http://127.0.0.1:${STUB_PORT}/v1`, apiKey: "sk-e2e-dummy-1234567890", model: "stub-real-1" },
@@ -2524,7 +2564,7 @@ h2("融合·LLM 装配后节拍真实推理（runBeat via=llm）→ 还原", asy
       });
     } else { res.writeHead(404); res.end(); }
   });
-  await new Promise<void>((r) => llmStub!.listen(STUB_PORT, "127.0.0.1", () => r()));
+  await listenStubOnce(llmStub!);
   await api("/trpc/onboarding.saveLlmConfig", { method: "POST", token: tokenOwner, body: { provider: "e2e-stub", baseUrl: `http://127.0.0.1:${STUB_PORT}/v1`, apiKey: "sk-e2e-dummy", model: "stub-real-1" } });
   const { data } = await api<{ result?: { data?: { eventId?: string; via?: string } } }>("/trpc/captain.runBeat", { method: "POST", token: tokenOwner, body: { beat: "daily" } });
   eq(data.result?.data?.via, "llm", "节拍走真实模型");
@@ -2645,8 +2685,20 @@ h2("融合·LLM 降级链：死端配置被拒 → mock 兜底应答不断链", 
 
   RC("L2 裁决节拍：带内批准 / 贴边上浮 L4（公司CEO 自主闭环）", async () => {
     const arc = await getArchive();
-    // 种子 pending 审批行状态备份（裁决节拍会消费全量 L2 队列，用例后恢复，不跨用例污染）
-    const seedPending = (await qApp<{ approval_id: string }>(`SELECT approval_id FROM approvals WHERE workspace_id=$1 AND status='pending'`, [scope.workspaceId])).rows.map((r) => r.approval_id);
+    /**
+     * 队列隔离（M6-N1 / R2）：裁决节拍每轮最多处理 20 条 `l2_captain` 待批——
+     * 历史遗留（前序用例或上一次运行留下的待批）会先吃掉配额，本用例新建的两条永远轮不到，
+     * 于是断言「裁决 0 上浮 20」在污染库上假红（干净库 463/463、污染库假红）。
+     * 快照 pending 行（记录原 tier），临时移出队列，finally 原样恢复——与 R-10/R-12 同口径。
+     */
+    const seedPending = (await qApp<{ approval_id: string; tier: string }>(
+      `SELECT approval_id, tier FROM approvals WHERE workspace_id=$1 AND status='pending'`,
+      [scope.workspaceId],
+    )).rows;
+    await qApp(
+      `UPDATE approvals SET status='rejected' WHERE workspace_id=$1 AND status='pending'`,
+      [scope.workspaceId],
+    );
     try {
       const mk = async (id: string, price: number) => qApp(
         `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, snapshot, tier)
@@ -2663,12 +2715,12 @@ h2("融合·LLM 降级链：死端配置被拒 → mock 兜底应答不断链", 
       assert((await countEvents("ceo.decision")) >= 2, "ceo.decision 留痕");
     } finally {
       await restoreArchive(arc);
-      // 恢复种子审批行（裁决副作用回滚）+ 清理本用例审批行
-      for (const id of seedPending) {
+      // 恢复种子审批行（原 tier 如实回填；裁决副作用回滚）+ 清理本用例审批行
+      for (const row of seedPending) {
         await qApp(
-          `UPDATE approvals SET status='pending', tier='l2_captain', gesture=NULL, decided_by=NULL, decided_at=NULL,
+          `UPDATE approvals SET status='pending', tier=$2, gesture=NULL, decided_by=NULL, decided_at=NULL,
              snapshot = snapshot - 'ceo_escalated' - 'ceo_rationale' WHERE approval_id=$1`,
-          [id],
+          [row.approval_id, row.tier],
         );
       }
       await qApp(`DELETE FROM approvals WHERE approval_id IN ($1,$2)`, [`apr-r05a-${SFX}`, `apr-r05b-${SFX}`]);
@@ -3742,6 +3794,23 @@ z("知识库事实：ask 答案必须含知识内容，不被通用统计挤掉"
   assert(answer.includes("星火"), `答案须含知识库暗号内容（实际：${answer}）`);
   assert(!answer.includes("已截断"), `知识内容完整时不得标"已截断"（实际：${answer}）`);
   assert(answer.length <= ASK_ANSWER_MAX_CHARS, `GR-09 硬闸仍须守住（实际 ${answer.length} 字）`);
+  /**
+   * MC-111（2026-09-30 批 E）：知识库优先级只对"知识型提问"成立——问系统事实（审批/工单/夜班/线程）时，
+   * 被问域事实必须排在知识库之前，且落款必须与正文实际取数来源一致（KB-only 不得声称事件库数字）。
+   */
+  const systemMerged = mergeKbFacts(
+    { facts: [{ label: "当前待审批", value: "3 项（决断队列）", domain: "approvals" }], sources: ["approvals"] },
+    [{ content: "拨0报修后可随时致电前台查询进度。", heading: "维修报修", documentTitle: "住客常见问答", documentId: docId }],
+  );
+  const systemAnswer = composeAskAnswer("当前有多少待审批事项？", systemMerged.facts);
+  assert(systemAnswer.includes("当前待审批：3 项"), `系统问句必须给出被问域事实（实际：${systemAnswer}）`);
+  assert(systemAnswer.indexOf("当前待审批") < systemAnswer.indexOf("知识库·"),
+    `被问域事实必须先于知识库命中（实际：${systemAnswer}）`);
+  const kbOnlyAnswer = composeAskAnswer("暗号是什么？", mergeKbFacts({ facts: [], sources: [] }, [
+    { content: "客户报暗号「星火」可再减 30 元。", heading: "暗号", documentTitle: "国庆促销政策", documentId: docId },
+  ]).facts);
+  assert(!kbOnlyAnswer.includes("以上数字均来自事件库实时取数"),
+    `KB-only 答案不得声称数字来自事件库（实际：${kbOnlyAnswer}）`);
 });
 
 z("缺参写步骤：围栏求值异常必须降级人工裁决，不得假熔断", async () => {
@@ -4124,7 +4193,14 @@ z("A-05 启动补扫：审批已通过而线程仍挂起时必须补续跑", asy
       `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, snapshot)
        VALUES ($1,$2,$3,$4,'inapp','approved',$5)`,
       [aprId, zScope.tenantId, zScope.workspaceId, evRow.eventId,
-        JSON.stringify({ before: null, after: { v: 1 }, expires_at: new Date(Date.now() + 864e5).toISOString() })],
+        // MC-106（R2-F1/F2）：补续跑会带着本票据重放 desktop.gui 写步骤，快照必须绑定动作，
+        // 否则被 fail-closed 拒绝——「未绑定任何写动作」会掩盖补扫本身是否工作。
+        JSON.stringify({
+          before: null,
+          after: { v: 1 },
+          action: "desktop.gui",
+          expires_at: new Date(Date.now() + 864e5).toISOString(),
+        })],
     );
     const resumed = await resumeApprovedPendingThreads();
     assert(resumed >= 1, `启动补扫应至少补续跑 1 条僵尸线程（实际 ${resumed}）`);

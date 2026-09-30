@@ -1,0 +1,218 @@
+{
+  "title": "M2-01 主链路闭环",
+  "started_at": "2026-09-29T23:57:31.318Z",
+  "finished_at": "2026-09-29T23:57:38.192Z",
+  "base": "http://127.0.0.1:8985",
+  "suffix": "m2munc6ai1",
+  "total": 21,
+  "passed": 20,
+  "failed": 0,
+  "checks": [
+    {
+      "name": "seeded sessions",
+      "ok": null,
+      "detail": {
+        "owner": "owner",
+        "manager": "manager",
+        "readonly": "readonly"
+      }
+    },
+    {
+      "name": "dispatch 建线程且路由为 quest",
+      "ok": true,
+      "detail": {
+        "status": 200,
+        "d": {
+          "kind": "routed",
+          "mode": "quest",
+          "via": "rule",
+          "threadId": "T-110",
+          "status": "pending_review",
+          "stepsDone": 1,
+          "stepsTotal": 2,
+          "warnings": [
+            "当前部署未配置工具执行桥，写动作（pms.price.write、ota.price.write）将以「未核实」收尾"
+          ]
+        }
+      }
+    },
+    {
+      "name": "dispatch 走围栏判定（越围栏挂起 pending_review，或价带内 auto 完成）",
+      "ok": true,
+      "detail": {
+        "kind": "routed",
+        "mode": "quest",
+        "via": "rule",
+        "threadId": "T-110",
+        "status": "pending_review",
+        "stepsDone": 1,
+        "stepsTotal": 2,
+        "warnings": [
+          "当前部署未配置工具执行桥，写动作（pms.price.write、ota.price.write）将以「未核实」收尾"
+        ],
+        "note": "挂起分支"
+      }
+    },
+    {
+      "name": "审批行可定位（pending_approval_id 或线程事件链反查）",
+      "ok": true,
+      "detail": {
+        "approvalId": "apr-e-9132",
+        "status": "pending_review",
+        "rowStatus": null
+      }
+    },
+    {
+      "name": "approvals 行快照声明 gate（状态 pending 或已自动续跑 approved；无审批行时 SKIP）",
+      "ok": true,
+      "detail": {
+        "note": "SKIP：本次为价带内 auto 完成，无审批行（MC-306 修复后的预期行为）"
+      }
+    },
+    {
+      "name": "挂起事件落账（decision.kind=review 或 basis 标注越围栏挂起；auto 完成时 SKIP）",
+      "ok": true,
+      "detail": {
+        "note": "SKIP：本次为价带内 auto 完成，无挂起事件"
+      }
+    },
+    {
+      "name": "统一队列可见该审批（已自动续跑/无审批行时按 SKIP）",
+      "ok": true,
+      "detail": {
+        "queueSize": 4,
+        "rowStatus": null,
+        "note": "SKIP：审批已被自动续跑消费，队列中不再为 pending"
+      }
+    },
+    {
+      "name": "readonly 审批被拒（403/FORBIDDEN）",
+      "ok": true,
+      "detail": {
+        "status": 403,
+        "code": "FORBIDDEN",
+        "body": "{\"error\":{\"message\":\"当前成员没有“审批裁决”权限。\",\"code\":-32003,\"data\":{\"code\":\"FORBIDDEN\",\"httpStatus\":403,\"stack\":\"TRPCError: 当前成员没有“审批裁决”权限。\\n    at <anonymous> (/Users/"
+      }
+    },
+    {
+      "name": "readonly 被拒后审批状态未被其改写（未落库；无审批行/已自动续跑时按 SKIP）",
+      "ok": true,
+      "detail": {
+        "before": null,
+        "after": null,
+        "note": "SKIP：审批已由自动续跑置为 approved，readonly 手势未被采纳"
+      }
+    },
+    {
+      "name": "非法手势被拒（400/BAD_REQUEST）",
+      "ok": true,
+      "detail": {
+        "status": 400,
+        "code": "BAD_REQUEST",
+        "message": "[\n  {\n    \"code\": \"invalid_value\",\n    \"values\": [\n      \"approve\",\n      \"edit\",\n      \"reject\"\n    ],\n    \"path\": [\n      \"gesture\"\n    ],\n    \"message\": \"Invalid option: expected one of \\\"approve\\\"|\\\"edit\\\"|\\\"reject\\\"\"\n  }\n]"
+      }
+    },
+    {
+      "name": "空理由驳回被拒（L5.2）",
+      "ok": true,
+      "detail": {
+        "status": 400,
+        "message": "驳回必须选择原因枚举（L5.2）"
+      }
+    },
+    {
+      "name": "两次非法手势后审批状态未被其改写（无审批行/已自动续跑时按 SKIP）",
+      "ok": true,
+      "detail": {
+        "status": null,
+        "gesture": null,
+        "note": "SKIP：审批已由自动续跑置为 approved"
+      }
+    },
+    {
+      "name": "manager 采纳成功（无审批行时 SKIP）",
+      "ok": true,
+      "detail": {
+        "approvalId": "apr-e-9132",
+        "status": "approved",
+        "deduped": false,
+        "gestureEventId": "E-9133"
+      }
+    },
+    {
+      "name": "手势事件经网关落账（无审批行时 SKIP）",
+      "ok": true,
+      "detail": {
+        "count": 0,
+        "after": null,
+        "note": "SKIP：本次为 auto 完成，无审批手势"
+      }
+    },
+    {
+      "name": "审批通过后服务端自动续跑（21s 内线程自达 completed）",
+      "ok": true,
+      "detail": {
+        "observed": {
+          "ok": true,
+          "status": "completed",
+          "progress_done": 2,
+          "progress_total": 2
+        },
+        "waitedMs": 6033,
+        "note": "已自动续跑"
+      }
+    },
+    {
+      "name": "threads.run 携带已批准步骤直接执行 → completed（auto 完成时 SKIP）",
+      "ok": true,
+      "detail": {
+        "note": "SKIP：本次为 auto 完成，无需人工推进"
+      }
+    },
+    {
+      "name": "终态一致：completed + progress 收敛 + 无遗留审批",
+      "ok": true,
+      "detail": {
+        "status": "completed",
+        "done": 2,
+        "total": 2,
+        "pending": null
+      }
+    },
+    {
+      "name": "执行事件带可核验回执（receipt.synced=true, mode=simulated）且标注审批来源",
+      "ok": true,
+      "detail": {
+        "receipt": {
+          "mode": "simulated",
+          "synced": true,
+          "verified_at": "2026-09-29T15:14:59.765Z",
+          "snapshot_uri": "workloom-sim://receipt/competitor.crawl/mumtiblh"
+        },
+        "approval_ref": null
+      }
+    },
+    {
+      "name": "属性：completed 线程的执行事件全部 receipt.synced=true（全工作区）",
+      "ok": true,
+      "detail": {
+        "offenders": [],
+        "note": "反例即 E3.7「无回执不得宣称完成」被破坏"
+      }
+    },
+    {
+      "name": "settledSince 流水含该线程（结算投影）",
+      "ok": true,
+      "detail": {
+        "n": 4
+      }
+    },
+    {
+      "name": "行动消息流投影含挂起 + 执行 + 手势链路（≥3 条）",
+      "ok": true,
+      "detail": {
+        "n": 5
+      }
+    }
+  ]
+}

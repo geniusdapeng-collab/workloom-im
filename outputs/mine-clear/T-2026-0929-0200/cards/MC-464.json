@@ -1,0 +1,58 @@
+{
+  "id": "MC-464",
+  "kind": "fix",
+  "batch": 1,
+  "state": "fixed",
+  "title": "R2 修复：release-gate 验链摘要解析取 `{` 之后全文 → JSON.parse 抛错，异常规模丢失",
+  "covers": [
+    "MC-504"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "scripts/release-gate.ts:60@a68eed0",
+      "note": "修复提交 a68eed0"
+    },
+    {
+      "type": "log",
+      "ref": "work/fix-f/final-r2f4.log（7/7）+ gate-anom.log（T-03 报 499700 处异常）",
+      "note": "红→绿对照"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/FIX-F-REPORT.md",
+      "note": "修复报告（根因/修法/回归/回滚）"
+    }
+  ],
+  "fix_plan": "见 FIX-F-REPORT.md §3（根因 + 代码级修法 + 证据）",
+  "blast_radius": "见 FIX-F-REPORT.md 对应小节",
+  "conflict_paths": [
+    "scripts/release-gate.ts"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "复跑 MC-504",
+      "expect": "转绿",
+      "command": "node work/fix-f/assert-r2f4-parse.mts",
+      "last_result": "pass",
+      "evidence": "work/fix-f/final-r2f4.log（7/7）+ gate-anom.log（T-03 报 499700 处异常）"
+    },
+    {
+      "kind": "property",
+      "given": "同类输入/重复执行",
+      "expect": "保持通过（幂等、不依赖遗留数据）",
+      "command": "node work/fix-f/assert-r2f4-parse.mts",
+      "last_result": "pass",
+      "evidence": "work/fix-f/final-r2f4.log（7/7）+ gate-anom.log（T-03 报 499700 处异常）"
+    }
+  ],
+  "regression": {
+    "command": "bash work/fix-f/run-regression.sh（8/8 PASS）",
+    "evidence": "work/fix-f/reg-*.log"
+  },
+  "rollback": "git revert a68eed0",
+  "fixed_by": "fixer-F",
+  "verified_by": null,
+  "notes": "R2 复验由独立验证会话与独立验收会话执行。"
+}

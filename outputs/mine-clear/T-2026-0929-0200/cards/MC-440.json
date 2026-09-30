@@ -1,0 +1,53 @@
+{
+  "id": "MC-440",
+  "kind": "fix",
+  "batch": 1,
+  "state": "fixed",
+  "title": "验链摘要口径 + maxBuffer（ENOBUFS 不再伪装链断）",
+  "covers": [
+    "MC-210"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "scripts/verify-chain.ts:1@96e2c0a",
+      "note": "修复提交 96e2c0a"
+    },
+    {
+      "type": "log",
+      "ref": "work/fix-d/assert-sweep.log",
+      "note": "异常库输出 6.5KB（原 160MB）；T-03 报『N 处异常』"
+    }
+  ],
+  "fix_plan": "见 work/fix-d/REPORT-fix-d-service-acceptance.md 对应卡片小节（提交 96e2c0a）",
+  "blast_radius": "见报告对应小节",
+  "conflict_paths": [
+    "scripts/verify-chain.ts"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "复跑 MC-210 的验收断言",
+      "expect": "异常库输出 6.5KB（原 160MB）；T-03 报『N 处异常』",
+      "command": "bash work/fix-d/assert-sweep.sh",
+      "last_result": "pass",
+      "evidence": "work/fix-d/assert-sweep.log"
+    },
+    {
+      "kind": "property",
+      "given": "MC-210 的修复语义在任意同类输入下成立",
+      "expect": "同一断言脚本在重复运行下保持通过（幂等）",
+      "command": "bash work/fix-d/assert-sweep.sh",
+      "last_result": "pass",
+      "evidence": "work/fix-d/assert-sweep.log"
+    }
+  ],
+  "regression": {
+    "command": "pnpm suite && pnpm test && pnpm typecheck",
+    "evidence": "work/fix-d/suite.log; work/fix-d/root-test.log"
+  },
+  "rollback": "git revert 96e2c0a",
+  "fixed_by": "fix_d_service_acceptance",
+  "verified_by": null,
+  "notes": ""
+}

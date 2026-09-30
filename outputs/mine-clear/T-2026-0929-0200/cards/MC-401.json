@@ -1,0 +1,64 @@
+{
+  "id": "MC-401",
+  "kind": "fix",
+  "batch": 1,
+  "state": "fixed",
+  "title": "围栏规则行版本化：同一 rule_id 可重复提案且批准即生效",
+  "covers": [
+    "MC-102"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "packages/base/fence-engine/lifecycle.ts:171@4e52948",
+      "note": "fenceRuleRowId 版本化 fr-<rule>-v<N>-<ws>"
+    },
+    {
+      "type": "code",
+      "ref": "apps/server/src/trpc/router.ts:2286@4e52948",
+      "note": "插入冲突改为重算版本重试，5 次仍冲突显式报错（取代静默 ON CONFLICT DO NOTHING）"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/green-4-fence-with-dbstate.log",
+      "note": "断言 exit 0；DB：fr-r7-v1 基线 active / fr-r7-v3 block active"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/red-1-fence.log",
+      "note": "修复前同一断言 exit 1（attempt2 未生效）"
+    }
+  ],
+  "fix_plan": "行 ID/版本在事务内按历史最大版本 +1 分配；提案事件携带 ruleRowId/version；激活按行回写并对旧事件按 rule_id 反查兼容",
+  "blast_radius": "围栏规则提案/激活链路；P5 规则中心与 night-shift 围栏快照（后者按 is_baseline 取基线行，未改）",
+  "conflict_paths": [
+    "packages/base/fence-engine/lifecycle.ts",
+    "apps/server/src/trpc/router.ts"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "R7 连续两次加严（review → block）并逐次批准",
+      "expect": "第二次批准后 level=block 生效且版本递增（v3），旧租户行 rolled_back",
+      "command": "WORKTREE=/Users/mac/WorkLoom-fleet/.wt-mcd-fb bash work/with-server.sh work/env-fb -- node outputs/mine-clear/T-2026-0929-0200/assertions/m1-fence-rule-change.mjs",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/green-4-fence-with-dbstate.log"
+    },
+    {
+      "kind": "property",
+      "given": "任意 rule_id 的任意次合法加严提案",
+      "expect": "批准即生效，不存在『已批准但规则未变』的静默中间态",
+      "command": "同上（脚本循环两次加严 + 回读比对）",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/green-1-fence.log"
+    }
+  ],
+  "regression": {
+    "command": "RUN_DB_TESTS=1 pnpm -C packages/base test -- fence-engine && TOOL_UNVERIFIED_RATE=0 tsx --env-file=<env> scripts/suite.ts",
+    "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/vitest-fence-2.log; outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/suite-2.log（463/463）"
+  },
+  "rollback": "revert 4e52948（或 git revert -m 1 <merge commit>）",
+  "fixed_by": "fixer-B",
+  "verified_by": null,
+  "notes": "同批修复了『被拒提案消耗 dry-run』与『dry-run 可跨规则借用』两个同路径缺陷。"
+}

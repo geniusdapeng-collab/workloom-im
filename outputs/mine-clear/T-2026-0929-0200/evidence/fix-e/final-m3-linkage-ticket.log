@@ -1,0 +1,20 @@
+✓ B 端登录 :: "ws-aipm-demo"
+✓ C 端会话建立 :: {"status":200}
+✓ C 端提交工单成功 :: {"status":200,"ticketId":"tck-mun06x3i0034zqz"}
+✓ 客户侧工单列表可见（C 端投影） :: {"count":1}
+✓ 受理通知落入客户推送箱 :: {"count":1,"kinds":["ticket.accepted"]}
+✓ [数据源覆盖] 统一待办在建单后纳入未办结工单（pendingTickets ≥ 1） :: {"group":{"workspaceId":"ws-aipm-demo","slug":"ai-pm-demo","workspaceName":"织元产品部（AI 产品经理示例团队）","tenantName":"织元演示租户","role":"owner","industry":"ai-pm","pendingApprovals":4,"pendingTickets":5},"groups":[{"workspaceId":"ws-aipm-demo","slug":"ai-pm-demo","workspaceName":"织元产品部（AI 产品经理示例团队）","tenantName":"织元演示租户","role":"owner","industry":"ai-pm","pendingApprovals":4,"pendingTickets":5}]}
+✓ B 端工单台可见该工单（C→B 联动） :: {"status":"assigned","dept":"客户服务团队","count":13}
+✓ B 端时间线包含客户提交事件 :: {"timeline":["c_user:create","system:assign"]}
+✓ B 端派单成功 :: "MEM-002"
+✓ B 端推进（start）成功 :: "processing"
+✓ B 端办结成功 :: "done"
+✓ 时间线记录 B 端动作（staff 归属） :: {"actions":["c_user:create","system:assign","system:assign","staff:start","staff:complete"]}
+✓ 客户侧工单详情状态已更新为 done :: {"status":"done","statusText":"已完成"}
+✓ 客户侧时间线可见 B 端处置轨迹 :: {"timeline":["c_user:create","system:assign","system:assign","staff:start","staff:complete"]}
+✓ 办结结果通知达到客户推送箱 :: {"kinds":["ticket.completed","ticket.accepted"]}
+✓ 服务台统计今日工单数增加（统计投影） :: {"before":12,"after":13}
+✓ [数据源覆盖] 办结后统一待办未办结计数回落（P28 与工单台同口径） :: {"open":5,"closed":4,"groups":[{"workspaceId":"ws-aipm-demo","slug":"ai-pm-demo","workspaceName":"织元产品部（AI 产品经理示例团队）","tenantName":"织元演示租户","role":"owner","industry":"ai-pm","pendingApprovals":4,"pendingTickets":4}]}
+✓ 租户/工作区隔离：另一工作区看不到该工单（负面对照） :: {"count":56}
+
+联动探针 3：18/18 通过；证据 → /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/evidence/m3-ticket-1790706125123.json

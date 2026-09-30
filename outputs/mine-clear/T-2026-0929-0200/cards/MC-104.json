@@ -1,0 +1,50 @@
+{
+  "id": "MC-104",
+  "kind": "problem",
+  "level": "L4",
+  "severity": "P2",
+  "batch": 2,
+  "state": "open",
+  "title": "人工审批决定不进线程时间线：approval.gesture 事件缺 session_id",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "packages/base/review-console/approvals.ts:254@4ff9943",
+      "note": "decide() 写手势事件时只传 {tenantId, workspaceId, actor}，未传 sessionId（links 有 row.event_id，但投影不按 links）"
+    },
+    {
+      "type": "code",
+      "ref": "apps/server/src/trpc/router.ts:1248@4ff9943",
+      "note": "threads.events 按 WHERE workspace_id=$1 AND session_id=$2 过滤，手势事件 session_id 为 NULL 因而不可见"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m1-gesture-session.log",
+      "note": "DB 直查：E-10359/E-10353/E-10351 的 session_id 均为 NULL；对应线程 T-129/T-128/T-127 的动作列表只有 dispatch 与执行动作"
+    }
+  ],
+  "root_cause": {
+    "file": "packages/base/review-console/approvals.ts",
+    "line": 254,
+    "commit": "4ff9943",
+    "symbol": "decide"
+  },
+  "trigger_path": "审批台批准/驳回/编辑任一步骤关卡 → 线程详情的事件时间线看不到这次人工决定（全局账本有，线程投影没有），审计与回放时无法在任务维度确认『谁放行的这一步』",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "对某线程步骤关卡执行 approvals.decide(approve)",
+      "expect": "threads.events 返回该线程的事件列表包含 approval.gesture（且带 approvalId/gesture）",
+      "command": "cd <repo> && set -a && . ./.env && set +a && MCD_BASE=http://127.0.0.1:8899 node outputs/mine-clear/T-2026-0929-0200/assertions/m1-approval-resume.mjs（脚本打印线程时间线动作列表）",
+      "last_result": "fail"
+    },
+    {
+      "kind": "property",
+      "given": "任意审批手势（approve/edit/reject）",
+      "expect": "决策事件归属到被审批步骤所属线程（session_id 或等价的 links 投影），线程维度可完整回放",
+      "command": "同上 + DB 直查 approval.gesture 的 session_id 非 NULL",
+      "last_result": "fail"
+    }
+  ],
+  "notes": "expireSweep 的 approval.expired 事件同样无 session_id（approvals.ts:389）。"
+}

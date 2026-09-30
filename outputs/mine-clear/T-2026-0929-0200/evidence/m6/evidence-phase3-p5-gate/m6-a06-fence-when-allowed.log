@@ -1,0 +1,22 @@
++ node /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/assertions/m1-fence-rule-change.mjs
+
+=== attempt 1: R7 -> level=review
+- dryRun: 200 dryRunId=fdr-r7-muna17bk
+- confirmDryRun: 200 eventId=E-11922
+- decide: 200 status=approved
+- fence.rules readback: fr-r7-v2-ws-yunqi/v2/review/active | fr-r7-v1-ws-yunqi/hotel-baseline/v1/auto/active
+
+=== attempt 2: R7 -> level=block
+- dryRun: 200 dryRunId=fdr-r7-muna17ch
+- confirmDryRun: 200 eventId=E-11924
+- decide: 200 status=approved
+- fence.rules readback: fr-r7-v3-ws-yunqi/v3/block/active | fr-r7-v1-ws-yunqi/hotel-baseline/v1/auto/active
+
+=== 第 3 次：放宽提案（level=auto）→ confirmDryRun 400（已拒绝，符合『只可加严』）
+
+=== verdict
+attempt1: OK (approved+applied)
+attempt2: OK (approved+applied)
+attempt3 (loosen): OK (rejected)
+attempt2 readback: [{"id":"fr-r7-v3-ws-yunqi","version":"v3","level":"block","status":"active"},{"id":"fr-r7-v1-ws-yunqi","version":"hotel-baseline/v1","level":"auto","status":"active"}]
+attempt2 生效校验：OK

@@ -1,0 +1,143 @@
+{
+  "probe": "m3-ask-coverage",
+  "started_at": "2026-09-29T18:07:27.390Z",
+  "base": "http://127.0.0.1:8981",
+  "workspaceSlug": "yunqi-hotel",
+  "assertions": [
+    {
+      "name": "B 端登录",
+      "ok": true,
+      "detail": "ws-yunqi"
+    },
+    {
+      "name": "审批类问题有事实依据（approvals 域覆盖）",
+      "ok": false,
+      "detail": {
+        "sources": null
+      }
+    },
+    {
+      "name": "线程类问题有事实依据（threads 域覆盖）",
+      "ok": false,
+      "detail": {
+        "sources": null
+      }
+    },
+    {
+      "name": "知识库问题能引用库内知识（kb 域覆盖）",
+      "ok": true,
+      "detail": {
+        "sources": null,
+        "answer": "关于「住客问：房间里的毛巾多久更换一次？」：\n· 知识库·住客常见问答·网络与设施（房间里USB口不能充电怎么办？）：可先换用床头五孔插座；USB口故障请致电前台0报修，工程部会在120分钟内上门处理。\n以上内容来自知识库检索，可下钻溯源。"
+      }
+    },
+    {
+      "name": "[数据源覆盖] 工单域是否进入事实面（c_tickets）",
+      "ok": false,
+      "detail": {
+        "sources": null,
+        "answer": "关于「今天服务台收到多少工单，处理进度怎么样？」：\n· 服务台工单：5 条未办结（SLA 超时 1 条）\n· 事件库规模：143 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。"
+      }
+    },
+    {
+      "name": "[数据源覆盖] 夜班域是否进入事实面（night_runs）",
+      "ok": true,
+      "detail": {
+        "sources": null,
+        "answer": "关于「昨晚夜班完成了哪些工作？」：\n· 最近夜班：2026-09-28 班次已出决策包（候选 14 项）\n· 事件库规模：145 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。"
+      }
+    }
+  ],
+  "answers": [
+    {
+      "key": "approvals",
+      "question": "当前有多少待审批事项？",
+      "threadId": "T-111",
+      "mode": "ask",
+      "via": "rule",
+      "answer": "关于「当前有多少待审批事项？」：\n· 当前待审批：3 项（决断队列）\n· 事件库规模：137 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。",
+      "ledger_facts": null,
+      "ledger_sources": null,
+      "raw": {
+        "kind": "routed",
+        "mode": "ask",
+        "via": "rule",
+        "threadId": "T-111",
+        "status": "completed",
+        "answer": "关于「当前有多少待审批事项？」：\n· 当前待审批：3 项（决断队列）\n· 事件库规模：137 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。"
+      }
+    },
+    {
+      "key": "threads",
+      "question": "现在有多少进行中的任务？",
+      "threadId": "T-112",
+      "mode": "ask",
+      "via": "rule",
+      "answer": "关于「现在有多少进行中的任务？」：\n· 进行中线程：3 条\n· 事件库规模：139 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。",
+      "ledger_facts": null,
+      "ledger_sources": null,
+      "raw": {
+        "kind": "routed",
+        "mode": "ask",
+        "via": "rule",
+        "threadId": "T-112",
+        "status": "completed",
+        "answer": "关于「现在有多少进行中的任务？」：\n· 进行中线程：3 条\n· 事件库规模：139 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。"
+      }
+    },
+    {
+      "key": "kb",
+      "question": "住客问：房间里的毛巾多久更换一次？",
+      "threadId": "T-113",
+      "mode": "ask",
+      "via": "rule",
+      "answer": "关于「住客问：房间里的毛巾多久更换一次？」：\n· 知识库·住客常见问答·网络与设施（房间里USB口不能充电怎么办？）：可先换用床头五孔插座；USB口故障请致电前台0报修，工程部会在120分钟内上门处理。\n以上内容来自知识库检索，可下钻溯源。",
+      "ledger_facts": null,
+      "ledger_sources": null,
+      "raw": {
+        "kind": "routed",
+        "mode": "ask",
+        "via": "rule",
+        "threadId": "T-113",
+        "status": "completed",
+        "answer": "关于「住客问：房间里的毛巾多久更换一次？」：\n· 知识库·住客常见问答·网络与设施（房间里USB口不能充电怎么办？）：可先换用床头五孔插座；USB口故障请致电前台0报修，工程部会在120分钟内上门处理。\n以上内容来自知识库检索，可下钻溯源。"
+      }
+    },
+    {
+      "key": "tickets",
+      "question": "今天服务台收到多少工单，处理进度怎么样？",
+      "threadId": "T-114",
+      "mode": "ask",
+      "via": "rule",
+      "answer": "关于「今天服务台收到多少工单，处理进度怎么样？」：\n· 服务台工单：5 条未办结（SLA 超时 1 条）\n· 事件库规模：143 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。",
+      "ledger_facts": null,
+      "ledger_sources": null,
+      "raw": {
+        "kind": "routed",
+        "mode": "ask",
+        "via": "rule",
+        "threadId": "T-114",
+        "status": "completed",
+        "answer": "关于「今天服务台收到多少工单，处理进度怎么样？」：\n· 服务台工单：5 条未办结（SLA 超时 1 条）\n· 事件库规模：143 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。"
+      }
+    },
+    {
+      "key": "night",
+      "question": "昨晚夜班完成了哪些工作？",
+      "threadId": "T-115",
+      "mode": "ask",
+      "via": "rule",
+      "answer": "关于「昨晚夜班完成了哪些工作？」：\n· 最近夜班：2026-09-28 班次已出决策包（候选 14 项）\n· 事件库规模：145 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。",
+      "ledger_facts": null,
+      "ledger_sources": null,
+      "raw": {
+        "kind": "routed",
+        "mode": "ask",
+        "via": "rule",
+        "threadId": "T-115",
+        "status": "completed",
+        "answer": "关于「昨晚夜班完成了哪些工作？」：\n· 最近夜班：2026-09-28 班次已出决策包（候选 14 项）\n· 事件库规模：145 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。"
+      }
+    }
+  ]
+}

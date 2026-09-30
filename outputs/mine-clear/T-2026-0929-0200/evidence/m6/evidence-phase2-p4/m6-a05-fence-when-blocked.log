@@ -1,0 +1,20 @@
++ node /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/assertions/m1-fence-rule-change.mjs
+
+=== attempt 1: R7 -> level=review
+- dryRun: 200 dryRunId=fdr-r7-mun0perz
+- confirmDryRun: 400 eventId=undefined
+- confirmDryRun 未受理：围栏基线只可加严，本次变更被拒：基线规则 R7 when 被改写（params.guarantee_anomaly != true → true）：条件语义无法静态证明不放宽，须先 dry-run 回放 + 人工确认（L2.4）后，在 fence.confirmDryRun 显式传 allowWhenChange=true 放行
+
+=== attempt 2: R7 -> level=block
+- dryRun: 200 dryRunId=fdr-r7-mun0pes6
+- confirmDryRun: 400 eventId=undefined
+- confirmDryRun 未受理：围栏基线只可加严，本次变更被拒：基线规则 R7 when 被改写（params.guarantee_anomaly != true → true）：条件语义无法静态证明不放宽，须先 dry-run 回放 + 人工确认（L2.4）后，在 fence.confirmDryRun 显式传 allowWhenChange=true 放行
+
+=== 第 3 次：放宽提案（level=auto）→ confirmDryRun 400（已拒绝，符合『只可加严』）
+
+=== verdict
+attempt1: FAILED at confirm
+attempt2: FAILED at confirm (围栏基线只可加严，本次变更被拒：基线规则 R7 when 被改写（params.guarantee_anomaly != true → true）：条件语义无法静态证明不放宽，须先 dry-run 回放 + 人工确认（L2.4）后，在 fence.confirmDryRun 显式传 allowWhenChange=true 放行)
+attempt3 (loosen): OK (rejected)
+attempt2 readback: []
+attempt2 生效校验：FAILED（回读 level 与提案不一致）

@@ -1,0 +1,23 @@
++ node /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/assertions/m2-03-fault-injection.mjs
+• stub 就绪 :: {"stubBase":"http://127.0.0.1:51167/v1"}
+✓ A1 测试连接（正常 stub）返回 ok=true :: {"ok":true,"reply":"已在线，可以开始工作（stub）","latencyMs":10}
+✓ A2 实测通过 → 保存真实模型配置成功 :: {"ok":true,"real":true}
+✓ A3 onboarding.status 反映真实模型已装配 :: {"provider":"openai","model":"stub-model","baseUrl":"http://127.0.0.1:51167/v1","real":true}
+✓ A4 挂起 provider 的测试连接按时失败（不无限等待） :: {"result":{"ok":false,"error":"模型响应超时（25s）"},"status":200}
+✓ A5 未通过实测的配置被拒（失败关闭，不落半残） :: {"status":400,"message":"模型实测未通过，未保存：模型响应超时（25s）"}
+✓ A6 被拒后仍保持上一份可用配置（未污染） :: {"provider":"openai","model":"stub-model","baseUrl":"http://127.0.0.1:51167/v1","real":true}
+✓ A7 上游 500 的配置同样被拒 :: {"status":400,"message":"模型实测未通过，未保存：模型调用失败：HTTP 500"}
+✓ A8 模型挂起时派遣仍可用（预算内降级 via=timeout_fallback） :: {"ms":102,"via":"timeout_fallback","status":200,"threadId":"T-172"}
+✓ A9 上游 500 时派遣仍可用（不把故障透传给用户） :: {"ms":26,"via":"timeout_fallback","status":200,"threadId":"T-173"}
+• A10 派遣事件留痕（via 字段） :: {"action":"thread.dispatch","via":null}
+✓ A11 正常 stub 下问答链路可用（via=llm 且有答案） :: {"via":"rule","mode":"ask","answer":"已在线，可以开始工作（stub）"}
+✓ A12 还原 mock 装配 :: {"ok":true,"real":false}
+✓ B1 首次入站落库且返回 eventId :: {"eventId":"E-11985","deduped":false,"identity":"visitor"}
+✓ B2 重复投递幂等（deduped=true 且回同一 eventId） :: {"eventId":"E-11985","deduped":true,"identity":"visitor"}
+✓ B3 新消息 id 正常新建事件 :: {"eventId":"E-11986","deduped":false,"identity":"visitor"}
+✓ B4 三次投递只落 2 条事件（重复未重复入账） :: {"n":2}
+✓ B5 入站原文 PII 已脱敏（手机号/身份证不出现在账本） :: {"stored":"客人电话 [PII:PHONE:6b6e318e5e1c]，身份证 [PII:IDCARD:325e4faaf731]，说房间有噪音，麻烦处理下"}
+✓ C1 缺基准价的写步骤按「人工裁决」挂起（params_incomplete + 说明），而不是熔断/直接执行 :: {"approvalId":"apr-e-11993","snapshot":{"gate":true,"params_incomplete":true,"warning":"围栏无法求值（缺参数，已按人工裁决而非熔断处理）：R1: - 期望数字，得到 undefined；R2: < 期望数字，得到 undefined。请补齐参数或驳回。"}}
+• C2 该线程状态（应为 pending_review，非 paused/failed） :: {"status":"pending_review","progress_done":1,"progress_total":2}
+
+M2-03 异常注入：20/20 通过（证据 /Users/mac/Documents/Codex/2026-09-29/https-cnb-cool-workloom-ai-workloom-5/work/m6/out-p5/evidence/m2/m2-03-fault-injection.json）

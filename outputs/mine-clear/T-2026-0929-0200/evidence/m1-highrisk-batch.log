@@ -1,0 +1,6 @@
+- dispatch: 200 threadId=T-129 kind=routed
+- thread status after dispatch: pending_review
+- approval row: {"approval_id":"apr-e-10358","tier":"l2_captain","snap_high_risk":null,"snap_irreversible":"false","tool":"desktop.gui","status":"pending"}
+- isHighRiskApproval(guard view) = false（preset 声明 high_risk=true 的岗位）
+- batchApprove: 200 approved=["apr-e-10358"] skipped=[]
+BUG: 高危岗位（desktop-agent, high_risk=true, write 工具）的关卡被批量放行 —— 守卫未生效

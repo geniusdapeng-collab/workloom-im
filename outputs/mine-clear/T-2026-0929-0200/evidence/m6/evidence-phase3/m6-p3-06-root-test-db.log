@@ -1,0 +1,311 @@
+
+> workloom-im@0.1.1 test /Users/mac/WorkLoom-fleet/.wt-mcd-m6
+> pnpm test:reset-safety && pnpm test:payload-boundary && pnpm test:release-assets && pnpm test:action-trust && pnpm test:release-policy && pnpm test:desktop-bootstrap && pnpm -r --if-present test && pnpm test:oss
+
+
+> workloom-im@0.1.1 test:reset-safety /Users/mac/WorkLoom-fleet/.wt-mcd-m6
+> node --test scripts/reset-safety.test.mjs
+
+✔ 非交互调用没有 --yes 时 fail closed，且不访问数据库 (90.941208ms)
+✔ 远端、生产和数据库名不匹配目标始终拒绝 (165.355084ms)
+✔ 检测到非演示工作区时拒绝删除 (225.144041ms)
+✔ 本机 workloom 纯演示库先备份，再事务重建并执行迁移种子 (396.635667ms)
+✔ 未知参数 fail closed (3.686125ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 925.227458
+
+> workloom-im@0.1.1 test:payload-boundary /Users/mac/WorkLoom-fleet/.wt-mcd-m6
+> node --test scripts/product-runtime.test.mjs scripts/payload-policy.test.mjs scripts/pack-nm-merge.test.mjs scripts/runtime-deps-lock.test.mjs
+
+✔ pnpm 锁文件在 Windows CRLF 检出后保持同一解析语义 (1.710292ms)
+✔ 基座物理存在 platform-ops 时依赖合成仍排除平台工程 (9.345125ms)
+✔ 仙女座精确身份收集 platform-ops，缺包则阻断 (4.620333ms)
+✔ 范围 specifier 只输出 pnpm 锁定的精确版本 (2.506917ms)
+✔ 缺锁、specifier 漂移与同名解析版本冲突均失败关闭 (7.985208ms)
+✔ 包目录创建顺序不影响依赖清单输出 (6.106208ms)
+✔ 只有仙女座精确身份允许携带 platform-ops (1.535791ms)
+✔ 基座即使物理存在平台源码和内部包也会被装包后检查阻断 (25.770292ms)
+✔ 归档清单对大小写、Windows 分隔符和相对段统一失败关闭 (0.326958ms)
+✔ 缺失或不可校验的产品清单不能生成载荷策略 (56.989166ms)
+✔ 仙女座载荷检查允许平台源码，但不放宽其他产品 (20.502084ms)
+✔ 非 Git 运行时缺少任一身份闭包文件时，目录与归档检查均失败关闭 (6.621208ms)
+✔ 非 Git 运行时伪造产品身份时与源策略精确比对失败 (1.660208ms)
+✔ 产品清单未投影字段被篡改时摘要校验仍失败关闭 (2.83675ms)
+✔ 身份闭包目录与归档完整且产品身份一致时通过 (1.835916ms)
+✔ 归档中的身份闭包必须是精确文件路径，目录或大小写伪装不能通过 (0.209166ms)
+✔ 产品清单派生仓库、品牌与隔离端口 (26.43325ms)
+✔ 非法仓库、产品名与端口偏移失败关闭 (94.911542ms)
+✔ 缺失或伪造 schema/role 时失败关闭 (62.138708ms)
+✔ 非 Git 解包运行时可从客户端目录向上解析自身身份 (0.815708ms)
+✔ Vite 身份桥在非 Git 解包目录中固定使用脚本所在产品根 (24.803542ms)
+✔ 受控 pathPrefix 产品从仓根身份构建，但必须由完整同步 state 精确绑定 (89.238167ms)
+✔ pathPrefix state 的来源、模式、SHA 或目录任一不可信时不得借用仓根身份 (218.149584ms)
+✔ 解包运行时缺少自身清单时不得借用外部 Git 根身份 (40.892083ms)
+✔ 运行依赖锁输入摘要忽略 Git 工作树 LF/CRLF 差异 (1.702917ms)
+✔ 正式装配跨平台直接调用 Node 随附 npm CLI (0.338167ms)
+✔ 仓库提交的每产品 runtime lock 与当前依赖输入完全一致 (20.861291ms)
+✔ package-lock 必须锁定完整三目标原生包与 registry integrity (0.427875ms)
+✔ 安装后目标校验拒绝宿主架构原生包并生成稳定 inventory 摘要 (3.763375ms)
+✔ 正式与应急装配线统一使用每产品 lock、目标 OS/CPU 和身份闭包 (1.5925ms)
+ℹ tests 30
+ℹ suites 0
+ℹ pass 30
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 601.407417
+
+> workloom-im@0.1.1 test:release-assets /Users/mac/WorkLoom-fleet/.wt-mcd-m6
+> node --test scripts/release-assets.test.mjs
+
+✔ release asset manifest pins every desktop runtime artifact (1.332958ms)
+✔ streaming SHA-256 verification accepts exact bytes and rejects mutations (3.154959ms)
+✔ Windows PG provenance must match every locked build input (1.237625ms)
+✔ every packaging download is wired through the verified fetch boundary (1.650959ms)
+✔ manifest is repository-local and cannot be replaced through environment (0.107125ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 44.447708
+
+> workloom-im@0.1.1 test:action-trust /Users/mac/WorkLoom-fleet/.wt-mcd-m6
+> node --test scripts/action-trust-policy.test.mjs
+
+✔ every workflow and propagated template uses only reviewed immutable Action commits (23.312958ms)
+✔ checkout never persists the workflow token into repository Git config (10.723833ms)
+✔ mutable tags, branches, abbreviated SHAs and unreviewed Actions fail closed (0.7805ms)
+✔ pin manifest is repository data, not a generated or external trust input (0.08975ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 86.592708
+
+> workloom-im@0.1.1 test:release-policy /Users/mac/WorkLoom-fleet/.wt-mcd-m6
+> node --test scripts/release-publisher-policy.test.mjs scripts/desktop-release-policy.test.mjs scripts/desktop-release-state.test.mjs scripts/desktop-workflow-path.test.mjs scripts/desktop-release-finalizer.test.mjs
+
+✔ discovers existing product artifact names and assembles exactly five public assets (10.1385ms)
+✔ fails closed on duplicate architecture candidates (1.558792ms)
+✔ fails closed when a candidate is tampered with after sealing (2.308542ms)
+✔ fails closed when platform candidates belong to another tag (1.860333ms)
+✔ public verification rejects extra or missing assets (2.607708ms)
+✔ desktop release has one serialized writer and read-only platform builders (2.144041ms)
+✔ preflight binds an exact stable tag to the current reviewed main HEAD (0.126458ms)
+✔ unsigned platform builds require an explicit reviewed input and disclose their trust level (0.192583ms)
+✔ Windows package smoke is isolated from the build toolchain and retains all failure evidence (0.098916ms)
+✔ production secrets exist only in the minimum signing steps (0.551917ms)
+✔ platform jobs hand off three installers and publisher adds a verifiable public manifest (0.442916ms)
+✔ candidate artifacts support partial reruns without crossing the workflow run or commit (239.119166ms)
+✔ downstream publisher flattens selected artifacts into the exact finalizer input directories (0.112125ms)
+✔ the actual inline writer state machine survives rollback and immutability mutations (194.435584ms)
+✔ latest recovery always prefers the highest remaining desktop stable release (0.530375ms)
+✔ release list truncation is fail-closed in both selection and quarantine proof (2.430208ms)
+✔ quarantine proof catches wrong latest, non-draft target and ambiguous latest (0.145416ms)
+✔ public release state proof requires GitHub immutability (0.135709ms)
+✔ only a managed corrupt release may enter automatic quarantine (0.0975ms)
+✔ base pins the new publisher while existing industry repositories retain a safe migration path (5.858417ms)
+✔ only the two reviewed single-job product publishers may write GitHub Releases (25.430083ms)
+✔ release writer detector rejects common alternate and newly introduced bypasses (0.511167ms)
+✔ legacy packers and platform evidence keep read-only repository permissions (2.331334ms)
+✔ local PAT publisher fails before reading credentials or touching the network (3.766833ms)
+✔ UI release is assembled as non-latest draft and published only after byte verification (2.657833ms)
+ℹ tests 25
+ℹ suites 0
+ℹ pass 25
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 512.241375
+
+> workloom-im@0.1.1 test:desktop-bootstrap /Users/mac/WorkLoom-fleet/.wt-mcd-m6
+> node --test apps/desktop/electron/bootstrap.test.cjs scripts/desktop-bootstrap-db.test.mjs
+
+06:56:10 == WorkLoom 织元 · 引导启动（resources=/var/folders/dj/mkh6fwbd4mb6ycp933xfty4h0000gn/T/workloom-packaged-payload-missing-PcaFXA/resources）==
+06:56:10 正在检查本机版本与安装载荷…
+06:56:10 == WorkLoom 织元 · 引导启动（resources=/var/folders/dj/mkh6fwbd4mb6ycp933xfty4h0000gn/T/workloom-packaged-no-double-payload-98xhzP/resources）==
+06:56:10 正在检查本机版本与安装载荷…
+▶ 桌面载荷原子装配
+  ✔ 解析物理路径后向 tar 传相对路径，并为 Windows 跨盘符暂存归档 (0.569125ms)
+  ✔ 正式打包入口缺少载荷时在启动任何服务前失败关闭 (6.469ms)
+  ✔ 正式打包入口不会把源码 dist-payload 双重嵌套误认作 Resources (2.871208ms)
+  ✔ 完整暂存后换入；提交前可回滚，提交后清理临时目录 (5.571875ms)
+  ✔ 提交清理故障发生在不可逆边界之后，不会重新开放旧载荷回滚 (3.605542ms)
+  ✔ 换入第一项后故障会恢复旧版目录、版本和首航状态 (3.874167ms)
+  ✔ 首装暂存失败不会留下半套运行时 (2.432ms)
+  ✔ 安装阶段检查点以机器可读中文状态落盘 (1.098958ms)
+  ✔ 启动页使用确定进度语义，不再显示循环假进度 (0.702917ms)
+  ✔ 源码主进程只复用已验活服务，正式安装包与渲染冒烟不能绕过载荷 (0.423208ms)
+  ✔ 发布渲染冒烟使用稳定动作标记走完真实欢迎流程 (0.493125ms)
+✔ 桌面载荷原子装配 (28.767917ms)
+▶ 桌面 PostgreSQL 实例归属与端口契约
+  ✔ 严格拒绝空白、小数、非数字和越界端口 (0.12475ms)
+  ✔ 只有 pg_ctl 确认运行且 postmaster 数据目录与端口同时匹配才允许复用 (1.035167ms)
+  ✔ pg_ctl 未确认运行时不读取残留 PID，也不把端口监听者当作自有实例 (0.305916ms)
+  ✔ 退出前重新复验实例归属，PID 文件被替换时绝不发送 stop (0.746291ms)
+  ✔ 托管环境只重写数据库与服务端口，保留其他用户配置 (0.374208ms)
+✔ 桌面 PostgreSQL 实例归属与端口契约 (2.669708ms)
+▶ 桌面 PostgreSQL 凭据状态与 SCRAM 围栏
+  ✔ 0600 状态文件生成三份互异随机凭据，重复启动不轮换 (0.946167ms)
+  ✔ 损坏状态失败关闭；绑定 system_identifier 后才能完成并清除旧凭据 (1.299375ms)
+  ✔ pending 状态可从恢复后的旧配置补充候选；hardened 后绝不重新收录 (1.237916ms)
+  ✔ initdb 只接受 pwfile + SCRAM，HBA 只允许本机 SCRAM (0.257292ms)
+  ✔ pending 迁移复验失败会原子恢复旧 HBA 并再次 reload (1.052375ms)
+  ✔ 即使磁盘 HBA 未变化也强制 reload，再以正反向凭据复验结果为准 (0.482417ms)
+  ✔ 源码固定先提交新 payload 再创建状态或改库，且不含 trust initdb (0.474917ms)
+  ✔ payload commit 前用内置 Node 语法检查安全 helper，校验失败立即阻断 (0.195166ms)
+  ✔ 所有 migrate 入口在轮换 app/gateway 角色前固定本会话 SCRAM (0.21325ms)
+✔ 桌面 PostgreSQL 凭据状态与 SCRAM 围栏 (6.261625ms)
+▶ 应急浏览器壳与正式 Electron 共用安全引导
+  ✔ 原子单实例锁拒绝活进程，并可接管死进程遗留锁 (2.007208ms)
+  ✔ 两端旧启动器只委托 bootstrap，不再维护 trust/helper 分支 (0.587458ms)
+  ✔ 浏览器壳按平台使用无 shell 拼接的固定打开命令 (0.095958ms)
+  ✔ CLI 在启动前注册 INT/TERM/HUP，并用 AbortSignal 驱动初始化清理 (0.13775ms)
+✔ 应急浏览器壳与正式 Electron 共用安全引导 (2.885125ms)
+workloom-db-identity {"dataDirectory":"/private/var/folders/dj/mkh6fwbd4mb6ycp933xfty4h0000gn/T/workloom-helper-inspect-fzu8tU/pgdata","port":55432,"hbaFile":"/var/folders/dj/mkh6fwbd4mb6ycp933xfty4h0000gn/T/workloom-helper-inspect-fzu8tU/pgdata/pg_hba.conf","systemIdentifier":"7654321098765432109","postmasterStartTime":"2026-09-16 16:52:18.418+00"}
+bootstrap-db prepare ok
+bootstrap-db verify ok
+▶ 客户端投影路径围栏
+  ✔ 同时接受 POSIX 与 Windows 的目录分隔符 (0.7225ms)
+  ✔ 拒绝同目录、父目录逃逸和 Windows 跨盘路径 (0.082208ms)
+✔ 客户端投影路径围栏 (1.236041ms)
+▶ 桌面数据库安全引导
+  ✔ 经符号链接路径执行 helper 时仍识别为 CLI 入口 (0.862542ms)
+  ✔ 要求三模式、端口、PGDATA、HBA 与三角色凭据全部由启动器显式注入 (0.459917ms)
+  ✔ inspect 用旧 owner 候选只读绑定非默认端口、PGDATA、HBA 与 system_identifier (1.569ms)
+  ✔ legacy prepare 先验归属，再轮换 owner/app/gateway 为 SCRAM 并准备业务库 (1.320875ms)
+  ✔ verify 对三角色正向连接、错误凭据反向拒绝，且全过程零写 (1.376875ms)
+  ✔ trust 仍接受错误凭据时 verify 失败，不会误标为 SCRAM 生效 (0.847833ms)
+  ✔ 错误凭据探测若得到非认证错误则失败关闭，不把网络故障当成安全证明 (0.746917ms)
+  ✔ 未知 data_directory、活动 HBA 或 system_identifier 时首条查询后零写失败 (0.921709ms)
+  ✔ 实例报告端口不符时失败且零写入 (0.590542ms)
+✔ 桌面数据库安全引导 (8.947458ms)
+ℹ tests 40
+ℹ suites 6
+ℹ pass 40
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 83.777625
+Scope: 10 of 11 workspace projects
+packages/industry-contract test$ vitest run
+packages/shared test$ vitest run
+packages/ui test$ vitest run
+packages/ui test:  RUN  v5.0.1 /Users/mac/WorkLoom-fleet/.wt-mcd-m6/packages/ui
+packages/industry-contract test:  RUN  v5.0.1 /Users/mac/WorkLoom-fleet/.wt-mcd-m6/packages/industry-contract
+packages/shared test:  RUN  v5.0.1 /Users/mac/WorkLoom-fleet/.wt-mcd-m6/packages/shared
+packages/shared test:  Test Files  1 passed (1)
+packages/shared test:       Tests  4 passed (4)
+packages/shared test:    Start at  06:56:10
+packages/shared test:    Duration  373ms (import 59%, transform 35%, worker 3%, tests 3%)
+packages/shared test: Done
+packages/industry-contract test:  Test Files  2 passed (2)
+packages/industry-contract test:       Tests  40 passed (40)
+packages/industry-contract test:    Start at  06:56:10
+packages/industry-contract test:    Duration  395ms (import 46%, transform 45%, tests 7%, worker 2%)
+packages/industry-contract test: Done
+packages/ui test:  Test Files  10 passed (10)
+packages/ui test:       Tests  56 passed (56)
+packages/ui test:    Start at  06:56:10
+packages/ui test:    Duration  1.03s (transform 43%, environment 28%, import 21%, tests 6%, worker 1%)
+packages/ui test: Done
+apps/webc test$ ../../node_modules/.bin/vitest run
+apps/webc test:  RUN  v5.0.1 /Users/mac/WorkLoom-fleet/.wt-mcd-m6/apps/webc
+apps/webc test:  Test Files  4 passed (4)
+apps/webc test:       Tests  21 passed (21)
+apps/webc test:    Start at  06:56:12
+apps/webc test:    Duration  410ms (transform 44%, environment 42%, import 10%, tests 3%, worker 1%)
+apps/webc test: Done
+packages/base test$ vitest run
+packages/base test:  RUN  v5.0.1 /Users/mac/WorkLoom-fleet/.wt-mcd-m6/packages/base
+packages/base test: stderr | workdata/atomicity.test.ts
+packages/base test: [pii] PII_SALT 未配置，使用 dev 占位盐（仅限开发/测试，生产必须注入 PII_SALT）
+packages/base test:  ❯ workdata/atomicity.test.ts (5 tests | 4 failed) 30ms
+packages/base test:    ❯ D16 业务+事件原子性（app 池单事务） (5)
+packages/base test:      × 同一事务：业务行与事件同生（提交后双双可见） 14ms
+packages/base test:      × 崩溃注入：业务写后强制失败 → 状态与事件同滚回（无孤儿） 9ms
+packages/base test:      × DB 层链校验：prev_hash 伪造经函数写入被拒（断链拒写） 2ms
+packages/base test:      × DB 层防伪造：GUC 上下文与事件归属不符被拒 2ms
+packages/base test: warning: adding embedded git repository: .workloom/t-conflict
+packages/base test: hint: You've added another git repository inside your current repository.
+packages/base test: hint: Clones of the outer repository will not contain the contents of
+packages/base test: hint: the embedded repository and will not know how to obtain it.
+packages/base test: hint: If you meant to add a submodule, use:
+packages/base test: hint: 
+packages/base test: hint: 	git submodule add <url> .workloom/t-conflict
+packages/base test: hint: 
+packages/base test: hint: If you added this path by mistake, you can remove it from the
+packages/base test: hint: index with:
+packages/base test: hint: 
+packages/base test: hint: 	git rm --cached .workloom/t-conflict
+packages/base test: hint: 
+packages/base test: hint: See "git help submodule" for more information.
+packages/base test: ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+packages/base test:  FAIL  workdata/atomicity.test.ts > D16 业务+事件原子性（app 池单事务） > 同一事务：业务行与事件同生（提交后双双可见）
+packages/base test: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+packages/base test:  ❯ ../../node_modules/.pnpm/pg-pool@3.14.0_pg@8.23.0/node_modules/pg-pool/index.js:45:11
+packages/base test:  ❯ workdata/atomicity.test.ts:29:15
+packages/base test:      27|   it("同一事务：业务行与事件同生（提交后双双可见）", async () => {
+packages/base test:      28|     const tag = `d16-${Date.now().toString(36)}-ok`;
+packages/base test:      29|     const c = await app.connect();
+packages/base test:        |               ^
+packages/base test:      30|     let eventId = "";
+packages/base test:      31|     try {
+packages/base test: ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+packages/base test:  FAIL  workdata/atomicity.test.ts > D16 业务+事件原子性（app 池单事务） > 崩溃注入：业务写后强制失败 → 状态与事件同滚回（无孤儿）
+packages/base test: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+packages/base test:  ❯ ../../node_modules/.pnpm/pg-pool@3.14.0_pg@8.23.0/node_modules/pg-pool/index.js:45:11
+packages/base test:  ❯ workdata/atomicity.test.ts:64:15
+packages/base test:      62|   it("崩溃注入：业务写后强制失败 → 状态与事件同滚回（无孤儿）", async () => {
+packages/base test:      63|     const tag = `d16-${Date.now().toString(36)}-boom`;
+packages/base test:      64|     const c = await app.connect();
+packages/base test:        |               ^
+packages/base test:      65|     let eventId = "";
+packages/base test:      66|     try {
+packages/base test: ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+packages/base test:  FAIL  workdata/atomicity.test.ts > D16 业务+事件原子性（app 池单事务） > DB 层链校验：prev_hash 伪造经函数写入被拒（断链拒写）
+packages/base test: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+packages/base test:  ❯ ../../node_modules/.pnpm/pg-pool@3.14.0_pg@8.23.0/node_modules/pg-pool/index.js:45:11
+packages/base test:  ❯ workdata/atomicity.test.ts:106:15
+packages/base test:     104|
+packages/base test:     105|   it("DB 层链校验：prev_hash 伪造经函数写入被拒（断链拒写）", async () => {
+packages/base test:     106|     const c = await app.connect();
+packages/base test:        |               ^
+packages/base test:     107|     try {
+packages/base test:     108|       await c.query("BEGIN");
+packages/base test: ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+packages/base test:  FAIL  workdata/atomicity.test.ts > D16 业务+事件原子性（app 池单事务） > DB 层防伪造：GUC 上下文与事件归属不符被拒
+packages/base test: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+packages/base test:  ❯ ../../node_modules/.pnpm/pg-pool@3.14.0_pg@8.23.0/node_modules/pg-pool/index.js:45:11
+packages/base test:  ❯ workdata/atomicity.test.ts:122:15
+packages/base test:     120|
+packages/base test:     121|   it("DB 层防伪造：GUC 上下文与事件归属不符被拒", async () => {
+packages/base test:     122|     const c = await app.connect();
+packages/base test:        |               ^
+packages/base test:     123|     try {
+packages/base test:     124|       await c.query("BEGIN");
+packages/base test: ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+packages/base test:  Test Files  1 failed | 49 passed | 2 skipped (52)
+packages/base test:       Tests  4 failed | 698 passed | 122 skipped (824)
+packages/base test:    Start at  06:56:13
+packages/base test:    Duration  14.76s (tests 82%, import 9%, transform 8%)
+packages/base test: Failed
+/Users/mac/WorkLoom-fleet/.wt-mcd-m6/packages/base:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workloom/base@0.1.0 test: `vitest run`
+Exit status 1
+ ELIFECYCLE  Test failed. See above for more details.

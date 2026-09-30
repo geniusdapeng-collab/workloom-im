@@ -1,0 +1,51 @@
+{
+  "id": "MC-503",
+  "kind": "problem",
+  "level": "L4",
+  "severity": "P1",
+  "batch": 1,
+  "state": "fixed",
+  "title": "落地向导整块替换 archive.business → 清空出厂价带，R1/R2 可达性失效",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "apps/server/src/trpc/router.ts:723@2e3ddcb",
+      "note": "修复提交 2e3ddcb（fixer-F）"
+    },
+    {
+      "type": "log",
+      "ref": "work/fix-f/red-r2f3-wizard.log → final-r2f3.log（8/8）",
+      "note": "红→绿对照（fixer-F 原始日志）"
+    }
+  ],
+  "root_cause": {
+    "file": "apps/server/src/trpc/router.ts",
+    "line": 723,
+    "commit": "b67d651",
+    "symbol": "见 FIX-F-REPORT.md"
+  },
+  "trigger_path": "独立验收（RDAS v3.1 / 独立验证会话）在冻结基线 b67d651 上复现；详见 ACCEPTANCE-REPORT.md / VERIFY-REPORT.md",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "复跑 MC-503 的验收场景",
+      "expect": "红→绿（见修复卡断言）",
+      "command": "node work/fix-f/assert-r2f3-wizard.mjs",
+      "last_result": "pass",
+      "evidence": "work/fix-f/red-r2f3-wizard.log → final-r2f3.log（8/8）"
+    },
+    {
+      "kind": "property",
+      "given": "同一场景在干净库与污染库下重复执行",
+      "expect": "结论一致（不因遗留数据波动）",
+      "command": "node work/fix-f/assert-r2f3-wizard.mjs",
+      "last_result": "pass",
+      "evidence": "work/fix-f/red-r2f3-wizard.log → final-r2f3.log（8/8）"
+    }
+  ],
+  "regression": {
+    "command": "node work/fix-f/assert-r2f3-wizard.mjs",
+    "evidence": "work/fix-f/red-r2f3-wizard.log → final-r2f3.log（8/8）"
+  },
+  "notes": "来源：独立验收/独立验证会话（非修复者自报）。"
+}

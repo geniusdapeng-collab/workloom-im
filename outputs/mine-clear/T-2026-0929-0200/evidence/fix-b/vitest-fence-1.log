@@ -1,0 +1,79 @@
+
+ RUN  v5.0.1 /Users/mac/WorkLoom-fleet/.wt-mcd-fb
+
+ ❯ packages/base/fence-engine/hardening.test.ts (19 tests | 1 failed) 73ms
+   ❯ HP-02 真库：审批绑定与版本递增 (5)
+     × MC-102/109 真库：同一 rule_id 连续两次加严都生效，且平台基线锚点不丢 20ms
+ ❯ packages/base/fence-engine/fence-engine.test.ts (33 tests | 2 failed) 1142ms
+   ❯ checkCandidateAgainstBaseline（MC-109 覆盖层锚点） (3)
+     × 无 is_baseline 行时，最严 active 行仍是比较锚点（放宽被拒） 3ms
+     × 平台基线（auto）与客户覆盖行（review）并存时，锚点取更严的一条 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/base/fence-engine/fence-engine.test.ts > checkCandidateAgainstBaseline（MC-109 覆盖层锚点） > 无 is_baseline 行时，最严 active 行仍是比较锚点（放宽被拒）
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ packages/base/fence-engine/fence-engine.test.ts:403:23
+    401|     const current: RuntimeRule[] = [{ ...base, level: "review" }];
+    402|     const loosen = checkCandidateAgainstBaseline(current, { ...base, v…
+    403|     expect(loosen.ok).toBe(false);
+       |                       ^
+    404|     expect(loosen.violations.map((v) => v.reason).join("；")).toContain…
+    405|     expect(checkCandidateAgainstBaseline(current, { ...base, version: …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  packages/base/fence-engine/fence-engine.test.ts > checkCandidateAgainstBaseline（MC-109 覆盖层锚点） > 平台基线（auto）与客户覆盖行（review）并存时，锚点取更严的一条
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ packages/base/fence-engine/fence-engine.test.ts:413:102
+    411|       { ...base, level: "review", is_baseline: false, version: "v2" },
+    412|     ];
+    413|     expect(checkCandidateAgainstBaseline(current, { ...base, version: …
+       |                                                                                                      ^
+    414|     expect(checkCandidateAgainstBaseline(current, { ...base, version: …
+    415|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  packages/base/fence-engine/hardening.test.ts > HP-02 真库：审批绑定与版本递增 > MC-102/109 真库：同一 rule_id 连续两次加严都生效，且平台基线锚点不丢
+AssertionError: promise resolved "{ version: 'v4' }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "version": "v4",
+  }
+
+ ❯ packages/base/fence-engine/hardening.test.ts:403:44
+    401|       const third = await withAppTx((client) => nextRuleRowIdentity(cl…
+    402|       expect(third.version).toBe("v4");
+    403|       await expect(activate(third, "auto")).rejects.toThrowError(/只可加严…
+       |                                            ^
+    404|       expect((await rowStatus()).rows.find((r) => r.id === third.rowId…
+    405|     } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  3 failed | 54 passed (57)
+   Start at  00:25:45
+   Duration  1.37s (tests 76%, transform 12%, import 12%)
+

@@ -1,0 +1,28 @@
++ node /Users/mac/Documents/Codex/2026-09-29/https-cnb-cool-workloom-ai-workloom-5/work/m6/probes/sec-probe.mjs http://127.0.0.1:8986 /Users/mac/WorkLoom-fleet/.wt-mcd-m6
+PASS  SEC-BIND-01 服务只监听回环地址 :: 127.0.0.1:8986
+PASS  SEC-CORS-01 非回环来源不回 ACAO :: {"acao":null}
+PASS  SEC-CORS-02 回环来源放行 :: {"acao":"http://127.0.0.1:5321","acac":"true"}
+PASS  SEC-CORS-03 非回环来源的 tRPC 响应不回 ACAO :: {"status":404}
+FAIL  SEC-DEMO-01 生产档下匿名设备可签发 C 端会话（出厂 .env 默认） :: {"status":503,"hasToken":false}
+PASS  SEC-TENANT-00 云栖线程建立（取证前置） :: {"status":200,"threadId":"T-199"}
+PASS  SEC-TENANT-01 跨工作区读线程不泄露（返回空/错误） :: {"status":200,"body":"{\"result\":{\"data\":null}}"}
+PASS  SEC-TENANT-02 跨工作区读线程事件流不泄露 :: {"status":200,"body":"{\"result\":{\"data\":[]}}"}
+PASS  SEC-TENANT-00b 正对照：本区凭据可读到该线程 :: {"body":"{\"result\":{\"data\":{\"id\":\"T-199\",\"title\":\"M4 越权探针：云栖酒店调价\",\"mode\":\"quest\",\"status\":\"queued\",\"progress_done\":0,\"progress_total\":0,\"created_by\":\"MEM-001\",\"agent_id\":\"agt-pricing-agent\",\"created_at\":\"2026-"}
+PASS  SEC-TENANT-03 跨工作区审批裁决被拒且不改状态 :: {"status":400,"code":"BAD_REQUEST","before":"pending","after":"pending"}
+PASS  SEC-TENANT-04 审批队列仅含本工作区条目 :: {"listed":2,"dbOwn":2,"foreignVisible":[]}
+PASS  SEC-ROLE-01 readonly 角色派发任务被拒（403） :: {"status":403,"code":"FORBIDDEN"}
+PASS  SEC-ROLE-02 readonly 角色审批被拒 :: {"status":403}
+FAIL  SEC-CUSER-00 C 端建单（取证前置） :: {"status":401}
+FAIL  SEC-CINPUT-01 /c/chat 文本超 2000 字被拒 :: {"status":401}
+FAIL  SEC-CINPUT-02 /c/tickets 非法 kind 被拒 :: {"status":401}
+FAIL  SEC-CRATE-01 C 端每用户限流触发 429 :: {"saw":"no-429-in-62"}
+PASS  SEC-INJ-01 注入式标题不破坏数据库（biz_events 仍在） :: {"regclass":"biz_events"}
+PASS  SEC-INJ-02 注入式标题按字面存储（未被解释执行/截断破坏） :: {"stored":"'; DROP TABLE biz_events; -- <script>alert(1)</script> \\u0000 ${jndi:ldap://x}"}
+PASS  SEC-INJ-03 超长标题被拒绝或截断（不落 20000 字） :: {"status":400,"maxStoredTitleLen":500}
+PASS  SEC-BATCH-01 高危审批批量采纳必须逐条跳过（l4_chairman） :: {"requested":5,"approved":0,"skipped":5,"stillPending":5}
+PASS  SEC-AUTH-01 无令牌访问受保护过程 → 401 :: {"status":401}
+PASS  SEC-AUTH-02 伪造令牌 → 401 :: {"status":401}
+PASS  SEC-AUTH-03 错误密钥签发的令牌 → 401 :: {"status":401}
+PASS  SEC-AUTH-04 生产档演示直登被拒（403） :: {"status":403,"code":"FORBIDDEN"}
+
+安全探针：20/25 通过

@@ -1,0 +1,13 @@
+
+> @workloom/server@0.1.0 test /Users/mac/WorkLoom-fleet/.wt-mcd-m6/apps/server
+> ../../node_modules/.bin/vitest run --testTimeout 30000
+
+
+ RUN  v5.0.1 /Users/mac/WorkLoom-fleet/.wt-mcd-m6/apps/server
+
+
+ Test Files  28 passed | 1 skipped (29)
+      Tests  302 passed | 2 skipped (304)
+   Start at  02:12:28
+   Duration  4.72s (import 54%, tests 26%, transform 19%)
+

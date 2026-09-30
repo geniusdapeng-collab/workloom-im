@@ -1,0 +1,190 @@
+{
+  "title": "M2-03 异常注入",
+  "started_at": "2026-09-29T15:26:45.819Z",
+  "finished_at": "2026-09-29T15:27:42.405Z",
+  "base": "http://127.0.0.1:8901",
+  "suffix": "m2f232645",
+  "total": 20,
+  "passed": 17,
+  "failed": 0,
+  "checks": [
+    {
+      "name": "stub 就绪",
+      "ok": null,
+      "detail": {
+        "stubBase": "http://127.0.0.1:54998/v1"
+      }
+    },
+    {
+      "name": "A1 测试连接（正常 stub）返回 ok=true",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "reply": "已在线，可以开始工作（stub）",
+        "latencyMs": 38
+      }
+    },
+    {
+      "name": "A2 实测通过 → 保存真实模型配置成功",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "real": true
+      }
+    },
+    {
+      "name": "A3 onboarding.status 反映真实模型已装配",
+      "ok": true,
+      "detail": {
+        "provider": "openai",
+        "model": "stub-model",
+        "baseUrl": "http://127.0.0.1:54998/v1",
+        "real": true
+      }
+    },
+    {
+      "name": "A4 挂起 provider 的测试连接按时失败（不无限等待）",
+      "ok": true,
+      "detail": {
+        "result": {
+          "ok": false,
+          "error": "模型响应超时（25s）"
+        },
+        "status": 200
+      }
+    },
+    {
+      "name": "A5 未通过实测的配置被拒（失败关闭，不落半残）",
+      "ok": true,
+      "detail": {
+        "status": 400,
+        "message": "模型实测未通过，未保存：模型响应超时（25s）"
+      }
+    },
+    {
+      "name": "A6 被拒后仍保持上一份可用配置（未污染）",
+      "ok": true,
+      "detail": {
+        "provider": "openai",
+        "model": "stub-model",
+        "baseUrl": "http://127.0.0.1:54998/v1",
+        "real": true
+      }
+    },
+    {
+      "name": "A7 上游 500 的配置同样被拒",
+      "ok": true,
+      "detail": {
+        "status": 400,
+        "message": "模型实测未通过，未保存：模型调用失败：HTTP 500"
+      }
+    },
+    {
+      "name": "A8 模型挂起时派遣仍可用（预算内降级 via=timeout_fallback）",
+      "ok": true,
+      "detail": {
+        "ms": 150,
+        "via": "timeout_fallback",
+        "status": 200,
+        "threadId": "T-127"
+      }
+    },
+    {
+      "name": "A9 上游 500 时派遣仍可用（不把故障透传给用户）",
+      "ok": true,
+      "detail": {
+        "ms": 23,
+        "via": "timeout_fallback",
+        "status": 200,
+        "threadId": "T-128"
+      }
+    },
+    {
+      "name": "A10 派遣事件留痕（via 字段）",
+      "ok": null,
+      "detail": {
+        "action": "thread.dispatch",
+        "via": null
+      }
+    },
+    {
+      "name": "A11 正常 stub 下问答链路可用（via=llm 且有答案）",
+      "ok": true,
+      "detail": {
+        "via": "rule",
+        "mode": "ask",
+        "answer": "已在线，可以开始工作（stub）"
+      }
+    },
+    {
+      "name": "A12 还原 mock 装配",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "real": false
+      }
+    },
+    {
+      "name": "B1 首次入站落库且返回 eventId",
+      "ok": true,
+      "detail": {
+        "eventId": "E-9172",
+        "deduped": false,
+        "identity": "visitor"
+      }
+    },
+    {
+      "name": "B2 重复投递幂等（deduped=true 且回同一 eventId）",
+      "ok": true,
+      "detail": {
+        "eventId": "E-9172",
+        "deduped": true,
+        "identity": "visitor"
+      }
+    },
+    {
+      "name": "B3 新消息 id 正常新建事件",
+      "ok": true,
+      "detail": {
+        "eventId": "E-9173",
+        "deduped": false,
+        "identity": "visitor"
+      }
+    },
+    {
+      "name": "B4 三次投递只落 2 条事件（重复未重复入账）",
+      "ok": true,
+      "detail": {
+        "n": 2
+      }
+    },
+    {
+      "name": "B5 入站原文 PII 已脱敏（手机号/身份证不出现在账本）",
+      "ok": true,
+      "detail": {
+        "stored": "客人电话 [PII:PHONE:6b6e318e5e1c]，身份证 [PII:IDCARD:325e4faaf731]，说房间有噪音，麻烦处理下"
+      }
+    },
+    {
+      "name": "C1 缺基准价的写步骤按「人工裁决」挂起（params_incomplete + 说明），而不是熔断/直接执行",
+      "ok": true,
+      "detail": {
+        "approvalId": "apr-e-9180",
+        "snapshot": {
+          "gate": true,
+          "params_incomplete": true,
+          "warning": "围栏无法求值（缺参数，已按人工裁决而非熔断处理）：R1: - 期望数字，得到 undefined；R2: < 期望数字，得到 undefined。请补齐参数或驳回。"
+        }
+      }
+    },
+    {
+      "name": "C2 该线程状态（应为 pending_review，非 paused/failed）",
+      "ok": null,
+      "detail": {
+        "status": "pending_review",
+        "progress_done": 1,
+        "progress_total": 2
+      }
+    }
+  ]
+}

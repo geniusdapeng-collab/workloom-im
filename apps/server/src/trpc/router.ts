@@ -22,9 +22,15 @@ import {
 } from "@workloom/base/tenancy";
 import { gatewayAppend, gatewayAppendOnClient, insertWithReadableId, MockEmbedder, THREAD_ID_SOURCE, upsertMemoryInTx } from "@workloom/base/workdata";
 import { INTENT_ROUTE_TIMEOUT_DISPATCH_MS, makeReadableId } from "@workloom/shared";
-import { registerAskKbSearch } from "@workloom/runtime";
-import { loadGoalArchive, registerIndustryQuestPlanner, resolveDispatchPresetKey } from "../runtime/thread-runner.js";
-import { searchKB } from "../service/kb.js";
+import { ASK_KB_MIN_SCORE, registerAskKbSearch } from "@workloom/runtime";
+import {
+  loadGoalArchive,
+  registerIndustryQuestPlanner,
+  resolveDispatchPreset,
+  resolveDispatchPresetKey,
+  runQuestForThread,
+} from "../runtime/thread-runner.js";
+import { applyKbPublishAfterApproval, searchKB } from "../service/kb.js";
 import { acquisitionQuestPlanner } from "../industry/hotel/acquisition-planner.js";
 import {
   actionProcedure,
@@ -45,7 +51,7 @@ import {
   expireSweep,
   listQueue,
 } from "@workloom/base/review-console";
-import { routeIntent, runAsk, runQuest } from "@workloom/runtime";
+import { routeIntent, runAsk } from "@workloom/runtime";
 import { LlmIntentClassifier, type IntentClassifier } from "@workloom/runtime";
 import { providerFromEnv, OpenAiCompatibleProvider } from "@workloom/base/model-router";
 import { routedLlmCall, resetLlmAssembly } from "../service/llm.js";
@@ -77,11 +83,12 @@ import {
 import {
   activateRuleVersion,
   checkCandidateAgainstBaseline,
-  confirmDryRun,
+  confirmDryRunOnTx,
   createDryRun,
   fenceActivationFromProposal,
-  fenceRuleRowId,
   loadActiveRulesInTx,
+  nextRuleRowIdentity,
+  type RuleRowIdentity,
 } from "@workloom/base/fence-engine";
 import { MAX_CONCURRENT_THREADS, PLAN_TIERS } from "@workloom/shared";
 import {
@@ -712,8 +719,18 @@ const onboardingRouter = router({
           `UPDATE workspaces SET name=$2, industry=$3, is_example=false WHERE id=$1`,
           [scope.workspaceId, input.displayName, input.industry],
         );
+        /**
+         * R2-F3 / M6-F1：向导只更新经营主体身份字段，不得整块替换 `business`。
+         * 出厂档案里的 `business.price_bands` 是行业规划器与围栏（R1 涨幅自动 / R2 保底熔断）的
+         * 唯一价格锚点：整块替换会把它清成 null，使价带内调价退化为「缺参数 → 一律人工裁决」
+         * （M6-F1 已复现）。合并语义：既有键保留，向导字段覆盖同名键（jsonb || 右操作数优先）。
+         */
         await client.query(
-          `UPDATE profiles SET archive = jsonb_set(archive, '{business}', $2::jsonb), industry=$3, updated_at=now() WHERE workspace_id=$1`,
+          `UPDATE profiles
+              SET archive = jsonb_set(archive, '{business}', coalesce(archive->'business', '{}'::jsonb) || $2::jsonb),
+                  industry = $3,
+                  updated_at = now()
+            WHERE workspace_id=$1`,
           [scope.workspaceId, JSON.stringify({
             name: input.displayName,
             industry: input.industry,
@@ -1086,7 +1103,14 @@ const threadsRouter = router({
         return { kind: "clarify" as const, question: intent.clarifyQuestion, via: intent.via };
       }
       // N-14：岗位解析带任务语义（视觉/视频/发布/增长四域偏好），不再只认 Bundle 清单顺序
-      const presetKey = input.presetKey ?? (await resolveDispatchPresetKey(scope, input.title));
+      // MC-304：解析结果带来源（语义命中 / 行业能力试算 / 兜底…），兜底派遣不再“静默派给第一个岗位”
+      const presetResolution = input.presetKey
+        ? { presetKey: input.presetKey, selection: "explicit" as const }
+        : await resolveDispatchPreset(scope, input.title);
+      const presetKey = presetResolution.presetKey;
+      const presetNotice = presetResolution.selection === "fallback"
+        ? { presetSelection: "fallback" as const, notice: "未识别任务域：已按兜底岗位派遣，请在任务页核对或改派" }
+        : {};
       /**
        * GR-14：档案读取失败一律 fail-closed（按无档案走并留痕），绝不"猜"目标。
        * 读到了则用全文替换规划目标；线程 title 仍是索引（事件 after 里带 goal_ref 与版本）。
@@ -1105,6 +1129,13 @@ const threadsRouter = router({
         await client.query("BEGIN");
         await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
         await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+        /**
+         * MC-301（2026-09-30 排雷修复）：计数与建档必须原子。
+         * 事务级 advisory lock（按工作区）把同一工作区的并发派遣串行化——此前 N 路并发
+         * 都读到「未超限」快照后各自 INSERT（实测 15/15 全部放行，L3.1 上限形同虚设）。
+         * 锁在 COMMIT/ROLLBACK 时释放，持锁区间只含本工作区的装配/计数/建档/派遣事件。
+         */
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`thread-dispatch:${scope.workspaceId}`]);
         selectedAgent = await runnableAgentOn(client, scope.workspaceId, presetKey);
         /**
          * L3.1：单工作区并发 ≤10，超出排队且可见（须在 RLS 上下文内统计，否则恒 0 行 fail-open）。
@@ -1201,12 +1232,20 @@ const threadsRouter = router({
         }
       }
       if (input.runImmediately && intent.mode === "quest") {
-        const r = await runQuest(app, getGatewayPool(), scope, {
-          threadId, goal: planningGoal, presetKey, llmCall: llmCall("quest-plan", scope),
-        });
-        return { kind: "routed" as const, mode: intent.mode, via: intent.via, threadId, status: r.status, stepsDone: r.stepsDone, stepsTotal: r.stepsTotal };
+        /**
+         * MC-303（2026-09-30 排雷修复）：立即执行入口与调度器/续跑共用 runQuestForThread——
+         * 此前直呼 runQuest 未注入行业规划器（fallbackPlanner），同一目标在“立即执行”入口
+         * 得到空参通用计划（工具名当动作名），围栏全部无命中，与调度器口径不一致。
+         */
+        const r = await runQuestForThread(scope, { threadId, goal: planningGoal, presetRef: presetKey });
+        return {
+          kind: "routed" as const, mode: intent.mode, via: intent.via, threadId,
+          status: r.status, stepsDone: r.stepsDone, stepsTotal: r.stepsTotal,
+          ...(r.warnings ? { warnings: r.warnings } : {}),
+          ...presetNotice,
+        };
       }
-      return { kind: "routed" as const, mode: intent.mode, via: intent.via, threadId, status: "queued" as const };
+      return { kind: "routed" as const, mode: intent.mode, via: intent.via, threadId, status: "queued" as const, ...presetNotice };
     }),
 
   /** 线程详情（P2 线程头/信息面板；L7.1 越权返回空） */
@@ -1354,8 +1393,12 @@ const threadsRouter = router({
       if (mode === "ask") {
         return runAsk(app, getGatewayPool(), scope, { threadId: input.threadId, goal: runGoal, presetKey: selectedAgent!.presetKey, llmCall: llmCall("ask-synthesize", scope) });
       }
-      return runQuest(app, getGatewayPool(), scope, {
-        threadId: input.threadId, goal: runGoal, presetKey: selectedAgent!.presetKey, mode, llmCall: llmCall("quest-plan", scope),
+      /**
+       * MC-303（2026-09-30 排雷修复）：UI「执行 / 从中断处继续 / 追问」与调度器同一条装配路径。
+       * 此前直呼 runQuest 不走行业规划器——续跑会用通用模板重排计划（覆盖度/参数与首次执行不一致）。
+       */
+      return runQuestForThread(scope, {
+        threadId: input.threadId, goal: runGoal, presetRef: selectedAgent!.presetKey, mode,
       });
     }),
 });
@@ -1382,7 +1425,25 @@ async function activateFenceRuleAfterApproval(
        WHERE a.approval_id=$1 AND a.workspace_id=$2`,
       [approvalId, scope.workspaceId],
     );
-    const params = fenceActivationFromProposal(r.rows[0]?.payload, scope.workspaceId);
+    let params = fenceActivationFromProposal(r.rows[0]?.payload, scope.workspaceId);
+    if (!params) {
+      // 兼容修复前落库的提案事件（after 只带 ruleId/dryRunId，没有行 ID）：按该 rule_id 当前
+      // 待激活行反查。MC-102 修复后新提案一律自带 ruleRowId，此分支只服务历史事件。
+      const legacy = r.rows[0]?.payload as
+        | { decision?: { action?: string; after?: { ruleId?: unknown; dryRunId?: unknown } } }
+        | undefined;
+      const after = legacy?.decision?.action === "fence.rule.propose" ? legacy.decision?.after : undefined;
+      if (typeof after?.ruleId === "string" && typeof after?.dryRunId === "string") {
+        const pending = await client.query<{ id: string }>(
+          `SELECT id FROM fence_rules
+            WHERE workspace_id=$1 AND rule_id=$2 AND status IN ('draft','pending_approval')
+            ORDER BY created_at DESC, id DESC LIMIT 1`,
+          [scope.workspaceId, after.ruleId],
+        );
+        const legacyRowId = pending.rows[0]?.id;
+        if (legacyRowId) params = { ruleRowId: legacyRowId, dryRunId: after.dryRunId };
+      }
+    }
     if (!params) return null;
     // 审批留痕 ID = 手势回写事件（approval.gesture，F5.5 经安全网关落库）
     const g = await client.query<{ event_id: string }>(
@@ -1423,8 +1484,12 @@ async function activateFenceRuleAfterApproval(
  *  - HR 汰换同样同步执行；
  *  - 每一项各自隔离 catch，失败只落服务端日志——审批已 approved 的事实不被副作用失败反噬。
  *
- * 注：基座的 Quest 续跑语义是**人工"继续推进"**（threads.run），本钩子不引入自动续跑；
- * 跨重启的遗留挂起由 A-05 启动补扫兜底。
+ * 注（合并口径，2026-09-30）：基座原先的 Quest 续跑语义是**人工"继续推进"**（threads.run），
+ * 跨重启的遗留挂起由 A-05 启动补扫兜底；本轮排雷 T-2026-0929-0200 的 MC-101 进一步把
+ * **步骤级关卡"采纳/编辑后采纳"** 的线程在同一事务内直接置回 `queued`（见 review-console/approvals.ts），
+ * 由既有调度器重入并携带 approvalRef 执行该步；本钩子仍只负责围栏激活 / HR 汰换 / 知识库生效等副作用，
+ * 两者叠加不重复执行（step_id 幂等锚点 + replay 只认已核实回执）。非步骤级审批（围栏提案、HR、
+ * 技能下发等无 session_id/step_id 的行）一律不动线程。
  */
 async function runPostApprovalSideEffects(
   scope: { tenantId: string; workspaceId: string },
@@ -1496,6 +1561,23 @@ const approvalsRouter = router({
           // 与 batchApprove / IM 回调三路同源；deduped 不触发，各项失败隔离不反噬接口）
           { onApproved: (id) => runPostApprovalSideEffects(scopeOf(ctx.identity), id) },
         );
+        /**
+         * 合并口径（T-2026-0929-0200 × T-2026-0929-0201）：
+         *  - 批准/编辑后的副作用（围栏激活 + HR 汰换 + 知识库生效）统一走云端 main 的
+         *    `runPostApprovalSideEffects` 钩子（decide/batchApprove/IM 回调三路同源，失败隔离）；
+         *  - 驳回仍需收敛知识库状态（MC-110）：`onApproved` 只在 approved/edited 触发，
+         *    因此这里单独补一条 reject 分支，语义与 approve 侧一致（失败不反噬接口）。
+         */
+        if (!res.deduped && res.status === "rejected") {
+          try {
+            await applyKbPublishAfterApproval(scopeOf(ctx.identity), input.approvalId);
+          } catch (err) {
+            console.error(
+              `[approvals] 知识库驳回回滚副作用失败 ${input.approvalId}（审批结果不变）：`,
+              err instanceof Error ? err.message : err,
+            );
+          }
+        }
         return res;
       } catch (err) {
         if (err instanceof ApprovalError) {
@@ -2195,6 +2277,40 @@ const fenceRouter = router({
     }
   }),
 
+  /**
+   * 生效规则（MC-105）：RDAS P 域 / dsh 围栏插件消费的「最小可判定形状」。
+   * 与 `fence.rules` 的区别：只回 `status='active'` 的生效规则（含全局 '*' 基线），
+   * 输出 `{ rule_id, name, level, is_baseline, match: { object_types, actions }, actions, when }`，
+   * 与 packages/runtime/plugins/workloom-fence.plugin.js 的读取口径一致。
+   * 历史缺陷：acceptance/live 链路调用本端点（注释称「本仓已补」）但服务端从未注册 →
+   * 插件把 404 错误体当规则数组 → 工具层整体不可用（P 域实测）。SSOT：复用 loadActiveRulesInTx，
+   * 与激活/提案路径同一判定输入。
+   */
+  activeRules: protectedProcedure.query(async ({ ctx }) => {
+    const scope = scopeOf(ctx.identity);
+    const app = getAppPool();
+    const client = await app.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+      await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+      const active = await loadActiveRulesInTx(client, scope);
+      return active.map((rule) => ({
+        rule_id: rule.rule_id,
+        version: rule.version,
+        name: rule.name,
+        level: rule.level,
+        is_baseline: rule.is_baseline,
+        match: { object_types: rule.objectTypes, actions: rule.actions },
+        actions: rule.actions,
+        when: rule.when,
+      }));
+    } finally {
+      await client.query("COMMIT").catch(() => undefined);
+      client.release();
+    }
+  }),
+
   /** 版本历史（P5E1：active/rolled_back/出厂基线 🔒；单调守卫 L2.1） */
   versions: protectedProcedure.query(async ({ ctx }) => {
     const scope = scopeOf(ctx.identity);
@@ -2252,10 +2368,14 @@ const fenceRouter = router({
         ruleId: z.string(), name: z.string(), level: z.enum(["auto", "review", "block"]),
         objectTypes: z.array(z.string()), actions: z.array(z.string()), when: z.string(),
       }),
+      /**
+       * MC-103：基线 when 改写的显式放行位。when 语义无法静态证明不放严，默认一律拒绝；
+       * 客户在 dry-run 回放 + 人工确认（L2.4）后显式传 true，放行事实写进提案事件（H-3 留痕）。
+       */
+      allowWhenChange: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const scope = scopeOf(ctx.identity);
-      await confirmDryRun(getAppPool(), scope, input.dryRunId);
       // 规则草稿进 pending_approval（激活须审批事件 ID，activateRuleVersion 在 P4 手势后调用——E1 已接线，见下方 decide/batchApprove）
       // D16（#1/A）：规则草稿行、提案事件、审批行三者同一事务同一 COMMIT
       const app = getAppPool();
@@ -2265,37 +2385,85 @@ const fenceRouter = router({
         await client.query("BEGIN");
         await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
         await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+        // MC-103：dry-run 必须属于本次提案的同一条规则——此前只按 id 确认，可以把任意一条
+        // 自己名下的 dry-run 拿来给另一条规则的提案背书（回放证据与提案内容脱钩）。
+        const drRow = await client.query<{ rule_id: string; status: string }>(
+          `SELECT rule_id, status FROM fence_dry_runs WHERE id=$1 AND workspace_id=$2`,
+          [input.dryRunId, scope.workspaceId],
+        );
+        const dryRun = drRow.rows[0];
+        if (!dryRun) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: `dry-run ${input.dryRunId} 不存在或不属于当前工作区` });
+        }
+        if (dryRun.rule_id !== input.rule.ruleId) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `dry-run ${input.dryRunId} 回放的是规则 ${dryRun.rule_id}，与本次提案 ${input.rule.ruleId} 不一致（禁止借用他条规则的确认）`,
+          });
+        }
+        if (dryRun.status !== "pending") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: `dry-run ${input.dryRunId} 状态为 ${dryRun.status}，仅 pending 可确认` });
+        }
         // HP-02：提案入口即做基线单调守卫——同 rule_id 的基线规则只可加严
         //（level 不降 / when 不变 / 覆盖集不收窄）。修复前该守卫只在测试里被调用，
         // 工作区可以把一条 block 基线规则"升级"成 review/恒假条件。
+        // MC-109：锚点取同 rule_id 最严 active 行（含客户覆盖行），首次自定义后仍然生效。
         const activeBaseline = await loadActiveRulesInTx(client, scope);
         const guard = checkCandidateAgainstBaseline(activeBaseline, {
           rule_id: input.rule.ruleId, version: "v-next", name: input.rule.name,
           level: input.rule.level, is_baseline: false,
           objectTypes: input.rule.objectTypes, actions: input.rule.actions, when: input.rule.when,
-        });
+        }, { allowWhenChange: input.allowWhenChange === true });
         if (!guard.ok) {
           throw new TRPCError({
             code: "BAD_REQUEST",
             message: `围栏基线只可加严，本次变更被拒：${guard.violations.map((v) => v.reason).join("；")}`,
           });
         }
-        const rowId = fenceRuleRowId(input.rule.ruleId, scope.workspaceId);
-        await client.query(
-          `INSERT INTO fence_rules (id, rule_id, version, workspace_id, name, level, match_spec, action, is_baseline, status, created_by)
-           VALUES ($1,$2,'v-next',$3,$4,$5,$6,$7,false,'pending_approval',$8)
-           ON CONFLICT (id) DO NOTHING`,
-          [rowId, input.rule.ruleId, scope.workspaceId, input.rule.name, input.rule.level,
-           JSON.stringify({ object_types: input.rule.objectTypes, actions: input.rule.actions, when: input.rule.when }),
-           JSON.stringify({ result: input.rule.level }), ctx.identity.memberNo],
-        );
+        // MC-102：行 ID 带版本号（v<该 rule_id 历史最大 + 1>），同 rule_id 的第 N 次提案落在新行上。
+        // ON CONFLICT 只覆盖"并发提案先占了同一版本号"这一种情况——重算版本重试，绝不静默丢弃提案内容
+        //（修复前固定 vnext 后缀 + DO NOTHING：第二次提案审批通过但规则行从未更新）。
+        let identity: RuleRowIdentity | null = null;
+        for (let attempt = 0; attempt < 5 && !identity; attempt += 1) {
+          const candidate = await nextRuleRowIdentity(client, scope, input.rule.ruleId);
+          const inserted = await client.query(
+            `INSERT INTO fence_rules (id, rule_id, version, workspace_id, name, level, match_spec, action, is_baseline, status, created_by)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false,'pending_approval',$9)
+             ON CONFLICT (id) DO NOTHING`,
+            [candidate.rowId, input.rule.ruleId, candidate.version, scope.workspaceId, input.rule.name, input.rule.level,
+             JSON.stringify({ object_types: input.rule.objectTypes, actions: input.rule.actions, when: input.rule.when }),
+             JSON.stringify({ result: input.rule.level }), ctx.identity.memberNo],
+          );
+          if (inserted.rowCount === 1) identity = candidate;
+        }
+        if (!identity) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: `规则 ${input.rule.ruleId} 的提案行版本连续冲突，未落地；请重试（未写入任何变更）`,
+          });
+        }
+        // dry-run 确认与提案行/事件/审批行同一事务：被守卫拒绝的提案不消耗 pending 态，
+        // 客户修正后可用同一 dryRunId 重试（修复前先确认后守卫，拒一次就再也确认不了）。
+        await confirmDryRunOnTx(client, scope, input.dryRunId);
         ev = await gatewayAppendOnClient(client, {
           ...scope, actor: { id: ctx.identity.memberNo, type: "human" },
         }, {
           who: { type: "human", id: ctx.identity.memberNo },
           context: { tenant_id: scope.tenantId, workspace_id: scope.workspaceId, time: new Date().toISOString(), channel: "inapp" },
           object: { type: "staff", id: input.rule.ruleId },
-          decision: { action: "fence.rule.propose", after: { ...input.rule, dryRunId: input.dryRunId } },
+          // 提案事件携带本行 ID/版本与基线锚点事实：审批通过后按此行激活（MC-102），
+          // allowWhenChange 放行事实一并留痕（MC-103/H-3）。
+          decision: {
+            action: "fence.rule.propose",
+            after: {
+              ...input.rule,
+              dryRunId: input.dryRunId,
+              ruleRowId: identity.rowId,
+              version: identity.version,
+              inheritedBaseline: identity.inheritedBaseline,
+              ...(input.allowWhenChange === true ? { allowWhenChange: true } : {}),
+            },
+          },
           rule_impact: [],
         });
         // E1 联调接线（PF.5/F2.4）：围栏变更提案进 P4 决断队列——高危（不可批量采纳，须逐条手势，F5.4/G6）
@@ -2305,7 +2473,7 @@ const fenceRouter = router({
            VALUES ($1,$2,$3,$4,'inapp','pending',$5)
            ON CONFLICT (event_id, channel) DO NOTHING`,
           [`apr-${ev.eventId.toLowerCase()}`, scope.tenantId, scope.workspaceId, ev.eventId,
-           JSON.stringify({ after: input.rule, high_risk: true })],
+           JSON.stringify({ after: input.rule, ruleRowId: identity.rowId, version: identity.version, high_risk: true })],
         );
         await client.query("COMMIT");
       } catch (err) {
@@ -3587,7 +3755,8 @@ export type { IntelItem, RepoPulse } from "../service/aipm.js";
  */
 registerIndustryQuestPlanner((goal) => acquisitionQuestPlanner(goal));
 registerAskKbSearch(async (scope, question, limit) => {
-  const hits = await searchKB({ workspaceId: scope.workspaceId, query: question, limit });
+  // MC-111：ask 事实面按相关性下限注入（P22 检索面仍用宽召回，默认 0）
+  const hits = await searchKB({ workspaceId: scope.workspaceId, query: question, limit, minScore: ASK_KB_MIN_SCORE });
   return hits.map((hit) => ({
     content: hit.content,
     ...(hit.heading ? { heading: hit.heading } : {}),

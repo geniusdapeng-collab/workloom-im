@@ -250,12 +250,29 @@ export async function decide(
       ],
     );
 
+    /**
+     * MC-101 / MC-104（同事务前置查询）：被审事件的归属线程与会话必须先取到——
+     *   · 手势事件缺 sessionId 时 `threads.events`（按 session_id 过滤）看不到人工决策（MC-104）；
+     *   · 采纳/编辑后需要把步骤级关卡所属线程从 pending_review 重新入队，交给调度器重入
+     *     runQuest 续跑（#34 恢复闭环携带 approvalRef 直接执行），否则任务永远停在关卡上（MC-101）。
+     * 查询仍在本事务内（FOR UPDATE 已锁定 approval 行），不引入新的竞态窗口。
+     */
+    const owner = await c.query<{ session_id: string | null; step_id: string | null }>(
+      `SELECT session_id, payload->'decision'->>'step_id' AS step_id
+         FROM biz_events WHERE event_id=$1 AND workspace_id=$2`,
+      [row.event_id, scope.workspaceId],
+    );
+    const ownerThread = owner.rows[0]?.session_id ?? null;
+    const ownerStep = owner.rows[0]?.step_id ?? null;
+
     // D16（#1/A）：状态变更、手势事件、校准记忆全部在同一事务同一 COMMIT——
     // 不再存在「状态已改、事件/记忆未落」的崩溃孤儿窗口
     // F5.5 手势回写：事件库（经安全网关；人类手势动作）
     const gres = await gatewayAppendOnClient(c, {
       ...scope,
       actor: { id: actor.memberNo, type: "human" },
+      // MC-104：人工决策归属被审事件所在线程（threads.events 按 session_id 过滤）
+      sessionId: ownerThread,
     }, {
       who: { type: "human", id: actor.memberNo },
       context: { tenant_id: scope.tenantId, workspace_id: scope.workspaceId, time: new Date().toISOString(), channel: "inapp" },
@@ -269,6 +286,8 @@ export async function decide(
           reason_enum: gesture.reasonEnum,
           edited_after: gesture.editedAfter,
           edit_kind: gesture.editKind,
+          // MC-101：线程直达（与 GR-10 驳回分支的口径一致，供前端与复盘定位）
+          ...(ownerThread ? { thread_id: ownerThread } : {}),
         },
         basis: gesture.reasonText ? [gesture.reasonText] : undefined,
       },
@@ -302,20 +321,32 @@ export async function decide(
      * 非步骤级审批（如围栏规则提案、HR 汰换）保持原语义：不动线程。
      */
     if (gesture.type === "reject") {
-      const owner = await c.query<{ session_id: string | null; step_id: string | null }>(
-        `SELECT session_id, payload->'decision'->>'step_id' AS step_id
-           FROM biz_events WHERE event_id=$1 AND workspace_id=$2`,
-        [row.event_id, scope.workspaceId],
-      );
-      const owner_row = owner.rows[0];
-      const ownerThread = owner_row?.session_id ?? null;
-      if (ownerThread && owner_row?.step_id) {
+      if (ownerThread && ownerStep) {
         await c.query(
           `UPDATE threads SET status='cancelled', error=$3, updated_at=now()
             WHERE id=$1 AND workspace_id=$2 AND status <> 'completed'`,
           [ownerThread, scope.workspaceId, `步骤被驳回：${gesture.reasonEnum ?? "未注明"}`],
         );
       }
+    }
+
+    /**
+     * MC-101：步骤级关卡被**采纳/编辑后采纳** → 线程自动续跑（同一事务重新入队）。
+     *
+     * 此前的断点：decide() 只在 reject 分支联动线程，approve/edit 既不回队也不触发调度，
+     * 线程停在 pending_review，只有人工再点「推进」才会动（真机实测 T-127：approve 后 60s
+     * 事件数 4→4、状态不变）。现在改为：状态置 `queued` + 清空 error，由既有调度器
+     * （apps/server/src/runtime/scheduler.ts，每 7s 扫描 queued）重入 runQuestForThread；
+     * replay 时 approvedStepIds 命中本条审批 → 携带 approvalRef 直接执行该步骤（#34 闭环），
+     * 不产生第二个关卡、不重复事件（step_id 幂等锚点）。非步骤级审批（围栏规则提案、
+     * HR 汰换、技能下发等无 session_id/step_id 的行）保持原语义：不动线程。
+     */
+    if ((gesture.type === "approve" || gesture.type === "edit") && ownerThread && ownerStep) {
+      await c.query(
+        `UPDATE threads SET status='queued', error=NULL, updated_at=now()
+          WHERE id=$1 AND workspace_id=$2 AND status='pending_review'`,
+        [ownerThread, scope.workspaceId],
+      );
     }
     return { kind: "decided" as const, row, status, gestureEventId: gres.eventId };
   });
@@ -415,9 +446,16 @@ export async function expireSweep(
     // D16（#1/A）：expired 状态与过期事件同一事务提交——不再存在状态已变、事件未落的孤儿窗口
     await scoped(app, scope, async (c) => {
       await c.query(`UPDATE approvals SET status='expired' WHERE approval_id=$1`, [row.approval_id]);
+      // MC-104：过期事件同样归属被审事件所在线程（threads.events 按 session_id 过滤，
+      // 缺 session_id 时系统侧的超时处置在任务时间线上不可见）
+      const own = await c.query<{ session_id: string | null }>(
+        `SELECT session_id FROM biz_events WHERE event_id=$1 AND workspace_id=$2`,
+        [row.event_id, scope.workspaceId],
+      );
       await gatewayAppendOnClient(c, {
         tenantId: scope.tenantId, workspaceId: scope.workspaceId,
         actor: { id: "review-console", type: "system" },
+        sessionId: own.rows[0]?.session_id ?? null,
       }, {
         who: { type: "system", id: "review-console" },
         context: { tenant_id: scope.tenantId, workspace_id: scope.workspaceId, time: new Date().toISOString(), channel: "inapp" },

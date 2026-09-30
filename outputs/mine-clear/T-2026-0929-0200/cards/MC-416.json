@@ -1,0 +1,65 @@
+{
+  "id": "MC-416",
+  "kind": "fix",
+  "covers": [
+    "MC-306"
+  ],
+  "level": "L2",
+  "severity": "P2",
+  "batch": 2,
+  "title": "酒店演示种子补齐 business.price_bands：R1「≤8% 自动」/ R2「保底价熔断」出厂可达",
+  "state": "fixed",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "scripts/seed.ts#yunqiArchive@6828469",
+      "note": "新增 business.price_bands（雅致大床房 420–480 / 美团大床房 380–440 / 亲子双床房 480–560 / 商旅大床房 360–420），与 R2 保底价 ¥380、forbidden 同源"
+    },
+    {
+      "type": "db",
+      "ref": "wl_mcd_fc profiles.archive",
+      "note": "seed 幂等复跑后回读 archive->'business'->'price_bands' 非空（两次 seed：新写入 0 条事件、幂等跳过 100 条）"
+    },
+    {
+      "type": "log",
+      "ref": "evidence/fix-c/final-m2-05.log",
+      "note": "J1 出厂档案下 +3% 调价 → R1 命中自动执行 completed（修复前 params_incomplete 一律转人工）；A2 rule_impact=R1 有回执；B2 300 元 → R2:blocked paused"
+    }
+  ],
+  "root_cause": {
+    "file": "scripts/seed.ts",
+    "line": 174,
+    "symbol": "yunqiArchive",
+    "commit": "4ff9943"
+  },
+  "fix_plan": "在酒店演示种子的一店一档补 business.price_bands（行业规划器唯一价格锚点来源）；不改 bundles/**（资产摘要被 bundle.json integrity 索引锁定，改文件需同步重算摘要，超出本批范围）。",
+  "blast_radius": "只影响 hotel 演示种子（scripts/seed*.ts 在 base-sync 排除清单内）；其它 bundle 不受影响。注意：m2-05 用例末尾会把 archive-'business' 当作「用例注入物」移除，复跑 J1 前需重新 seed。",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "出厂种子 + 「把雅致大床房调价上调 3%」（价带内）",
+      "expect": "R1 命中自动执行、线程 completed、无人工审批",
+      "command": "同 FIX-C-03 命令",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-c/final-m2-01.log"
+    },
+    {
+      "kind": "sample",
+      "given": "出厂种子 + 「把雅致大床房调价到 300 元」（低于 ¥380 保底）",
+      "expect": "R2 命中熔断（paused + rule_impact=R2:blocked）",
+      "command": "同 FIX-C-03 命令",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-c/final-m2-01.log"
+    }
+  ],
+  "regression": {
+    "command": "BUNDLE_DIR=bundles/hotel tsx --env-file=work/env-fc scripts/seed.ts && node outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+    "evidence": "evidence/fix-c/final-m2-05.log"
+  },
+  "rollback": "回滚 528823a（scripts/seed.ts）：删除 business 块；已 seed 的库执行同一 seed 幂等覆盖即可回到无价带形态。",
+  "fixed_by": "fixer-C",
+  "verified_by": null,
+  "conflict_paths": [
+    "scripts/seed.ts"
+  ]
+}

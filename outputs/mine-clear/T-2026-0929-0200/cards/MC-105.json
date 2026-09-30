@@ -1,0 +1,50 @@
+{
+  "id": "MC-105",
+  "kind": "problem",
+  "level": "L2",
+  "severity": "P1",
+  "batch": 1,
+  "state": "open",
+  "title": "RDAS O 域执行器调用不存在的过程 approvals.batchRelease（404），自主交付率测量失真",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "scripts/acceptance/outcome.mjs:148@4ff9943",
+      "note": "每轮介入都 POST /trpc/approvals.batchRelease 并把 released 记入 trial.interventions"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m1-batchrelease-404.log",
+      "note": "真机实测：POST /trpc/approvals.batchRelease → 404 No procedure found（apps/server/src/trpc/router.ts 只有 decide/batchApprove/sweep）"
+    },
+    {
+      "type": "code",
+      "ref": "apps/server/src/trpc/router.ts:1438@4ff9943",
+      "note": "approvalsRouter 仅暴露 list/decide/batchApprove/sweep"
+    }
+  ],
+  "root_cause": {
+    "file": "scripts/acceptance/outcome.mjs",
+    "line": 148,
+    "commit": "4ff9943",
+    "symbol": "runTrial（介入循环）"
+  },
+  "trigger_path": "跑 pnpm acceptance:outcome（O 域 ADR/HIR）→ 每轮 batchRelease 404 → 低风险关卡无法按设计批量放行，只能逐条手势；配合 MC-101（无自动续跑）会让 trial 大面积停在 pending_review，passAtK/ADR/HIR 被系统性压低",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "以 owner 身份 POST /trpc/approvals.batchRelease",
+      "expect": "200 且返回 released 列表（或在 base 未实现时执行器明确降级并记录来源），而不是 404",
+      "command": "cd <repo> && set -a && . ./.env && set +a && curl -s -X POST $MCD_BASE/trpc/approvals.batchRelease -H \"authorization: Bearer $TOKEN\" -d '{}' | head -c 200",
+      "last_result": "fail"
+    },
+    {
+      "kind": "property",
+      "given": "任意一次 O 域验收运行",
+      "expect": "执行器引用的每个 tRPC 过程都在目标仓存在（启动前自检），缺失即 fail-fast 而不是静默降级",
+      "command": "node scripts/acceptance/outcome.mjs --help / 自检脚本遍历 trpc 调用面",
+      "last_result": "fail"
+    }
+  ],
+  "notes": "与 MC-101 组合效应：验收器期望『批量放行 + 异步续跑』，基座两者都缺。"
+}

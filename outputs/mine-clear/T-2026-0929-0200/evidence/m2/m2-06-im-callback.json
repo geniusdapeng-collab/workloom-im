@@ -1,0 +1,96 @@
+{
+  "title": "M2-06 IM 手势回调",
+  "started_at": "2026-09-29T15:51:52.096Z",
+  "finished_at": "2026-09-29T15:52:13.378Z",
+  "base": "http://127.0.0.1:8901",
+  "suffix": "m2i235151",
+  "total": 9,
+  "passed": 7,
+  "failed": 1,
+  "checks": [
+    {
+      "name": "已绑定测试 openid",
+      "ok": null,
+      "detail": {
+        "member": "MEM-002",
+        "channel": "dingtalk",
+        "openid": "ou-m2-m2i235151",
+        "before": {}
+      }
+    },
+    {
+      "name": "A1 待审线程就绪（pending_review + approvalId）",
+      "ok": true,
+      "detail": {
+        "threadId": "T-180",
+        "approvalId": "apr-e-9345",
+        "status": "pending_review"
+      }
+    },
+    {
+      "name": "B1 未验签通道下冒名 openid 被拒（403，P0-1 降级纪律）",
+      "ok": true,
+      "detail": {
+        "status": 403,
+        "message": "未验签通道回调仅允许本人操作：operatorOpenId 须为当前会话成员 MEM-002 在 dingtalk 绑定的 openid（P0-1 开发降级）"
+      }
+    },
+    {
+      "name": "B2 冒名被拒后审批未落库",
+      "ok": true,
+      "detail": {
+        "status": "pending"
+      }
+    },
+    {
+      "name": "C1 本人 IM 手势放行成功（unsigned 标注）",
+      "ok": true,
+      "detail": {
+        "approvalId": "apr-e-9345",
+        "status": "approved",
+        "deduped": false,
+        "operator": "MEM-002",
+        "unsigned": true
+      }
+    },
+    {
+      "name": "C2 重复回调幂等（deduped=true）",
+      "ok": true,
+      "detail": {
+        "approvalId": "apr-e-9345",
+        "status": "approved",
+        "deduped": true,
+        "operator": "MEM-002",
+        "unsigned": true
+      }
+    },
+    {
+      "name": "C3 手势事件只有一条（重复回调不重复入账）",
+      "ok": true,
+      "detail": {
+        "n": 1
+      }
+    },
+    {
+      "name": "D1 IM 通道批准后线程自动续跑（21s 内离开 pending_review）",
+      "ok": false,
+      "detail": {
+        "observed": {
+          "ok": false,
+          "status": "pending_review",
+          "progress_done": 2,
+          "progress_total": 3
+        },
+        "waitedMs": 21099,
+        "note": "IM 批准后线程仍停在 pending_review：手机端批了，任务不会动（无服务端续跑出口）"
+      }
+    },
+    {
+      "name": "E1 用例环境已恢复（openid 绑定还原）",
+      "ok": true,
+      "detail": {
+        "after": {}
+      }
+    }
+  ]
+}

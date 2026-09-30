@@ -7,7 +7,8 @@
 #   - CNB services 只支持 docker / vscode，没有 GH Actions 的 service containers；
 #     因此 DB 闸门用 pgvector/pgvector:pg17 作为流水线镜像，在容器内直接拉起 PostgreSQL 17。
 #   - 三端 Playwright 视觉门禁（ui:e2e）暂未纳入 v1，作为后续补入项。
-#   - 签名/公证/发布类流水线保持只读，发布仍在受控人工入口执行。
+#   - 桌面安装包发布已迁入 CNB（见文件末尾 `desktop-release`）：签名/公证密钥与自托管
+#     mac/windows 构建节点未就绪时 fail-closed；`.github/workflows/*` 仅保留为发布策略事实源。
 
 .static-gate: &static_gate
   name: static-gate
@@ -103,6 +104,8 @@
         pnpm test:release-policy
         pnpm test:release-assets
         pnpm test:reset-safety
+        # MC-201 防复发：README/客户文档承诺的安装包名必须与发布产线（INSTALLERS）和 CNB 发布流水线一致
+        node scripts/desktop-artifact-naming.mjs
 
     - name: 基座同步与客户端接入门禁
       script: |
@@ -450,6 +453,264 @@
         fi
         cat /tmp/merge.json
 
+# 桌面安装包发布（CNB 侧通道，MC-202）
+#
+# 事实源在 CNB：GitHub 账号已失效（WORKLOOM_PRODUCT_CONTEXT §9.1），
+# `.github/workflows/desktop-production-release.yml` 仅作为**发布策略事实源**保留
+# （product.manifest.json#release.workflow、release-publisher-policy 与命名门禁仍按它校验），
+# 桌面安装包的实际构建与发布在本流水线完成：
+#   ① desktop-release-preflight（SaaS Linux）：发布输入、运行时资产锁、发布策略与
+#      「文档承诺产物名 == 产线 INSTALLERS」一致性自检（MC-201 同源漂移防复发）；
+#   ② desktop-release-macos（自托管 mac 节点）：签名 Bundle → 投影/产品校验/三端构建 → 载荷装配 →
+#      electron-builder dmg（arm64 / x64）→ 拆包验收（payload/公钥环/签名+公证票据）→ 上传候选资产；
+#   ③ desktop-release-windows（自托管 windows 节点）：同源 PG 运行时 → 载荷装配 → NSIS exe →
+#      拆包验收（win-unpacked 载荷归档 + 首启冒烟）→ 上传候选资产；
+#   ④ desktop-release-finalize（SaaS Linux）：await 上游完成后回读 CNB Release 候选字节逐字节复核
+#      sha512，再产出 WorkLoom-SHA512SUMS.txt 与 WorkLoom-release-manifest.json。
+#
+# 前置（组织侧一次性，缺任一项即 fail-closed，不产出未签名/半套制品）：
+#   · 接入自托管 mac / windows 构建节点（组织设置 → 构建节点；tags 见各 job）；
+#   · 在 CNB 仓库密钥注入 BUNDLE_SIGNING_PRIVATE_KEY / MAC_CSC_LINK / MAC_CSC_KEY_PASSWORD /
+#     APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID / WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD / CNB_TOKEN。
+# 现状登记：桌面签名与公证密钥未配置（BLK-B-01-003），预检会明确列出缺项并拒绝继续。
+.desktop-release-preflight: &desktop_release_preflight
+  name: desktop-release-preflight
+  runner:
+    tags: cnb:arch:amd64
+    cpus: 8
+  docker:
+    image: node:24.19.0-bookworm
+    volumes:
+      - /cnb-cache/pnpm-store:copy-on-write
+  env:
+    DESKTOP_RELEASE_VERSION: v0.0.0
+  stages:
+    - name: 发布输入与密钥前置（fail-closed）
+      script: |
+        set -eu
+        VERSION="${DESKTOP_RELEASE_VERSION:-}"
+        echo "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || {
+          echo "必须用 env DESKTOP_RELEASE_VERSION=vX.Y.Z 触发桌面发布（当前：'${VERSION}'）"; exit 1; }
+        missing=""
+        for key in CNB_TOKEN BUNDLE_SIGNING_PRIVATE_KEY MAC_CSC_LINK MAC_CSC_KEY_PASSWORD \
+                   APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID WIN_CSC_LINK WIN_CSC_KEY_PASSWORD; do
+          eval "value=\${$key:-}"
+          [ -n "$value" ] || missing="$missing $key"
+        done
+        if [ -n "$missing" ]; then
+          echo "桌面发布通道未就绪：缺少签名/公证/发布凭据 →$missing"
+          echo "登记：BLK-B-01-003（桌面签名与公证 secrets 未配置）。配齐后重跑 api_trigger_desktop_release。"
+          echo "拒绝产出未签名安装包——制品必须可验签、可公证后再对外发布。"
+          exit 1
+        fi
+        echo "发布版本 $VERSION"
+    - name: 运行时资产锁 / 发布策略 / 命名一致性
+      script: |
+        set -eu
+        corepack enable
+        corepack prepare pnpm@10.14.0 --activate
+        pnpm config set store-dir /cnb-cache/pnpm-store
+        pnpm install --frozen-lockfile
+        node scripts/runtime-deps-lock.mjs verify
+        node --test scripts/desktop-workflow-path.test.mjs scripts/desktop-release-policy.test.mjs \
+          scripts/release-publisher-policy.test.mjs scripts/runtime-deps-lock.test.mjs
+        node scripts/desktop-artifact-naming.mjs
+    - name: resolve
+      type: cnb:resolve
+      options:
+        key: desktop-release-preflight
+
+.desktop-release-macos: &desktop_release_macos
+  name: desktop-release-macos
+  # 自托管 mac 构建节点（dmg 需 hdiutil/codesign/notarytool，SaaS 节点是 Linux 容器，无法代跑）
+  runner:
+    namespace: group
+    tags:
+      - mac
+      - arm64
+  env:
+    VERSION: v0.0.0
+    VITE_DEMO_WORKSPACE: ai-pm-demo
+    VITE_DEMO_MEMBER: MEM-001
+    ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+  stages:
+    - name: await preflight
+      type: cnb:await
+      options:
+        key: desktop-release-preflight
+    - name: 依赖 + 签名 Bundle + 投影/产品校验 + web 构建
+      script: |
+        set -eu
+        corepack enable
+        corepack prepare pnpm@10.14.0 --activate
+        pnpm install --frozen-lockfile
+        test -n "${BUNDLE_SIGNING_PRIVATE_KEY:-}" || { echo "缺少 BUNDLE_SIGNING_PRIVATE_KEY，拒绝生成生产安装包"; exit 1; }
+        pnpm bundle:release
+        test -s build/bundle-trust.json || { echo "独立 Bundle 公钥环未生成"; exit 1; }
+        pnpm projections:generate
+        pnpm product:verify
+        pnpm bundle:governance
+        pnpm projections:check
+        node --test apps/desktop/electron/bootstrap.test.cjs scripts/desktop-bootstrap-db.test.mjs
+        pnpm exec vitest run apps/web/src/voice/VoiceEngine.test.ts
+        pnpm -C apps/web build
+    - name: 载荷装配 + DMG（arm64 / x64）+ 拆包验收
+      script: |
+        set -eu
+        test -n "${MAC_CSC_LINK:-}" && test -n "${MAC_CSC_KEY_PASSWORD:-}" || { echo "缺少 macOS Developer ID 签名证书，拒绝对外发行"; exit 1; }
+        test -n "${APPLE_ID:-}" && test -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" && test -n "${APPLE_TEAM_ID:-}" || { echo "缺少 Apple 公证凭据，拒绝对外发行"; exit 1; }
+        export CSC_LINK="$MAC_CSC_LINK" CSC_KEY_PASSWORD="$MAC_CSC_KEY_PASSWORD"
+        retry() { local attempt=1; until "$@"; do [ "$attempt" -ge 3 ] && return 1; echo "下载失败，第 $((attempt + 1))/3 次重试"; attempt=$((attempt + 1)); sleep 8; done; }
+        for arch in arm64 x64; do
+          bash scripts/pack-electron-payload.sh --platform mac --arch "$arch" --version "$VERSION"
+          retry pnpm exec electron-builder --mac dmg --"$arch" --publish never -c.extraMetadata.version="${VERSION#v}"
+        done
+        for dir in release/mac-arm64 release/mac; do
+          APP="$(find "$dir" -maxdepth 1 -name '*.app' -print -quit 2>/dev/null || true)"
+          [ -n "$APP" ] || continue
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          spctl --assess --verbose --type exec "$APP"
+          xcrun stapler validate "$APP"
+          RES="$APP/Contents/Resources"
+          test -f "$RES/payload.tar.gz" || { echo "拆包验收失败：payload.tar.gz 未进包（$APP）"; exit 1; }
+          test -s "$RES/bundle-trust.json" || { echo "拆包验收失败：独立 Bundle 公钥环未进包（$APP）"; exit 1; }
+          tar -tzf "$RES/payload.tar.gz" > /tmp/wl-pkg-list.txt
+          grep -q "runtime/node_modules/tsx/package.json" /tmp/wl-pkg-list.txt || { echo "拆包验收失败：归档内缺 tsx"; exit 1; }
+          grep -q "nats/nats-server" /tmp/wl-pkg-list.txt || { echo "拆包验收失败：归档内缺 nats"; exit 1; }
+          node apps/desktop/electron/bootstrap.cjs --smoke --resources "$RES" --support "/tmp/wl-smoke-$(basename "$dir")"
+          echo "拆包验收通过：$APP"
+        done
+        # 封存：改名到对外恒定名并写出平台清单（与遗留发布通道逐字段同口径）
+        node scripts/desktop-candidate-stage.mjs --platform mac --out dist-desktop --version "$VERSION" --signing signed
+    - name: 上传 macOS 候选资产到 CNB Release
+      script: |
+        set -eu
+        node scripts/cnb-release-publish.mjs --tag "$VERSION" --create \
+          --body "WorkLoom 织元桌面安装包（CNB 构建；macOS arm64/x64 已验签+公证）" \
+          dist-desktop/WorkLoom-mac-arm64.dmg dist-desktop/WorkLoom-mac-x64.dmg dist-desktop/desktop-macos-manifest.json
+    - name: resolve
+      type: cnb:resolve
+      options:
+        key: desktop-release-macos
+
+.desktop-release-windows: &desktop_release_windows
+  name: desktop-release-windows
+  # 自托管 windows 构建节点（NSIS/Authenticode 需 Windows 工具链）；bash 步骤依赖 Git for Windows（CNB 文档列为自托管节点必装）
+  runner:
+    namespace: group
+    tags:
+      - windows
+  env:
+    VERSION: v0.0.0
+    VITE_DEMO_WORKSPACE: ai-pm-demo
+    VITE_DEMO_MEMBER: MEM-001
+    ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+  stages:
+    - name: await preflight
+      type: cnb:await
+      options:
+        key: desktop-release-preflight
+    - name: 同源 PG 运行时 + 依赖 + 签名 Bundle + 投影/构建
+      script: |
+        # 注：自托管 Windows 节点上 stage script 默认走 PowerShell（CNB 文档），bash 步骤显式经 Git for Windows 执行
+        $ErrorActionPreference = "Stop"
+        powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-pgvector-win.ps1
+        if ($LASTEXITCODE -ne 0) { throw "pgvector/PG 运行时编译失败" }
+        bash -lc @'
+        set -eu
+        corepack enable
+        corepack prepare pnpm@10.14.0 --activate
+        pnpm install --frozen-lockfile
+        test -n "${BUNDLE_SIGNING_PRIVATE_KEY:-}" || { echo "缺少 BUNDLE_SIGNING_PRIVATE_KEY，拒绝生成生产安装包"; exit 1; }
+        pnpm bundle:release
+        test -s build/bundle-trust.json || { echo "独立 Bundle 公钥环未生成"; exit 1; }
+        pnpm projections:generate
+        pnpm product:verify
+        pnpm bundle:governance
+        pnpm projections:check
+        pnpm -C apps/web build
+        '@
+        if ($LASTEXITCODE -ne 0) { throw "依赖/签名 Bundle/投影构建失败" }
+    - name: 载荷装配 + NSIS 安装包 + 拆包验收
+      script: |
+        $ErrorActionPreference = "Stop"
+        if (-not $env:WIN_CSC_LINK -or -not $env:WIN_CSC_KEY_PASSWORD) { throw "缺少 Windows 代码签名证书，拒绝对外发行" }
+        bash scripts/pack-electron-payload.sh --platform win --arch x64 --version $env:VERSION
+        if ($LASTEXITCODE -ne 0) { throw "载荷装配失败" }
+        $version = $env:VERSION.TrimStart("v")
+        pnpm exec electron-builder --win nsis --x64 --publish never "-c.extraMetadata.version=$version"
+        if ($LASTEXITCODE -ne 0) { throw "NSIS 打包失败" }
+        $resources = "release/win-unpacked/resources"
+        if (-not (Test-Path "$resources/payload.tar.gz")) { throw "拆包验收失败：payload.tar.gz 未进包" }
+        if (-not (Test-Path "$resources/payload/PAYLOAD_VERSION")) { throw "拆包验收失败：PAYLOAD_VERSION 未进包" }
+        if (-not (Test-Path "$resources/bundle-trust.json")) { throw "拆包验收失败：独立 Bundle 公钥环未进包" }
+        bash -lc @'
+        set -eu
+        tar -tzf release/win-unpacked/resources/payload.tar.gz > /tmp/wl-pkg-list.txt
+        grep -q "runtime/node_modules/tsx/package.json" /tmp/wl-pkg-list.txt || { echo "归档内缺 tsx"; exit 1; }
+        grep -q "nats/nats-server" /tmp/wl-pkg-list.txt || { echo "归档内缺 nats"; exit 1; }
+        '@
+        if ($LASTEXITCODE -ne 0) { throw "拆包验收失败：载荷归档内容不完整" }
+        node apps/desktop/electron/bootstrap.cjs --smoke --resources $resources --support "$env:TEMP/wl-win-smoke"
+        if ($LASTEXITCODE -ne 0) { throw "win-unpacked 载荷首启冒烟失败" }
+        node scripts/desktop-candidate-stage.mjs --platform win --out dist-desktop --version $env:VERSION --signing signed
+        if ($LASTEXITCODE -ne 0) { throw "候选封存失败（产物数量/命名与发布策略不一致）" }
+    - name: 上传 Windows 候选资产到 CNB Release
+      script: |
+        $ErrorActionPreference = "Stop"
+        node scripts/cnb-release-publish.mjs --tag $env:VERSION --create --body "WorkLoom 织元桌面安装包（CNB 构建；Windows x64 已 Authenticode 签名）" dist-desktop/WorkLoom-win-x64.exe dist-desktop/desktop-windows-manifest.json
+        if ($LASTEXITCODE -ne 0) { throw "候选资产上传/回读复核失败" }
+    - name: resolve
+      type: cnb:resolve
+      options:
+        key: desktop-release-windows
+
+.desktop-release-finalize: &desktop_release_finalize
+  name: desktop-release-finalize
+  runner:
+    tags: cnb:arch:amd64
+    cpus: 8
+  docker:
+    image: node:24.19.0-bookworm
+  env:
+    VERSION: v0.0.0
+  stages:
+    - name: await 平台候选制品
+      type: cnb:await
+      options:
+        key: [desktop-release-macos, desktop-release-windows]
+    - name: 回读候选字节 + 汇总校验表与发布清单
+      script: |
+        set -eu
+        mkdir -p dist/desktop
+        cd dist/desktop
+        for asset in WorkLoom-mac-arm64.dmg WorkLoom-mac-x64.dmg WorkLoom-win-x64.exe desktop-macos-manifest.json desktop-windows-manifest.json; do
+          curl -fsSL "https://cnb.cool/workloom-ai/workloom-im/-/releases/download/${VERSION}/${asset}" -o "$asset"
+        done
+        node -e '
+          const fs=require("fs"),c=require("crypto");
+          const specs=[["desktop-macos-manifest.json",["WorkLoom-mac-arm64.dmg","WorkLoom-mac-x64.dmg"]],["desktop-windows-manifest.json",["WorkLoom-win-x64.exe"]]];
+          const assets=[];
+          for(const [manifestFile,names] of specs){
+            const m=JSON.parse(fs.readFileSync(manifestFile,"utf8"));
+            if(m.schemaVersion!==1||m.tag!==process.env.VERSION) throw new Error(`${manifestFile} 版本/标签不匹配`);
+            for(const name of names){
+              const b=fs.readFileSync(name);
+              const digest=c.createHash("sha512").update(b).digest("hex");
+              const row=(m.assets??[]).filter((a)=>a.name===name);
+              if(row.length!==1||row[0].size!==b.length||row[0].sha512!==digest) throw new Error(`${name} 与平台清单不一致（候选字节可能在传输中损坏）`);
+              assets.push({name,size:b.length,sha512:digest});
+            }
+          }
+          fs.writeFileSync("WorkLoom-release-manifest.json",JSON.stringify({schemaVersion:1,product:"workloom-desktop",tag:process.env.VERSION,channel:"cnb",assets},null,2)+"\n");
+          fs.writeFileSync("WorkLoom-SHA512SUMS.txt",assets.map((a)=>`${a.sha512}  ${a.name}`).join("\n")+"\n");
+          console.log("汇总校验表：",assets.map((a)=>a.name).join("、"));
+        '
+        cd -
+        node scripts/cnb-release-publish.mjs --tag "$VERSION" \
+          --body "WorkLoom 织元桌面安装包（CNB 构建；sha512 校验表 + 发布清单）" \
+          dist/desktop/WorkLoom-SHA512SUMS.txt dist/desktop/WorkLoom-release-manifest.json
+
 main:
   push:
     - *static_gate
@@ -464,6 +725,15 @@ main:
 
 # 手动/定时触发的流水线（合并进同一个 $ 兜底键，避免重复顶层键导致配置解析失败）
 $:
+  # 桌面安装包正式发布（CNB 侧通道，MC-202）：
+  #   触发：event=api_trigger_desktop_release，并以 env DESKTOP_RELEASE_VERSION=vX.Y.Z 指定版本；
+  #   编排：preflight（Linux）→ mac/win 自托管节点构建 → finalize（Linux 回读复核 + 校验表）。
+  #   前置：自托管 mac/windows 构建节点 + 桌面签名/公证密钥（缺任一项由 preflight/平台 job fail-closed）。
+  api_trigger_desktop_release:
+    - *desktop_release_preflight
+    - *desktop_release_macos
+    - *desktop_release_windows
+    - *desktop_release_finalize
   # 发布共享 UI 制品：由 API 触发（event: api_trigger_ui_release），也可页面触发
   api_trigger_ui_release:
     - *ui_release

@@ -1,0 +1,55 @@
+{
+  "id": "MC-102",
+  "kind": "problem",
+  "level": "L1",
+  "severity": "P1",
+  "batch": 1,
+  "state": "open",
+  "title": "同一 rule_id 的第二次加严提案『已批准』但规则静默不生效（行 id 固定 + 激活幂等早退）",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "packages/base/fence-engine/lifecycle.ts:165@4ff9943",
+      "note": "fenceRuleRowId 固定为 fr-<rule>-vnext-<ws>：同 rule_id 第二次提案必然撞主键"
+    },
+    {
+      "type": "code",
+      "ref": "apps/server/src/trpc/router.ts:2246@4ff9943",
+      "note": "confirmDryRun 的 INSERT ... ON CONFLICT (id) DO NOTHING：冲突即静默丢弃提案内容"
+    },
+    {
+      "type": "code",
+      "ref": "apps/server/src/trpc/router.ts:1389@4ff9943",
+      "note": "activateFenceRuleAfterApproval 在行状态非 draft/pending_approval 时 return null（幂等早退），不写失败证据、不报错"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m1-fence-rule-change.log",
+      "note": "实测：第 1 次 auto→review 生效（v2）；第 2 次 review→block 审批 200 通过，回读仍 review/v2（未生效）"
+    }
+  ],
+  "root_cause": {
+    "file": "apps/server/src/trpc/router.ts",
+    "line": 2246,
+    "commit": "4ff9943",
+    "symbol": "confirmDryRun"
+  },
+  "trigger_path": "规则中心对同一 rule_id 做第二次加严（dryRun → confirmDryRun → 审批通过）→ 审批留痕为 approved，但 fence_rules 行未被更新，客户以为围栏已收紧",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "对 R7 连续两次加严提案（review → block）并各自批准",
+      "expect": "第二次批准后 fence.rules 回读 level=block，且版本号递增（旧版 rolled_back）",
+      "command": "cd <repo> && set -a && . ./.env && set +a && MCD_BASE=http://127.0.0.1:8899 node outputs/mine-clear/T-2026-0929-0200/assertions/m1-fence-rule-change.mjs",
+      "last_result": "fail"
+    },
+    {
+      "kind": "property",
+      "given": "任意 rule_id 的任意次合法加严提案",
+      "expect": "批准即生效，或明确拒绝并给出可复现原因；不存在『已批准但规则未变』的中间态",
+      "command": "同上（循环 N 次并对 fence.rules 回读断言）",
+      "last_result": "fail"
+    }
+  ],
+  "notes": "修复时必须与 MC-109 一起处理：单纯改成版本化行 id 会打开『放宽基线』的口子。"
+}

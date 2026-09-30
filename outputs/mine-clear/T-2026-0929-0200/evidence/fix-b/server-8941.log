@@ -1,0 +1,47 @@
+[supervisor 00:15:20] starting server
+[auth] JWT_SECRET 长度 <32 字符，熵不足——生产环境请配置 ≥32 字符随机密钥
+[service-c] SERVICE_C_DEMO_AUTH 已开启：h5/openid 演示直登可用（生产环境必须置 false 并配置渠道 code 交换凭据）
+WorkLoom IM 底座 server 已启动：http://127.0.0.1:8941（tRPC: /trpc/*，C 端网关: /c/*）
+[scheduler] 已启动：每 7000ms 扫描 queued 线程（每区每轮 ≤3 条，并发上限 10）
+反馈枚举表已装载：hotel→ws-yunqi（11 条）、ai-pm→ws-aipm-demo（14 条）
+[scheduler] 重启恢复：1 条 running 线程转 paused（可续跑）
+[supervisor 00:16:10] starting server
+[auth] JWT_SECRET 长度 <32 字符，熵不足——生产环境请配置 ≥32 字符随机密钥
+[service-c] SERVICE_C_DEMO_AUTH 已开启：h5/openid 演示直登可用（生产环境必须置 false 并配置渠道 code 交换凭据）
+WorkLoom IM 底座 server 已启动：http://127.0.0.1:8941（tRPC: /trpc/*，C 端网关: /c/*）
+[scheduler] 已启动：每 7000ms 扫描 queued 线程（每区每轮 ≤3 条，并发上限 10）
+反馈枚举表已装载：hotel→ws-yunqi（11 条）、ai-pm→ws-aipm-demo（14 条）
+[supervisor 00:27:26] server exited code=0
+[supervisor 00:27:28] starting server
+[auth] JWT_SECRET 长度 <32 字符，熵不足——生产环境请配置 ≥32 字符随机密钥
+[service-c] SERVICE_C_DEMO_AUTH 已开启：h5/openid 演示直登可用（生产环境必须置 false 并配置渠道 code 交换凭据）
+WorkLoom IM 底座 server 已启动：http://127.0.0.1:8941（tRPC: /trpc/*，C 端网关: /c/*）
+[scheduler] 已启动：每 7000ms 扫描 queued 线程（每区每轮 ≤3 条，并发上限 10）
+反馈枚举表已装载：hotel→ws-yunqi（11 条）、ai-pm→ws-aipm-demo（14 条）
+[trpc] mutation fence.confirmDryRun → BAD_REQUEST: 围栏基线只可加严，本次变更被拒：基线规则 R7 level 被放宽：block → auto（只可加严）（ref=201483ae）
+[trpc] mutation fence.confirmDryRun → BAD_REQUEST: 围栏基线只可加严，本次变更被拒：基线规则 R7 when 被改写（params.guarantee_anomaly != true → true）：条件语义无法静态证明不放宽，须先 dry-run 回放 + 人工确认（L2.4）后，在 fence.confirmDryRun 显式传 allowWhenChange=true 放行（ref=c5a0fd1f）
+[trpc] mutation fence.confirmDryRun → BAD_REQUEST: 围栏基线只可加严，本次变更被拒：基线规则 R7 when 被改写（params.guarantee_anomaly != true → true）：条件语义无法静态证明不放宽，须先 dry-run 回放 + 人工确认（L2.4）后，在 fence.confirmDryRun 显式传 allowWhenChange=true 放行（ref=c5a0fd1f）
+[trpc] mutation fence.confirmDryRun → BAD_REQUEST: 围栏基线只可加严，本次变更被拒：基线规则 R7 when 被改写（params.guarantee_anomaly != true → true）：条件语义无法静态证明不放宽，须先 dry-run 回放 + 人工确认（L2.4）后，在 fence.confirmDryRun 显式传 allowWhenChange=true 放行（ref=c5a0fd1f）
+[trpc] mutation approvals.decide → INTERNAL_SERVER_ERROR: 基线规则只可加严，本次变更被拒：基线规则 R7 when 被改写（params.guarantee_anomaly != true → true）：条件语义无法静态证明不放宽，须先 dry-run 回放 + 人工确认（L2.4）后，在 fence.confirmDryRun 显式传 allowWhenChange=true 放行（ref=e8de93ab）
+[trpc] mutation approvals.decide → INTERNAL_SERVER_ERROR: 基线规则只可加严，本次变更被拒：基线规则 R7 when 被改写（params.guarantee_anomaly != true → true）：条件语义无法静态证明不放宽，须先 dry-run 回放 + 人工确认（L2.4）后，在 fence.confirmDryRun 显式传 allowWhenChange=true 放行（ref=e8de93ab）
+[supervisor 00:30:33] server exited code=0
+[supervisor 00:30:35] starting server
+[auth] JWT_SECRET 长度 <32 字符，熵不足——生产环境请配置 ≥32 字符随机密钥
+[service-c] SERVICE_C_DEMO_AUTH 已开启：h5/openid 演示直登可用（生产环境必须置 false 并配置渠道 code 交换凭据）
+WorkLoom IM 底座 server 已启动：http://127.0.0.1:8941（tRPC: /trpc/*，C 端网关: /c/*）
+[scheduler] 已启动：每 7000ms 扫描 queued 线程（每区每轮 ≤3 条，并发上限 10）
+反馈枚举表已装载：hotel→ws-yunqi（11 条）、ai-pm→ws-aipm-demo（14 条）
+[trpc] mutation fence.confirmDryRun → BAD_REQUEST: 围栏基线只可加严，本次变更被拒：基线规则 R7 level 被放宽：block → auto（只可加严）（ref=201483ae）
+[trpc] mutation fence.confirmDryRun → BAD_REQUEST: 围栏基线只可加严，本次变更被拒：基线规则 R7 level 被放宽：block → auto（只可加严）（ref=201483ae）
+[trpc] mutation fence.confirmDryRun → BAD_REQUEST: 围栏基线只可加严，本次变更被拒：基线规则 R7 when 被改写（params.guarantee_anomaly != true → true）：条件语义无法静态证明不放宽，须先 dry-run 回放 + 人工确认（L2.4）后，在 fence.confirmDryRun 显式传 allowWhenChange=true 放行（ref=c5a0fd1f）
+[scheduler] T-104（quest）→ pending_review（1/2）岗位=review-agent
+[supervisor 00:37:15] server exited code=0
+[supervisor 00:37:17] starting server
+[auth] JWT_SECRET 长度 <32 字符，熵不足——生产环境请配置 ≥32 字符随机密钥
+[service-c] SERVICE_C_DEMO_AUTH 已开启：h5/openid 演示直登可用（生产环境必须置 false 并配置渠道 code 交换凭据）
+WorkLoom IM 底座 server 已启动：http://127.0.0.1:8941（tRPC: /trpc/*，C 端网关: /c/*）
+[scheduler] 已启动：每 7000ms 扫描 queued 线程（每区每轮 ≤3 条，并发上限 10）
+反馈枚举表已装载：hotel→ws-yunqi（11 条）、ai-pm→ws-aipm-demo（14 条）、hotel→ws-910be944840ba43a（11 条）、hotel→ws-2gdo38（11 条）
+[scheduler] T-147（quest）→ completed（1/1）岗位=competitor-agent
+[scheduler] T-148（quest）→ completed（1/1）岗位=competitor-agent
+[trpc] mutation fence.confirmDryRun → BAD_REQUEST: 围栏基线只可加严，本次变更被拒：基线规则 R7 level 被放宽：block → auto（只可加严）（ref=201483ae）

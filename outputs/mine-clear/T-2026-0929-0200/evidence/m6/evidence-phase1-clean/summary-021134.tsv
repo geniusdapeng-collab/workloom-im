@@ -1,0 +1,4 @@
+m6-e01-sec-probe	FAIL	rc=1
+m6-e01b-sec-probe-prod	FAIL	rc=1
+m6-e02-observability	PASS	rc=0
+m6-e03-error-leak	PASS	rc=0

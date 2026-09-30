@@ -1,0 +1,23 @@
+== m6-b01-linkage-thread.log
+✗ 数字职场该员工进入 asking 且 approvalId 直达 :: [{"presetKey":"desktop-agent","state":"asking","currentThread":null,"pendingTier":"l4_chairman","approvalId":"apr-boost-i2","celebrating":false,"statusLine":"请示待裁：inspection.scan"},{"presetKey":"reconcile-agent","state":"asking","currentThread":null,"pendingTier":"l4_chairman","approvalId":"apr-e-se
+== m6-b02-linkage-kb.log
+✗ 探针口令在变更前不可检索（基线） :: {"hits":5}
+✗ 待审文档不入检索索引（承诺口径） :: {"hits":5}
+✗ [联动断点候选] 审批记录是 pending —— 但动作已执行、文档已生效（事后审批） :: {"approval_status":"pending","doc_status":"active","executed_at_doc":true}
+✗ C 端问答能引用生效后的知识（问答入口数据源覆盖） :: {"answer":"抱歉，这个问题我暂时无法准确回答，不敢随意编造。已为您准备好工单草稿，确认后转人工跟进；您也可以换个说法再问我。"}
+== m6-b03-linkage-ask.log
+✗ 审批类问题有事实依据（approvals 域覆盖） :: {"sources":null}
+✗ 线程类问题有事实依据（threads 域覆盖） :: {"sources":null}
+== m6-b04-linkage-ticket.log
+✗ B 端工单台可见该工单（C→B 联动） :: {"count":8}
+✗ B 端时间线包含客户提交事件 :: {"timeline":[]}
+✗ B 端派单成功
+✗ B 端推进（start）成功
+✗ B 端办结成功
+✗ 时间线记录 B 端动作（staff 归属） :: {"actions":[]}
+✗ 客户侧工单详情状态已更新为 done :: {"status":"assigned","statusText":"已受理"}
+✗ 客户侧时间线可见 B 端处置轨迹 :: {"timeline":["c_user:create","system:assign"]}
+✗ 办结结果通知达到客户推送箱 :: {"kinds":["ticket.accepted"]}
+✗ 服务台统计今日工单数增加（统计投影） :: {"before":5,"after":5}
+✗ [数据源覆盖] 统一待办是否纳入工单（P28 口径：审批/告警/工单） :: {"groups":[]}
+== m6-b05-linkage-reject.log

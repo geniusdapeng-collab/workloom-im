@@ -1,0 +1,18 @@
+{
+  "drained": [],
+  "raceThreads": [
+    {
+      "threadId": "T-157",
+      "approvalId": "apr-e-10498"
+    },
+    {
+      "threadId": "T-158",
+      "approvalId": "apr-e-10501"
+    },
+    {
+      "threadId": "T-159",
+      "approvalId": "apr-e-10504"
+    }
+  ],
+  "leftoverRuns": 1
+}

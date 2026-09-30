@@ -1,0 +1,71 @@
+{
+  "id": "MC-413",
+  "kind": "fix",
+  "covers": [
+    "MC-303"
+  ],
+  "level": "L2",
+  "severity": "P1",
+  "batch": 1,
+  "title": "计划生成入口唯一化：dispatch(runImmediately) 与 threads.run 统一走 runQuestForThread",
+  "state": "fixed",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "apps/server/src/trpc/router.ts#threads.dispatch@6828469",
+      "note": "runImmediately 分支改调 runQuestForThread（行业规划器/工具执行器/对象词表/覆盖度提示同一条装配路径）"
+    },
+    {
+      "type": "code",
+      "ref": "apps/server/src/trpc/router.ts#threads.run@6828469",
+      "note": "续跑/追问分支改调 runQuestForThread；返回值兼容（status/stepsDone/stepsTotal + warnings）"
+    },
+    {
+      "type": "log",
+      "ref": "evidence/fix-c/final-m2-05.log",
+      "note": "H1：同一目标两条入口计划逐字段一致（均 pms.price.read{room_type} + price.adjust{price:519}）"
+    },
+    {
+      "type": "log",
+      "ref": "evidence/fix-c/m2-01-main-loop.json",
+      "note": "挂起事件 W-01 文案随新口径更新为带「越围栏挂起：」机器前缀（见 FIX-C-05 说明），m2-01 该断言保持绿"
+    }
+  ],
+  "root_cause": {
+    "file": "apps/server/src/trpc/router.ts",
+    "line": 1191,
+    "symbol": "threadsRouter.dispatch / threadsRouter.run",
+    "commit": "4ff9943"
+  },
+  "fix_plan": "两处直呼 runQuest 的调用点统一替换为 runQuestForThread（装配点已在 runtime/thread-runner.ts 收敛）。",
+  "blast_radius": "立即执行入口的计划形态改变（空参通用计划 → 行业确定性计划）——这正是卡面要求；由此 W-01 缺参挂起的 basis 文案成为该路径的主文案，loop.ts 为其补上「越围栏挂起：」机器前缀（FIX-C-05），否则冻结的 m2-01 断言会由绿转红。",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "同一目标「把雅致大床房调价到 519 元」分别 runImmediately=true/false",
+      "expect": "两次计划步数/action/params 一致",
+      "command": "M2_REPO=… M2_BASE=http://127.0.0.1:8951 … node outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-c/final-m2-01.log"
+    },
+    {
+      "kind": "property",
+      "given": "任意行业目标与任意入口（dispatch/run/调度器）",
+      "expect": "计划生成入口唯一，计划不随入口漂移",
+      "command": "M2_REPO=… M2_BASE=http://127.0.0.1:8951 … node outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-c/final-m2-01.log"
+    }
+  ],
+  "regression": {
+    "command": "M2_REPO=/Users/mac/WorkLoom-fleet/.wt-mcd-fc M2_BASE=http://127.0.0.1:8951 M2_ENV_FILE=work/env-fc node outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+    "evidence": "evidence/fix-c/final-m2-05.log"
+  },
+  "rollback": "回滚 f199d92 中 router.ts 两处调用点；注意同时回滚 loop.ts 的 W-01 前缀变更，否则 m2-01 断言口径不一致。",
+  "fixed_by": "fixer-C",
+  "verified_by": null,
+  "conflict_paths": [
+    "apps/server/src/trpc/router.ts",
+    "apps/server/src/runtime/thread-runner.ts"
+  ]
+}

@@ -1,0 +1,2 @@
++ bash /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-203 --repo /Users/mac/WorkLoom-fleet/.wt-mcd-m6
+PASS  MC-203 :: release-gate 已含生产档口径

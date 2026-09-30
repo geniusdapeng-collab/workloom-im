@@ -1,0 +1,2 @@
++ bash /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-206 --repo /Users/mac/WorkLoom-fleet/.wt-mcd-m6 --base http://127.0.0.1:8991
+PASS  MC-206 :: 5xx 响应体不含内部实现细节

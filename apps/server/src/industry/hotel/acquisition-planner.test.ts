@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { AssembledPreset, QuestStep } from "@workloom/runtime";
-import { acquisitionQuestPlanner } from "./acquisition-planner.js";
+import { acquisitionQuestPlanner, claimsHotelDomain } from "./acquisition-planner.js";
 
 function presetOf(tools: Array<{ name: string; access: "read" | "write" }>, archive: Record<string, unknown> = {}): AssembledPreset {
   return {
@@ -51,6 +51,36 @@ describe("口碑：差评回复带评分（R6 必审可判定）", () => {
   it("只说差评 → 取最差一档评分（宁可送审）", () => {
     const steps = plan("有差评要回复", presetOf(reviewTools));
     expect(steps[1]!.params.rating).toBe(2);
+  });
+
+  it("MC-304：口语词族（投诉/客服/答复/回评）同样走口碑链", () => {
+    for (const goal of ["客户投诉要答复", "客服回评一下", "帮我把这条评价回复了"]) {
+      const steps = plan(goal, presetOf(reviewTools));
+      expect(steps.map((s) => s.tool)).toEqual(["review.list", "review.reply"]);
+    }
+  });
+});
+
+describe("MC-304 语义域判定（基座派遣试算的行业声明）", () => {
+  it("口碑词族只认领持有 review.reply 的岗位", () => {
+    expect(claimsHotelDomain("处理一条差评并回复", presetOf(reviewTools))).toBe(true);
+    expect(claimsHotelDomain("客户投诉要跟进", presetOf(reviewTools))).toBe(true);
+    expect(claimsHotelDomain("处理一条差评并回复", presetOf(pricingTools))).toBe(false);
+    expect(claimsHotelDomain("处理一条差评并回复", presetOf(housekeepingTools))).toBe(false);
+  });
+
+  it("口语调价动词（上调/下调/降价）只认领定价岗位", () => {
+    expect(claimsHotelDomain("把雅致大床房上调 3%", presetOf(pricingTools))).toBe(true);
+    expect(claimsHotelDomain("把雅致大床房降价 20 元", presetOf(pricingTools))).toBe(true);
+    expect(claimsHotelDomain("把雅致大床房上调 3%", presetOf(reviewTools))).toBe(false);
+  });
+
+  it("巡检/送物认领对应岗位；无域目标不得被任意岗位吞下（假交付回归闸）", () => {
+    expect(claimsHotelDomain("每日巡检渠道价格与评价", presetOf(inspectionTools))).toBe(true);
+    expect(claimsHotelDomain("给 1208 房送两瓶水", presetOf(housekeepingTools))).toBe(true);
+    expect(claimsHotelDomain("并发用例 cap-3", presetOf(reviewTools))).toBe(false);
+    expect(claimsHotelDomain("并发用例 cap-3", presetOf(pricingTools))).toBe(false);
+    expect(claimsHotelDomain("例行行情比对", presetOf(inspectionTools))).toBe(false);
   });
 });
 

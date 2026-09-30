@@ -1,0 +1,51 @@
+{
+  "id": "MC-504",
+  "kind": "problem",
+  "level": "L1",
+  "severity": "P2",
+  "batch": 1,
+  "state": "fixed",
+  "title": "release-gate 验链摘要解析取 `{` 之后全文 → JSON.parse 抛错，异常规模丢失",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "scripts/release-gate.ts:60@a68eed0",
+      "note": "修复提交 a68eed0（fixer-F）"
+    },
+    {
+      "type": "log",
+      "ref": "work/fix-f/final-r2f4.log（7/7）+ gate-anom.log（T-03 报 499700 处异常）",
+      "note": "红→绿对照（fixer-F 原始日志）"
+    }
+  ],
+  "root_cause": {
+    "file": "scripts/release-gate.ts",
+    "line": 60,
+    "commit": "b67d651",
+    "symbol": "见 FIX-F-REPORT.md"
+  },
+  "trigger_path": "独立验收（RDAS v3.1 / 独立验证会话）在冻结基线 b67d651 上复现；详见 ACCEPTANCE-REPORT.md / VERIFY-REPORT.md",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "复跑 MC-504 的验收场景",
+      "expect": "红→绿（见修复卡断言）",
+      "command": "node work/fix-f/assert-r2f4-parse.mts",
+      "last_result": "pass",
+      "evidence": "work/fix-f/final-r2f4.log（7/7）+ gate-anom.log（T-03 报 499700 处异常）"
+    },
+    {
+      "kind": "property",
+      "given": "同一场景在干净库与污染库下重复执行",
+      "expect": "结论一致（不因遗留数据波动）",
+      "command": "node work/fix-f/assert-r2f4-parse.mts",
+      "last_result": "pass",
+      "evidence": "work/fix-f/final-r2f4.log（7/7）+ gate-anom.log（T-03 报 499700 处异常）"
+    }
+  ],
+  "regression": {
+    "command": "node work/fix-f/assert-r2f4-parse.mts",
+    "evidence": "work/fix-f/final-r2f4.log（7/7）+ gate-anom.log（T-03 报 499700 处异常）"
+  },
+  "notes": "来源：独立验收/独立验证会话（非修复者自报）。"
+}

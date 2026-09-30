@@ -1,0 +1,53 @@
+{
+  "id": "MC-434",
+  "kind": "fix",
+  "batch": 1,
+  "state": "fixed",
+  "title": "发布门禁生产档身份通道（三级回落）+ 档位显式声明",
+  "covers": [
+    "MC-203"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "scripts/release-gate.ts:1@10798e5",
+      "note": "修复提交 10798e5"
+    },
+    {
+      "type": "log",
+      "ref": "work/fix-d/assert-sweep.log",
+      "note": "生产档 11/11（基线 5/11）"
+    }
+  ],
+  "fix_plan": "见 work/fix-d/REPORT-fix-d-service-acceptance.md 对应卡片小节（提交 10798e5）",
+  "blast_radius": "见报告对应小节",
+  "conflict_paths": [
+    "scripts/release-gate.ts"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "复跑 MC-203 的验收断言",
+      "expect": "生产档 11/11（基线 5/11）",
+      "command": "bash work/fix-d/assert-sweep.sh",
+      "last_result": "pass",
+      "evidence": "work/fix-d/assert-sweep.log"
+    },
+    {
+      "kind": "property",
+      "given": "MC-203 的修复语义在任意同类输入下成立",
+      "expect": "同一断言脚本在重复运行下保持通过（幂等）",
+      "command": "bash work/fix-d/assert-sweep.sh",
+      "last_result": "pass",
+      "evidence": "work/fix-d/assert-sweep.log"
+    }
+  ],
+  "regression": {
+    "command": "pnpm suite && pnpm test && pnpm typecheck",
+    "evidence": "work/fix-d/suite.log; work/fix-d/root-test.log"
+  },
+  "rollback": "git revert 10798e5",
+  "fixed_by": "fix_d_service_acceptance",
+  "verified_by": null,
+  "notes": ""
+}

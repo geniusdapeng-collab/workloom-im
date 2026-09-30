@@ -1,0 +1,20 @@
++ node /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-ticket.mjs
+✓ B 端登录 :: "ws-yunqi"
+✓ C 端会话建立 :: {"status":200}
+✓ C 端提交工单成功 :: {"status":200,"ticketId":"tck-mumzrzgu001gmot"}
+✓ 客户侧工单列表可见（C 端投影） :: {"count":1}
+✓ 受理通知落入客户推送箱 :: {"count":1,"kinds":["ticket.accepted"]}
+✗ B 端工单台可见该工单（C→B 联动） :: {"count":8}
+✗ B 端时间线包含客户提交事件 :: {"timeline":[]}
+✗ B 端派单成功
+✗ B 端推进（start）成功
+✗ B 端办结成功
+✗ 时间线记录 B 端动作（staff 归属） :: {"actions":[]}
+✗ 客户侧工单详情状态已更新为 done :: {"status":"assigned","statusText":"已受理"}
+✗ 客户侧时间线可见 B 端处置轨迹 :: {"timeline":["c_user:create","system:assign"]}
+✗ 办结结果通知达到客户推送箱 :: {"kinds":["ticket.accepted"]}
+✗ 服务台统计今日工单数增加（统计投影） :: {"before":5,"after":5}
+✗ [数据源覆盖] 统一待办是否纳入工单（P28 口径：审批/告警/工单） :: {"groups":[]}
+✓ 租户/工作区隔离：另一工作区看不到该工单（负面对照） :: {"count":8}
+
+联动探针 3：6/17 通过；证据 → /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/evidence/m3-ticket-1790705428348.json

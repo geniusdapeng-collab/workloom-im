@@ -1,0 +1,13 @@
+✓ 登录（owner） :: "ws-yunqi"
+✓ 派遣高风险任务（调价 → 围栏挂起） :: {"threadId":"T-169","status":"pending_review"}
+✓ 线程进入 pending_review 且带审批单号 :: {"id":"T-169","status":"pending_review","presetKey":"pricing-agent","approvalId":"apr-e-10819"}
+✓ 前置：该岗位处于 blocked（近 30 分钟遇阻）——MC-114 场景成立 :: {"id":"agt-pricing-agent","presetKey":"pricing-agent","name":"收益定价官","state":"blocked","stationId":"st-5","currentThread":null,"pendingTier":"l4_chairman","approvalId":"apr-suite-stmun044pz-d7jje7","pendingCount":15,"asking":true,"celebrating":true,"statusLine":"遇阻：price.adjust · 请示待裁：suite.reviewable（共 15 项待裁）"}
+✓ blocked 条目仍下发审批直达号（信息不丢） :: {"approvalId":"apr-e-10819","entry":{"id":"agt-pricing-agent","presetKey":"pricing-agent","name":"收益定价官","state":"blocked","stationId":"st-5","currentThread":null,"pendingTier":"l4_chairman","approvalId":"apr-suite-stmun044pz-d7jje7","pendingCount":15,"asking":true,"celebrating":true,"statusLine":"遇阻：price.adjust · 请示待裁：suite.reviewable（共 15 项待裁）"}}
+✓ blocked 条目报出待裁总数（pendingCount ≥ 1） :: {"pendingCount":15}
+✓ blocked 条目下发审批分级 pendingTier :: {"pendingTier":"l4_chairman"}
+✓ blocked 条目带 asking 标志（前端可同时渲染请示入口） :: {"asking":true}
+✓ statusLine 并列「遇阻」与「请示待裁」两个信号 :: {"statusLine":"遇阻：price.adjust · 请示待裁：suite.reviewable（共 15 项待裁）"}
+✓ 批准手势成功（收尾） :: {"approvalId":"apr-e-10819","status":"approved","deduped":false,"gestureEventId":"E-10820"}
+✓ 批准后线程自动续跑（MC-101 接线未被本批破坏） :: {"status":"queued"}
+
+f1 楼层共存：11/11 通过；证据 → /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-floor-1790706117609.json

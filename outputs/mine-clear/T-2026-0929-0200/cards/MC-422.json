@@ -1,0 +1,54 @@
+{
+  "id": "MC-422",
+  "kind": "fix",
+  "batch": 1,
+  "state": "fixed",
+  "title": "审批采纳/编辑后自动续跑 + 手势事件归属线程",
+  "covers": [
+    "MC-101",
+    "MC-104"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "packages/base/review-console/approvals.ts:254@d6adbd1",
+      "note": "decide 同事务把步骤级审批所属线程置回 queued；手势事件带 sessionId"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m5-merge-m1-approval-resume.log",
+      "note": "合并后复跑：approve 后 5s pending_review→queued，10s→completed"
+    }
+  ],
+  "fix_plan": "decide 事务内查询被审事件的 session_id/step_id；approve/edit 时把线程置回 queued（由调度器续跑），并把 thread_id/sessionId 写进手势事件",
+  "blast_radius": "审批台/IM 回调/CEO 节拍的采纳路径；线程状态机新增 pending_review→queued 转移",
+  "conflict_paths": [
+    "packages/base/review-console/approvals.ts"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "步骤级关卡被 approvals.decide(approve)",
+      "expect": "60s 内线程离开 pending_review 并最终 completed",
+      "command": "WORKTREE=<repo> bash work/with-server.sh work/env-verify -- node outputs/mine-clear/T-2026-0929-0200/assertions/m1-approval-resume.mjs",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m5-merge-m1-approval-resume.log"
+    },
+    {
+      "kind": "property",
+      "given": "任意审批手势（approve/edit/reject）",
+      "expect": "决策事件出现在所属线程的事件时间线（session_id 非空）",
+      "command": "同上（脚本打印线程时间线动作列表）",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m5-merge-m1-approval-resume.log"
+    }
+  ],
+  "regression": {
+    "command": "pnpm -C packages/base test && pnpm -C apps/server test",
+    "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m5-merge-m1-approval-resume.log"
+  },
+  "rollback": "git revert d6adbd1",
+  "fixed_by": "fixer-A",
+  "verified_by": null,
+  "notes": "非步骤级审批（HR/技能/围栏提案）不动线程，保持原语义。"
+}

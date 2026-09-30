@@ -1,0 +1,28 @@
+PASS SEC-BIND-01 服务只监听回环地址 :: "127.0.0.1:8921"
+PASS SEC-CORS-01 非回环来源不回 ACAO :: {"acao":null}
+PASS SEC-CORS-02 回环来源放行 :: {"acao":"http://127.0.0.1:5321","acac":"true"}
+PASS SEC-CORS-03 非回环来源的 tRPC 响应不回 ACAO :: {"status":404}
+PASS SEC-DEMO-01 生产档下匿名设备可签发 C 端会话（出厂 .env 默认） :: {"status":200,"hasToken":true}
+PASS SEC-DEMO-02 匿名会话可读服务前台数据 :: {"status":200,"sample":"{\"notifications\":[]}"}
+PASS SEC-DEMO-03 匿名会话可消耗对话（LLM）链路 :: {"status":200}
+PASS SEC-TENANT-00 云栖线程建立（取证前置） :: {"status":200,"threadId":"T-129"}
+PASS SEC-TENANT-01 跨工作区读线程不泄露（返回空/错误） :: {"status":200,"body":"{\"result\":{\"data\":null}}"}
+PASS SEC-TENANT-02 跨工作区读线程事件流不泄露 :: {"status":200,"body":"{\"result\":{\"data\":[]}}"}
+PASS SEC-TENANT-00b 正对照：本区凭据可读到该线程 :: {"body":"{\"result\":{\"data\":{\"id\":\"T-129\",\"title\":\"M4 越权探针：云栖酒店调价\",\"mode\":\"quest\",\"status\":\"queued\",\"progress_done\":0,\"progress_total\":0,\"created_by\":\"MEM-001\",\"agent_id\":\"agt-pricing-agent\",\"created_at\":\"2026-"}
+PASS SEC-TENANT-03 跨工作区审批裁决被拒且不改状态 :: {"status":400,"code":"BAD_REQUEST","before":"pending","after":"pending"}
+PASS SEC-TENANT-04 审批队列仅含本工作区条目 :: {"listed":2,"dbOwn":2,"foreignVisible":[]}
+PASS SEC-ROLE-01 readonly 角色派发任务被拒（403） :: {"status":403,"code":"FORBIDDEN"}
+PASS SEC-ROLE-02 readonly 角色审批被拒 :: {"status":403}
+PASS SEC-CUSER-00 C 端建单（取证前置） :: {"status":200,"ticketId":"tck-mumtpdnm0010dou"}
+PASS SEC-CUSER-01 他用户凭证读不到本人工单 :: {"mineStatus":200,"otherStatus":404,"otherBody":"{\"error\":\"工单不存在\",\"requestId\":\"f3cc1da4-602c-4b83-be70-797b5ea8567c\"}"}
+PASS SEC-CINPUT-01 /c/chat 文本超 2000 字被拒 :: {"status":400}
+PASS SEC-CINPUT-02 /c/tickets 非法 kind 被拒 :: {"status":400}
+PASS SEC-CRATE-01 C 端每用户限流触发 429 :: {"saw":429}
+PASS SEC-INJ-01 注入式标题不破坏数据库（biz_events 仍在） :: {"regclass":"biz_events"}
+PASS SEC-INJ-02 注入式标题按字面存储（未被解释执行/截断破坏） :: {"stored":"'; DROP TABLE biz_events; -- <script>alert(1)</script> \\u0000 ${jndi:ldap://x}"}
+PASS SEC-INJ-03 超长标题被拒绝或截断（不落 20000 字） :: {"status":400,"maxStoredTitleLen":500}
+PASS SEC-BATCH-01 高危审批批量采纳必须逐条跳过（l4_chairman） :: {"requested":5,"approved":0,"skipped":5,"stillPending":5}
+PASS SEC-AUTH-01 无令牌访问受保护过程 → 401 :: {"status":401}
+PASS SEC-AUTH-02 伪造令牌 → 401 :: {"status":401}
+PASS SEC-AUTH-03 错误密钥签发的令牌 → 401 :: {"status":401}
+PASS SEC-AUTH-04 生产档演示直登被拒（403） :: {"status":403,"code":"FORBIDDEN"}

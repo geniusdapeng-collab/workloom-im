@@ -1,0 +1,24 @@
++ node /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/assertions/m2-04-boundaries.mjs
+✓ B1 空标题被拒（400，不建档） :: {"status":400,"code":"BAD_REQUEST","message":"[\n  {\n    \"origin\": \"string\",\n    \"code\": \"too_small\",\n    \"minimum\": 1,\n    \"inclusive\": true,\n    \"path\": [\n      \"title\"\n    ],\n    \"mess"}
+✓ B2 纯空白 → 含糊反问（clarify，不盲目建档） :: {"status":200,"code":null,"data":{"kind":"clarify","question":"想让我做什么？比如：「整理今天的待办」「核查一项异常」「生成本周复盘」——请说清对象和目标，我立即开工。","via":"rule"},"message":""}
+✓ B3 500 字标题可派遣 :: {"status":200,"threadId":"T-176"}
+✓ B4 500 字标题落库未截断 :: {"len":500}
+✓ B5 501 字标题被拒（上限 500） :: {"status":400,"message":"[\n  {\n    \"origin\": \"string\",\n    \"code\": \"too_big\",\n    \"maximum\": 500,\n    \"inclusive\": true,\n    \"path\": [\n      \"title\"\n    ],\n    \"mess"}
+✓ B6 SQL 注入式标题不导致 5xx :: {"status":200,"threadId":"T-177"}
+✓ B7 biz_events 表仍存在且可查（注入未被执行） :: {"n":3011}
+✓ B8 注入文本按数据原样落库（无解释/无转义损坏） :: {"stored":"'; DROP TABLE biz_events; -- 🧨 \"双引号\" '单引号'"}
+✓ B9 模板表达式不被求值（原样存储） :: {"stored":"模板注入 {{7*7}} ${1+1} %{x} <%= 1 %> （m2muna2nql）"}
+✓ B10 缺失 approvalId 被拒（400） :: {"status":400}
+✓ B11 不存在的审批单返回可读 400（非 500） :: {"status":400,"message":"审批 apr-does-not-exist-m2muna2nql 不存在"}
+✓ B12 edit 手势缺 editedAfter 被拒 :: {"status":400,"message":"编辑后采纳必须携带 edited_after 新值（F5.2）"}
+✓ B13 驳回自由文本 >200 字被拒 :: {"status":400}
+✓ B14 非法 editKind 被拒（纠错/口味二分白名单） :: {"status":400,"message":"[\n  {\n    \"code\": \"invalid_value\",\n    \"values\": [\n      \"correction\",\n      \"preference\"\n"}
+✓ B15 未知驳回枚举（approve 携带）不产生脏数据/不 5xx :: {"status":200}
+✓ B16 不存在的线程返回 null（非 500） :: {"status":200,"data":null}
+✓ B17 事件流分页边界（0 / 1000 均被拒） :: {"lim0":400,"lim1000":400}
+✓ B18 跨工作区读线程返回 null（不泄露存在性） :: {"ownThread":"T-178","foreignToken":true,"status":200,"data":null}
+✓ B19 入站正文 >2000 字被拒 :: {"status":400}
+✓ B20 非法通道枚举被拒 :: {"status":400}
+✓ B21 不存在的 goalRef fail-closed（按标题继续，不 5xx） :: {"status":200,"threadId":"T-179"}
+
+M2-04 边界值与注入：21/21 通过（证据 /Users/mac/Documents/Codex/2026-09-29/https-cnb-cool-workloom-ai-workloom-5/work/m6/out-p5/evidence/m2/m2-04-boundaries.json）

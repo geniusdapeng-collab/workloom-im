@@ -1,0 +1,358 @@
+[auth] JWT_SECRET 长度 <32 字符，熵不足——生产环境请配置 ≥32 字符随机密钥
+[service-c] SERVICE_C_DEMO_AUTH 已开启：h5/openid 演示直登可用（生产环境必须置 false 并配置渠道 code 交换凭据）
+WorkLoom IM 底座 server 已启动：http://127.0.0.1:8901（tRPC: /trpc/*，C 端网关: /c/*）
+[scheduler] 已启动：每 7000ms 扫描 queued 线程（每区每轮 ≤3 条，并发上限 10）
+反馈枚举表已装载：hotel→ws-yunqi（11 条）、ai-pm→ws-aipm-demo（14 条）
+[trpc] query approvals.list → METHOD_NOT_SUPPORTED: Unsupported POST-request to query procedure at path "approvals.list"（ref=2f9e0900）
+[trpc] query approvals.list → METHOD_NOT_SUPPORTED: Unsupported POST-request to query procedure at path "approvals.list"（ref=2f9e0900）
+[trpc] mutation approvals.decide → FORBIDDEN: 当前成员没有“审批裁决”权限。（ref=91c33aac）
+[trpc] mutation approvals.decide → BAD_REQUEST: [
+  {
+    "code": "invalid_value",
+    "values": [
+      "approve",
+      "edit",
+      "reject"
+    ],
+    "path": [
+      "gesture"
+    ],
+    "message": "Invalid option: expected one of \"approve\"|\"edit\"|\"reject\""
+  }
+]（ref=4f2049a2）
+[trpc] mutation approvals.decide → BAD_REQUEST: 驳回必须选择原因枚举（L5.2）（ref=28d3e94d）
+[trpc] mutation threads.dispatch → TOO_MANY_REQUESTS: 并发上限 10/工作区（L3.1/G11），已超出请稍后或排队（ref=0dc2a1a3）
+[scheduler] T-125（quest）→ pending_review（1/2）岗位=pricing-agent
+[scheduler] T-126（quest）→ completed（1/1）岗位=competitor-agent
+(node:55795) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[trpc] mutation onboarding.saveLlmConfig → BAD_REQUEST: 模型实测未通过，未保存：模型响应超时（25s）（ref=c0092c4c）
+[trpc] mutation onboarding.saveLlmConfig → BAD_REQUEST: 模型实测未通过，未保存：模型调用失败：HTTP 500（ref=41f29206）
+[im] IM_BRIDGE_KEY 未配置：im.inbound 服务间密钥校验占位放行（开发态；生产必须配置）
+[im] IM_BRIDGE_KEY 未配置：im.inbound 服务间密钥校验占位放行（开发态；生产必须配置）
+[im] IM_BRIDGE_KEY 未配置：im.inbound 服务间密钥校验占位放行（开发态；生产必须配置）
+[scheduler] T-127（quest）→ pending_review（1/2）岗位=pricing-agent
+[scheduler] T-128（quest）→ pending_review（1/2）岗位=pricing-agent
+[scheduler] T-130（quest）→ pending_review（1/2）岗位=pricing-agent
+[trpc] mutation threads.dispatch → BAD_REQUEST: [
+  {
+    "origin": "string",
+    "code": "too_small",
+    "minimum": 1,
+    "inclusive": true,
+    "path": [
+      "title"
+    ],
+    "message": "Too small: expected string to have >=1 characters"
+  }
+]（ref=85ac3bd3）
+[trpc] mutation threads.dispatch → BAD_REQUEST: [
+  {
+    "origin": "string",
+    "code": "too_big",
+    "maximum": 500,
+    "inclusive": true,
+    "path": [
+      "title"
+    ],
+    "message": "Too big: expected string to have <=500 characters"
+  }
+]（ref=2a8cd5e5）
+[trpc] mutation approvals.decide → BAD_REQUEST: [
+  {
+    "expected": "string",
+    "code": "invalid_type",
+    "path": [
+      "approvalId"
+    ],
+    "message": "Invalid input: expected string, received undefined"
+  }
+]（ref=c84c53a9）
+[trpc] mutation approvals.decide → BAD_REQUEST: 审批 apr-does-not-exist-m2b233017 不存在（ref=b1e3033a）
+[trpc] mutation approvals.decide → BAD_REQUEST: 编辑后采纳必须携带 edited_after 新值（F5.2）（ref=5edfd085）
+[trpc] mutation approvals.decide → BAD_REQUEST: [
+  {
+    "origin": "string",
+    "code": "too_big",
+    "maximum": 200,
+    "inclusive": true,
+    "path": [
+      "reasonText"
+    ],
+    "message": "Too big: expected string to have <=200 characters"
+  }
+]（ref=25f12126）
+[trpc] mutation approvals.decide → BAD_REQUEST: [
+  {
+    "code": "invalid_value",
+    "values": [
+      "correction",
+      "preference"
+    ],
+    "path": [
+      "editKind"
+    ],
+    "message": "Invalid option: expected one of \"correction\"|\"preference\""
+  }
+]（ref=5d6d92a2）
+[trpc] query threads.events → BAD_REQUEST: [
+  {
+    "origin": "number",
+    "code": "too_small",
+    "minimum": 1,
+    "inclusive": true,
+    "path": [
+      "limit"
+    ],
+    "message": "Too small: expected number to be >=1"
+  }
+]（ref=a7dc7e53）
+[trpc] query threads.events → BAD_REQUEST: [
+  {
+    "origin": "number",
+    "code": "too_big",
+    "maximum": 200,
+    "inclusive": true,
+    "path": [
+      "limit"
+    ],
+    "message": "Too big: expected number to be <=200"
+  }
+]（ref=a65ddc22）
+[trpc] query threads.get → BAD_REQUEST: [
+  {
+    "expected": "string",
+    "code": "invalid_type",
+    "path": [
+      "threadId"
+    ],
+    "message": "Invalid input: expected string, received undefined"
+  }
+]（ref=0d5836c1）
+[trpc] mutation im.inbound → BAD_REQUEST: [
+  {
+    "origin": "string",
+    "code": "too_big",
+    "maximum": 2000,
+    "inclusive": true,
+    "path": [
+      "text"
+    ],
+    "message": "Too big: expected string to have <=2000 characters"
+  }
+]（ref=214b6ca8）
+[trpc] mutation im.inbound → BAD_REQUEST: [
+  {
+    "code": "invalid_value",
+    "values": [
+      "inapp",
+      "dingtalk",
+      "wecom",
+      "feishu"
+    ],
+    "path": [
+      "channel"
+    ],
+    "message": "Invalid option: expected one of \"inapp\"|\"dingtalk\"|\"wecom\"|\"feishu\""
+  }
+]（ref=4e3bd6eb）
+[dispatch] goalRef=no-such-archive-m2b233017 未取到档案（fail-closed：按标题规划）
+[auth] JWT_SECRET 长度 <32 字符，熵不足——生产环境请配置 ≥32 字符随机密钥
+[service-c] SERVICE_C_DEMO_AUTH 已开启：h5/openid 演示直登可用（生产环境必须置 false 并配置渠道 code 交换凭据）
+WorkLoom IM 底座 server 已启动：http://127.0.0.1:8901（tRPC: /trpc/*，C 端网关: /c/*）
+[scheduler] 已启动：每 7000ms 扫描 queued 线程（每区每轮 ≤3 条，并发上限 10）
+反馈枚举表已装载：hotel→ws-yunqi（11 条）、ai-pm→ws-aipm-demo（14 条）
+[scheduler] 重启恢复：1 条 running 线程转 paused（可续跑）
+[scheduler] T-135（quest）→ completed（1/1）岗位=competitor-agent
+[scheduler] T-136（quest）→ completed（1/1）岗位=competitor-agent
+[scheduler] T-137（quest）→ failed（1/1）岗位=competitor-agent
+[scheduler] T-140（quest）→ pending_review（1/2）岗位=pricing-agent
+[scheduler] T-141（quest）→ pending_review（1/2）岗位=pricing-agent
+[scheduler] T-142（quest）→ pending_review（1/2）岗位=pricing-agent
+[supervisor 23:41:51] starting server
+[auth] JWT_SECRET 长度 <32 字符，熵不足——生产环境请配置 ≥32 字符随机密钥
+[service-c] SERVICE_C_DEMO_AUTH 已开启：h5/openid 演示直登可用（生产环境必须置 false 并配置渠道 code 交换凭据）
+WorkLoom IM 底座 server 已启动：http://127.0.0.1:8901（tRPC: /trpc/*，C 端网关: /c/*）
+[scheduler] 已启动：每 7000ms 扫描 queued 线程（每区每轮 ≤3 条，并发上限 10）
+反馈枚举表已装载：hotel→ws-yunqi（11 条）、ai-pm→ws-aipm-demo（14 条）
+[scheduler] T-145（quest）→ failed（2/2）岗位=pricing-agent
+[scheduler] T-146（quest）→ paused（1/2）岗位=pricing-agent
+[scheduler] T-147（quest）→ failed（2/2）岗位=pricing-agent
+[scheduler] T-150（quest）→ completed（2/2）岗位=pricing-agent
+[scheduler] T-151（quest）→ paused（1/2）岗位=pricing-agent
+[scheduler] T-152（quest）→ failed（1/1）岗位=competitor-agent
+[trpc] mutation approvals.decide → FORBIDDEN: 当前成员没有“审批裁决”权限。（ref=91c33aac）
+[trpc] mutation approvals.decide → BAD_REQUEST: [
+  {
+    "code": "invalid_value",
+    "values": [
+      "approve",
+      "edit",
+      "reject"
+    ],
+    "path": [
+      "gesture"
+    ],
+    "message": "Invalid option: expected one of \"approve\"|\"edit\"|\"reject\""
+  }
+]（ref=4f2049a2）
+[trpc] mutation approvals.decide → BAD_REQUEST: 驳回必须选择原因枚举（L5.2）（ref=28d3e94d）
+[trpc] mutation approvals.decide → FORBIDDEN: 当前成员没有“审批裁决”权限。（ref=91c33aac）
+[trpc] mutation approvals.decide → BAD_REQUEST: [
+  {
+    "code": "invalid_value",
+    "values": [
+      "approve",
+      "edit",
+      "reject"
+    ],
+    "path": [
+      "gesture"
+    ],
+    "message": "Invalid option: expected one of \"approve\"|\"edit\"|\"reject\""
+  }
+]（ref=4f2049a2）
+[trpc] mutation approvals.decide → BAD_REQUEST: 驳回必须选择原因枚举（L5.2）（ref=28d3e94d）
+[trpc] mutation approvals.decide → BAD_REQUEST: 快照已过期（2026-09-29T14:49:37.747Z），审批标记 expired（E5.3/F5.7）（ref=b2d5b35c）
+[trpc] mutation threads.dispatch → BAD_REQUEST: [
+  {
+    "origin": "string",
+    "code": "too_small",
+    "minimum": 1,
+    "inclusive": true,
+    "path": [
+      "title"
+    ],
+    "message": "Too small: expected string to have >=1 characters"
+  }
+]（ref=85ac3bd3）
+[trpc] mutation threads.dispatch → BAD_REQUEST: [
+  {
+    "origin": "string",
+    "code": "too_big",
+    "maximum": 500,
+    "inclusive": true,
+    "path": [
+      "title"
+    ],
+    "message": "Too big: expected string to have <=500 characters"
+  }
+]（ref=2a8cd5e5）
+[trpc] mutation approvals.decide → BAD_REQUEST: [
+  {
+    "expected": "string",
+    "code": "invalid_type",
+    "path": [
+      "approvalId"
+    ],
+    "message": "Invalid input: expected string, received undefined"
+  }
+]（ref=c84c53a9）
+[trpc] mutation approvals.decide → BAD_REQUEST: 审批 apr-does-not-exist-m2b235033 不存在（ref=8ad56df4）
+[trpc] mutation approvals.decide → BAD_REQUEST: 编辑后采纳必须携带 edited_after 新值（F5.2）（ref=5edfd085）
+[trpc] mutation approvals.decide → BAD_REQUEST: [
+  {
+    "origin": "string",
+    "code": "too_big",
+    "maximum": 200,
+    "inclusive": true,
+    "path": [
+      "reasonText"
+    ],
+    "message": "Too big: expected string to have <=200 characters"
+  }
+]（ref=25f12126）
+[trpc] mutation approvals.decide → BAD_REQUEST: [
+  {
+    "code": "invalid_value",
+    "values": [
+      "correction",
+      "preference"
+    ],
+    "path": [
+      "editKind"
+    ],
+    "message": "Invalid option: expected one of \"correction\"|\"preference\""
+  }
+]（ref=5d6d92a2）
+[trpc] query threads.events → BAD_REQUEST: [
+  {
+    "origin": "number",
+    "code": "too_small",
+    "minimum": 1,
+    "inclusive": true,
+    "path": [
+      "limit"
+    ],
+    "message": "Too small: expected number to be >=1"
+  }
+]（ref=a7dc7e53）
+[trpc] query threads.events → BAD_REQUEST: [
+  {
+    "origin": "number",
+    "code": "too_big",
+    "maximum": 200,
+    "inclusive": true,
+    "path": [
+      "limit"
+    ],
+    "message": "Too big: expected number to be <=200"
+  }
+]（ref=a65ddc22）
+[trpc] mutation im.inbound → BAD_REQUEST: [
+  {
+    "origin": "string",
+    "code": "too_big",
+    "maximum": 2000,
+    "inclusive": true,
+    "path": [
+      "text"
+    ],
+    "message": "Too big: expected string to have <=2000 characters"
+  }
+]（ref=214b6ca8）
+[trpc] mutation im.inbound → BAD_REQUEST: [
+  {
+    "code": "invalid_value",
+    "values": [
+      "inapp",
+      "dingtalk",
+      "wecom",
+      "feishu"
+    ],
+    "path": [
+      "channel"
+    ],
+    "message": "Invalid option: expected one of \"inapp\"|\"dingtalk\"|\"wecom\"|\"feishu\""
+  }
+]（ref=4e3bd6eb）
+[dispatch] goalRef=no-such-archive-m2b235033 未取到档案（fail-closed：按标题规划）
+[trpc] mutation im.callback → FORBIDDEN: 未验签通道回调仅允许本人操作：operatorOpenId 须为当前会话成员 MEM-002 在 dingtalk 绑定的 openid（P0-1 开发降级）（ref=f6b28f7e）
+[supervisor 00:04:40] starting server
+[auth] JWT_SECRET 长度 <32 字符，熵不足——生产环境请配置 ≥32 字符随机密钥
+[service-c] SERVICE_C_DEMO_AUTH 已开启：h5/openid 演示直登可用（生产环境必须置 false 并配置渠道 code 交换凭据）
+WorkLoom IM 底座 server 已启动：http://127.0.0.1:8901（tRPC: /trpc/*，C 端网关: /c/*）
+[scheduler] 已启动：每 7000ms 扫描 queued 线程（每区每轮 ≤3 条，并发上限 10）
+反馈枚举表已装载：hotel→ws-yunqi（11 条）、ai-pm→ws-aipm-demo（14 条）
+[supervisor 00:06:32] starting server
+[auth] JWT_SECRET 长度 <32 字符，熵不足——生产环境请配置 ≥32 字符随机密钥
+[service-c] SERVICE_C_DEMO_AUTH 已开启：h5/openid 演示直登可用（生产环境必须置 false 并配置渠道 code 交换凭据）
+WorkLoom IM 底座 server 已启动：http://127.0.0.1:8901（tRPC: /trpc/*，C 端网关: /c/*）
+[scheduler] 已启动：每 7000ms 扫描 queued 线程（每区每轮 ≤3 条，并发上限 10）
+反馈枚举表已装载：hotel→ws-yunqi（11 条）、ai-pm→ws-aipm-demo（14 条）
+[auth] JWT_SECRET 长度 <32 字符，熵不足——生产环境请配置 ≥32 字符随机密钥
+[service-c] SERVICE_C_DEMO_AUTH 已开启：h5/openid 演示直登可用（生产环境必须置 false 并配置渠道 code 交换凭据）
+WorkLoom IM 底座 server 已启动：http://127.0.0.1:8901（tRPC: /trpc/*，C 端网关: /c/*）
+[scheduler] 已启动：每 7000ms 扫描 queued 线程（每区每轮 ≤3 条，并发上限 10）
+反馈枚举表已装载：hotel→ws-yunqi（11 条）、ai-pm→ws-aipm-demo（14 条）
+[scheduler] T-182（quest）→ pending_review（1/2）岗位=pricing-agent
+[scheduler] T-184（quest）→ pending_review（1/2）岗位=pricing-agent
+[scheduler] T-185（quest）→ completed（2/2）岗位=pricing-agent
+[scheduler] T-186（quest）→ paused（1/2）岗位=pricing-agent
+[scheduler] T-187（quest）→ failed（1/1）岗位=competitor-agent
+[supervisor 00:12:02] starting server
+[auth] JWT_SECRET 长度 <32 字符，熵不足——生产环境请配置 ≥32 字符随机密钥
+[service-c] SERVICE_C_DEMO_AUTH 已开启：h5/openid 演示直登可用（生产环境必须置 false 并配置渠道 code 交换凭据）
+WorkLoom IM 底座 server 已启动：http://127.0.0.1:8901（tRPC: /trpc/*，C 端网关: /c/*）
+[scheduler] 已启动：每 7000ms 扫描 queued 线程（每区每轮 ≤3 条，并发上限 10）
+反馈枚举表已装载：hotel→ws-yunqi（11 条）、ai-pm→ws-aipm-demo（14 条）

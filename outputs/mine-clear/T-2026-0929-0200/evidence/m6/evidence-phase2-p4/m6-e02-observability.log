@@ -1,0 +1,8 @@
++ node /Users/mac/Documents/Codex/2026-09-29/https-cnb-cool-workloom-ai-workloom-5/work/m6/probes/observability-probe.mjs http://127.0.0.1:8987 /Users/mac/WorkLoom-fleet/.wt-mcd-m6 /Users/mac/Documents/Codex/2026-09-29/https-cnb-cool-workloom-ai-workloom-5/work/m6/server-dev-8987-p4.log
+PASS  OBS-500-01 依赖故障被转成 5xx（不吞错、不假成功） :: {"status":500,"body":"{\"error\":{\"message\":\"服务内部错误（已记录，ref=09f7e862）\",\"code\":-32603,\"data\":{\"code\":\"INTERNAL_SERVER_ERROR\",\"httpStatus\":500,\"path\":\"approvals.list\",\"ref\":\"09f7e862\"}}}"}
+PASS  OBS-500-02 5xx 在服务端日志有记录（含 path/code/ref） :: {"sample":"[trpc] query approvals.list → INTERNAL_SERVER_ERROR: permission denied for table approvals（ref=09f7e862）"}
+PASS  OBS-500-03 5xx 写入事件账本（system.error 计数增加） :: {"before":1,"after":2}
+PASS  OBS-500-04 依赖恢复后接口自愈（无需重启） :: {"status":200}
+PASS  OBS-NEG-01 负对照：参数错误(4xx)不写系统错误事件 :: {"status":400,"before":2,"after":2}
+
+可观测性探针：5/5 通过

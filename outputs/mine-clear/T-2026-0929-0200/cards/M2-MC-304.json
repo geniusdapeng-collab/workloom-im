@@ -1,0 +1,52 @@
+{
+  "id": "MC-304",
+  "kind": "problem",
+  "level": "L4",
+  "severity": "P1",
+  "batch": 1,
+  "state": "open",
+  "title": "语义路由缺口：无路由关键词的目标落到「preset_key 字母序第一个就绪岗位」，无关步骤被执行并标记 completed（假交付）",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "apps/server/src/runtime/thread-runner.ts:99-113@4ff9943f0e5b331619a67db06af32ec09e9d8616",
+      "note": "候选（语义偏好 → Bundle orchestrator → 指挥层兜底）全部未命中时 `if (ready.length > 0) return ready[0]`——ready 按 preset_key 排序，云栖酒店即 competitor-agent（竞对分析员）"
+    },
+    {
+      "type": "code",
+      "ref": "apps/server/src/runtime/dispatch-routing.ts:39-83@4ff9943f0e5b331619a67db06af32ec09e9d8616",
+      "note": "路由表只覆盖视觉/视频/发布/价格/服务履约/增长六域，且价格域正则 `调价|定价|改价|价格|房价|报价|折扣|优惠|券|库存|房态|保底价` 不含「涨价/降价/上调/下调/加价」，也不含「差评/评价/口碑/回复/客服」"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m2/m2-05-state-machine.json",
+      "note": "I1 断言实测（红）：「处理一条差评并回复」→ 岗位 competitor-agent、执行步骤 1 步 competitor.crawl、status=completed、receipt.synced=true、review.* 步骤 0 个（T-183；此前 T-122 走 runImmediately、T-126 走调度器，两条入口均复现）。另有 J1 侧证：只说「上调 3%」（无路由关键词）同样落 competitor-agent"
+    }
+  ],
+  "root_cause": {
+    "file": "apps/server/src/runtime/thread-runner.ts",
+    "line": 107,
+    "commit": "4ff9943f0e5b331619a67db06af32ec09e9d8616",
+    "symbol": "resolveDispatchPresetKey"
+  },
+  "trigger_path": "用户用路由表未覆盖的口语表达派活（差评回复、口碑维护、客服跟进、涨价/降价、房态调整…）→ 系统挑一个「存在的员工」执行其默认工具序列 → 线程 completed，交付物与目标无关。",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "标题「处理一条差评并回复」",
+      "expect": "命中持有 review.reply 的岗位（review-agent）并产出 review.reply 步骤；不得由 competitor.crawl 之类的无关工具「完成」",
+      "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2r$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+      "last_result": "fail",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m2/m2-05-state-machine.raw.json"
+    },
+    {
+      "kind": "property",
+      "given": "任意目标文本",
+      "expect": "plan 中每一步的工具都必须与该目标语义域相容；无法判定域时不得挑选无关岗位静默执行（应反问或缺省拒绝）",
+      "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2r2$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+      "last_result": "fail",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m2/m2-05-state-machine.raw.json"
+    }
+  ],
+  "notes": "修复方向（择一或叠加）：① 路由表补「评价/口碑/客服/答复」与「涨价/降价/上调/下调」等词族；② ready[0] 兜底改为「按行业默认指挥岗 → 明确要求用户指定岗位」，不再是任意第一个；③ 任务完成前加语义自检（交付物与目标域一致性），与 RDAS 灵魂三问对齐。"
+}

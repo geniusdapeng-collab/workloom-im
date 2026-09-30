@@ -1,0 +1,68 @@
+{
+  "id": "MC-114",
+  "kind": "problem",
+  "level": "L4",
+  "severity": "P2",
+  "batch": 3,
+  "state": "open",
+  "title": "数字职场优先级压制：有 pending 请示的员工被 blocked 态覆盖，楼层不显示请示与审批直达号",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "packages/base/captain/floor.ts:235@4ff9943",
+      "note": "状态派生优先级 blocked > asking：blocked 分支 return 时不带 pendingTier/approvalId；X-05 只给 asking×celebrating 做了共存，未覆盖 blocked×asking"
+    },
+    {
+      "type": "code",
+      "ref": "packages/base/captain/floor.ts:169@4ff9943",
+      "note": "blocked 窗口 = 近 30 分钟内该 preset_key 的 rule_impact blocked / *.failed / anomaly.* / inspect.anomaly / 驳回手势事件"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-thread-1790694619945.json",
+      "note": "真机实测（S1，派遣后 1s）：pricing-agent 在同轮既有 pending 审批 apr-e-10347（l2_captain，10 分钟内新建）又在楼层显示 state=blocked、pendingTier=null、approvalId=null、statusLine『遇阻：pms.price.write』；同帧其它无 block 记录的员工正常显示 asking+approvalId"
+    },
+    {
+      "type": "db",
+      "ref": "biz_events：pricing-agent 的 price.adjust rule_impact=[R1/R2 blocked]（22:55–22:57，30 分钟窗口内）",
+      "note": "block 事件来自更早的 M0 冒烟线程；新审批（15:09）与旧 block 事件叠加时，楼层只保留『遇阻』"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-thread-1790696247065.json",
+      "note": "复跑同一现象：新审批 apr-e-10395 建立后，pricing-agent 仍以 blocked 呈现（approvalId=null）；同帧 content-agent 等无 block 记录员工正常显示 asking+approvalId"
+    }
+  ],
+  "root_cause": {
+    "file": "packages/base/captain/floor.ts",
+    "line": 235,
+    "commit": "4ff9943",
+    "symbol": "deriveFloor（优先级分支）"
+  },
+  "trigger_path": "某员工近 30 分钟内发生过围栏硬阻断/失败/驳回，此后叠加新的待审批请示（例如再次派遣同类任务被挂起）→ 数字职场只显示『遇阻』，请示卡、层级与审批直达号全部不可见；人类在 P0 首页无法原地三手势放行。",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "pricing-agent 既有 30 分钟内的 blocked 事件、又有新建的 pending 审批（apr-e-10347）",
+      "expect": "captain.theater.floor 中该员工条目仍给出待审批信息（pendingTier=l2_captain 且 approvalId=apr-e-10347），或显式并列 blocked+asking 两个信号",
+      "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8899 node outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-thread.mjs",
+      "last_result": "fail",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-thread-1790694619945.json"
+    },
+    {
+      "kind": "property",
+      "given": "任意 (blocked, asking) 组合状态",
+      "expect": "楼层投影不隐藏待人工裁决项：任何存在 pending 审批的员工，其 approvalId 必在楼层可见（信息不丢失）",
+      "command": "同上（脚本断言 asking 条目 approvalId 命中新审批单号）",
+      "last_result": "fail",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-thread-1790694619945.json"
+    }
+  ],
+  "fix_plan": "floor.ts 的 blocked 分支并入 asking 信息（照 X-05 的共存口径）：state 仍为 blocked，但同时带 pendingTier/approvalId 与『请示待裁』气泡；或在 blocked 分支若存在 pending 审批则降级展示 asking+blocked 双标记。",
+  "blast_radius": "影响 P0 数字职场、织球情绪映射（agent-emotion.ts 读 waitingApproval）与 suite 里 floor 状态断言（V-06 blocked 优先纪律需保留：出事仍显示遇阻，但不丢审批信息）。",
+  "conflict_paths": [
+    "packages/base/captain/floor.ts",
+    "apps/web/src/components/loomball/agent-emotion.ts"
+  ],
+  "notes": "M3 联动探针 1（mcd_linkage）。"
+}

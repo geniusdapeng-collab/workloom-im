@@ -1,0 +1,69 @@
+{
+  "id": "MC-445",
+  "kind": "fix",
+  "batch": 3,
+  "state": "fixed",
+  "title": "数字职场遇阻与请示共存 + 待裁总数",
+  "covers": [
+    "MC-114"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "packages/base/captain/floor.ts:255@861c9d1",
+      "note": "blocked 分支并列 asking 信息（pendingTier/approvalId/asking/pendingCount + 双信息 statusLine）"
+    },
+    {
+      "type": "code",
+      "ref": "packages/base/captain/floor.ts:45@861c9d1",
+      "note": "FloorAgent.pendingCount：同员工多条 pending 时 FIFO 直达号 + 待裁总数"
+    },
+    {
+      "type": "code",
+      "ref": "apps/web/src/pages/p0/Floor.tsx:1@861c9d1",
+      "note": "blocked 且有审批时气泡「遇阻 · 请您定（· 共 N 项）」并可点击直达审批卡"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-floor-1790706117609.json",
+      "note": "f1 楼层共存 11/11：blocked 主态保留、审批直达号/分级/asking/待裁总数齐备、批准后线程续跑"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-thread-1790706160084.json",
+      "note": "M3 探针 1 复跑 11/11（断点判定改为「请示信号 + 直达号」，快照补 asking/pendingCount）"
+    }
+  ],
+  "fix_plan": "deriveFloor 的 blocked 分支并入 asking 信息（状态仍 blocked，V-06 遇阻优先），pendingTier/approvalId/asking/pendingCount 与双信息气泡一并下发；前端 blocked+asking 可点击直达审批卡",
+  "blast_radius": "P0 数字职场楼层投影、织球情绪映射（blocked 仍优先）、theater.floor 消费方与 suite 楼层断言（V-06 纪律保留）",
+  "conflict_paths": [
+    "packages/base/captain/floor.ts",
+    "apps/web/src/pages/p0/Floor.tsx"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "ws-yunqi 派遣高风险调价（触发围栏挂起）后读 captain.theater",
+      "expect": "该员工条目 state=blocked 且带 approvalId/pendingTier/asking=true/pendingCount≥1，statusLine 同时含「遇阻」与「请示待裁」",
+      "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 node outputs/mine-clear/T-2026-0929-0200/assertions/f1-floor-blocked-asking.mjs",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-floor-1790706117609.json"
+    },
+    {
+      "kind": "property",
+      "given": "任意 (blocked, asking) 组合状态",
+      "expect": "楼层不隐藏待人工裁决项：条目必带审批直达号与待裁总数，点击可直达审批卡（不再被遇阻态吃掉）",
+      "command": "同上 + MCD_BASE=... node outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-thread.mjs",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-thread-1790706160084.json"
+    }
+  ],
+  "regression": {
+    "command": "pnpm typecheck && RUN_DB_TESTS=1 pnpm -C packages/base test && pnpm suite",
+    "evidence": "work/fix-e/typecheck.log; work/fix-e/base-test.log; work/fix-e/suite.log"
+  },
+  "rollback": "git revert 861c9d1",
+  "fixed_by": "fix_e_semantics",
+  "verified_by": null,
+  "notes": ""
+}

@@ -1,0 +1,14 @@
++ env RUN_DB_TESTS=1 pnpm -C /Users/mac/WorkLoom-fleet/.wt-mcd-m6/packages/runtime test
+
+> @workloom/runtime@0.1.0 test /Users/mac/WorkLoom-fleet/.wt-mcd-m6/packages/runtime
+> vitest run
+
+
+ RUN  v5.0.1 /Users/mac/WorkLoom-fleet/.wt-mcd-m6/packages/runtime
+
+
+ Test Files  4 passed (4)
+      Tests  49 passed (49)
+   Start at  07:00:13
+   Duration  549ms (transform 44%, tests 38%, import 17%, worker 1%)
+

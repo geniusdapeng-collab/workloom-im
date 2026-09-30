@@ -19,7 +19,7 @@ import {
   type KbSearchLexicon,
 } from "@workloom/base/service-kb";
 import { ensureServiceSchema, indexChunks } from "./store.js";
-import { serviceTx, svcQuery } from "./events.js";
+import { appendEventOn, serviceTx, svcQuery } from "./events.js";
 import type { LlmCall } from "./llm.js";
 
 let seq = 0;
@@ -312,6 +312,12 @@ export async function searchKB(input: {
   workspaceId: string;
   query: string;
   limit?: number;
+  /**
+   * MC-111：相关性下限（0..1）。默认 0 = 保持既有「score>0 即命中」口径（P22 知识库检索面
+   * 需要宽召回，让操作者看到候选）；ask 事实面注入时必须给下限，避免 2-gram 噪声 FAQ
+   * 冒充「系统事实」（详见 packages/runtime/src/ask.ts#ASK_KB_MIN_SCORE）。
+   */
+  minScore?: number;
   /** 由已验证活动 Bundle 选择的适配器注入；省略时基座不理解行业词义。 */
   lexicon?: KbSearchLexicon;
 }): Promise<KbHit[]> {
@@ -333,7 +339,60 @@ export async function searchKB(input: {
       content: x.content, heading: x.heading, documentTitle: x.title, documentId: x.document_id,
       score: scoreChunkFallback(input.query, { heading: x.heading, content: x.content }, input.lexicon),
     }))
-    .filter((x) => x.score > 0)
+    .filter((x) => x.score > 0 && x.score >= (input.minScore ?? 0))
     .sort((a, b) => b.score - a.score)
     .slice(0, input.limit ?? 5);
+}
+
+/**
+ * MC-110 接线：审批台对 `kb.publish` 审批的裁决 → 知识库状态联动（与
+ * apps/server/src/trpc/router.ts#activateFenceRuleAfterApproval 同范式）。
+ *
+ * 覆盖两类行：
+ *  ① 修复前遗留的幽灵 pending（动作已执行、审批仍在待办）与未来任何来源的 kb.publish 待审：
+ *     approve/edit → 文档置 active（幂等）；reject → 文档退回 pending_review（驳回即退出客户问答检索范围）；
+ *  ② 非 kb.publish 审批 → 返回 null，不触碰知识库（保持既有语义）。
+ *
+ * 幂等：重复回调（审批已终态、文档状态已一致）不重复写事件；非 pending/未知状态不动。
+ */
+export async function applyKbPublishAfterApproval(
+  scope: { workspaceId: string },
+  approvalId: string,
+): Promise<{ documentId: string; status: "active" | "pending_review"; changed: boolean } | null> {
+  await ensureServiceSchema();
+  return serviceTx(scope.workspaceId, async (client, sc) => {
+    const r = await client.query<{ status: string; action: string | null; document_id: string | null }>(
+      `SELECT a.status,
+              e.payload->'decision'->>'action' AS action,
+              COALESCE(e.payload->'decision'->'after'->>'documentId', e.payload->'object'->>'id') AS document_id
+         FROM approvals a
+         LEFT JOIN biz_events e ON e.event_id = a.event_id AND e.workspace_id = a.workspace_id
+        WHERE a.approval_id=$1 AND a.workspace_id=$2`,
+      [approvalId, scope.workspaceId],
+    );
+    const row = r.rows[0];
+    if (!row || row.action !== "kb.publish" || !row.document_id) return null;
+    const approved = row.status === "approved" || row.status === "edited";
+    const rejected = row.status === "rejected";
+    if (!approved && !rejected) return null; // pending/expired：等裁决，不动文档
+    const target: "active" | "pending_review" = approved ? "active" : "pending_review";
+    const upd = await client.query<{ id: string }>(
+      `UPDATE kb_documents SET status=$3
+        WHERE workspace_id=$1 AND id=$2 AND status <> $3
+        RETURNING id`,
+      [scope.workspaceId, row.document_id, target],
+    );
+    if (!upd.rows[0]) return { documentId: row.document_id, status: target, changed: false };
+    await appendEventOn(client, sc, { id: "review-console", type: "system" }, {
+      objectType: "kb_document", objectId: row.document_id,
+      action: approved ? "kb.publish" : "kb.publish.revoke",
+      after: { status: target, approvalId },
+      basis: [
+        approved
+          ? `审批 ${approvalId} 通过：文档进入客户问答检索范围`
+          : `审批 ${approvalId} 驳回：文档退回待审、即刻退出客户问答检索范围（MC-110）`,
+      ],
+    });
+    return { documentId: row.document_id, status: target, changed: true };
+  });
 }

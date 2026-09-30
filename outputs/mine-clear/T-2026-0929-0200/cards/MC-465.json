@@ -1,0 +1,58 @@
+{
+  "id": "MC-465",
+  "kind": "fix",
+  "batch": 2,
+  "state": "fixed",
+  "title": "R2 修复：/memory 来源清算下拉框无访问名（axe select-name critical）",
+  "covers": [
+    "MC-505"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "apps/web/src/pages/p23/P23.tsx:372@6a49b30",
+      "note": "修复提交 6a49b30"
+    },
+    {
+      "type": "log",
+      "ref": "work/fix-f/axe-memory-before.log → final-r2f5.log（0 违规）",
+      "note": "红→绿对照"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/FIX-F-REPORT.md",
+      "note": "修复报告（根因/修法/回归/回滚）"
+    }
+  ],
+  "fix_plan": "见 FIX-F-REPORT.md §3（根因 + 代码级修法 + 证据）",
+  "blast_radius": "见 FIX-F-REPORT.md 对应小节",
+  "conflict_paths": [
+    "apps/web/src/pages/p23/P23.tsx"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "复跑 MC-505",
+      "expect": "转绿",
+      "command": "node work/fix-f/axe-memory-ff.mjs",
+      "last_result": "pass",
+      "evidence": "work/fix-f/axe-memory-before.log → final-r2f5.log（0 违规）"
+    },
+    {
+      "kind": "property",
+      "given": "同类输入/重复执行",
+      "expect": "保持通过（幂等、不依赖遗留数据）",
+      "command": "node work/fix-f/axe-memory-ff.mjs",
+      "last_result": "pass",
+      "evidence": "work/fix-f/axe-memory-before.log → final-r2f5.log（0 违规）"
+    }
+  ],
+  "regression": {
+    "command": "bash work/fix-f/run-regression.sh（8/8 PASS）",
+    "evidence": "work/fix-f/reg-*.log"
+  },
+  "rollback": "git revert 6a49b30",
+  "fixed_by": "fixer-F",
+  "verified_by": null,
+  "notes": "R2 复验由独立验证会话与独立验收会话执行。"
+}

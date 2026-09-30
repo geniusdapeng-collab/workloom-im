@@ -1,0 +1,305 @@
+
+> workloom-im@0.1.1 test /Users/mac/WorkLoom-fleet/.wt-mcd-m6
+> pnpm test:reset-safety && pnpm test:payload-boundary && pnpm test:release-assets && pnpm test:action-trust && pnpm test:release-policy && pnpm test:desktop-bootstrap && pnpm -r --if-present test && pnpm test:oss
+
+
+> workloom-im@0.1.1 test:reset-safety /Users/mac/WorkLoom-fleet/.wt-mcd-m6
+> node --test scripts/reset-safety.test.mjs
+
+✔ 非交互调用没有 --yes 时 fail closed，且不访问数据库 (76.226791ms)
+✔ 远端、生产和数据库名不匹配目标始终拒绝 (168.958291ms)
+✔ 检测到非演示工作区时拒绝删除 (244.252709ms)
+✔ 本机 workloom 纯演示库先备份，再事务重建并执行迁移种子 (387.898542ms)
+✔ 未知参数 fail closed (5.035041ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 921.749333
+
+> workloom-im@0.1.1 test:payload-boundary /Users/mac/WorkLoom-fleet/.wt-mcd-m6
+> node --test scripts/product-runtime.test.mjs scripts/payload-policy.test.mjs scripts/pack-nm-merge.test.mjs scripts/runtime-deps-lock.test.mjs
+
+✔ pnpm 锁文件在 Windows CRLF 检出后保持同一解析语义 (1.755208ms)
+✔ 基座物理存在 platform-ops 时依赖合成仍排除平台工程 (10.393125ms)
+✔ 仙女座精确身份收集 platform-ops，缺包则阻断 (5.765333ms)
+✔ 范围 specifier 只输出 pnpm 锁定的精确版本 (2.593875ms)
+✔ 缺锁、specifier 漂移与同名解析版本冲突均失败关闭 (7.432584ms)
+✔ 包目录创建顺序不影响依赖清单输出 (6.54025ms)
+✔ 只有仙女座精确身份允许携带 platform-ops (0.895334ms)
+✔ 基座即使物理存在平台源码和内部包也会被装包后检查阻断 (83.951958ms)
+✔ 归档清单对大小写、Windows 分隔符和相对段统一失败关闭 (0.265125ms)
+✔ 缺失或不可校验的产品清单不能生成载荷策略 (55.247208ms)
+✔ 仙女座载荷检查允许平台源码，但不放宽其他产品 (23.899416ms)
+✔ 非 Git 运行时缺少任一身份闭包文件时，目录与归档检查均失败关闭 (6.277333ms)
+✔ 非 Git 运行时伪造产品身份时与源策略精确比对失败 (1.527166ms)
+✔ 产品清单未投影字段被篡改时摘要校验仍失败关闭 (1.561916ms)
+✔ 身份闭包目录与归档完整且产品身份一致时通过 (1.716417ms)
+✔ 归档中的身份闭包必须是精确文件路径，目录或大小写伪装不能通过 (0.216375ms)
+✔ 产品清单派生仓库、品牌与隔离端口 (86.65325ms)
+✔ 非法仓库、产品名与端口偏移失败关闭 (97.645375ms)
+✔ 缺失或伪造 schema/role 时失败关闭 (62.792709ms)
+✔ 非 Git 解包运行时可从客户端目录向上解析自身身份 (1.132292ms)
+✔ Vite 身份桥在非 Git 解包目录中固定使用脚本所在产品根 (28.735083ms)
+✔ 受控 pathPrefix 产品从仓根身份构建，但必须由完整同步 state 精确绑定 (94.963209ms)
+✔ pathPrefix state 的来源、模式、SHA 或目录任一不可信时不得借用仓根身份 (162.172667ms)
+✔ 解包运行时缺少自身清单时不得借用外部 Git 根身份 (39.580334ms)
+✔ 运行依赖锁输入摘要忽略 Git 工作树 LF/CRLF 差异 (0.730375ms)
+✔ 正式装配跨平台直接调用 Node 随附 npm CLI (0.248708ms)
+✔ 仓库提交的每产品 runtime lock 与当前依赖输入完全一致 (16.7275ms)
+✔ package-lock 必须锁定完整三目标原生包与 registry integrity (0.410375ms)
+✔ 安装后目标校验拒绝宿主架构原生包并生成稳定 inventory 摘要 (2.981ms)
+✔ 正式与应急装配线统一使用每产品 lock、目标 OS/CPU 和身份闭包 (1.815542ms)
+ℹ tests 30
+ℹ suites 0
+ℹ pass 30
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 615.717291
+
+> workloom-im@0.1.1 test:release-assets /Users/mac/WorkLoom-fleet/.wt-mcd-m6
+> node --test scripts/release-assets.test.mjs
+
+✔ release asset manifest pins every desktop runtime artifact (1.343083ms)
+✔ streaming SHA-256 verification accepts exact bytes and rejects mutations (3.144291ms)
+✔ Windows PG provenance must match every locked build input (1.038875ms)
+✔ every packaging download is wired through the verified fetch boundary (1.411334ms)
+✔ manifest is repository-local and cannot be replaced through environment (0.098583ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 45.939458
+
+> workloom-im@0.1.1 test:action-trust /Users/mac/WorkLoom-fleet/.wt-mcd-m6
+> node --test scripts/action-trust-policy.test.mjs
+
+✔ every workflow and propagated template uses only reviewed immutable Action commits (23.379834ms)
+✔ checkout never persists the workflow token into repository Git config (10.391042ms)
+✔ mutable tags, branches, abbreviated SHAs and unreviewed Actions fail closed (0.852875ms)
+✔ pin manifest is repository data, not a generated or external trust input (0.148042ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 92.279375
+
+> workloom-im@0.1.1 test:release-policy /Users/mac/WorkLoom-fleet/.wt-mcd-m6
+> node --test scripts/release-publisher-policy.test.mjs scripts/desktop-release-policy.test.mjs scripts/desktop-release-state.test.mjs scripts/desktop-workflow-path.test.mjs scripts/desktop-release-finalizer.test.mjs
+
+✔ discovers existing product artifact names and assembles exactly five public assets (7.323625ms)
+✔ fails closed on duplicate architecture candidates (1.251875ms)
+✔ fails closed when a candidate is tampered with after sealing (2.149166ms)
+✔ fails closed when platform candidates belong to another tag (2.613083ms)
+✔ public verification rejects extra or missing assets (2.634458ms)
+✔ desktop release has one serialized writer and read-only platform builders (1.638791ms)
+✔ preflight binds an exact stable tag to the current reviewed main HEAD (0.12025ms)
+✔ unsigned platform builds require an explicit reviewed input and disclose their trust level (0.177459ms)
+✔ Windows package smoke is isolated from the build toolchain and retains all failure evidence (0.100583ms)
+✔ production secrets exist only in the minimum signing steps (0.461292ms)
+✔ platform jobs hand off three installers and publisher adds a verifiable public manifest (0.418875ms)
+✔ candidate artifacts support partial reruns without crossing the workflow run or commit (245.710125ms)
+✔ downstream publisher flattens selected artifacts into the exact finalizer input directories (0.113541ms)
+✔ the actual inline writer state machine survives rollback and immutability mutations (221.620958ms)
+✔ latest recovery always prefers the highest remaining desktop stable release (0.61325ms)
+✔ release list truncation is fail-closed in both selection and quarantine proof (1.794125ms)
+✔ quarantine proof catches wrong latest, non-draft target and ambiguous latest (0.912791ms)
+✔ public release state proof requires GitHub immutability (0.191667ms)
+✔ only a managed corrupt release may enter automatic quarantine (0.113708ms)
+✔ base pins the new publisher while existing industry repositories retain a safe migration path (1.551709ms)
+✔ only the two reviewed single-job product publishers may write GitHub Releases (27.829208ms)
+✔ release writer detector rejects common alternate and newly introduced bypasses (0.502833ms)
+✔ legacy packers and platform evidence keep read-only repository permissions (2.343584ms)
+✔ local PAT publisher fails before reading credentials or touching the network (0.329416ms)
+✔ UI release is assembled as non-latest draft and published only after byte verification (2.789541ms)
+ℹ tests 25
+ℹ suites 0
+ℹ pass 25
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 559.883125
+
+> workloom-im@0.1.1 test:desktop-bootstrap /Users/mac/WorkLoom-fleet/.wt-mcd-m6
+> node --test apps/desktop/electron/bootstrap.test.cjs scripts/desktop-bootstrap-db.test.mjs
+
+07:02:53 == WorkLoom 织元 · 引导启动（resources=/var/folders/dj/mkh6fwbd4mb6ycp933xfty4h0000gn/T/workloom-packaged-payload-missing-QCJMCf/resources）==
+07:02:53 正在检查本机版本与安装载荷…
+07:02:53 == WorkLoom 织元 · 引导启动（resources=/var/folders/dj/mkh6fwbd4mb6ycp933xfty4h0000gn/T/workloom-packaged-no-double-payload-qWlmWk/resources）==
+07:02:53 正在检查本机版本与安装载荷…
+▶ 桌面载荷原子装配
+  ✔ 解析物理路径后向 tar 传相对路径，并为 Windows 跨盘符暂存归档 (0.566208ms)
+  ✔ 正式打包入口缺少载荷时在启动任何服务前失败关闭 (6.358666ms)
+  ✔ 正式打包入口不会把源码 dist-payload 双重嵌套误认作 Resources (2.708583ms)
+  ✔ 完整暂存后换入；提交前可回滚，提交后清理临时目录 (6.829125ms)
+  ✔ 提交清理故障发生在不可逆边界之后，不会重新开放旧载荷回滚 (3.906791ms)
+  ✔ 换入第一项后故障会恢复旧版目录、版本和首航状态 (4.230334ms)
+  ✔ 首装暂存失败不会留下半套运行时 (2.625417ms)
+  ✔ 安装阶段检查点以机器可读中文状态落盘 (1.181792ms)
+  ✔ 启动页使用确定进度语义，不再显示循环假进度 (0.71275ms)
+  ✔ 源码主进程只复用已验活服务，正式安装包与渲染冒烟不能绕过载荷 (0.406833ms)
+  ✔ 发布渲染冒烟使用稳定动作标记走完真实欢迎流程 (0.388458ms)
+✔ 桌面载荷原子装配 (30.59325ms)
+▶ 桌面 PostgreSQL 实例归属与端口契约
+  ✔ 严格拒绝空白、小数、非数字和越界端口 (0.126417ms)
+  ✔ 只有 pg_ctl 确认运行且 postmaster 数据目录与端口同时匹配才允许复用 (1.113834ms)
+  ✔ pg_ctl 未确认运行时不读取残留 PID，也不把端口监听者当作自有实例 (0.387625ms)
+  ✔ 退出前重新复验实例归属，PID 文件被替换时绝不发送 stop (1.005ms)
+  ✔ 托管环境只重写数据库与服务端口，保留其他用户配置 (0.382459ms)
+✔ 桌面 PostgreSQL 实例归属与端口契约 (3.102416ms)
+▶ 桌面 PostgreSQL 凭据状态与 SCRAM 围栏
+  ✔ 0600 状态文件生成三份互异随机凭据，重复启动不轮换 (0.891541ms)
+  ✔ 损坏状态失败关闭；绑定 system_identifier 后才能完成并清除旧凭据 (1.176625ms)
+  ✔ pending 状态可从恢复后的旧配置补充候选；hardened 后绝不重新收录 (1.311542ms)
+  ✔ initdb 只接受 pwfile + SCRAM，HBA 只允许本机 SCRAM (0.281917ms)
+  ✔ pending 迁移复验失败会原子恢复旧 HBA 并再次 reload (1.2595ms)
+  ✔ 即使磁盘 HBA 未变化也强制 reload，再以正反向凭据复验结果为准 (1.026125ms)
+  ✔ 源码固定先提交新 payload 再创建状态或改库，且不含 trust initdb (0.479666ms)
+  ✔ payload commit 前用内置 Node 语法检查安全 helper，校验失败立即阻断 (0.207792ms)
+  ✔ 所有 migrate 入口在轮换 app/gateway 角色前固定本会话 SCRAM (0.240666ms)
+✔ 桌面 PostgreSQL 凭据状态与 SCRAM 围栏 (6.995917ms)
+▶ 应急浏览器壳与正式 Electron 共用安全引导
+  ✔ 原子单实例锁拒绝活进程，并可接管死进程遗留锁 (1.74425ms)
+  ✔ 两端旧启动器只委托 bootstrap，不再维护 trust/helper 分支 (0.585834ms)
+  ✔ 浏览器壳按平台使用无 shell 拼接的固定打开命令 (0.0915ms)
+  ✔ CLI 在启动前注册 INT/TERM/HUP，并用 AbortSignal 驱动初始化清理 (0.138875ms)
+✔ 应急浏览器壳与正式 Electron 共用安全引导 (2.616666ms)
+workloom-db-identity {"dataDirectory":"/private/var/folders/dj/mkh6fwbd4mb6ycp933xfty4h0000gn/T/workloom-helper-inspect-uUaia0/pgdata","port":55432,"hbaFile":"/var/folders/dj/mkh6fwbd4mb6ycp933xfty4h0000gn/T/workloom-helper-inspect-uUaia0/pgdata/pg_hba.conf","systemIdentifier":"7654321098765432109","postmasterStartTime":"2026-09-16 16:52:18.418+00"}
+bootstrap-db prepare ok
+bootstrap-db verify ok
+▶ 客户端投影路径围栏
+  ✔ 同时接受 POSIX 与 Windows 的目录分隔符 (0.685958ms)
+  ✔ 拒绝同目录、父目录逃逸和 Windows 跨盘路径 (0.0775ms)
+✔ 客户端投影路径围栏 (1.184209ms)
+▶ 桌面数据库安全引导
+  ✔ 经符号链接路径执行 helper 时仍识别为 CLI 入口 (0.810167ms)
+  ✔ 要求三模式、端口、PGDATA、HBA 与三角色凭据全部由启动器显式注入 (0.450125ms)
+  ✔ inspect 用旧 owner 候选只读绑定非默认端口、PGDATA、HBA 与 system_identifier (1.790583ms)
+  ✔ legacy prepare 先验归属，再轮换 owner/app/gateway 为 SCRAM 并准备业务库 (1.270583ms)
+  ✔ verify 对三角色正向连接、错误凭据反向拒绝，且全过程零写 (1.282375ms)
+  ✔ trust 仍接受错误凭据时 verify 失败，不会误标为 SCRAM 生效 (1.103125ms)
+  ✔ 错误凭据探测若得到非认证错误则失败关闭，不把网络故障当成安全证明 (0.666583ms)
+  ✔ 未知 data_directory、活动 HBA 或 system_identifier 时首条查询后零写失败 (0.962417ms)
+  ✔ 实例报告端口不符时失败且零写入 (0.683292ms)
+✔ 桌面数据库安全引导 (9.26775ms)
+ℹ tests 40
+ℹ suites 6
+ℹ pass 40
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 89.579041
+Scope: 10 of 11 workspace projects
+packages/industry-contract test$ vitest run
+packages/shared test$ vitest run
+packages/ui test$ vitest run
+packages/ui test:  RUN  v5.0.1 /Users/mac/WorkLoom-fleet/.wt-mcd-m6/packages/ui
+packages/industry-contract test:  RUN  v5.0.1 /Users/mac/WorkLoom-fleet/.wt-mcd-m6/packages/industry-contract
+packages/shared test:  RUN  v5.0.1 /Users/mac/WorkLoom-fleet/.wt-mcd-m6/packages/shared
+packages/shared test:  Test Files  1 passed (1)
+packages/shared test:       Tests  4 passed (4)
+packages/shared test:    Start at  07:02:54
+packages/shared test:    Duration  364ms (import 52%, transform 38%, worker 4%, tests 3%, environment 3%)
+packages/shared test: Done
+packages/industry-contract test:  Test Files  2 passed (2)
+packages/industry-contract test:       Tests  40 passed (40)
+packages/industry-contract test:    Start at  07:02:54
+packages/industry-contract test:    Duration  425ms (import 43%, transform 32%, tests 24%, worker 1%)
+packages/industry-contract test: Done
+packages/ui test:  Test Files  10 passed (10)
+packages/ui test:       Tests  56 passed (56)
+packages/ui test:    Start at  07:02:54
+packages/ui test:    Duration  1.79s (environment 32%, transform 32%, import 19%, tests 14%, worker 2%)
+packages/ui test: Done
+apps/webc test$ ../../node_modules/.bin/vitest run
+apps/webc test:  RUN  v5.0.1 /Users/mac/WorkLoom-fleet/.wt-mcd-m6/apps/webc
+apps/webc test:  Test Files  4 passed (4)
+apps/webc test:       Tests  21 passed (21)
+apps/webc test:    Start at  07:02:56
+apps/webc test:    Duration  1.24s (transform 60%, environment 31%, import 8%, tests 1%, worker 1%)
+apps/webc test: Done
+packages/base test$ vitest run
+packages/base test:  RUN  v5.0.1 /Users/mac/WorkLoom-fleet/.wt-mcd-m6/packages/base
+packages/base test: warning: adding embedded git repository: .workloom/t-conflict
+packages/base test: hint: You've added another git repository inside your current repository.
+packages/base test: hint: Clones of the outer repository will not contain the contents of
+packages/base test: hint: the embedded repository and will not know how to obtain it.
+packages/base test: hint: If you meant to add a submodule, use:
+packages/base test: hint: 
+packages/base test: hint: 	git submodule add <url> .workloom/t-conflict
+packages/base test: hint: 
+packages/base test: hint: If you added this path by mistake, you can remove it from the
+packages/base test: hint: index with:
+packages/base test: hint: 
+packages/base test: hint: 	git rm --cached .workloom/t-conflict
+packages/base test: hint: 
+packages/base test: hint: See "git help submodule" for more information.
+packages/base test:  Test Files  52 passed (52)
+packages/base test:       Tests  823 passed | 1 skipped (824)
+packages/base test:    Start at  07:02:58
+packages/base test:    Duration  15.05s (tests 74%, transform 16%, import 10%)
+packages/base test: Done
+packages/runtime test$ vitest run
+packages/runtime test:  RUN  v5.0.1 /Users/mac/WorkLoom-fleet/.wt-mcd-m6/packages/runtime
+packages/runtime test:  Test Files  4 passed (4)
+packages/runtime test:       Tests  49 passed (49)
+packages/runtime test:    Start at  07:03:13
+packages/runtime test:    Duration  590ms (transform 45%, tests 31%, import 23%, worker 1%)
+packages/runtime test: Done
+apps/server test$ ../../node_modules/.bin/vitest run --testTimeout 30000
+apps/server test:  RUN  v5.0.1 /Users/mac/WorkLoom-fleet/.wt-mcd-m6/apps/server
+apps/server test:  Test Files  28 passed | 1 skipped (29)
+apps/server test:       Tests  306 passed | 2 skipped (308)
+apps/server test:    Start at  07:03:14
+apps/server test:    Duration  6.61s (transform 44%, import 39%, tests 16%)
+apps/server test:      Import  227 modules were evaluated 816 times · 12.20s total, 39% of tracked time
+apps/server test:              ~353ms faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+apps/server test:              learn more: https://vitest.dev/guide/improving-performance#test-isolation
+apps/server test: Done
+apps/web test$ vitest run
+apps/webb test$ vitest run
+apps/webb test:  RUN  v5.0.1 /Users/mac/WorkLoom-fleet/.wt-mcd-m6/apps/webb
+apps/web test:  RUN  v5.0.1 /Users/mac/WorkLoom-fleet/.wt-mcd-m6/apps/web
+apps/webb test:  Test Files  2 passed (2)
+apps/webb test:       Tests  6 passed (6)
+apps/webb test:    Start at  07:03:21
+apps/webb test:    Duration  418ms (transform 88%, import 9%, tests 2%, worker 1%)
+apps/webb test: Done
+apps/web test:  Test Files  24 passed (24)
+apps/web test:       Tests  111 passed (111)
+apps/web test:    Start at  07:03:21
+apps/web test:    Duration  1.57s (environment 46%, transform 25%, import 15%, tests 12%, worker 2%)
+apps/web test:     Isolate  24 workers spawned · ~228ms startup each (spawn + environment, per file)
+apps/web test:              at least ~553ms faster with isolate: false — reuses workers across files instead of one per file
+apps/web test: Done
+
+> workloom-im@0.1.1 test:oss /Users/mac/WorkLoom-fleet/.wt-mcd-m6
+> node --test scripts/oss-inventory.test.mjs
+
+✔ npm 清单：优先采用 lockfile 解析版本，并保留 npm 别名行 (12.424458ms)
+✔ Python 与容器镜像：解析约束、镜像来源 (1.789792ms)
+✔ probe 探测：regex / vendor / lockfile 三类来源 (1.625125ms)
+✔ 清单渲染：确定性、含上游最新与漂移标记、--check 可复现 (84.479334ms)
+✔ 版本工具：最高版本选择与滞后判定 (0.128833ms)
+✔ 仓库标识行：克隆 URL 大小写不同不算清单漂移 (0.19925ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 150.408709

@@ -1,0 +1,58 @@
+{
+  "id": "MC-462",
+  "kind": "fix",
+  "batch": 1,
+  "state": "fixed",
+  "title": "R2 修复：单测断言与产品口径漂移：未绑定/已消费两条拒绝文案与顺序不一致（2 败）",
+  "covers": [
+    "MC-502"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "packages/base/workdata/workdata.test.ts:150@88e6b51",
+      "note": "修复提交 88e6b51"
+    },
+    {
+      "type": "log",
+      "ref": "work/fix-f/red-r2f1-vitest.log → green-r2f1-vitest2.log（30/30）",
+      "note": "红→绿对照"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/FIX-F-REPORT.md",
+      "note": "修复报告（根因/修法/回归/回滚）"
+    }
+  ],
+  "fix_plan": "见 FIX-F-REPORT.md §3（根因 + 代码级修法 + 证据）",
+  "blast_radius": "见 FIX-F-REPORT.md 对应小节",
+  "conflict_paths": [
+    "packages/base/workdata/workdata.test.ts"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "复跑 MC-502",
+      "expect": "转绿",
+      "command": "RUN_DB_TESTS=1 pnpm test",
+      "last_result": "pass",
+      "evidence": "work/fix-f/red-r2f1-vitest.log → green-r2f1-vitest2.log（30/30）"
+    },
+    {
+      "kind": "property",
+      "given": "同类输入/重复执行",
+      "expect": "保持通过（幂等、不依赖遗留数据）",
+      "command": "RUN_DB_TESTS=1 pnpm test",
+      "last_result": "pass",
+      "evidence": "work/fix-f/red-r2f1-vitest.log → green-r2f1-vitest2.log（30/30）"
+    }
+  ],
+  "regression": {
+    "command": "bash work/fix-f/run-regression.sh（8/8 PASS）",
+    "evidence": "work/fix-f/reg-*.log"
+  },
+  "rollback": "git revert 88e6b51",
+  "fixed_by": "fixer-F",
+  "verified_by": null,
+  "notes": "R2 复验由独立验证会话与独立验收会话执行。"
+}

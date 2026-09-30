@@ -1,0 +1,22 @@
++ pnpm -C /Users/mac/WorkLoom-fleet/.wt-mcd-m6/apps/web build
+
+> @workloom/web@0.1.0 build /Users/mac/WorkLoom-fleet/.wt-mcd-m6/apps/web
+> vite build && node ../../scripts/verify-production-client-boundary.mjs dist
+
+vite v8.3.0 building client environment for production...
+transforming...
+✓ 988 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                       0.75 kB │ gzip:   0.54 kB
+dist/assets/index-CK1CrkAk.css      138.44 kB │ gzip:  22.43 kB
+dist/assets/index.es-4Q0ADTTr.js    123.22 kB │ gzip:  30.40 kB
+dist/assets/index-R51o6gmw.js     2,621.64 kB │ gzip: 747.07 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.04s
+✅ 生产客户端文案边界通过（检查 5 个构建文件）

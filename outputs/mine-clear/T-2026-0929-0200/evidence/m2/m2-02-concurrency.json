@@ -1,0 +1,161 @@
+{
+  "title": "M2-02 并发竞争",
+  "started_at": "2026-09-29T17:29:33.558Z",
+  "finished_at": "2026-09-29T17:30:09.952Z",
+  "base": "http://127.0.0.1:8899",
+  "suffix": "m2mumybdcz",
+  "total": 15,
+  "passed": 10,
+  "failed": 3,
+  "checks": [
+    {
+      "name": "A0 目标审批行就绪",
+      "ok": true,
+      "detail": {
+        "approvalId": "apr-e-10474",
+        "threadId": "T-146"
+      }
+    },
+    {
+      "name": "A1 8 路并发 decide：恰一条真正生效",
+      "ok": true,
+      "detail": {
+        "decided": 1,
+        "deduped": 7,
+        "failed": []
+      }
+    },
+    {
+      "name": "A2 其余并发请求幂等返回（200/deduped），无 500",
+      "ok": true,
+      "detail": {
+        "failed": []
+      }
+    },
+    {
+      "name": "A3 手势事件只落一条（并发不重复写入账本）",
+      "ok": false,
+      "detail": {
+        "n": 0
+      }
+    },
+    {
+      "name": "A4 审批终态唯一且已落 decided_by",
+      "ok": false
+    },
+    {
+      "name": "B1 并发派遣不超过 L3.1 上限（抢占前余量 10，并发 15）",
+      "ok": true,
+      "detail": {
+        "preexisting": 0,
+        "capacity": 10,
+        "accepted": 10,
+        "rejected": 5,
+        "firstReject": {
+          "i": 10,
+          "status": 429,
+          "code": "TOO_MANY_REQUESTS",
+          "message": "并发上限 10/工作区（L3.1/G11），已超出请稍后或排队"
+        },
+        "verdict": "未穿透"
+      }
+    },
+    {
+      "name": "B2 超限请求返回 429 且有可读原因",
+      "ok": true,
+      "detail": {
+        "sample": {
+          "i": 10,
+          "status": 429,
+          "code": "TOO_MANY_REQUESTS",
+          "message": "并发上限 10/工作区（L3.1/G11），已超出请稍后或排队"
+        }
+      }
+    },
+    {
+      "name": "B3 超限时线程未建档（拒绝就拒绝，不落半截数据）",
+      "ok": true,
+      "detail": {
+        "rejectedWithId": 0
+      }
+    },
+    {
+      "name": "B4 队列 ≥ 并发上限时调度器仍推进（不得整体停摆）",
+      "ok": false,
+      "detail": {
+        "start": {
+          "n": 0,
+          "last": null
+        },
+        "after35s": {
+          "n": 0,
+          "last": null
+        },
+        "acceptedByBurst": 10,
+        "verdict": "零推进：queued ≥ MAX 时调度器拒绝拾取任何线程（自锁）"
+      }
+    },
+    {
+      "name": "B5 人工可解锁（threads.run 逐个排空）但需逐个用户操作",
+      "ok": true,
+      "detail": {
+        "drained": 0,
+        "left": 0,
+        "sample": []
+      }
+    },
+    {
+      "name": "C1 并发写库后哈希链验证通过（verify-chain 退出码 0）",
+      "ok": true,
+      "detail": {
+        "exit": 0,
+        "tail": "    } |   ] | } |  | ✅ 全库验证通过：6 个 workspace 段 / 1512 条事件，六项检查全绿 | "
+      }
+    },
+    {
+      "name": "D0 待审行样本",
+      "ok": null,
+      "detail": {
+        "n": 3
+      }
+    },
+    {
+      "name": "D1 竞态下审批终态唯一（不得出现「已采纳但被写成 expired」）",
+      "ok": true,
+      "detail": {
+        "sweepStatus": 200,
+        "decide": {
+          "status": 200,
+          "code": null,
+          "message": null,
+          "data": {
+            "approvalId": "apr-e-10504",
+            "status": "approved",
+            "deduped": false,
+            "gestureEventId": "E-10505"
+          }
+        },
+        "events": [],
+        "verdict": "未观察到覆盖"
+      }
+    },
+    {
+      "name": "D2 竞态下不出现双事件（approval.expired 与 approval.gesture 同时存在）",
+      "ok": true,
+      "detail": {
+        "actions": []
+      }
+    },
+    {
+      "name": "D3 二次扫描（应幂等：不重复处理终态行）",
+      "ok": null,
+      "detail": {
+        "expired": [],
+        "keptHighRisk": [
+          "apr-suite-stmumspbkm-qev8t8",
+          "apr-l4-stmumspbkm"
+        ]
+      }
+    }
+  ]
+}

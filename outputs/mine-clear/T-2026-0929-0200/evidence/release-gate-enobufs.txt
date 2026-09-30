@@ -1,0 +1,20 @@
+# release:gate 的 T-03 在账本大批异常时报 ENOBUFS
+
+## 门禁输出（work/m4/gate-release-gate-8921.log：账本含 101,580 条事件）
+25:✗ T-03 编排 · 事件哈希链完整（验链脚本） —— spawnSync /bin/sh ENOBUFS（1926ms）
+37:  ✗ T-03 编排 · 事件哈希链完整（验链脚本） —— spawnSync /bin/sh ENOBUFS
+
+## 同一时段 db:verify-chain 的真实输出规模（同库手跑）
+ 160386011 /tmp/m4-verify-chain.out
+❌ 验证失败：共 499700 处异常（13 段 / 101580 条事件）
+ ELIFECYCLE  Command failed with exit code 1.
+
+## 健康账本对照（wl_mcd_c · 1,559 条事件）
+    4691 /tmp/m4-verify-chain-healthy.out
+✅ 全库验证通过：13 个 workspace 段 / 1559 条事件，六项检查全绿
+
+## 源码（未设 maxBuffer，默认 1MB）
+323:  const out = execSync("pnpm db:verify-chain", {
+324-    cwd: new URL("..", import.meta.url).pathname, stdio: "pipe", env: { ...process.env },
+325-  }).toString();
+326-  // 验链口径兼容：旧版「逐条重算全部一致」/ 新版六项检查「全库验证通过」（D31 远端硬化版）

@@ -1,0 +1,543 @@
+{
+  "probe": "m3-ticket-linkage",
+  "started_at": "2026-09-29T18:13:56.638Z",
+  "base": "http://127.0.0.1:8981",
+  "workspaceSlug": "ai-pm-demo",
+  "mark": "M3TK1790705636638",
+  "assertions": [
+    {
+      "name": "B 端登录",
+      "ok": true,
+      "detail": "ws-aipm-demo"
+    },
+    {
+      "name": "C 端会话建立",
+      "ok": true,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "name": "C 端提交工单成功",
+      "ok": true,
+      "detail": {
+        "status": 200,
+        "ticketId": "tck-mumzwg910058l4g"
+      }
+    },
+    {
+      "name": "客户侧工单列表可见（C 端投影）",
+      "ok": true,
+      "detail": {
+        "count": 1
+      }
+    },
+    {
+      "name": "受理通知落入客户推送箱",
+      "ok": true,
+      "detail": {
+        "count": 1,
+        "kinds": [
+          "ticket.accepted"
+        ]
+      }
+    },
+    {
+      "name": "[数据源覆盖] 统一待办在建单后纳入未办结工单（pendingTickets ≥ 1）",
+      "ok": true,
+      "detail": {
+        "group": {
+          "workspaceId": "ws-aipm-demo",
+          "slug": "ai-pm-demo",
+          "workspaceName": "织元产品部（AI 产品经理示例团队）",
+          "tenantName": "织元演示租户",
+          "role": "owner",
+          "industry": "ai-pm",
+          "pendingApprovals": 4,
+          "pendingTickets": 3
+        },
+        "groups": [
+          {
+            "workspaceId": "ws-aipm-demo",
+            "slug": "ai-pm-demo",
+            "workspaceName": "织元产品部（AI 产品经理示例团队）",
+            "tenantName": "织元演示租户",
+            "role": "owner",
+            "industry": "ai-pm",
+            "pendingApprovals": 4,
+            "pendingTickets": 3
+          }
+        ]
+      }
+    },
+    {
+      "name": "B 端工单台可见该工单（C→B 联动）",
+      "ok": true,
+      "detail": {
+        "status": "assigned",
+        "dept": "客户服务团队",
+        "count": 8
+      }
+    },
+    {
+      "name": "B 端时间线包含客户提交事件",
+      "ok": true,
+      "detail": {
+        "timeline": [
+          "c_user:create",
+          "system:assign"
+        ]
+      }
+    },
+    {
+      "name": "B 端派单成功",
+      "ok": true,
+      "detail": "MEM-002"
+    },
+    {
+      "name": "B 端推进（start）成功",
+      "ok": true,
+      "detail": "processing"
+    },
+    {
+      "name": "B 端办结成功",
+      "ok": true,
+      "detail": "done"
+    },
+    {
+      "name": "时间线记录 B 端动作（staff 归属）",
+      "ok": true,
+      "detail": {
+        "actions": [
+          "c_user:create",
+          "system:assign",
+          "system:assign",
+          "staff:start",
+          "staff:complete"
+        ]
+      }
+    },
+    {
+      "name": "客户侧工单详情状态已更新为 done",
+      "ok": true,
+      "detail": {
+        "status": "done",
+        "statusText": "已完成"
+      }
+    },
+    {
+      "name": "客户侧时间线可见 B 端处置轨迹",
+      "ok": true,
+      "detail": {
+        "timeline": [
+          "c_user:create",
+          "system:assign",
+          "system:assign",
+          "staff:start",
+          "staff:complete"
+        ]
+      }
+    },
+    {
+      "name": "办结结果通知达到客户推送箱",
+      "ok": true,
+      "detail": {
+        "kinds": [
+          "ticket.completed",
+          "ticket.accepted"
+        ]
+      }
+    },
+    {
+      "name": "服务台统计今日工单数增加（统计投影）",
+      "ok": true,
+      "detail": {
+        "before": 7,
+        "after": 8
+      }
+    },
+    {
+      "name": "[数据源覆盖] 办结后统一待办未办结计数回落（P28 与工单台同口径）",
+      "ok": true,
+      "detail": {
+        "open": 3,
+        "closed": 2,
+        "groups": [
+          {
+            "workspaceId": "ws-aipm-demo",
+            "slug": "ai-pm-demo",
+            "workspaceName": "织元产品部（AI 产品经理示例团队）",
+            "tenantName": "织元演示租户",
+            "role": "owner",
+            "industry": "ai-pm",
+            "pendingApprovals": 4,
+            "pendingTickets": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "租户/工作区隔离：另一工作区看不到该工单（负面对照）",
+      "ok": true,
+      "detail": {
+        "count": 8
+      }
+    }
+  ],
+  "before": {
+    "stats": {
+      "date": "2026-09-29",
+      "sessions": 6,
+      "qaCount": 6,
+      "avgConfidence": 0.724,
+      "groundedRate": 0.833,
+      "avgLatencyMs": 3,
+      "ticketsToday": 7,
+      "completionRate": 0.714,
+      "slaBreached": 0,
+      "avgRating": null
+    },
+    "inbox": {
+      "groups": [
+        {
+          "workspaceId": "ws-aipm-demo",
+          "slug": "ai-pm-demo",
+          "workspaceName": "织元产品部（AI 产品经理示例团队）",
+          "tenantName": "织元演示租户",
+          "role": "owner",
+          "industry": "ai-pm",
+          "pendingApprovals": 4,
+          "pendingTickets": 2
+        }
+      ]
+    }
+  },
+  "created": {
+    "status": 200,
+    "ticket": {
+      "id": "tck-mumzwg910058l4g",
+      "workspaceId": "ws-aipm-demo",
+      "cUserId": "cu-mumzwg8r006vaw7",
+      "conversationId": "conv-tk-M3TK1790705636638",
+      "kind": "complaint",
+      "title": "M3 探针工单 M3TK1790705636638",
+      "payload": {
+        "note": "排雷取证用，不是真实客诉",
+        "severity": "low"
+      },
+      "status": "assigned",
+      "priority": "normal",
+      "dept": "客户服务团队",
+      "assignee": null,
+      "ratingScore": null,
+      "ratingComment": null,
+      "result": null,
+      "slaDeadline": "2026-09-29T22:13:56.000Z",
+      "createdAt": "2026-09-29T18:13:56.000Z",
+      "updatedAt": "2026-09-29T18:13:56.000Z",
+      "statusText": "已受理"
+    },
+    "receipt": {
+      "requestId": "afa2ddc1-8cdd-4fa3-a681-592931be3f41",
+      "state": "accepted",
+      "resourceId": "tck-mumzwg910058l4g",
+      "idempotentReplay": false,
+      "eventId": "E-9200",
+      "delivery": {
+        "state": "demo",
+        "notificationId": "21"
+      }
+    }
+  },
+  "notifications_after_create": [
+    {
+      "id": "21",
+      "kind": "ticket.accepted",
+      "payload": {
+        "text": "您的工单「M3 探针工单 M3TK1790705636638」已受理，客户服务团队将尽快跟进。",
+        "title": "M3 探针工单 M3TK1790705636638",
+        "ticketId": "tck-mumzwg910058l4g"
+      },
+      "createdAt": "2026-09-29T18:13:56.679Z",
+      "read": false,
+      "deliveryState": "demo"
+    }
+  ],
+  "inbox_open": {
+    "groups": [
+      {
+        "workspaceId": "ws-aipm-demo",
+        "slug": "ai-pm-demo",
+        "workspaceName": "织元产品部（AI 产品经理示例团队）",
+        "tenantName": "织元演示租户",
+        "role": "owner",
+        "industry": "ai-pm",
+        "pendingApprovals": 4,
+        "pendingTickets": 3
+      }
+    ]
+  },
+  "assign": {
+    "status": 200,
+    "data": {
+      "ticket": {
+        "id": "tck-mumzwg910058l4g",
+        "workspaceId": "ws-aipm-demo",
+        "cUserId": "cu-mumzwg8r006vaw7",
+        "conversationId": "conv-tk-M3TK1790705636638",
+        "kind": "complaint",
+        "title": "M3 探针工单 M3TK1790705636638",
+        "payload": {
+          "note": "排雷取证用，不是真实客诉",
+          "severity": "low"
+        },
+        "status": "assigned",
+        "priority": "normal",
+        "dept": "客服组",
+        "assignee": "MEM-002",
+        "ratingScore": null,
+        "ratingComment": null,
+        "result": null,
+        "slaDeadline": "2026-09-29T22:13:56.000Z",
+        "createdAt": "2026-09-29T18:13:56.000Z",
+        "updatedAt": "2026-09-29T18:13:56.000Z"
+      }
+    }
+  },
+  "advance": {
+    "status": 200,
+    "data": {
+      "ticket": {
+        "id": "tck-mumzwg910058l4g",
+        "workspaceId": "ws-aipm-demo",
+        "cUserId": "cu-mumzwg8r006vaw7",
+        "conversationId": "conv-tk-M3TK1790705636638",
+        "kind": "complaint",
+        "title": "M3 探针工单 M3TK1790705636638",
+        "payload": {
+          "note": "排雷取证用，不是真实客诉",
+          "severity": "low"
+        },
+        "status": "processing",
+        "priority": "normal",
+        "dept": "客服组",
+        "assignee": "MEM-002",
+        "ratingScore": null,
+        "ratingComment": null,
+        "result": null,
+        "slaDeadline": "2026-09-29T22:13:56.000Z",
+        "createdAt": "2026-09-29T18:13:56.000Z",
+        "updatedAt": "2026-09-29T18:13:56.000Z"
+      }
+    }
+  },
+  "complete": {
+    "status": 200,
+    "data": {
+      "ticket": {
+        "id": "tck-mumzwg910058l4g",
+        "workspaceId": "ws-aipm-demo",
+        "cUserId": "cu-mumzwg8r006vaw7",
+        "conversationId": "conv-tk-M3TK1790705636638",
+        "kind": "complaint",
+        "title": "M3 探针工单 M3TK1790705636638",
+        "payload": {
+          "note": "排雷取证用，不是真实客诉",
+          "severity": "low"
+        },
+        "status": "done",
+        "priority": "normal",
+        "dept": "客服组",
+        "assignee": "MEM-002",
+        "ratingScore": null,
+        "ratingComment": null,
+        "result": {
+          "text": "已电话联系客户并完成处理（M3 探针）"
+        },
+        "slaDeadline": "2026-09-29T22:13:56.000Z",
+        "createdAt": "2026-09-29T18:13:56.000Z",
+        "updatedAt": "2026-09-29T18:13:56.000Z"
+      }
+    }
+  },
+  "timeline_after": [
+    {
+      "id": "73",
+      "ticketId": "tck-mumzwg910058l4g",
+      "action": "create",
+      "actorType": "c_user",
+      "actorId": "cu-mumzwg8r006vaw7",
+      "detail": {
+        "kind": "complaint",
+        "title": "M3 探针工单 M3TK1790705636638",
+        "requestFingerprint": "ea7d95f9fd342f24a17a255d7562052bc99ae6d6742df5193e4c699cd2f9d8c9"
+      },
+      "createdAt": "2026-09-29T18:13:56.000Z"
+    },
+    {
+      "id": "74",
+      "ticketId": "tck-mumzwg910058l4g",
+      "action": "assign",
+      "actorType": "system",
+      "actorId": "service-desk",
+      "detail": {
+        "dept": "客户服务团队",
+        "assignee": null
+      },
+      "createdAt": "2026-09-29T18:13:56.000Z"
+    },
+    {
+      "id": "75",
+      "ticketId": "tck-mumzwg910058l4g",
+      "action": "assign",
+      "actorType": "system",
+      "actorId": "service-desk",
+      "detail": {
+        "dept": "客服组",
+        "assignee": "MEM-002",
+        "reassigned": true,
+        "from_status": "assigned"
+      },
+      "createdAt": "2026-09-29T18:13:56.000Z"
+    },
+    {
+      "id": "76",
+      "ticketId": "tck-mumzwg910058l4g",
+      "action": "start",
+      "actorType": "staff",
+      "actorId": "MEM-001",
+      "detail": {},
+      "createdAt": "2026-09-29T18:13:56.000Z"
+    },
+    {
+      "id": "77",
+      "ticketId": "tck-mumzwg910058l4g",
+      "action": "complete",
+      "actorType": "staff",
+      "actorId": "MEM-001",
+      "detail": {
+        "result": "已电话联系客户并完成处理（M3 探针）"
+      },
+      "createdAt": "2026-09-29T18:13:56.000Z"
+    }
+  ],
+  "c_detail": {
+    "status": 200,
+    "ticket": {
+      "id": "tck-mumzwg910058l4g",
+      "workspaceId": "ws-aipm-demo",
+      "cUserId": "cu-mumzwg8r006vaw7",
+      "conversationId": "conv-tk-M3TK1790705636638",
+      "kind": "complaint",
+      "title": "M3 探针工单 M3TK1790705636638",
+      "payload": {
+        "note": "排雷取证用，不是真实客诉",
+        "severity": "low"
+      },
+      "status": "done",
+      "priority": "normal",
+      "dept": "客服组",
+      "assignee": "MEM-002",
+      "ratingScore": null,
+      "ratingComment": null,
+      "result": {
+        "text": "已电话联系客户并完成处理（M3 探针）"
+      },
+      "slaDeadline": "2026-09-29T22:13:56.000Z",
+      "createdAt": "2026-09-29T18:13:56.000Z",
+      "updatedAt": "2026-09-29T18:13:56.000Z",
+      "statusText": "已完成"
+    },
+    "timeline": [
+      {
+        "action": "create",
+        "actorType": "c_user",
+        "actorId": "cu-mumzwg8r006vaw7",
+        "detail": "{\"kind\":\"complaint\",\"title\":\"M3 探针工单 M3TK1790705636638\",\"requestFingerprint\":\"ea7d95f9fd342f24a17a255d7562052bc99ae6d6742df5193e4c699cd2f9d8c9\"}",
+        "createdAt": "2026-09-29T18:13:56.000Z"
+      },
+      {
+        "action": "assign",
+        "actorType": "system",
+        "actorId": "service-desk",
+        "detail": "{\"dept\":\"客户服务团队\",\"assignee\":null}",
+        "createdAt": "2026-09-29T18:13:56.000Z"
+      },
+      {
+        "action": "assign",
+        "actorType": "system",
+        "actorId": "service-desk",
+        "detail": "{\"dept\":\"客服组\",\"assignee\":\"MEM-002\",\"reassigned\":true,\"from_status\":\"assigned\"}",
+        "createdAt": "2026-09-29T18:13:56.000Z"
+      },
+      {
+        "action": "start",
+        "actorType": "staff",
+        "actorId": "MEM-001",
+        "detail": "{}",
+        "createdAt": "2026-09-29T18:13:56.000Z"
+      },
+      {
+        "action": "complete",
+        "actorType": "staff",
+        "actorId": "MEM-001",
+        "detail": "{\"result\":\"已电话联系客户并完成处理（M3 探针）\"}",
+        "createdAt": "2026-09-29T18:13:56.000Z"
+      }
+    ]
+  },
+  "notifications_after_complete": [
+    {
+      "id": "22",
+      "kind": "ticket.completed",
+      "payload": {
+        "text": "您的工单「M3 探针工单 M3TK1790705636638」已办结：已电话联系客户并完成处理（M3 探针）",
+        "title": "M3 探针工单 M3TK1790705636638",
+        "ticketId": "tck-mumzwg910058l4g"
+      },
+      "createdAt": "2026-09-29T18:13:56.707Z",
+      "read": false,
+      "deliveryState": "demo"
+    },
+    {
+      "id": "21",
+      "kind": "ticket.accepted",
+      "payload": {
+        "text": "您的工单「M3 探针工单 M3TK1790705636638」已受理，客户服务团队将尽快跟进。",
+        "title": "M3 探针工单 M3TK1790705636638",
+        "ticketId": "tck-mumzwg910058l4g"
+      },
+      "createdAt": "2026-09-29T18:13:56.679Z",
+      "read": false,
+      "deliveryState": "demo"
+    }
+  ],
+  "after": {
+    "stats": {
+      "date": "2026-09-29",
+      "sessions": 6,
+      "qaCount": 6,
+      "avgConfidence": 0.724,
+      "groundedRate": 0.833,
+      "avgLatencyMs": 3,
+      "ticketsToday": 8,
+      "completionRate": 0.75,
+      "slaBreached": 0,
+      "avgRating": null
+    },
+    "inbox": {
+      "groups": [
+        {
+          "workspaceId": "ws-aipm-demo",
+          "slug": "ai-pm-demo",
+          "workspaceName": "织元产品部（AI 产品经理示例团队）",
+          "tenantName": "织元演示租户",
+          "role": "owner",
+          "industry": "ai-pm",
+          "pendingApprovals": 4,
+          "pendingTickets": 2
+        }
+      ]
+    }
+  }
+}

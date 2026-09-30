@@ -1,0 +1,70 @@
+{
+  "id": "MC-415",
+  "kind": "fix",
+  "covers": [
+    "MC-305"
+  ],
+  "level": "L1",
+  "severity": "P1",
+  "batch": 1,
+  "title": "replay 断点锚点必须是「有真实回执」的步骤：无回执线程重跑不再直接 completed",
+  "state": "fixed",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "packages/runtime/src/loop.ts#existingStepIds@6828469",
+      "note": "done 集合只收 receipt.synced===true 且非 block/review 的步骤（stepReceiptVerified 导出供单测）"
+    },
+    {
+      "type": "code",
+      "ref": "packages/runtime/src/loop.ts#runQuest@6828469",
+      "note": "W-01 缺参挂起补「越围栏挂起：」机器前缀（与 replay 标记语义一致，原因仍写在文案与快照里）；completed 时清 error"
+    },
+    {
+      "type": "log",
+      "ref": "evidence/fix-c/final-m2-05.log",
+      "note": "C1 failed（无回执）→ C3 重跑仍 failed（修复前重跑即 completed）"
+    },
+    {
+      "type": "log",
+      "ref": "evidence/fix-c/m2-01-main-loop.json",
+      "note": "「挂起事件落账（basis 标注越围栏挂起）」在新口径下保持绿；「属性：completed 线程执行事件全部 synced=true」绿"
+    }
+  ],
+  "root_cause": {
+    "file": "packages/runtime/src/loop.ts",
+    "line": 231,
+    "symbol": "existingStepIds / runQuest 尾部 unverified 判定",
+    "commit": "4ff9943"
+  },
+  "fix_plan": "existingStepIds 增加 receipt.synced===true 门槛；completed 落库时清 error；W-01 basis 增加机器前缀（兼容 m2-01 冻结断言与 replay 标记）。",
+  "blast_radius": "所有 failed/中断线程重跑时会重新执行未核实步骤（合规所需的重试，次数增加但不再谎报完成）；历史 completed 线程重跑行为不变（其步骤有回执）；依赖旧 W-01 文案前缀的消费方（仅 loop.ts 自身 replay 判定）已同步。",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "dataMode=real（无连接器）跑写步骤 → failed → 再调 threads.run",
+      "expect": "重跑后不得为 completed（仍 failed / 重新产生回执后才行）",
+      "command": "同 FIX-C-03 命令",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-c/final-m2-05.log"
+    },
+    {
+      "kind": "property",
+      "given": "任意 completed 线程",
+      "expect": "其已执行步骤的最新事件均 receipt.synced=true",
+      "command": "m2-01 属性断言 + m2-05 C1/C2/C3",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-c/final-m2-05.log"
+    }
+  ],
+  "regression": {
+    "command": "pnpm -C packages/runtime test && node outputs/mine-clear/T-2026-0929-0200/assertions/m2-01-main-loop.mjs",
+    "evidence": "evidence/fix-c/final-m2-05.log + evidence/fix-c/reg-m2-01b.log"
+  },
+  "rollback": "回滚 6828469：恢复「有 step_id 即视为已完成」的旧 replay 口径（E3.7 被绕过风险回归）。",
+  "fixed_by": "fixer-C",
+  "verified_by": null,
+  "conflict_paths": [
+    "packages/runtime/src/loop.ts"
+  ]
+}

@@ -1,0 +1,76 @@
+{
+  "id": "MC-444",
+  "kind": "fix",
+  "batch": 3,
+  "state": "fixed",
+  "title": "演示种子补全局账号 + 统一待办纳入未办结工单",
+  "covers": [
+    "MC-113"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "scripts/seed.ts:583@c1f0fbb",
+      "note": "酒店演示成员建账号（acc-demo-hotel-*）并回填 members.account_id，幂等"
+    },
+    {
+      "type": "code",
+      "ref": "scripts/seed-aipm.ts:130@c1f0fbb",
+      "note": "ai-pm 示例团队同口径（acc-demo-aipm-*）"
+    },
+    {
+      "type": "code",
+      "ref": "apps/server/src/trpc/accounts-router.ts:591@c1f0fbb",
+      "note": "inbox.unified 增 pendingTickets（created/assigned/processing，与 P22 同口径），按工作区独立 fail-soft"
+    },
+    {
+      "type": "code",
+      "ref": "apps/web/src/pages/p28/P28.tsx:1@0c0a1ad",
+      "note": "P28 卡片同时展示待审批与未办结工单（信息色走 text-holo 令牌）"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-inbox-1790706124692.json",
+      "note": "f1 统一待办 10/10：groups 非空、计数与库内一致、建单 +1 / 办结 -1、跨店隔离、种子账号回填"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-ticket-1790706125123.json",
+      "note": "M3 探针 3 的 P28 检查改为建单后 +1 / 办结后回落两段取证"
+    }
+  ],
+  "fix_plan": "①种子为演示成员建 accounts 并联结 members.account_id（演示保留命名空间，幂等）；②inbox.unified 增 pendingTickets 并按店分组返回；③P28 卡片展示两项计数",
+  "blast_radius": "P28 统一待办页面与 accounts.inbox 端点、出厂种子（全新安装与既有库均需重跑种子才生效）、跨店聚合口径",
+  "conflict_paths": [
+    "apps/server/src/trpc/accounts-router.ts",
+    "scripts/seed.ts",
+    "scripts/seed-aipm.ts",
+    "apps/web/src/pages/p28/P28.tsx"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "演示成员 MEM-001 调用 accounts.inbox.unified（ai-pm-demo 与 yunqi-hotel）",
+      "expect": "groups 非空且分店计数与库内 pending 审批/未办结工单一致；C 端建单后 pendingTickets +1、办结后回落",
+      "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-inbox-unified.mjs",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-inbox-1790706124692.json"
+    },
+    {
+      "kind": "property",
+      "given": "任意有 pending 审批或未完结工单的工作区成员",
+      "expect": "该成员在统一待办看到对应计数；无账号绑定的成员由种子/注册流程保证绑定（仍有 UI 提示而非静默空列表）",
+      "command": "同上 + DATABASE_APP_URL=... psql 直查 members.account_id 覆盖",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-inbox-1790706124692.json"
+    }
+  ],
+  "regression": {
+    "command": "pnpm typecheck && pnpm suite && pnpm test",
+    "evidence": "work/fix-e/typecheck.log; work/fix-e/suite.log; work/fix-e/root-test.log"
+  },
+  "rollback": "git revert c1f0fbb",
+  "fixed_by": "fix_e_semantics",
+  "verified_by": null,
+  "notes": "告警计数仍为行业包数据面（基座无 alerts 表）——本卡只补审批 + 工单两域"
+}

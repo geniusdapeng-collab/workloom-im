@@ -1,0 +1,1278 @@
+{
+  "probe": "m3-thread-linkage",
+  "started_at": "2026-09-29T18:22:15.726Z",
+  "base": "http://127.0.0.1:8981",
+  "workspaceSlug": "yunqi-hotel",
+  "memberNo": "MEM-001",
+  "goal": "把周六招牌菜调价 8%（M3 联动探针）",
+  "snapshots": {
+    "S0-before": {
+      "label": "S0-before",
+      "at": "2026-09-29T18:22:15.748Z",
+      "faces": {
+        "threads.list": {
+          "count": 50,
+          "thread": null
+        },
+        "approvals.list(pending)": {
+          "count": 30,
+          "ids": [
+            "apr-e-10785",
+            "apr-l4-stmun044pz",
+            "apr-e-10751",
+            "apr-suite-stmun044pz-m3451f",
+            "apr-suite-stmun044pz-agcjme",
+            "apr-e-9676",
+            "apr-suite-stmun044pz-jqbk4y",
+            "apr-suite-stmun044pz-45ddrp",
+            "apr-suite-stmun044pz-n8rywn",
+            "apr-suite-stmun044pz-86r2tk",
+            "apr-suite-stmun044pz-l4osh7",
+            "apr-suite-stmun044pz-ga3poq",
+            "apr-suite-stmun044pz-qvmccg",
+            "apr-suite-stmun044pz-qppay7",
+            "apr-suite-stmun044pz-vz2rou",
+            "apr-suite-stmun044pz-4hv9mw",
+            "apr-suite-stmun044pz-d7jje7",
+            "apr-e-9517",
+            "apr-b6-ro-mun03qin",
+            "apr-b6-high-mun03qif",
+            "apr-b6-hr-mun03qi3",
+            "apr-b6-queue-mun03qgq",
+            "apr-immun03q8i-g4",
+            "apr-immun03q8i-g3",
+            "apr-immun03q8i-g2",
+            "apr-e-9456",
+            "apr-e-9240",
+            "apr-e-seed-8895",
+            "apr-boost-i2",
+            "apr-boost-i1"
+          ]
+        },
+        "captain.theater": {
+          "pendingByTier": {
+            "l2_captain": 2,
+            "l4_chairman": 28
+          },
+          "ticker": [
+            {
+              "event_id": "E-10854",
+              "action": "ask.answer",
+              "who": "competitor-agent",
+              "created_at": "2026-09-29T18:22:04.999Z"
+            },
+            {
+              "event_id": "E-10852",
+              "action": "ask.answer",
+              "who": "competitor-agent",
+              "created_at": "2026-09-29T18:22:04.981Z"
+            },
+            {
+              "event_id": "E-10850",
+              "action": "ask.answer",
+              "who": "competitor-agent",
+              "created_at": "2026-09-29T18:22:04.960Z"
+            }
+          ],
+          "floorAgents": [
+            {
+              "presetKey": "competitor-agent",
+              "state": "celebrating",
+              "currentThread": null,
+              "pendingTier": null,
+              "approvalId": null,
+              "celebrating": true,
+              "asking": false,
+              "pendingCount": 0,
+              "statusLine": "刚完成：ask.answer"
+            },
+            {
+              "presetKey": "content-agent",
+              "state": "blocked",
+              "currentThread": null,
+              "pendingTier": "l2_captain",
+              "approvalId": "apr-e-10751",
+              "celebrating": false,
+              "asking": true,
+              "pendingCount": 1,
+              "statusLine": "遇阻：z_probe_write · 请示待裁：z_probe_write"
+            },
+            {
+              "presetKey": "desktop-agent",
+              "state": "asking",
+              "currentThread": null,
+              "pendingTier": "l4_chairman",
+              "approvalId": "apr-boost-i2",
+              "celebrating": false,
+              "asking": false,
+              "pendingCount": 2,
+              "statusLine": "请示待裁：inspection.scan（共 2 项待裁）"
+            },
+            {
+              "presetKey": "inspection-agent",
+              "state": "blocked",
+              "currentThread": null,
+              "pendingTier": null,
+              "approvalId": null,
+              "celebrating": false,
+              "asking": false,
+              "pendingCount": 0,
+              "statusLine": "遇阻：inspect.run.completed"
+            },
+            {
+              "presetKey": "pricing-agent",
+              "state": "blocked",
+              "currentThread": null,
+              "pendingTier": "l4_chairman",
+              "approvalId": "apr-suite-stmun044pz-d7jje7",
+              "celebrating": true,
+              "asking": true,
+              "pendingCount": 14,
+              "statusLine": "遇阻：price.adjust · 请示待裁：suite.reviewable（共 14 项待裁）"
+            },
+            {
+              "presetKey": "reconcile-agent",
+              "state": "asking",
+              "currentThread": null,
+              "pendingTier": "l4_chairman",
+              "approvalId": "apr-e-seed-8895",
+              "celebrating": false,
+              "asking": false,
+              "pendingCount": 1,
+              "statusLine": "请示待裁：order.refund"
+            },
+            {
+              "presetKey": "review-agent",
+              "state": "blocked",
+              "currentThread": null,
+              "pendingTier": "l4_chairman",
+              "approvalId": "apr-immun03q8i-g2",
+              "celebrating": true,
+              "asking": true,
+              "pendingCount": 8,
+              "statusLine": "遇阻：review.reply · 请示待裁：review.reply（共 8 项待裁）"
+            }
+          ],
+          "latestBriefingAt": "2026-09-29T18:19:58.097Z"
+        },
+        "accounts.inbox.unified": {
+          "groups": [
+            {
+              "workspaceId": "ws-yunqi",
+              "slug": "yunqi-hotel",
+              "workspaceName": "云栖酒店",
+              "tenantName": "演示租户",
+              "role": "owner",
+              "industry": "hotel",
+              "pendingApprovals": 30,
+              "pendingTickets": 41
+            }
+          ]
+        },
+        "nightShift.current": {
+          "configured": true,
+          "status": "ready",
+          "id": "nr-ws-yunqi-2099-08-01-stmun044pz"
+        },
+        "service.stats.overview": {
+          "date": "2026-09-29",
+          "sessions": 332,
+          "qaCount": 356,
+          "avgConfidence": 0.935,
+          "groundedRate": 0.787,
+          "avgLatencyMs": 2,
+          "ticketsToday": 51,
+          "completionRate": 0.268,
+          "slaBreached": 1,
+          "avgRating": 5
+        }
+      },
+      "errors": {}
+    },
+    "S1-after-dispatch": {
+      "label": "S1-after-dispatch",
+      "at": "2026-09-29T18:22:16.841Z",
+      "faces": {
+        "threads.list": {
+          "count": 50,
+          "thread": {
+            "id": "T-180",
+            "title": "把周六招牌菜调价 8%（M3 联动探针）",
+            "mode": "quest",
+            "status": "pending_review",
+            "progress_done": 1,
+            "progress_total": 2,
+            "created_by": "MEM-001",
+            "agent_id": "agt-pricing-agent",
+            "created_at": "2026-09-29T18:22:15.813Z"
+          }
+        },
+        "threads.get": {
+          "id": "T-180",
+          "title": "把周六招牌菜调价 8%（M3 联动探针）",
+          "mode": "quest",
+          "status": "pending_review",
+          "progress_done": 1,
+          "progress_total": 2,
+          "created_by": "MEM-001",
+          "agent_id": "agt-pricing-agent",
+          "created_at": "2026-09-29T18:22:15.813Z",
+          "updated_at": "2026-09-29T18:22:15.824Z",
+          "pending_approval_id": "apr-e-10861",
+          "preset_key": "pricing-agent"
+        },
+        "approvals.list(pending)": {
+          "count": 31,
+          "ids": [
+            "apr-e-10861",
+            "apr-e-10785",
+            "apr-l4-stmun044pz",
+            "apr-e-10751",
+            "apr-suite-stmun044pz-m3451f",
+            "apr-suite-stmun044pz-agcjme",
+            "apr-e-9676",
+            "apr-suite-stmun044pz-jqbk4y",
+            "apr-suite-stmun044pz-45ddrp",
+            "apr-suite-stmun044pz-n8rywn",
+            "apr-suite-stmun044pz-86r2tk",
+            "apr-suite-stmun044pz-l4osh7",
+            "apr-suite-stmun044pz-ga3poq",
+            "apr-suite-stmun044pz-qvmccg",
+            "apr-suite-stmun044pz-qppay7",
+            "apr-suite-stmun044pz-vz2rou",
+            "apr-suite-stmun044pz-4hv9mw",
+            "apr-suite-stmun044pz-d7jje7",
+            "apr-e-9517",
+            "apr-b6-ro-mun03qin",
+            "apr-b6-high-mun03qif",
+            "apr-b6-hr-mun03qi3",
+            "apr-b6-queue-mun03qgq",
+            "apr-immun03q8i-g4",
+            "apr-immun03q8i-g3",
+            "apr-immun03q8i-g2",
+            "apr-e-9456",
+            "apr-e-9240",
+            "apr-e-seed-8895",
+            "apr-boost-i1",
+            "apr-boost-i2"
+          ]
+        },
+        "captain.theater": {
+          "pendingByTier": {
+            "l2_captain": 3,
+            "l4_chairman": 28
+          },
+          "ticker": [
+            {
+              "event_id": "E-10854",
+              "action": "ask.answer",
+              "who": "competitor-agent",
+              "created_at": "2026-09-29T18:22:04.999Z"
+            },
+            {
+              "event_id": "E-10852",
+              "action": "ask.answer",
+              "who": "competitor-agent",
+              "created_at": "2026-09-29T18:22:04.981Z"
+            },
+            {
+              "event_id": "E-10850",
+              "action": "ask.answer",
+              "who": "competitor-agent",
+              "created_at": "2026-09-29T18:22:04.960Z"
+            }
+          ],
+          "floorAgents": [
+            {
+              "presetKey": "competitor-agent",
+              "state": "celebrating",
+              "currentThread": null,
+              "pendingTier": null,
+              "approvalId": null,
+              "celebrating": true,
+              "asking": false,
+              "pendingCount": 0,
+              "statusLine": "刚完成：ask.answer"
+            },
+            {
+              "presetKey": "content-agent",
+              "state": "blocked",
+              "currentThread": null,
+              "pendingTier": "l2_captain",
+              "approvalId": "apr-e-10751",
+              "celebrating": false,
+              "asking": true,
+              "pendingCount": 1,
+              "statusLine": "遇阻：z_probe_write · 请示待裁：z_probe_write"
+            },
+            {
+              "presetKey": "desktop-agent",
+              "state": "asking",
+              "currentThread": null,
+              "pendingTier": "l4_chairman",
+              "approvalId": "apr-boost-i2",
+              "celebrating": false,
+              "asking": false,
+              "pendingCount": 2,
+              "statusLine": "请示待裁：inspection.scan（共 2 项待裁）"
+            },
+            {
+              "presetKey": "inspection-agent",
+              "state": "blocked",
+              "currentThread": null,
+              "pendingTier": null,
+              "approvalId": null,
+              "celebrating": false,
+              "asking": false,
+              "pendingCount": 0,
+              "statusLine": "遇阻：inspect.run.completed"
+            },
+            {
+              "presetKey": "pricing-agent",
+              "state": "blocked",
+              "currentThread": null,
+              "pendingTier": "l4_chairman",
+              "approvalId": "apr-suite-stmun044pz-d7jje7",
+              "celebrating": true,
+              "asking": true,
+              "pendingCount": 15,
+              "statusLine": "遇阻：price.adjust · 请示待裁：suite.reviewable（共 15 项待裁）"
+            },
+            {
+              "presetKey": "reconcile-agent",
+              "state": "asking",
+              "currentThread": null,
+              "pendingTier": "l4_chairman",
+              "approvalId": "apr-e-seed-8895",
+              "celebrating": false,
+              "asking": false,
+              "pendingCount": 1,
+              "statusLine": "请示待裁：order.refund"
+            },
+            {
+              "presetKey": "review-agent",
+              "state": "blocked",
+              "currentThread": null,
+              "pendingTier": "l4_chairman",
+              "approvalId": "apr-immun03q8i-g2",
+              "celebrating": true,
+              "asking": true,
+              "pendingCount": 8,
+              "statusLine": "遇阻：review.reply · 请示待裁：review.reply（共 8 项待裁）"
+            }
+          ],
+          "latestBriefingAt": "2026-09-29T18:19:58.097Z"
+        },
+        "accounts.inbox.unified": {
+          "groups": [
+            {
+              "workspaceId": "ws-yunqi",
+              "slug": "yunqi-hotel",
+              "workspaceName": "云栖酒店",
+              "tenantName": "演示租户",
+              "role": "owner",
+              "industry": "hotel",
+              "pendingApprovals": 31,
+              "pendingTickets": 41
+            }
+          ]
+        },
+        "nightShift.current": {
+          "configured": true,
+          "status": "ready",
+          "id": "nr-ws-yunqi-2099-08-01-stmun044pz"
+        },
+        "service.stats.overview": {
+          "date": "2026-09-29",
+          "sessions": 332,
+          "qaCount": 356,
+          "avgConfidence": 0.935,
+          "groundedRate": 0.787,
+          "avgLatencyMs": 2,
+          "ticketsToday": 51,
+          "completionRate": 0.268,
+          "slaBreached": 1,
+          "avgRating": 5
+        }
+      },
+      "errors": {}
+    },
+    "S2-after-approve-no-client": {
+      "label": "S2-after-approve-no-client",
+      "at": "2026-09-29T18:22:36.917Z",
+      "faces": {
+        "threads.list": {
+          "count": 50,
+          "thread": {
+            "id": "T-180",
+            "title": "把周六招牌菜调价 8%（M3 联动探针）",
+            "mode": "quest",
+            "status": "completed",
+            "progress_done": 2,
+            "progress_total": 2,
+            "created_by": "MEM-001",
+            "agent_id": "agt-pricing-agent",
+            "created_at": "2026-09-29T18:22:15.813Z"
+          }
+        },
+        "threads.get": {
+          "id": "T-180",
+          "title": "把周六招牌菜调价 8%（M3 联动探针）",
+          "mode": "quest",
+          "status": "completed",
+          "progress_done": 2,
+          "progress_total": 2,
+          "created_by": "MEM-001",
+          "agent_id": "agt-pricing-agent",
+          "created_at": "2026-09-29T18:22:15.813Z",
+          "updated_at": "2026-09-29T18:22:23.805Z",
+          "pending_approval_id": null,
+          "preset_key": "pricing-agent"
+        },
+        "approvals.list(pending)": {
+          "count": 30,
+          "ids": [
+            "apr-e-10785",
+            "apr-l4-stmun044pz",
+            "apr-e-10751",
+            "apr-suite-stmun044pz-m3451f",
+            "apr-suite-stmun044pz-agcjme",
+            "apr-e-9676",
+            "apr-suite-stmun044pz-jqbk4y",
+            "apr-suite-stmun044pz-45ddrp",
+            "apr-suite-stmun044pz-n8rywn",
+            "apr-suite-stmun044pz-86r2tk",
+            "apr-suite-stmun044pz-l4osh7",
+            "apr-suite-stmun044pz-ga3poq",
+            "apr-suite-stmun044pz-qvmccg",
+            "apr-suite-stmun044pz-qppay7",
+            "apr-suite-stmun044pz-vz2rou",
+            "apr-suite-stmun044pz-4hv9mw",
+            "apr-suite-stmun044pz-d7jje7",
+            "apr-e-9517",
+            "apr-b6-ro-mun03qin",
+            "apr-b6-high-mun03qif",
+            "apr-b6-hr-mun03qi3",
+            "apr-b6-queue-mun03qgq",
+            "apr-immun03q8i-g4",
+            "apr-immun03q8i-g3",
+            "apr-immun03q8i-g2",
+            "apr-e-9456",
+            "apr-e-9240",
+            "apr-e-seed-8895",
+            "apr-boost-i2",
+            "apr-boost-i1"
+          ]
+        },
+        "captain.theater": {
+          "pendingByTier": {
+            "l2_captain": 2,
+            "l4_chairman": 28
+          },
+          "ticker": [
+            {
+              "event_id": "E-10854",
+              "action": "ask.answer",
+              "who": "competitor-agent",
+              "created_at": "2026-09-29T18:22:04.999Z"
+            },
+            {
+              "event_id": "E-10852",
+              "action": "ask.answer",
+              "who": "competitor-agent",
+              "created_at": "2026-09-29T18:22:04.981Z"
+            },
+            {
+              "event_id": "E-10850",
+              "action": "ask.answer",
+              "who": "competitor-agent",
+              "created_at": "2026-09-29T18:22:04.960Z"
+            }
+          ],
+          "floorAgents": [
+            {
+              "presetKey": "competitor-agent",
+              "state": "celebrating",
+              "currentThread": null,
+              "pendingTier": null,
+              "approvalId": null,
+              "celebrating": true,
+              "asking": false,
+              "pendingCount": 0,
+              "statusLine": "刚完成：ask.answer"
+            },
+            {
+              "presetKey": "content-agent",
+              "state": "blocked",
+              "currentThread": null,
+              "pendingTier": "l2_captain",
+              "approvalId": "apr-e-10751",
+              "celebrating": false,
+              "asking": true,
+              "pendingCount": 1,
+              "statusLine": "遇阻：z_probe_write · 请示待裁：z_probe_write"
+            },
+            {
+              "presetKey": "desktop-agent",
+              "state": "asking",
+              "currentThread": null,
+              "pendingTier": "l4_chairman",
+              "approvalId": "apr-boost-i2",
+              "celebrating": false,
+              "asking": false,
+              "pendingCount": 2,
+              "statusLine": "请示待裁：inspection.scan（共 2 项待裁）"
+            },
+            {
+              "presetKey": "inspection-agent",
+              "state": "blocked",
+              "currentThread": null,
+              "pendingTier": null,
+              "approvalId": null,
+              "celebrating": false,
+              "asking": false,
+              "pendingCount": 0,
+              "statusLine": "遇阻：inspect.run.completed"
+            },
+            {
+              "presetKey": "pricing-agent",
+              "state": "blocked",
+              "currentThread": null,
+              "pendingTier": "l4_chairman",
+              "approvalId": "apr-suite-stmun044pz-d7jje7",
+              "celebrating": true,
+              "asking": true,
+              "pendingCount": 14,
+              "statusLine": "遇阻：price.adjust · 请示待裁：suite.reviewable（共 14 项待裁）"
+            },
+            {
+              "presetKey": "reconcile-agent",
+              "state": "asking",
+              "currentThread": null,
+              "pendingTier": "l4_chairman",
+              "approvalId": "apr-e-seed-8895",
+              "celebrating": false,
+              "asking": false,
+              "pendingCount": 1,
+              "statusLine": "请示待裁：order.refund"
+            },
+            {
+              "presetKey": "review-agent",
+              "state": "blocked",
+              "currentThread": null,
+              "pendingTier": "l4_chairman",
+              "approvalId": "apr-immun03q8i-g2",
+              "celebrating": true,
+              "asking": true,
+              "pendingCount": 8,
+              "statusLine": "遇阻：review.reply · 请示待裁：review.reply（共 8 项待裁）"
+            }
+          ],
+          "latestBriefingAt": "2026-09-29T18:19:58.097Z"
+        },
+        "accounts.inbox.unified": {
+          "groups": [
+            {
+              "workspaceId": "ws-yunqi",
+              "slug": "yunqi-hotel",
+              "workspaceName": "云栖酒店",
+              "tenantName": "演示租户",
+              "role": "owner",
+              "industry": "hotel",
+              "pendingApprovals": 30,
+              "pendingTickets": 41
+            }
+          ]
+        },
+        "nightShift.current": {
+          "configured": true,
+          "status": "ready",
+          "id": "nr-ws-yunqi-2099-08-01-stmun044pz"
+        },
+        "service.stats.overview": {
+          "date": "2026-09-29",
+          "sessions": 332,
+          "qaCount": 356,
+          "avgConfidence": 0.935,
+          "groundedRate": 0.787,
+          "avgLatencyMs": 2,
+          "ticketsToday": 51,
+          "completionRate": 0.268,
+          "slaBreached": 1,
+          "avgRating": 5
+        }
+      },
+      "errors": {}
+    },
+    "S3-after-client-run": {
+      "label": "S3-after-client-run",
+      "at": "2026-09-29T18:22:40.018Z",
+      "faces": {
+        "threads.list": {
+          "count": 50,
+          "thread": {
+            "id": "T-180",
+            "title": "把周六招牌菜调价 8%（M3 联动探针）",
+            "mode": "quest",
+            "status": "completed",
+            "progress_done": 2,
+            "progress_total": 2,
+            "created_by": "MEM-001",
+            "agent_id": "agt-pricing-agent",
+            "created_at": "2026-09-29T18:22:15.813Z"
+          }
+        },
+        "threads.get": {
+          "id": "T-180",
+          "title": "把周六招牌菜调价 8%（M3 联动探针）",
+          "mode": "quest",
+          "status": "completed",
+          "progress_done": 2,
+          "progress_total": 2,
+          "created_by": "MEM-001",
+          "agent_id": "agt-pricing-agent",
+          "created_at": "2026-09-29T18:22:15.813Z",
+          "updated_at": "2026-09-29T18:22:37.015Z",
+          "pending_approval_id": null,
+          "preset_key": "pricing-agent"
+        },
+        "approvals.list(pending)": {
+          "count": 30,
+          "ids": [
+            "apr-e-10785",
+            "apr-l4-stmun044pz",
+            "apr-e-10751",
+            "apr-suite-stmun044pz-m3451f",
+            "apr-suite-stmun044pz-agcjme",
+            "apr-e-9676",
+            "apr-suite-stmun044pz-jqbk4y",
+            "apr-suite-stmun044pz-45ddrp",
+            "apr-suite-stmun044pz-n8rywn",
+            "apr-suite-stmun044pz-86r2tk",
+            "apr-suite-stmun044pz-l4osh7",
+            "apr-suite-stmun044pz-ga3poq",
+            "apr-suite-stmun044pz-qvmccg",
+            "apr-suite-stmun044pz-qppay7",
+            "apr-suite-stmun044pz-vz2rou",
+            "apr-suite-stmun044pz-4hv9mw",
+            "apr-suite-stmun044pz-d7jje7",
+            "apr-e-9517",
+            "apr-b6-ro-mun03qin",
+            "apr-b6-high-mun03qif",
+            "apr-b6-hr-mun03qi3",
+            "apr-b6-queue-mun03qgq",
+            "apr-immun03q8i-g4",
+            "apr-immun03q8i-g3",
+            "apr-immun03q8i-g2",
+            "apr-e-9456",
+            "apr-e-9240",
+            "apr-e-seed-8895",
+            "apr-boost-i2",
+            "apr-boost-i1"
+          ]
+        },
+        "captain.theater": {
+          "pendingByTier": {
+            "l2_captain": 2,
+            "l4_chairman": 28
+          },
+          "ticker": [
+            {
+              "event_id": "E-10854",
+              "action": "ask.answer",
+              "who": "competitor-agent",
+              "created_at": "2026-09-29T18:22:04.999Z"
+            },
+            {
+              "event_id": "E-10852",
+              "action": "ask.answer",
+              "who": "competitor-agent",
+              "created_at": "2026-09-29T18:22:04.981Z"
+            },
+            {
+              "event_id": "E-10850",
+              "action": "ask.answer",
+              "who": "competitor-agent",
+              "created_at": "2026-09-29T18:22:04.960Z"
+            }
+          ],
+          "floorAgents": [
+            {
+              "presetKey": "competitor-agent",
+              "state": "celebrating",
+              "currentThread": null,
+              "pendingTier": null,
+              "approvalId": null,
+              "celebrating": true,
+              "asking": false,
+              "pendingCount": 0,
+              "statusLine": "刚完成：ask.answer"
+            },
+            {
+              "presetKey": "content-agent",
+              "state": "blocked",
+              "currentThread": null,
+              "pendingTier": "l2_captain",
+              "approvalId": "apr-e-10751",
+              "celebrating": false,
+              "asking": true,
+              "pendingCount": 1,
+              "statusLine": "遇阻：z_probe_write · 请示待裁：z_probe_write"
+            },
+            {
+              "presetKey": "desktop-agent",
+              "state": "asking",
+              "currentThread": null,
+              "pendingTier": "l4_chairman",
+              "approvalId": "apr-boost-i2",
+              "celebrating": false,
+              "asking": false,
+              "pendingCount": 2,
+              "statusLine": "请示待裁：inspection.scan（共 2 项待裁）"
+            },
+            {
+              "presetKey": "inspection-agent",
+              "state": "blocked",
+              "currentThread": null,
+              "pendingTier": null,
+              "approvalId": null,
+              "celebrating": false,
+              "asking": false,
+              "pendingCount": 0,
+              "statusLine": "遇阻：inspect.run.completed"
+            },
+            {
+              "presetKey": "pricing-agent",
+              "state": "blocked",
+              "currentThread": null,
+              "pendingTier": "l4_chairman",
+              "approvalId": "apr-suite-stmun044pz-d7jje7",
+              "celebrating": true,
+              "asking": true,
+              "pendingCount": 14,
+              "statusLine": "遇阻：price.adjust · 请示待裁：suite.reviewable（共 14 项待裁）"
+            },
+            {
+              "presetKey": "reconcile-agent",
+              "state": "asking",
+              "currentThread": null,
+              "pendingTier": "l4_chairman",
+              "approvalId": "apr-e-seed-8895",
+              "celebrating": false,
+              "asking": false,
+              "pendingCount": 1,
+              "statusLine": "请示待裁：order.refund"
+            },
+            {
+              "presetKey": "review-agent",
+              "state": "blocked",
+              "currentThread": null,
+              "pendingTier": "l4_chairman",
+              "approvalId": "apr-immun03q8i-g2",
+              "celebrating": true,
+              "asking": true,
+              "pendingCount": 8,
+              "statusLine": "遇阻：review.reply · 请示待裁：review.reply（共 8 项待裁）"
+            }
+          ],
+          "latestBriefingAt": "2026-09-29T18:19:58.097Z"
+        },
+        "accounts.inbox.unified": {
+          "groups": [
+            {
+              "workspaceId": "ws-yunqi",
+              "slug": "yunqi-hotel",
+              "workspaceName": "云栖酒店",
+              "tenantName": "演示租户",
+              "role": "owner",
+              "industry": "hotel",
+              "pendingApprovals": 30,
+              "pendingTickets": 41
+            }
+          ]
+        },
+        "nightShift.current": {
+          "configured": true,
+          "status": "ready",
+          "id": "nr-ws-yunqi-2099-08-01-stmun044pz"
+        },
+        "service.stats.overview": {
+          "date": "2026-09-29",
+          "sessions": 332,
+          "qaCount": 356,
+          "avgConfidence": 0.935,
+          "groundedRate": 0.787,
+          "avgLatencyMs": 2,
+          "ticketsToday": 51,
+          "completionRate": 0.268,
+          "slaBreached": 1,
+          "avgRating": 5
+        }
+      },
+      "errors": {}
+    }
+  },
+  "assertions": [
+    {
+      "name": "登录（owner）",
+      "ok": true,
+      "detail": {
+        "role": "owner",
+        "workspaceId": "ws-yunqi"
+      }
+    },
+    {
+      "name": "派遣返回 threadId（意图路由未判为含糊）",
+      "ok": true,
+      "detail": {
+        "kind": "routed",
+        "mode": "quest",
+        "status": "pending_review"
+      }
+    },
+    {
+      "name": "派遣后线程 → pending_review（围栏挂起）",
+      "ok": true,
+      "detail": {
+        "status": "pending_review",
+        "progress": "1/2",
+        "preset": "pricing-agent"
+      }
+    },
+    {
+      "name": "线程详情给出 pending_approval_id（X-02 直达入口）",
+      "ok": true,
+      "detail": {
+        "pending_approval_id": "apr-e-10861"
+      }
+    },
+    {
+      "name": "审批行已落库且 pending（事实源）",
+      "ok": true,
+      "detail": {
+        "approvalId": "apr-e-10861",
+        "row": {
+          "approval_id": "apr-e-10861",
+          "status": "pending",
+          "tier": "l2_captain",
+          "channel": "inapp",
+          "decided_by": null,
+          "decided_at": null,
+          "expires_at": "2026-09-30T18:22:15.825Z"
+        }
+      }
+    },
+    {
+      "name": "数字职场该员工给出请示信号与审批直达号（asking 或 blocked+asking 共存）",
+      "ok": true,
+      "detail": {
+        "presetKey": "pricing-agent",
+        "state": "blocked",
+        "currentThread": null,
+        "pendingTier": "l4_chairman",
+        "approvalId": "apr-suite-stmun044pz-d7jje7",
+        "celebrating": true,
+        "asking": true,
+        "pendingCount": 15,
+        "statusLine": "遇阻：price.adjust · 请示待裁：suite.reviewable（共 15 项待裁）"
+      }
+    },
+    {
+      "name": "批准手势成功",
+      "ok": true,
+      "detail": {
+        "approvalId": "apr-e-10861",
+        "status": "approved",
+        "deduped": false,
+        "gestureEventId": "E-10862"
+      }
+    },
+    {
+      "name": "审批状态已落库 approved",
+      "ok": true,
+      "detail": {
+        "approval_id": "apr-e-10861",
+        "status": "approved",
+        "tier": "l2_captain",
+        "channel": "inapp",
+        "decided_by": "MEM-001",
+        "decided_at": "2026-09-29T18:22:16.911Z",
+        "expires_at": "2026-09-30T18:22:15.825Z"
+      }
+    },
+    {
+      "name": "[联动断点候选] 批准后线程是否自动续跑（无客户端介入）",
+      "ok": true,
+      "detail": {
+        "status": "completed",
+        "age_s": 13,
+        "error": null
+      }
+    },
+    {
+      "name": "客户端 threads.run 可续跑（路径本身可用）",
+      "ok": true,
+      "detail": {
+        "status": "completed",
+        "run": "completed"
+      }
+    },
+    {
+      "name": "续跑写动作携带审批引用（#34 授权留痕）",
+      "ok": true,
+      "detail": {
+        "events": [
+          {
+            "action": "thread.dispatch",
+            "basis": null
+          },
+          {
+            "action": "pms.price.read",
+            "basis": null
+          },
+          {
+            "action": "price.adjust",
+            "basis": [
+              "越围栏挂起：围栏无法求值（缺参数）→ 一律人工裁决：R1: - 期望数字，得到 undefined；R2: < 期望数字，得到 undefined"
+            ]
+          },
+          {
+            "action": "approval.gesture",
+            "basis": null
+          },
+          {
+            "action": "price.adjust",
+            "basis": [
+              "经审批 apr-e-10861 批准执行（E3.3 恢复闭环）"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "faces": {
+    "P0 剧场 pendingByTier": {
+      "S1": {
+        "l2_captain": 3,
+        "l4_chairman": 28
+      },
+      "S2": {
+        "l2_captain": 2,
+        "l4_chairman": 28
+      }
+    },
+    "P0 剧场 ticker 首条": {
+      "S1": {
+        "event_id": "E-10854",
+        "action": "ask.answer",
+        "who": "competitor-agent",
+        "created_at": "2026-09-29T18:22:04.999Z"
+      },
+      "S2": {
+        "event_id": "E-10854",
+        "action": "ask.answer",
+        "who": "competitor-agent",
+        "created_at": "2026-09-29T18:22:04.999Z"
+      }
+    },
+    "P2 列表线程": {
+      "id": "T-180",
+      "title": "把周六招牌菜调价 8%（M3 联动探针）",
+      "mode": "quest",
+      "status": "pending_review",
+      "progress_done": 1,
+      "progress_total": 2,
+      "created_by": "MEM-001",
+      "agent_id": "agt-pricing-agent",
+      "created_at": "2026-09-29T18:22:15.813Z"
+    },
+    "P2 详情线程": {
+      "id": "T-180",
+      "title": "把周六招牌菜调价 8%（M3 联动探针）",
+      "mode": "quest",
+      "status": "pending_review",
+      "progress_done": 1,
+      "progress_total": 2,
+      "created_by": "MEM-001",
+      "agent_id": "agt-pricing-agent",
+      "created_at": "2026-09-29T18:22:15.813Z",
+      "updated_at": "2026-09-29T18:22:15.824Z",
+      "pending_approval_id": "apr-e-10861",
+      "preset_key": "pricing-agent"
+    },
+    "P28 统一待办": {
+      "S0": {
+        "groups": [
+          {
+            "workspaceId": "ws-yunqi",
+            "slug": "yunqi-hotel",
+            "workspaceName": "云栖酒店",
+            "tenantName": "演示租户",
+            "role": "owner",
+            "industry": "hotel",
+            "pendingApprovals": 30,
+            "pendingTickets": 41
+          }
+        ]
+      },
+      "S2": {
+        "groups": [
+          {
+            "workspaceId": "ws-yunqi",
+            "slug": "yunqi-hotel",
+            "workspaceName": "云栖酒店",
+            "tenantName": "演示租户",
+            "role": "owner",
+            "industry": "hotel",
+            "pendingApprovals": 30,
+            "pendingTickets": 41
+          }
+        ]
+      }
+    },
+    "P3 夜班": {
+      "configured": true,
+      "status": "ready",
+      "id": "nr-ws-yunqi-2099-08-01-stmun044pz"
+    }
+  },
+  "notes": [],
+  "identity": {
+    "memberId": "mem-001-id",
+    "memberNo": "MEM-001",
+    "name": "王店长",
+    "role": "owner",
+    "tenantId": "tenant-demo",
+    "workspaceId": "ws-yunqi",
+    "plan": "pro"
+  },
+  "dispatch": {
+    "status": 200,
+    "data": {
+      "kind": "routed",
+      "mode": "quest",
+      "via": "rule",
+      "threadId": "T-180",
+      "status": "pending_review",
+      "stepsDone": 1,
+      "stepsTotal": 2,
+      "warnings": [
+        "当前部署未配置工具执行桥，写动作（pms.price.write、ota.price.write）将以「未核实」收尾"
+      ]
+    }
+  },
+  "thread_after_dispatch": {
+    "id": "T-180",
+    "title": "把周六招牌菜调价 8%（M3 联动探针）",
+    "mode": "quest",
+    "status": "pending_review",
+    "progress_done": 1,
+    "progress_total": 2,
+    "created_by": "MEM-001",
+    "agent_id": "agt-pricing-agent",
+    "created_at": "2026-09-29T18:22:15.813Z",
+    "updated_at": "2026-09-29T18:22:15.824Z",
+    "pending_approval_id": "apr-e-10861",
+    "preset_key": "pricing-agent"
+  },
+  "db_after_dispatch": {
+    "thread": {
+      "id": "T-180",
+      "status": "pending_review",
+      "agent_id": "agt-pricing-agent",
+      "progress_done": 1,
+      "progress_total": 2,
+      "error": null,
+      "closed_at": null,
+      "age_s": 1
+    },
+    "approvals": [
+      {
+        "approval_id": "apr-e-10861",
+        "status": "pending",
+        "tier": "l2_captain",
+        "channel": "inapp",
+        "decided_by": null,
+        "decided_at": null,
+        "expires_at": "2026-09-30T18:22:15.825Z"
+      }
+    ],
+    "events": [
+      {
+        "action": "thread.dispatch",
+        "actor": "MEM-001",
+        "step_id": null,
+        "basis": null,
+        "created_at": "2026-09-29T18:22:15.814Z"
+      },
+      {
+        "action": "pms.price.read",
+        "actor": "pricing-agent",
+        "step_id": null,
+        "basis": null,
+        "created_at": "2026-09-29T18:22:15.822Z"
+      },
+      {
+        "action": "price.adjust",
+        "actor": "pricing-agent",
+        "step_id": null,
+        "basis": [
+          "越围栏挂起：围栏无法求值（缺参数）→ 一律人工裁决：R1: - 期望数字，得到 undefined；R2: < 期望数字，得到 undefined"
+        ],
+        "created_at": "2026-09-29T18:22:15.824Z"
+      }
+    ]
+  },
+  "pending_approval_id": "apr-e-10861",
+  "decide": {
+    "status": 200,
+    "data": {
+      "approvalId": "apr-e-10861",
+      "status": "approved",
+      "deduped": false,
+      "gestureEventId": "E-10862"
+    }
+  },
+  "db_after_approve": {
+    "thread": {
+      "id": "T-180",
+      "status": "completed",
+      "agent_id": "agt-pricing-agent",
+      "progress_done": 2,
+      "progress_total": 2,
+      "error": null,
+      "closed_at": "2026-09-29T18:22:23.805Z",
+      "age_s": 13
+    },
+    "approvals": [
+      {
+        "approval_id": "apr-e-10861",
+        "status": "approved",
+        "tier": "l2_captain",
+        "channel": "inapp",
+        "decided_by": "MEM-001",
+        "decided_at": "2026-09-29T18:22:16.911Z",
+        "expires_at": "2026-09-30T18:22:15.825Z"
+      }
+    ],
+    "events": [
+      {
+        "action": "thread.dispatch",
+        "actor": "MEM-001",
+        "step_id": null,
+        "basis": null,
+        "created_at": "2026-09-29T18:22:15.814Z"
+      },
+      {
+        "action": "pms.price.read",
+        "actor": "pricing-agent",
+        "step_id": null,
+        "basis": null,
+        "created_at": "2026-09-29T18:22:15.822Z"
+      },
+      {
+        "action": "price.adjust",
+        "actor": "pricing-agent",
+        "step_id": null,
+        "basis": [
+          "越围栏挂起：围栏无法求值（缺参数）→ 一律人工裁决：R1: - 期望数字，得到 undefined；R2: < 期望数字，得到 undefined"
+        ],
+        "created_at": "2026-09-29T18:22:15.824Z"
+      },
+      {
+        "action": "approval.gesture",
+        "actor": "MEM-001",
+        "step_id": null,
+        "basis": null,
+        "created_at": "2026-09-29T18:22:16.912Z"
+      },
+      {
+        "action": "price.adjust",
+        "actor": "pricing-agent",
+        "step_id": null,
+        "basis": [
+          "经审批 apr-e-10861 批准执行（E3.3 恢复闭环）"
+        ],
+        "created_at": "2026-09-29T18:22:23.785Z"
+      }
+    ]
+  },
+  "client_run": {
+    "status": 200,
+    "data": {
+      "threadId": "T-180",
+      "status": "completed",
+      "stepsDone": 2,
+      "stepsTotal": 2,
+      "unverified": [],
+      "warnings": [
+        "当前部署未配置工具执行桥，写动作（pms.price.write、ota.price.write）将以「未核实」收尾"
+      ],
+      "presetKey": "pricing-agent"
+    }
+  },
+  "db_after_client_run": {
+    "thread": {
+      "id": "T-180",
+      "status": "completed",
+      "agent_id": "agt-pricing-agent",
+      "progress_done": 2,
+      "progress_total": 2,
+      "error": null,
+      "closed_at": "2026-09-29T18:22:37.015Z",
+      "age_s": 3
+    },
+    "approvals": [
+      {
+        "approval_id": "apr-e-10861",
+        "status": "approved",
+        "tier": "l2_captain",
+        "channel": "inapp",
+        "decided_by": "MEM-001",
+        "decided_at": "2026-09-29T18:22:16.911Z",
+        "expires_at": "2026-09-30T18:22:15.825Z"
+      }
+    ],
+    "events": [
+      {
+        "action": "thread.dispatch",
+        "actor": "MEM-001",
+        "step_id": null,
+        "basis": null,
+        "created_at": "2026-09-29T18:22:15.814Z"
+      },
+      {
+        "action": "pms.price.read",
+        "actor": "pricing-agent",
+        "step_id": null,
+        "basis": null,
+        "created_at": "2026-09-29T18:22:15.822Z"
+      },
+      {
+        "action": "price.adjust",
+        "actor": "pricing-agent",
+        "step_id": null,
+        "basis": [
+          "越围栏挂起：围栏无法求值（缺参数）→ 一律人工裁决：R1: - 期望数字，得到 undefined；R2: < 期望数字，得到 undefined"
+        ],
+        "created_at": "2026-09-29T18:22:15.824Z"
+      },
+      {
+        "action": "approval.gesture",
+        "actor": "MEM-001",
+        "step_id": null,
+        "basis": null,
+        "created_at": "2026-09-29T18:22:16.912Z"
+      },
+      {
+        "action": "price.adjust",
+        "actor": "pricing-agent",
+        "step_id": null,
+        "basis": [
+          "经审批 apr-e-10861 批准执行（E3.3 恢复闭环）"
+        ],
+        "created_at": "2026-09-29T18:22:23.785Z"
+      }
+    ]
+  }
+}

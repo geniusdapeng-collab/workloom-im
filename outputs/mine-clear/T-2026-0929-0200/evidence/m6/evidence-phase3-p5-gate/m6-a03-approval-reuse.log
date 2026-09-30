@@ -1,0 +1,10 @@
++ /Users/mac/WorkLoom-fleet/.wt-mcd-m6/node_modules/.bin/tsx --env-file=/Users/mac/Documents/Codex/2026-09-29/https-cnb-cool-workloom-ai-workloom-5/work/env-p5 /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/assertions/m1-approval-reuse.mts
+场景 A：snapshot 无 object/action 绑定（非步骤级路径产生）
+  · 第 1 次写动作：拒绝（审批「apr-mc106-muna1732-unbound」未绑定任何写动作（缺 snapshot.action）——未绑定的审批不得作为高危写动作的通行授权（MC-106 fail-closed））
+  · 第 2 次写动作：拒绝（审批「apr-mc106-muna1732-unbound」未绑定任何写动作（缺 snapshot.action）——未绑定的审批不得作为高危写动作的通行授权（MC-106 fail-closed））
+  期望：两次都拒绝（缺绑定不得作为高危写授权）。实测：第一次 拒绝、第二次 拒绝
+场景 B：snapshot 已绑定 object/action
+  · 第 1 次写动作：放行（事件 E-11917）
+  · 第 2 次写动作：拒绝（审批「apr-mc106-muna1732-bound」已被消费（一次性授权，L3.5），同一审批不得驱动第二次写动作，须重新审批）
+  期望：第一次放行、第二次拒绝（逐次授权 = 一次性）。实测：第一次 放行、第二次 拒绝
+OK：无绑定审批被拒；绑定审批一次性消费

@@ -1,0 +1,65 @@
+{
+  "id": "MC-411",
+  "kind": "fix",
+  "covers": [
+    "MC-301"
+  ],
+  "level": "L3",
+  "severity": "P1",
+  "batch": 1,
+  "title": "派遣「计数 + 建档」同事务串行化：L3.1 工作区并发上限不可被并发请求击穿",
+  "state": "fixed",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "apps/server/src/trpc/router.ts#threads.dispatch@6828469",
+      "note": "BEGIN 后先取 pg_advisory_xact_lock(hashtext('thread-dispatch:<workspace>'))，再做 queued+新鲜 running 计数与建档；超限在锁内抛 TOO_MANY_REQUESTS"
+    },
+    {
+      "type": "log",
+      "ref": "evidence/fix-c/final-m2-02.log",
+      "note": "B1 15 路并发：accepted=10 / rejected=5（全 429「并发上限 10/工作区（L3.1/G11）」）；B3 被拒请求 0 建档"
+    },
+    {
+      "type": "log",
+      "ref": "evidence/fix-c/red-m2-02.log",
+      "note": "修复前同口径红：15/15 全部放行（并发穿透）"
+    }
+  ],
+  "root_cause": {
+    "file": "apps/server/src/trpc/router.ts",
+    "line": 1114,
+    "symbol": "threadsRouter.dispatch",
+    "commit": "4ff9943"
+  },
+  "fix_plan": "dispatch 事务内加工作区级事务 advisory lock（hashtext 键），锁内完成 RLS 上下文 → 计数 → 建档 → 派遣事件；锁随 COMMIT/ROLLBACK 释放。",
+  "blast_radius": "同工作区并发派遣被串行化（毫秒级持锁）；跨工作区互不影响；被拒请求整体回滚（无半截线程/事件）。未改调度器侧口径（见 FIX-C-02）。",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "ws-yunqi 抢占前 queued+running=0，15 路并发 threads.dispatch",
+      "expect": "接受数 ≤10，其余 429 且不建档",
+      "command": "M2_REPO=/Users/mac/WorkLoom-fleet/.wt-mcd-fc M2_BASE=http://127.0.0.1:8951 M2_ENV_FILE=work/env-fc M2_OUT=work/fix-c/m2out node outputs/mine-clear/T-2026-0929-0200/assertions/m2-02-concurrency.mjs",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-c/final-m2-01.log"
+    },
+    {
+      "kind": "property",
+      "given": "任意并发度 N 与抢占前占用 K",
+      "expect": "任意时刻 count(queued ∪ 新鲜 running) ≤ 10",
+      "command": "M2_REPO=/Users/mac/WorkLoom-fleet/.wt-mcd-fc M2_BASE=http://127.0.0.1:8951 M2_ENV_FILE=work/env-fc M2_OUT=work/fix-c/m2out node outputs/mine-clear/T-2026-0929-0200/assertions/m2-02-concurrency.mjs",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-c/final-m2-01.log"
+    }
+  ],
+  "regression": {
+    "command": "M2_REPO=/Users/mac/WorkLoom-fleet/.wt-mcd-fc M2_BASE=http://127.0.0.1:8951 M2_ENV_FILE=work/env-fc node outputs/mine-clear/T-2026-0929-0200/assertions/m2-02-concurrency.mjs",
+    "evidence": "evidence/fix-c/final-m2-02.log"
+  },
+  "rollback": "回滚 f199d92（router.ts 部分）：删除事务内 advisory lock 一行即可恢复旧口径（并发穿透风险回归）。",
+  "fixed_by": "fixer-C",
+  "verified_by": null,
+  "conflict_paths": [
+    "apps/server/src/trpc/router.ts"
+  ]
+}

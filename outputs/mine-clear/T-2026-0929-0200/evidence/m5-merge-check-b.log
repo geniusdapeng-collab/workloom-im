@@ -1,0 +1,10 @@
+## 合并批 B 后在任务分支（含批 B 提交）上的集成复跑
+基线：task/T-2026-0929-0200 @ 0b8bf71
+=== 第 3 次：放宽提案（level=auto）→ confirmDryRun 400（已拒绝，符合『只可加严』）
+
+=== verdict
+attempt1: FAILED at confirm
+attempt2: OK (approved+applied)
+attempt3 (loosen): OK (rejected)
+attempt2 readback: [{"id":"fr-r7-v5-ws-yunqi","version":"v5","level":"block","status":"active"}]
+attempt2 生效校验：OK

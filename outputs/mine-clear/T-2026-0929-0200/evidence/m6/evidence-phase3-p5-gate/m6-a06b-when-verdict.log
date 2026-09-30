@@ -1,0 +1,9 @@
++ bash /Users/mac/Documents/Codex/2026-09-29/https-cnb-cool-workloom-ai-workloom-5/work/m6/verify-when.sh
+OK   a05 无放行位：两次 when 改写均被拒（400 x 2）
+OK   a05 拒绝文案指名可达参数 allowWhenChange=true
+OK   a05 放宽提案被拒（只可加严）
+OK   a06 带放行位：confirmDryRun 200（2 次）
+OK   a06 审批手势 approved
+OK   a06 生效行 active 且基线锚点行仍 active
+OK   a06 attempt2 生效校验 OK
+OK   a06 放宽提案被拒（只可加严）

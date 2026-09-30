@@ -1,0 +1,28 @@
+✓ ① 前置：记录出征前班次状态 —— 无班次（未配置）
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+apiRequestContext.post: connect ECONNREFUSED 127.0.0.1:8787
+Call log:
+[2m  - → POST http://127.0.0.1:8787/trpc/auth.loginAs[22m
+[2m    - user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36[22m
+[2m    - accept: */*[22m
+[2m    - accept-encoding: gzip,deflate,br[22m
+[2m    - content-type: application/json[22m
+[2m    - content-length: 51[22m
+
+    at loginAsMember (/Users/mac/WorkLoom-fleet/workloom-im-mcdacc/scripts/acceptance/lib/session.mjs:22:34)
+    at /Users/mac/Documents/Codex/2026-09-29/https-cnb-cool-workloom-ai-workloom-5/work/m6/phase3-ui/assert-brake-p5.mjs:46:7 {
+  log: [
+    '  - → POST http://127.0.0.1:8787/trpc/auth.loginAs',
+    '    - user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36',
+    '    - accept: */*',
+    '    - accept-encoding: gzip,deflate,br',
+    '    - content-type: application/json',
+    '    - content-length: 51'
+  ],
+  name: 'Error'
+}
+
+Node.js v24.19.0

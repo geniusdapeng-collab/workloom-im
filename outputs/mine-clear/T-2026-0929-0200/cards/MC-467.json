@@ -1,0 +1,58 @@
+{
+  "id": "MC-467",
+  "kind": "fix",
+  "batch": 3,
+  "state": "fixed",
+  "title": "R2 修复：套件 R-06 对遗留 pending 敏感（污染库假红 469/470）",
+  "covers": [
+    "MC-507"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "scripts/suite.ts:2686@88e6b51",
+      "note": "修复提交 88e6b51"
+    },
+    {
+      "type": "log",
+      "ref": "work/fix-f/suite-red-n1.log → suite-green-n1.log（470/470）",
+      "note": "红→绿对照"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/FIX-F-REPORT.md",
+      "note": "修复报告（根因/修法/回归/回滚）"
+    }
+  ],
+  "fix_plan": "见 FIX-F-REPORT.md §3（根因 + 代码级修法 + 证据）",
+  "blast_radius": "见 FIX-F-REPORT.md 对应小节",
+  "conflict_paths": [
+    "scripts/suite.ts"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "复跑 MC-507",
+      "expect": "转绿",
+      "command": "注入 25 条遗留 L2 待批后跑套件",
+      "last_result": "pass",
+      "evidence": "work/fix-f/suite-red-n1.log → suite-green-n1.log（470/470）"
+    },
+    {
+      "kind": "property",
+      "given": "同类输入/重复执行",
+      "expect": "保持通过（幂等、不依赖遗留数据）",
+      "command": "注入 25 条遗留 L2 待批后跑套件",
+      "last_result": "pass",
+      "evidence": "work/fix-f/suite-red-n1.log → suite-green-n1.log（470/470）"
+    }
+  ],
+  "regression": {
+    "command": "bash work/fix-f/run-regression.sh（8/8 PASS）",
+    "evidence": "work/fix-f/reg-*.log"
+  },
+  "rollback": "git revert 88e6b51",
+  "fixed_by": "fixer-F",
+  "verified_by": null,
+  "notes": "R2 复验由独立验证会话与独立验收会话执行。"
+}

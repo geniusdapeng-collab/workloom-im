@@ -1,0 +1,84 @@
+{
+  "threadId": "T-110",
+  "approvalId": "apr-e-9132",
+  "dispatch": {
+    "kind": "routed",
+    "mode": "quest",
+    "via": "rule",
+    "threadId": "T-110",
+    "status": "pending_review",
+    "stepsDone": 1,
+    "stepsTotal": 2,
+    "warnings": [
+      "当前部署未配置工具执行桥，写动作（pms.price.write、ota.price.write）将以「未核实」收尾"
+    ]
+  },
+  "threadFinal": {
+    "id": "T-110",
+    "title": "把周五主打款调价 5%（m2munc6ai1-主线）",
+    "mode": "quest",
+    "status": "completed",
+    "progress_done": 2,
+    "progress_total": 2,
+    "created_by": "MEM-001",
+    "agent_id": "agt-pricing-agent",
+    "created_at": "2026-09-29T23:57:31.440Z",
+    "updated_at": "2026-09-29T23:57:38.112Z",
+    "pending_approval_id": null,
+    "preset_key": "pricing-agent"
+  },
+  "execEvent": {
+    "who": {
+      "id": "competitor-agent",
+      "type": "agent",
+      "version": "v1.1"
+    },
+    "object": {
+      "type": "competitor"
+    },
+    "context": {
+      "time": "2026-09-29T15:14:59.765Z",
+      "tenant_id": "tenant-demo",
+      "workspace_id": "ws-yunqi"
+    },
+    "receipt": {
+      "mode": "simulated",
+      "synced": true,
+      "verified_at": "2026-09-29T15:14:59.765Z",
+      "snapshot_uri": "workloom-sim://receipt/competitor.crawl/mumtiblh"
+    },
+    "decision": {
+      "tool": "competitor.crawl",
+      "after": {
+        "result": {
+          "input": {},
+          "state": "simulated"
+        }
+      },
+      "action": "competitor.crawl",
+      "effect": "read",
+      "params": {},
+      "step_id": "s1"
+    },
+    "event_id": "E-9135",
+    "model_trace": {
+      "tier": "standard",
+      "credits": 1,
+      "model_id": "simulated-runtime"
+    },
+    "rule_impact": []
+  },
+  "gestureEvent": null,
+  "stall": {
+    "ok": true,
+    "waitedMs": 6033,
+    "last": {
+      "ok": true,
+      "status": "completed",
+      "progress_done": 2,
+      "progress_total": 2
+    }
+  },
+  "elapsedMs": 6819,
+  "title": "把周五主打款调价 5%（m2munc6ai1-主线）"
+}

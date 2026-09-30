@@ -1,0 +1,15 @@
++ pnpm -C /Users/mac/WorkLoom-fleet/.wt-mcd-m6/apps/webc build
+
+> @workloom/webc@0.1.0 build /Users/mac/WorkLoom-fleet/.wt-mcd-m6/apps/webc
+> vite build
+
+vite v8.3.0 building client environment for production...
+transforming...
+✓ 53 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.56 kB │ gzip:  0.39 kB
+dist/assets/index-D1XNmZk7.css   77.66 kB │ gzip: 14.20 kB
+dist/assets/index-x9X8C600.js   281.48 kB │ gzip: 87.16 kB
+
+✓ built in 89ms

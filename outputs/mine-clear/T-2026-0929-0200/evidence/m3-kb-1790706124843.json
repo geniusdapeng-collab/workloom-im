@@ -1,0 +1,396 @@
+{
+  "probe": "m3-kb-linkage",
+  "started_at": "2026-09-29T18:22:04.728Z",
+  "base": "http://127.0.0.1:8981",
+  "workspaceSlug": "ai-pm-demo",
+  "memberNo": "MEM-001",
+  "mark": "M3KB1790706124728",
+  "assertions": [
+    {
+      "name": "B 端登录",
+      "ok": true,
+      "detail": "ws-aipm-demo"
+    },
+    {
+      "name": "C 端会话建立（h5 演示直登）",
+      "ok": true,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "name": "存在知识集可挂载探针文档",
+      "ok": true,
+      "detail": {
+        "collections": [
+          "需求池",
+          "竞品档案",
+          "用户反馈",
+          "产出档案",
+          "评测中心"
+        ]
+      }
+    },
+    {
+      "name": "探针口令在变更前不可检索（基线）",
+      "ok": true,
+      "detail": {
+        "hits": 0
+      }
+    },
+    {
+      "name": "上传返回 documentId",
+      "ok": true,
+      "detail": {
+        "documentId": "kbd-mun06wvh00241fo",
+        "version": 1,
+        "chunks": 1
+      }
+    },
+    {
+      "name": "新文档落 pending_review",
+      "ok": true,
+      "detail": {
+        "status": "pending_review",
+        "version": 1
+      }
+    },
+    {
+      "name": "待审区可见新文档",
+      "ok": true,
+      "detail": {
+        "pending": 1
+      }
+    },
+    {
+      "name": "待审文档不入检索索引（承诺口径）",
+      "ok": true,
+      "detail": {
+        "hits": 0
+      }
+    },
+    {
+      "name": "上传动作不产生 pending 审批（变更前对照）",
+      "ok": true,
+      "detail": {
+        "before": 4,
+        "after": 4
+      }
+    },
+    {
+      "name": "approveDocument 成功",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "status": "active",
+        "eventId": "E-10844",
+        "approvalId": "apr-e-10844",
+        "deduped": false
+      }
+    },
+    {
+      "name": "文档状态 → active",
+      "ok": true,
+      "detail": {
+        "status": "active"
+      }
+    },
+    {
+      "name": "生效后可检索（索引面联动）",
+      "ok": true,
+      "detail": {
+        "hits": 1,
+        "first": "M3 联动探针知识条目 M3KB1790706124728"
+      }
+    },
+    {
+      "name": "待审区已移除该文档",
+      "ok": true,
+      "detail": {
+        "pending": 0
+      }
+    },
+    {
+      "name": "审批中心出现 kb.publish 记录（承诺联动）",
+      "ok": true,
+      "detail": {
+        "record": {
+          "approval_id": "apr-e-10844",
+          "status": "approved",
+          "decided_by": "MEM-001"
+        }
+      }
+    },
+    {
+      "name": "记录为已裁决（approved + 决策人）：不存在「动作已执行却待办」的幽灵条目",
+      "ok": true,
+      "detail": {
+        "status": "approved",
+        "decided_by": "MEM-001"
+      }
+    },
+    {
+      "name": "待审列表不含该文档（幽灵待办消失）",
+      "ok": true,
+      "detail": {
+        "pending": 4
+      }
+    },
+    {
+      "name": "C 端问答能引用生效后的知识（问答入口数据源覆盖）",
+      "ok": true,
+      "detail": {
+        "answer": "本条目由 M3 联动探针写入（标记 M3KB1790704734225）。\n\n- 探针口令：北极星布草协议\n- 布草更换周期：72 小时\n- 生效范围：仅用于排雷证据取证，不属于经营数据\n本条目由 M3 联动探针写入（标记 M3KB1790705232438）。\n\n- 探针口令：北极星布草协议\n- 布草更换周期：72 小时\n- 生效范围：仅用于排雷证据取证，不属于经营数据"
+      }
+    },
+    {
+      "name": "终态审批重复裁决幂等（deduped），知识库/检索面不被改坏",
+      "ok": true,
+      "detail": {
+        "approval": "approved",
+        "deduped": true,
+        "doc": "active",
+        "hits": 1
+      }
+    }
+  ],
+  "c_session": {
+    "status": 200,
+    "user": {
+      "id": "cu-mun06wuj003c6yy",
+      "workspaceId": "ws-aipm-demo",
+      "channel": "h5",
+      "openid": "m3-probe-M3KB1790706124728",
+      "nickname": "M3 探针客户",
+      "memberId": null,
+      "verified": false,
+      "createdAt": "2026-09-29T18:22:04.746Z",
+      "authMode": "demo"
+    },
+    "error": null
+  },
+  "before": {
+    "docsBefore": 55,
+    "pendingBefore": 0,
+    "approvals": 4,
+    "searchHits": 0
+  },
+  "chat_before": {
+    "status": 200,
+    "data": {
+      "conversationId": "cvn-mun06wva001cpml",
+      "intent": "kb_qa",
+      "answer": "本条目由 M3 联动探针写入（标记 M3KB1790704734225）。\n\n- 探针口令：北极星布草协议\n- 布草更换周期：72 小时\n- 生效范围：仅用于排雷证据取证，不属于经营数据\n本条目由 M3 联动探针写入（标记 M3KB1790705232438）。\n\n- 探针口令：北极星布草协议\n- 布草更换周期：72 小时\n- 生效范围：仅用于排雷证据取证，不属于经营数据",
+      "confidence": 0.8685,
+      "citations": [
+        {
+          "documentTitle": "M3 联动探针知识条目 M3KB1790704734225",
+          "heading": "",
+          "content": "# M3 联动探针知识条目 M3KB1790704734225\n\n本条目由 M3 联动探针写入（标记 M3KB1790704734225）。\n\n- 探针口令：北极星布草协议\n- 布草更换周期：72 小时\n- 生效范围：仅用于排雷证据取证，不属于经营数据"
+        },
+        {
+          "documentTitle": "M3 联动探针知识条目 M3KB1790705232438",
+          "heading": "",
+          "content": "# M3 联动探针知识条目 M3KB1790705232438\n\n本条目由 M3 联动探针写入（标记 M3KB1790705232438）。\n\n- 探针口令：北极星布草协议\n- 布草更换周期：72 小时\n- 生效范围：仅用于排雷证据取证，不属于经营数据"
+        },
+        {
+          "documentTitle": "M3 联动探针知识条目 M3KB1790705631680",
+          "heading": "",
+          "content": "# M3 联动探针知识条目 M3KB1790705631680\n\n本条目由 M3 联动探针写入（标记 M3KB1790705631680）。\n\n- 探针口令：北极星布草协议\n- 布草更换周期：72 小时\n- 生效范围：仅用于排雷证据取证，不属于经营数据"
+        }
+      ],
+      "cards": [],
+      "ticket": null,
+      "ticketDraft": null,
+      "latencyMs": 3,
+      "mock": true
+    }
+  },
+  "upload": {
+    "documentId": "kbd-mun06wvh00241fo",
+    "version": 1,
+    "chunks": 1
+  },
+  "approve_document": {
+    "status": 200,
+    "data": {
+      "ok": true,
+      "status": "active",
+      "eventId": "E-10844",
+      "approvalId": "apr-e-10844",
+      "deduped": false
+    }
+  },
+  "approval_after_approve": {
+    "total": 18,
+    "record": {
+      "approval_id": "apr-e-10844",
+      "tenant_id": "demo",
+      "workspace_id": "ws-aipm-demo",
+      "event_id": "E-10844",
+      "channel": "inapp",
+      "status": "approved",
+      "gesture": {
+        "type": "approve",
+        "weight": 1,
+        "reason_text": "待审区「批准生效」（逐条人审）"
+      },
+      "snapshot": {
+        "after": {
+          "documentId": "kbd-mun06wvh00241fo",
+          "fence_action": "kb.publish"
+        },
+        "basis": "批准动作的当场留痕（不可回滚）；撤回请走知识库「停用」，同样写事件留痕（MC-110）",
+        "post_hoc": true,
+        "high_risk": false
+      },
+      "decided_by": "MEM-001",
+      "decided_at": "2026-09-29T18:22:04.797Z",
+      "created_at": "2026-09-29T18:22:04.797Z",
+      "tier": "l2_captain",
+      "payload": {
+        "who": {
+          "id": "MEM-001",
+          "type": "human"
+        },
+        "object": {
+          "id": "kbd-mun06wvh00241fo",
+          "type": "kb_document"
+        },
+        "context": {
+          "time": "2026-09-29T18:22:04.797Z",
+          "channel": "inapp",
+          "tenant_id": "demo",
+          "workspace_id": "ws-aipm-demo"
+        },
+        "decision": {
+          "after": {
+            "title": "M3 联动探针知识条目 M3KB1790706124728",
+            "status": "active",
+            "version": 1,
+            "approved_by": "MEM-001"
+          },
+          "basis": [
+            "待审区逐条人审后发布：文档进入客户问答检索范围（INV-4）",
+            "审批记录与文档生效同一 COMMIT 落库（MC-110：不再产生「已执行却待办」的幽灵条目）"
+          ],
+          "action": "kb.publish"
+        },
+        "event_id": "E-10844",
+        "rule_impact": []
+      },
+      "event": {
+        "who": {
+          "id": "MEM-001",
+          "type": "human"
+        },
+        "object": {
+          "id": "kbd-mun06wvh00241fo",
+          "type": "kb_document"
+        },
+        "context": {
+          "time": "2026-09-29T18:22:04.797Z",
+          "channel": "inapp",
+          "tenant_id": "demo",
+          "workspace_id": "ws-aipm-demo"
+        },
+        "decision": {
+          "after": {
+            "title": "M3 联动探针知识条目 M3KB1790706124728",
+            "status": "active",
+            "version": 1,
+            "approved_by": "MEM-001"
+          },
+          "basis": [
+            "待审区逐条人审后发布：文档进入客户问答检索范围（INV-4）",
+            "审批记录与文档生效同一 COMMIT 落库（MC-110：不再产生「已执行却待办」的幽灵条目）"
+          ],
+          "action": "kb.publish"
+        },
+        "event_id": "E-10844",
+        "rule_impact": []
+      }
+    },
+    "pending": 4
+  },
+  "chat_after": {
+    "status": 200,
+    "data": {
+      "conversationId": "cvn-mun06wwm002fdvy",
+      "intent": "kb_qa",
+      "answer": "本条目由 M3 联动探针写入（标记 M3KB1790704734225）。\n\n- 探针口令：北极星布草协议\n- 布草更换周期：72 小时\n- 生效范围：仅用于排雷证据取证，不属于经营数据\n本条目由 M3 联动探针写入（标记 M3KB1790705232438）。\n\n- 探针口令：北极星布草协议\n- 布草更换周期：72 小时\n- 生效范围：仅用于排雷证据取证，不属于经营数据",
+      "confidence": 0.8685,
+      "citations": [
+        {
+          "documentTitle": "M3 联动探针知识条目 M3KB1790704734225",
+          "heading": "",
+          "content": "# M3 联动探针知识条目 M3KB1790704734225\n\n本条目由 M3 联动探针写入（标记 M3KB1790704734225）。\n\n- 探针口令：北极星布草协议\n- 布草更换周期：72 小时\n- 生效范围：仅用于排雷证据取证，不属于经营数据"
+        },
+        {
+          "documentTitle": "M3 联动探针知识条目 M3KB1790705232438",
+          "heading": "",
+          "content": "# M3 联动探针知识条目 M3KB1790705232438\n\n本条目由 M3 联动探针写入（标记 M3KB1790705232438）。\n\n- 探针口令：北极星布草协议\n- 布草更换周期：72 小时\n- 生效范围：仅用于排雷证据取证，不属于经营数据"
+        },
+        {
+          "documentTitle": "M3 联动探针知识条目 M3KB1790705631680",
+          "heading": "",
+          "content": "# M3 联动探针知识条目 M3KB1790705631680\n\n本条目由 M3 联动探针写入（标记 M3KB1790705631680）。\n\n- 探针口令：北极星布草协议\n- 布草更换周期：72 小时\n- 生效范围：仅用于排雷证据取证，不属于经营数据"
+        }
+      ],
+      "cards": [],
+      "ticket": null,
+      "ticketDraft": null,
+      "latencyMs": 5,
+      "mock": true
+    }
+  },
+  "reject": {
+    "status": 200,
+    "data": {
+      "approvalId": "apr-e-10844",
+      "status": "approved",
+      "deduped": true
+    }
+  },
+  "after_reject": {
+    "doc_status": "active",
+    "search_hits": 1,
+    "decide": {
+      "approvalId": "apr-e-10844",
+      "status": "approved",
+      "deduped": true
+    }
+  },
+  "db": {
+    "events": [
+      {
+        "action": "kb.document.upsert",
+        "actor": "MEM-001",
+        "event_id": "E-10843",
+        "created_at": "2026-09-29T18:22:04.781Z"
+      },
+      {
+        "action": "kb.publish",
+        "actor": "MEM-001",
+        "event_id": "E-10844",
+        "created_at": "2026-09-29T18:22:04.797Z"
+      }
+    ],
+    "approvals": [
+      {
+        "approval_id": "apr-e-10844",
+        "status": "approved",
+        "decided_by": "MEM-001",
+        "snapshot": {
+          "after": {
+            "documentId": "kbd-mun06wvh00241fo",
+            "fence_action": "kb.publish"
+          },
+          "basis": "批准动作的当场留痕（不可回滚）；撤回请走知识库「停用」，同样写事件留痕（MC-110）",
+          "post_hoc": true,
+          "high_risk": false
+        }
+      }
+    ]
+  }
+}

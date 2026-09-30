@@ -1,0 +1,2 @@
++ bash /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/assertions/assert-m4.sh MC-201 --repo /Users/mac/WorkLoom-fleet/.wt-mcd-m6
+PASS  MC-201 :: 文档产物名与产线一致：WorkLoom-mac-arm64.dmg WorkLoom-mac-x64.dmg WorkLoom-win-x64.exe 

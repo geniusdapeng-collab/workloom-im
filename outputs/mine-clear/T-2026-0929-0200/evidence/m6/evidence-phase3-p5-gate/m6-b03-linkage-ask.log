@@ -1,0 +1,45 @@
++ node /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-ask.mjs
+✓ B 端登录 :: "ws-yunqi"
+
+[approvals] 当前有多少待审批事项？
+  A: 关于「当前有多少待审批事项？」：
+· 当前待审批：91 项（决断队列）
+· 事件库规模：3023 条五元事件（哈希链可验）
+以上数字均来自事件库实时取数，可下钻溯源。
+  sources: ["biz_events","biz_events 近窗聚合","approvals","c_tickets","threads","fence_rules","org_memory","night_runs"]
+
+[threads] 现在有多少进行中的任务？
+  A: 关于「现在有多少进行中的任务？」：
+· 进行中线程：23 条
+· 事件库规模：3025 条五元事件（哈希链可验）
+以上数字均来自事件库实时取数，可下钻溯源。
+  sources: ["biz_events","biz_events 近窗聚合","c_tickets","threads","fence_rules","org_memory","night_runs"]
+
+[kb] 住客问：房间里的毛巾多久更换一次？
+  A: 关于「住客问：房间里的毛巾多久更换一次？」：
+· 知识库·住客常见问答·网络与设施（房间里USB口不能充电怎么办？）：可先换用床头五孔插座；USB口故障请致电前台0报修，工程部会在120分钟内上门处理。
+以上内容来自知识库检索，可下钻溯源。
+  sources: ["kb:kbd-faq-network","biz_events","biz_events 近窗聚合","c_tickets","threads","fence_rules","org_memory","night_runs"]
+
+[tickets] 今天服务台收到多少工单，处理进度怎么样？
+  A: 关于「今天服务台收到多少工单，处理进度怎么样？」：
+· 服务台工单：20 条未办结（SLA 超时 1 条）
+· 事件库规模：3029 条五元事件（哈希链可验）
+以上数字均来自事件库实时取数，可下钻溯源。
+  sources: ["biz_events","biz_events 近窗聚合","c_tickets","threads","fence_rules","org_memory","night_runs"]
+
+[night] 昨晚夜班完成了哪些工作？
+  A: 关于「昨晚夜班完成了哪些工作？」：
+· 最近夜班：2099-08-01-stmun9x0gg 班次待开工（候选 0 项）
+· 事件库规模：3031 条五元事件（哈希链可验）
+以上数字均来自事件库实时取数，可下钻溯源。
+  sources: ["biz_events","biz_events 近窗聚合","c_tickets","threads","fence_rules","org_memory","night_runs"]
+✓ 审批类问题有事实依据（approvals 域覆盖） :: {"answer":"关于「当前有多少待审批事项？」：\n· 当前待审批：91 项（决断队列）\n· 事件库规模：3023 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。","sources":["biz_events","biz_events 近窗聚合","approvals","c_tickets","threads","fence_rules","org_memory","night_runs"]}
+✓ 线程类问题有事实依据（threads 域覆盖） :: {"answer":"关于「现在有多少进行中的任务？」：\n· 进行中线程：23 条\n· 事件库规模：3025 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。","sources":["biz_events","biz_events 近窗聚合","c_tickets","threads","fence_rules","org_memory","night_runs"]}
+✓ 知识库问题能引用库内知识（kb 域覆盖） :: {"sources":["kb:kbd-faq-network","biz_events","biz_events 近窗聚合","c_tickets","threads","fence_rules","org_memory","night_runs"],"answer":"关于「住客问：房间里的毛巾多久更换一次？」：\n· 知识库·住客常见问答·网络与设施（房间里USB口不能充电怎么办？）：可先换用床头五孔插座；USB口故障请致电前台0报修，工程部会在120分钟内上门处理。\n以上内容来自知识库检索，可下钻溯源。"}
+✓ [数据源覆盖] 工单域进入事实面（c_tickets：真实未办结计数） :: {"sources":["biz_events","biz_events 近窗聚合","c_tickets","threads","fence_rules","org_memory","night_runs"],"answer":"关于「今天服务台收到多少工单，处理进度怎么样？」：\n· 服务台工单：20 条未办结（SLA 超时 1 条）\n· 事件库规模：3029 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。"}
+✓ [数据源覆盖] 夜班域进入事实面（night_runs：班次/状态/候选数） :: {"sources":["biz_events","biz_events 近窗聚合","c_tickets","threads","fence_rules","org_memory","night_runs"],"answer":"关于「昨晚夜班完成了哪些工作？」：\n· 最近夜班：2099-08-01-stmun9x0gg 班次待开工（候选 0 项）\n· 事件库规模：3031 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。"}
+✓ 系统类问答不得被知识库 FAQ 挤占（approvals 取数来源无 kb:） :: {"sources":["biz_events","biz_events 近窗聚合","approvals","c_tickets","threads","fence_rules","org_memory","night_runs"]}
+✓ 落款与实际取数来源一致（KB-only 答案不声称事件库数字） :: {"answer":"关于「当前有多少待审批事项？」：\n· 当前待审批：91 项（决断队列）\n· 事件库规模：3023 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。"}
+
+联动探针 4：8/8 通过；证据 → /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/evidence/m3-a<redacted-api-key>.json

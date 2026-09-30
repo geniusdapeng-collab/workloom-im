@@ -1,0 +1,10 @@
+· threadId=T-161 kind=routed
+· 派发后状态=pending_review（期望 pending_review）事件=3
+· 线程时间线动作：["thread.dispatch","pms.price.read","price.adjust"]
+· 人工决策未进入线程时间线（approval.gesture 无 session_id）
+· decide -> 200 {"approvalId":"apr-e-10518","status":"approved","deduped":false,"gestureEventId":"E-10519"}
+· 5s 状态 pending_review → queued
+· 10s 状态 queued → completed
+
+结论：审批通过后 60s 内 → status=completed events=3→5
+✓ 审批后自动续跑至 completed

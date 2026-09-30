@@ -1,0 +1,283 @@
+{
+  "title": "M2-05 状态机遍历",
+  "started_at": "2026-09-29T17:28:33.608Z",
+  "finished_at": "2026-09-29T17:29:32.346Z",
+  "base": "http://127.0.0.1:8899",
+  "suffix": "m2mumya33r",
+  "total": 20,
+  "passed": 5,
+  "failed": 11,
+  "checks": [
+    {
+      "name": "S0 线程状态分布（跑前）",
+      "ok": null,
+      "detail": [
+        {
+          "status": "completed",
+          "n": 51
+        },
+        {
+          "status": "pending_review",
+          "n": 29
+        },
+        {
+          "status": "failed",
+          "n": 4
+        },
+        {
+          "status": "cancelled",
+          "n": 4
+        },
+        {
+          "status": "paused",
+          "n": 1
+        }
+      ]
+    },
+    {
+      "name": "S0 审批状态分布（跑前）",
+      "ok": null,
+      "detail": [
+        {
+          "status": "pending",
+          "n": 30
+        },
+        {
+          "status": "approved",
+          "n": 9
+        },
+        {
+          "status": "expired",
+          "n": 5
+        },
+        {
+          "status": "rejected",
+          "n": 4
+        }
+      ]
+    },
+    {
+      "name": "H1 两条入口（立即执行 / 调度器）对同一目标产出一致计划",
+      "ok": true,
+      "detail": {
+        "immediate": [
+          "s1:competitor.crawl:competitor.crawl:{}"
+        ],
+        "scheduler": [
+          "s1:competitor.crawl:competitor.crawl:{}"
+        ],
+        "verdict": "一致"
+      }
+    },
+    {
+      "name": "I1 「差评并回复」目标必须由持有 review.reply 的岗位执行（不得无关工具「完成」）",
+      "ok": false,
+      "detail": {
+        "thread": "T-139",
+        "row": {
+          "status": "failed",
+          "preset_key": "competitor-agent",
+          "review_steps": 0,
+          "exec_steps": 1
+        },
+        "verdict": "未命中：岗位=competitor-agent，执行步骤=1（交付物与目标无关）"
+      }
+    },
+    {
+      "name": "J1 出厂档案下价带内调价应命中 R1 自动执行（不得因缺价带一律转人工）",
+      "ok": false,
+      "detail": {
+        "thread": "T-140",
+        "threadStatus": "pending_review",
+        "approval": "apr-e-9204",
+        "params_incomplete": true,
+        "warning": "围栏无法求值（缺参数，已按人工裁决而非熔断处理）：R1: - 期望数字，得到 undefined；R2: < 期望数字，得到 undefined。请补齐参数或驳",
+        "verdict": "缺价带 → 围栏无法求值 → 一律人工（R1 自动/R2 熔断不可达）"
+      }
+    },
+    {
+      "name": "S1 已注入价带（雅致大床房 420–480 / 美团大床房 380–440）",
+      "ok": null,
+      "detail": {
+        "hadBandsBefore": false
+      }
+    },
+    {
+      "name": "A1 auto 视窗内的调价线程跑完（非挂起）",
+      "ok": false,
+      "detail": {
+        "threadId": "T-141",
+        "row": {
+          "status": "pending_review",
+          "error": null,
+          "progress_done": 1,
+          "progress_total": 3
+        }
+      }
+    },
+    {
+      "name": "A2 写步骤命中 R1（rule_impact 非空）→ 免审批直接执行且带回执",
+      "ok": false,
+      "detail": {
+        "writeEv": {
+          "step": "s2",
+          "action": "price.adjust",
+          "before": null,
+          "after": null,
+          "impacts": 2,
+          "synced": null,
+          "basis": "[\"围栏无法求值（缺参数）→ 一律人工裁决：R1: - 期望数字，得到 undefined；R2: < 期望数字，得到 undefined\"]"
+        },
+        "approvals": 2
+      }
+    },
+    {
+      "name": "B1 越保底价 → 熔断暂停（paused）",
+      "ok": false,
+      "detail": {
+        "threadId": "T-142",
+        "row": {
+          "status": "pending_review",
+          "error": null,
+          "progress_done": 1,
+          "progress_total": 3
+        }
+      }
+    },
+    {
+      "name": "B2 熔断事件写明命中规则（R2）与依据，且不产生审批行",
+      "ok": false,
+      "detail": {
+        "basis": "[\"越围栏挂起：写类动作无规则命中 → default_level=review\"]",
+        "impacts": []
+      }
+    },
+    {
+      "name": "B3 熔断线程重跑不得放行（终态仍非 completed）",
+      "ok": true,
+      "detail": {
+        "retryResult": "pending_review",
+        "row": {
+          "status": "pending_review",
+          "error": null,
+          "progress_done": 1,
+          "progress_total": 3
+        },
+        "note": "重跑会按同一围栏重新判定：仍被熔断或转人审，不会自动放行"
+      }
+    },
+    {
+      "name": "C1 真实数据态无连接器 → 线程 failed（无回执不得宣称完成）",
+      "ok": false,
+      "detail": {
+        "threadId": "T-143",
+        "row": {
+          "status": "cancelled",
+          "error": "步骤被驳回：price.too_high",
+          "progress_done": 2,
+          "progress_total": 3
+        }
+      }
+    },
+    {
+      "name": "C2 未核实步骤如实写 receipt.synced=false（不是省略字段）",
+      "ok": true,
+      "detail": {
+        "total": 2,
+        "unsynced": 2
+      }
+    },
+    {
+      "name": "C3 无回执线程重跑不得直接变 completed（E3.7 回归）",
+      "ok": true,
+      "detail": {
+        "runResult": "completed",
+        "row": {
+          "status": "cancelled",
+          "error": "步骤被驳回：price.too_high",
+          "progress_done": 2,
+          "progress_total": 3
+        },
+        "verdict": "未被绕过"
+      }
+    },
+    {
+      "name": "D1 驳回步骤级审批 → 线程转 cancelled（GR-10 联动）",
+      "ok": false,
+      "detail": {
+        "approvalId": "apr-e-10466",
+        "decide": {
+          "approvalId": "apr-e-10466",
+          "status": "rejected",
+          "deduped": false,
+          "gestureEventId": "E-10467"
+        },
+        "row": {
+          "status": "pending_review",
+          "error": null,
+          "progress_done": 2,
+          "progress_total": 3
+        }
+      }
+    },
+    {
+      "name": "E1 过期审批被扫描标 expired 且有事件",
+      "ok": false,
+      "detail": {
+        "approvalId": "apr-e-10470",
+        "sweep": 0
+      }
+    },
+    {
+      "name": "E2 审批过期后线程仍在 pending_review（线程状态无出口，需人工处理）",
+      "ok": false,
+      "detail": {
+        "thread": "T-145",
+        "threadStatus": "failed",
+        "note": "审批终态（expired/rejected）与线程状态未联动：expired 线程既不能自动续跑也不转终态"
+      }
+    },
+    {
+      "name": "F1 用例环境已恢复（价带移除、未遗留 dataMode 覆盖）",
+      "ok": true,
+      "detail": {
+        "bands": null,
+        "mode": "simulated"
+      }
+    },
+    {
+      "name": "G1 过期审批可由人工重跑恢复（生成新审批行）",
+      "ok": false,
+      "detail": {
+        "old": "apr-e-10470",
+        "runStatus": "pending_review"
+      }
+    },
+    {
+      "name": "S9 线程状态分布（跑后）",
+      "ok": null,
+      "detail": [
+        {
+          "status": "completed",
+          "n": 51
+        },
+        {
+          "status": "pending_review",
+          "n": 29
+        },
+        {
+          "status": "failed",
+          "n": 4
+        },
+        {
+          "status": "cancelled",
+          "n": 4
+        },
+        {
+          "status": "paused",
+          "n": 1
+        }
+      ]
+    }
+  ]
+}

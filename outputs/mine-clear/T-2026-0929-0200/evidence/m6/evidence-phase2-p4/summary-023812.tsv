@@ -1,0 +1,11 @@
+m6-d01-typecheck	PASS	rc=0
+m6-d02-test	PASS	rc=0
+m6-d03-runtime-test	FAIL	rc=1
+m6-d04-base-test	PASS	rc=0
+m6-d05-suite	FAIL	rc=1
+m6-d06-release-gate-dev	PASS	rc=0
+m6-d07-release-gate-prod	PASS	rc=0
+m6-d08-verify-chain	PASS	rc=0
+m6-d09-build-web	PASS	rc=0
+m6-d10-build-webb	PASS	rc=0
+m6-d11-build-webc	PASS	rc=0

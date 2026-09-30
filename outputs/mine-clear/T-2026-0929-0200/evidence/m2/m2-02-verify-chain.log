@@ -1,0 +1,79 @@
+✓ [demo/ws-aipm-demo] 22 条，六项检查全过 · 容忍 seq 小空洞 1396（ON CONFLICT 消耗）
+✓ [tenant-chaos-stmumspbkm/ws-chaos-stmumspbkm] 1 条，六项检查全过
+✓ [tenant-demo/ws-conc-stmumspbkm] 1 条，六项检查全过
+✓ [tenant-demo/ws-suite-b-stmumspbkm] 1 条，六项检查全过
+✓ [tenant-demo/ws-suite-c-stmumspbkm] 1 条，六项检查全过
+✓ [tenant-demo/ws-yunqi] 1486 条，六项检查全过 · 容忍 seq 小空洞 26（ON CONFLICT 消耗）
+
+===== 结构化验证报告（JSON） =====
+{
+  "ok": true,
+  "workspaces": 6,
+  "total_events": 1512,
+  "total_issues": 0,
+  "segments": [
+    {
+      "workspace_id": "ws-aipm-demo",
+      "tenant_id": "demo",
+      "events": 22,
+      "chain_ok": true,
+      "tolerated_seq_gaps": 1396,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 1,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-chaos-stmumspbkm",
+      "tenant_id": "tenant-chaos-stmumspbkm",
+      "events": 1,
+      "chain_ok": true,
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-conc-stmumspbkm",
+      "tenant_id": "tenant-demo",
+      "events": 1,
+      "chain_ok": true,
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-suite-b-stmumspbkm",
+      "tenant_id": "tenant-demo",
+      "events": 1,
+      "chain_ok": true,
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-suite-c-stmumspbkm",
+      "tenant_id": "tenant-demo",
+      "events": 1,
+      "chain_ok": true,
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-yunqi",
+      "tenant_id": "tenant-demo",
+      "events": 1486,
+      "chain_ok": true,
+      "tolerated_seq_gaps": 26,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 18,
+      "issues": []
+    }
+  ]
+}
+
+✅ 全库验证通过：6 个 workspace 段 / 1512 条事件，六项检查全绿
+

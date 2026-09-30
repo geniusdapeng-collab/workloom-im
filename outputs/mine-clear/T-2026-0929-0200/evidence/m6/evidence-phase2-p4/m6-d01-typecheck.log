@@ -1,0 +1,26 @@
++ pnpm -C /Users/mac/WorkLoom-fleet/.wt-mcd-m6 typecheck
+
+> workloom-im@0.1.1 typecheck /Users/mac/WorkLoom-fleet/.wt-mcd-m6
+> pnpm -r --if-present typecheck
+
+Scope: 10 of 11 workspace projects
+packages/industry-contract typecheck$ tsc --noEmit
+packages/shared typecheck$ tsc --noEmit
+packages/ui typecheck$ tsc --noEmit
+packages/industry-contract typecheck: Done
+packages/ui typecheck: Done
+packages/shared typecheck: Done
+apps/webc typecheck$ tsc --noEmit
+packages/db typecheck$ tsc --noEmit
+apps/webc typecheck: Done
+packages/db typecheck: Done
+packages/base typecheck$ tsc --noEmit
+packages/base typecheck: Done
+packages/runtime typecheck$ tsc --noEmit
+packages/runtime typecheck: Done
+apps/server typecheck$ tsc --noEmit
+apps/server typecheck: Done
+apps/webb typecheck$ tsc --noEmit
+apps/web typecheck$ tsc --noEmit
+apps/webb typecheck: Done
+apps/web typecheck: Done

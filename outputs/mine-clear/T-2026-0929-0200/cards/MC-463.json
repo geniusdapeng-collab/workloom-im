@@ -1,0 +1,58 @@
+{
+  "id": "MC-463",
+  "kind": "fix",
+  "batch": 1,
+  "state": "fixed",
+  "title": "R2 修复：落地向导整块替换 archive.business → 清空出厂价带，R1/R2 可达性失效",
+  "covers": [
+    "MC-503"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "apps/server/src/trpc/router.ts:723@2e3ddcb",
+      "note": "修复提交 2e3ddcb"
+    },
+    {
+      "type": "log",
+      "ref": "work/fix-f/red-r2f3-wizard.log → final-r2f3.log（8/8）",
+      "note": "红→绿对照"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/FIX-F-REPORT.md",
+      "note": "修复报告（根因/修法/回归/回滚）"
+    }
+  ],
+  "fix_plan": "见 FIX-F-REPORT.md §3（根因 + 代码级修法 + 证据）",
+  "blast_radius": "见 FIX-F-REPORT.md 对应小节",
+  "conflict_paths": [
+    "apps/server/src/trpc/router.ts"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "复跑 MC-503",
+      "expect": "转绿",
+      "command": "node work/fix-f/assert-r2f3-wizard.mjs",
+      "last_result": "pass",
+      "evidence": "work/fix-f/red-r2f3-wizard.log → final-r2f3.log（8/8）"
+    },
+    {
+      "kind": "property",
+      "given": "同类输入/重复执行",
+      "expect": "保持通过（幂等、不依赖遗留数据）",
+      "command": "node work/fix-f/assert-r2f3-wizard.mjs",
+      "last_result": "pass",
+      "evidence": "work/fix-f/red-r2f3-wizard.log → final-r2f3.log（8/8）"
+    }
+  ],
+  "regression": {
+    "command": "bash work/fix-f/run-regression.sh（8/8 PASS）",
+    "evidence": "work/fix-f/reg-*.log"
+  },
+  "rollback": "git revert 2e3ddcb",
+  "fixed_by": "fixer-F",
+  "verified_by": null,
+  "notes": "R2 复验由独立验证会话与独立验收会话执行。"
+}

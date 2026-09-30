@@ -1,0 +1,15 @@
+m6-a01-approval-resume	PASS	rc=0
+m6-a02-highrisk-batch	PASS	rc=0
+m6-a03-approval-reuse	PASS	rc=0
+m6-a04-fence-rule-change	PASS	rc=0
+m6-a05-fence-when-blocked	FAIL	rc=1
+m6-a06-fence-when-allowed	PASS	rc=0
+m6-a06b-when-verdict	PASS	rc=0
+m6-a14-when-retry-probe	PASS	rc=0
+m6-a07-outcome-trpc-surface	PASS	rc=0
+m6-a08-m2-01-main-loop	PASS	rc=0
+m6-a09-m2-02-concurrency	PASS	rc=0
+m6-a10-m2-03-fault-injection	PASS	rc=0
+m6-a11-m2-04-boundaries	PASS	rc=0
+m6-a12-m2-05-state-machine	FAIL	rc=1
+m6-a13-m2-06-im-callback	PASS	rc=0

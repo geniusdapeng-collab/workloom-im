@@ -1,0 +1,189 @@
+[
+  {
+    "id": "MC-401",
+    "kind": "fix",
+    "batch": 1,
+    "state": "fixed",
+    "title": "围栏规则行版本化：同一 rule_id 可重复提案且批准即生效",
+    "covers": [
+      "MC-102"
+    ],
+    "evidence": [
+      {
+        "type": "code",
+        "ref": "packages/base/fence-engine/lifecycle.ts:171@4e52948",
+        "note": "fenceRuleRowId 版本化 fr-<rule>-v<N>-<ws>"
+      },
+      {
+        "type": "code",
+        "ref": "apps/server/src/trpc/router.ts:2286@4e52948",
+        "note": "插入冲突改为重算版本重试，5 次仍冲突显式报错（取代静默 ON CONFLICT DO NOTHING）"
+      },
+      {
+        "type": "log",
+        "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/green-4-fence-with-dbstate.log",
+        "note": "断言 exit 0；DB：fr-r7-v1 基线 active / fr-r7-v3 block active"
+      },
+      {
+        "type": "log",
+        "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/red-1-fence.log",
+        "note": "修复前同一断言 exit 1（attempt2 未生效）"
+      }
+    ],
+    "fix_plan": "行 ID/版本在事务内按历史最大版本 +1 分配；提案事件携带 ruleRowId/version；激活按行回写并对旧事件按 rule_id 反查兼容",
+    "blast_radius": "围栏规则提案/激活链路；P5 规则中心与 night-shift 围栏快照（后者按 is_baseline 取基线行，未改）",
+    "conflict_paths": [
+      "packages/base/fence-engine/lifecycle.ts",
+      "apps/server/src/trpc/router.ts"
+    ],
+    "assertions": [
+      {
+        "kind": "sample",
+        "given": "R7 连续两次加严（review → block）并逐次批准",
+        "expect": "第二次批准后 level=block 生效且版本递增（v3），旧租户行 rolled_back",
+        "command": "WORKTREE=/Users/mac/WorkLoom-fleet/.wt-mcd-fb bash work/with-server.sh work/env-fb -- node outputs/mine-clear/T-2026-0929-0200/assertions/m1-fence-rule-change.mjs",
+        "last_result": "pass",
+        "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/green-4-fence-with-dbstate.log"
+      },
+      {
+        "kind": "property",
+        "given": "任意 rule_id 的任意次合法加严提案",
+        "expect": "批准即生效，不存在『已批准但规则未变』的静默中间态",
+        "command": "同上（脚本循环两次加严 + 回读比对）",
+        "last_result": "pass",
+        "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/green-1-fence.log"
+      }
+    ],
+    "regression": {
+      "command": "RUN_DB_TESTS=1 pnpm -C packages/base test -- fence-engine && TOOL_UNVERIFIED_RATE=0 tsx --env-file=<env> scripts/suite.ts",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/vitest-fence-2.log; outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/suite-2.log（463/463）"
+    },
+    "rollback": "revert 4e52948（或 git revert -m 1 <merge commit>）",
+    "fixed_by": "fixer-B",
+    "verified_by": null,
+    "notes": "同批修复了『被拒提案消耗 dry-run』与『dry-run 可跨规则借用』两个同路径缺陷。"
+  },
+  {
+    "id": "MC-402",
+    "kind": "fix",
+    "batch": 1,
+    "state": "fixed",
+    "title": "覆盖层锚点不丢：平台基线行保持 active，单调守卫取最严 active 行为基准",
+    "covers": [
+      "MC-109"
+    ],
+    "evidence": [
+      {
+        "type": "code",
+        "ref": "packages/base/fence-engine/lifecycle.ts:370@4e52948",
+        "note": "激活只回滚旧租户覆盖行（is_baseline=false），平台基线行保持 active"
+      },
+      {
+        "type": "code",
+        "ref": "packages/base/fence-engine/dsl.ts:215@4e52948",
+        "note": "checkCandidateAgainstBaseline 锚点改为『同 rule_id 最严 active 行』"
+      },
+      {
+        "type": "log",
+        "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/green-1-fence.log",
+        "note": "第 3 次放宽提案 400（守卫有效），基线行仍 active"
+      }
+    ],
+    "fix_plan": "取消『租户行继承 is_baseline』方案（避免 night-shift 快照与 P5 计数漂移），改为保留平台基线行 + 守卫按最严 active 行比对",
+    "blast_radius": "围栏判定（同 rule_id 多行共存→取最严）、P5 计数口径、night-shift 围栏快照",
+    "conflict_paths": [
+      "packages/base/fence-engine/lifecycle.ts",
+      "packages/base/fence-engine/dsl.ts"
+    ],
+    "assertions": [
+      {
+        "kind": "sample",
+        "given": "R7 已自定义为 review 后提交 level=auto 放宽提案",
+        "expect": "confirmDryRun 400（基线只可加严）",
+        "command": "同上断言脚本第 3 段",
+        "last_result": "pass",
+        "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/green-1-fence.log"
+      },
+      {
+        "kind": "property",
+        "given": "任意被自定义过的平台基线规则",
+        "expect": "收紧下界始终可判定（锚点不丢），放宽路径被拒",
+        "command": "同上 + DB 直查 is_baseline/status 组合",
+        "last_result": "pass",
+        "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/green-4-fence-with-dbstate.log"
+      }
+    ],
+    "regression": {
+      "command": "RUN_DB_TESTS=1 vitest run packages/base/fence-engine",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/vitest-fence-2.log（57/57）"
+    },
+    "rollback": "revert 4e52948",
+    "fixed_by": "fixer-B",
+    "verified_by": null,
+    "notes": "与 PLAN-fixes 规格的偏差（不把租户行标 is_baseline）已由 fixer-B 在报告 §2.1 论证并留痕。"
+  },
+  {
+    "id": "MC-403",
+    "kind": "fix",
+    "batch": 2,
+    "state": "fixed",
+    "title": "基线 when 改写走显式放行位（allowWhenChange），指引可达",
+    "covers": [
+      "MC-103"
+    ],
+    "evidence": [
+      {
+        "type": "code",
+        "ref": "apps/server/src/trpc/router.ts:2237@4e52948",
+        "note": "fence.confirmDryRun 新增 allowWhenChange 入参 + dry-run 归属/pending 校验 + 事件留痕"
+      },
+      {
+        "type": "code",
+        "ref": "packages/base/fence-engine/lifecycle.ts:223@4e52948",
+        "note": "放行事实经 fenceActivationFromProposal 带到激活期"
+      },
+      {
+        "type": "log",
+        "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/green-2-when-blocked.log",
+        "note": "无放行位 → 400 且文案给出可达参数"
+      },
+      {
+        "type": "log",
+        "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/green-3-when-allowed.log",
+        "note": "MCD_ALLOW_WHEN=1 → 端到端生效"
+      }
+    ],
+    "fix_plan": "confirmDryRun 接受 allowWhenChange 并校验 dry-run 归属，守卫显式放行 when 改写；拒绝文案指名可达路径",
+    "blast_radius": "围栏提案 API 契约（新增可选字段，向后兼容）；P5 规则中心（后续可接入开关）",
+    "conflict_paths": [
+      "apps/server/src/trpc/router.ts",
+      "packages/base/fence-engine/dsl.ts"
+    ],
+    "assertions": [
+      {
+        "kind": "sample",
+        "given": "基线规则 when 改写请求（MCD_WHEN=true）",
+        "expect": "不带放行位 400；带 allowWhenChange=true 时审批后生效",
+        "command": "MCD_WHEN=true [MCD_ALLOW_WHEN=1] node outputs/mine-clear/T-2026-0929-0200/assertions/m1-fence-rule-change.mjs",
+        "last_result": "pass",
+        "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/green-3-when-allowed.log"
+      },
+      {
+        "kind": "property",
+        "given": "任意拒绝消息中提到的开关/参数",
+        "expect": "该开关在至少一条产品路径上可被设置并留痕",
+        "command": "node work/fix-b/when-retry-probe.mjs（8/8 OK）",
+        "last_result": "pass",
+        "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/when-retry-probe.log"
+      }
+    ],
+    "regression": {
+      "command": "RUN_DB_TESTS=1 vitest run packages/base/fence-engine && pnpm typecheck",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-b/vitest-fence-2.log"
+    },
+    "rollback": "revert 4e52948",
+    "fixed_by": "fixer-B",
+    "verified_by": null,
+    "notes": ""
+  }
+]

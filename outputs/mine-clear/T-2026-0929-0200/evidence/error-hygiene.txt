@@ -1,0 +1,11 @@
+# 5xx 错误面：服务端留痕正常，客户端拿到内部原文
+
+## 服务端日志（有记录）
+[trpc] query approvals.list → INTERNAL_SERVER_ERROR: permission denied for table approvals（ref=09f7e862）
+[trpc] query approvals.list → INTERNAL_SERVER_ERROR: permission denied for table approvals（ref=09f7e862）\n
+
+## 客户端响应体（回传内部细节）
+{"error":{"message":"permission denied for table approvals","code":-32603,"data":{"code":"INTERNAL_SERVER_ERROR","httpStatus":500,"path":"approvals.list"}}}
+
+## 构造约束冲突时的响应体
+{"error":{"message":"duplicate key value violates unique constraint \"probe_uq_threads_title\"","code":-32603,"data":{"code":"INTERNAL_SERVER_ERROR","httpStatus":500,"path":"threads.dispatch"}}}

@@ -1,0 +1,20 @@
++ node /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-kb.mjs
+✓ B 端登录 :: "ws-yunqi"
+✓ C 端会话建立（h5 演示直登） :: {"status":200}
+✓ 存在知识集可挂载探针文档 :: {"collections":["商品与服务目录","住客常见问答"]}
+✗ 探针口令在变更前不可检索（基线） :: {"hits":5}
+✓ 上传返回 documentId :: {"documentId":"kbd-mumzrz8t001bvl6","version":1,"chunks":1}
+✓ 新文档落 pending_review :: {"status":"pending_review","version":1}
+✓ 待审区可见新文档 :: {"pending":1}
+✗ 待审文档不入检索索引（承诺口径） :: {"hits":5}
+✓ 上传动作不产生 pending 审批（变更前对照） :: {"before":34,"after":34}
+✓ approveDocument 成功 :: {"ok":true,"eventId":"E-10496"}
+✓ 文档状态 → active :: {"status":"active"}
+✓ 生效后可检索（索引面联动） :: {"hits":5,"first":"M3 联动探针知识条目 M3KB1790705427943"}
+✓ 待审区已移除该文档 :: {"pending":0}
+✓ 审批中心出现 kb.publish 记录（承诺联动） :: {"count":35}
+✗ [联动断点候选] 审批记录是 pending —— 但动作已执行、文档已生效（事后审批） :: {"approval_status":"pending","doc_status":"active","executed_at_doc":true}
+✗ C 端问答能引用生效后的知识（问答入口数据源覆盖） :: {"answer":"抱歉，这个问题我暂时无法准确回答，不敢随意编造。已为您准备好工单草稿，确认后转人工跟进；您也可以换个说法再问我。"}
+✓ [联动断点候选] 审批被驳回后，知识库状态与检索面未回滚（两面矛盾） :: {"approval":"rejected","doc":"active","hits":5}
+
+联动探针 2：13/17 通过；证据 → /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/evidence/m3-kb-1790705428079.json

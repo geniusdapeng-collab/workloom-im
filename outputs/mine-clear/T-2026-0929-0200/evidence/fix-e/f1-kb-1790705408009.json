@@ -1,0 +1,164 @@
+{
+  "probe": "f1-kb-publish-gate",
+  "started_at": "2026-09-29T18:10:07.866Z",
+  "base": "http://127.0.0.1:8981",
+  "workspaceSlug": "ai-pm-demo",
+  "mark": "F1KB1790705407866",
+  "assertions": [
+    {
+      "name": "B 端登录",
+      "ok": true,
+      "detail": "ws-aipm-demo"
+    },
+    {
+      "name": "基线：探针标记不可检索",
+      "ok": true,
+      "detail": {
+        "mark": "F1KB1790705407866"
+      }
+    },
+    {
+      "name": "存在知识集",
+      "ok": true,
+      "detail": [
+        "需求池",
+        "竞品档案",
+        "用户反馈"
+      ]
+    },
+    {
+      "name": "上传返回 documentId",
+      "ok": true,
+      "detail": {
+        "documentId": "kbd-mumzrjq8003bn74",
+        "version": 1,
+        "chunks": 1
+      }
+    },
+    {
+      "name": "新文档落 pending_review",
+      "ok": true
+    },
+    {
+      "name": "待审期间不可检索（发布门禁）",
+      "ok": true
+    },
+    {
+      "name": "approveDocument 成功",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "status": "active",
+        "eventId": "E-9151",
+        "approvalId": "apr-e-9151",
+        "deduped": false
+      }
+    },
+    {
+      "name": "文档状态 → active",
+      "ok": true
+    },
+    {
+      "name": "生效后进入检索",
+      "ok": true
+    },
+    {
+      "name": "落 kb.publish 五元事件",
+      "ok": true,
+      "detail": [
+        {
+          "event_id": "E-9151",
+          "action": "kb.publish"
+        }
+      ]
+    },
+    {
+      "name": "审批台不留「已执行却待办」幽灵条目",
+      "ok": true,
+      "detail": {
+        "before": 4,
+        "after": 4
+      }
+    },
+    {
+      "name": "审批记录为 approved + 决策人/时间/手势齐备（不可回滚的当场留痕）",
+      "ok": true,
+      "detail": {
+        "status": "approved",
+        "decided_by": "MEM-001",
+        "decided_at": "2026-09-29T18:10:07.920Z",
+        "gesture": {
+          "type": "approve",
+          "weight": 1,
+          "reason_text": "待审区「批准生效」（逐条人审）"
+        },
+        "snapshot": {
+          "after": {
+            "documentId": "kbd-mumzrjq8003bn74",
+            "fence_action": "kb.publish"
+          },
+          "basis": "批准动作的当场留痕（不可回滚）；撤回请走知识库「停用」，同样写事件留痕（MC-110）",
+          "post_hoc": true,
+          "high_risk": false
+        }
+      }
+    },
+    {
+      "name": "重复批准幂等（不重复落事件/审批行）",
+      "ok": true,
+      "detail": {
+        "deduped": true,
+        "events": 1
+      }
+    },
+    {
+      "name": "哈希链自检（内联 canonicalJson/hash 与生产逐条一致）",
+      "ok": true,
+      "detail": {
+        "checked": 19,
+        "bad": 0,
+        "firstBad": null
+      }
+    },
+    {
+      "name": "（制造存量场景）pending kb.publish 行已落库",
+      "ok": true,
+      "detail": {
+        "ghostId": "apr-ghost-f1kb1790705407866"
+      }
+    },
+    {
+      "name": "驳回手势成功",
+      "ok": true,
+      "detail": {
+        "approvalId": "apr-ghost-f1kb1790705407866",
+        "status": "rejected",
+        "deduped": false,
+        "gestureEventId": "E-9152"
+      }
+    },
+    {
+      "name": "驳回即不可检索（文档退回 pending_review）",
+      "ok": true,
+      "detail": {
+        "doc": "pending_review",
+        "hits": 0
+      }
+    },
+    {
+      "name": "存量待审行批准 → 文档重新生效且可检索",
+      "ok": true,
+      "detail": {
+        "approval": "approved",
+        "doc": "active"
+      }
+    },
+    {
+      "name": "事件留痕可追溯到发布/撤回动作",
+      "ok": true,
+      "detail": {
+        "hint": "1 次发布 + 1 次撤回 + 1 次重新发布"
+      }
+    }
+  ]
+}

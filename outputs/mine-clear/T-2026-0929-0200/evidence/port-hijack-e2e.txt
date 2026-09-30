@@ -1,0 +1,43 @@
+# 端口劫持实证（8795）
+
+## E1 8795 的监听者（非测试会话的子进程）
+COMMAND   PID USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+node    43831  mac   37u  IPv4 0x6b1e1573a571441f      0t0  TCP 127.0.0.1:8795 (LISTEN)
+
+## E2 它自述的身份（与真实服务同形）
+{"ok":true,"service":"workloom-im-server"}
+## E3 用测试同样的拉起命令（端口被占）→ 立即崩溃
+[auth] JWT_SECRET 长度 <32 字符，熵不足——生产环境请配置 ≥32 字符随机密钥
+[service-c] SERVICE_C_DEMO_AUTH 已开启：h5/openid 演示直登可用（生产环境必须置 false 并配置渠道 code 交换凭据）
+node:events:487
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use 127.0.0.1:8795
+    at Server.setupListenHandle [as _listen2] (node:net:2167:16)
+    at listenInCluster (node:net:2224:12)
+    at node:net:2448:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on Server instance at:
+
+## E4 于是套件对外部实例断言：两次全新 DB 运行均为 13 条确定性失败
+/Users/mac/Documents/Codex/2026-09-29/https-cnb-cool-workloom-ai-workloom-5/work/m4/fresh-install.log:544:      Tests  13 failed | 284 passed | 2 skipped (299)
+/Users/mac/Documents/Codex/2026-09-29/https-cnb-cool-workloom-ai-workloom-5/work/m4/gate-db-server.log:266:      Tests  13 failed | 284 passed | 2 skipped (299)
+
+## E5 源码：端口硬编码 + stdio ignore + 仅探 /health 200
+const PORT = 8795;
+  process.env.SERVICE_C_WORKSPACE_ID = workspaceId;
+  fixtureWorkspaceSlug = await resolveWorkspaceSlug();
+  const deadline = Date.now() + 60_000;
+  for (;;) {
+    try {
+      const r = await fetch(`${BASE}/health`);
+      if (r.ok) break;
+    } catch { /* 未就绪 */ }
+    if (Date.now() > deadline) throw new Error("8795 服务拉起超时");
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  db = new pg.Client(DB_URL);
+  await db.connect();
+  bToken = await loginAs("MEM-001");
+  roToken = await loginAs("MEM-003");

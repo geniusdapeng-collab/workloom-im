@@ -1,0 +1,81 @@
+{
+  "id": "MC-441",
+  "kind": "fix",
+  "batch": 2,
+  "state": "fixed",
+  "title": "知识发布当场人审留痕 + kb.publish 裁决联动（驳回即退出检索）",
+  "covers": [
+    "MC-110"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "apps/server/src/service/router.ts:119@036f02b",
+      "note": "publishKbDocumentInTx：文档生效 + kb.publish 事件 + approved 审批行三写同一 COMMIT"
+    },
+    {
+      "type": "code",
+      "ref": "apps/server/src/service/router.ts:302@036f02b",
+      "note": "approveDocument 幂等（deduped）+ 仅待审文档可批（PRECONDITION_FAILED）"
+    },
+    {
+      "type": "code",
+      "ref": "apps/server/src/service/kb.ts:358@036f02b",
+      "note": "applyKbPublishAfterApproval：approve/edit→生效、reject→退回待审并退出检索"
+    },
+    {
+      "type": "code",
+      "ref": "apps/server/src/trpc/router.ts:1@036f02b",
+      "note": "approvals.decide 接线调用钩子（非 deduped 且终态）"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-kb-1790706124251.json",
+      "note": "f1 知识发布门禁 19/19：无幽灵待办、approved 记录、驳回退出检索、再批准恢复"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-kb-1790706124843.json",
+      "note": "M3 探针 2 复跑 18/18（断点候选改写为修复后语义）"
+    },
+    {
+      "type": "log",
+      "ref": "work/fix-e/e2e.log",
+      "note": "apps/server e2e 101/101（含新增 4 例发布留痕/幂等/驳回回滚/直达启用）"
+    }
+  ],
+  "fix_plan": "待审区「批准生效」= 逐条人审动作本身：文档置 active、kb.publish 五元事件、approvals 行（approved + gesture/decided_by/decided_at + snapshot.post_hoc）同事务落库，审批台不再出现「已执行却待办」幽灵条目；存量/任何来源的 pending kb.publish 由 approvals.decide 钩子收敛（reject → 退回 pending_review 且即刻退出检索）；setStatus(active) 对待审文档同口径留痕",
+  "blast_radius": "P22 知识库待审区与文档抽屉、审批中心列表与计数（P4/P28）、C 端问答检索范围、ask 事实面；approveDocument 返回值增 status/approvalId/deduped（前端已同步）",
+  "conflict_paths": [
+    "apps/server/src/service/router.ts",
+    "apps/server/src/service/kb.ts",
+    "apps/server/src/trpc/router.ts",
+    "apps/web/src/pages/p22/P22.tsx"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "ws-aipm-demo 上传文档后调用 service.kb.approveDocument，再对该记录重复批准",
+      "expect": "文档 active 且可检索；审批记录 approved（带决策人/手势）；pending 列表无该文档；重复批准 deduped 且不新增事件",
+      "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-kb-publish-gate.mjs",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-kb-1790706124251.json"
+    },
+    {
+      "kind": "property",
+      "given": "任意 kb.publish 审批（含修复前遗留的 pending 行）被 approve/edit/reject",
+      "expect": "approve/edit → 文档生效；reject → 文档退回 pending_review 且检索不可见（两面不再矛盾）；重复回调幂等",
+      "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-kb-publish-gate.mjs",
+      "last_result": "pass",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-kb-1790706124251.json"
+    }
+  ],
+  "regression": {
+    "command": "pnpm typecheck && RUN_DB_TESTS=1 SERVICE_C_TEST_WORKSPACE_ID=ws-yunqi SERVER_E2E_PORT=8983 pnpm -C apps/server exec vitest run src/service/e2e.test.ts && pnpm suite",
+    "evidence": "work/fix-e/typecheck.log; work/fix-e/e2e.log; work/fix-e/suite.log"
+  },
+  "rollback": "git revert 036f02b",
+  "fixed_by": "fix_e_semantics",
+  "verified_by": null,
+  "notes": "与卡片建议的两段式门禁不同：采用卡片断言允许的第二条分支（批准 = 人审动作本身、审批行直接 approved）；理由见 FIX-E-REPORT §2"
+}

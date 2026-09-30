@@ -1,0 +1,183 @@
+{
+  "probe": "f1-ticket-reassign",
+  "started_at": "2026-09-29T18:22:04.491Z",
+  "base": "http://127.0.0.1:8981",
+  "workspaceSlug": "ai-pm-demo",
+  "mark": "F1TK1790706124491",
+  "assertions": [
+    {
+      "name": "B 端登录",
+      "ok": true,
+      "detail": "ws-aipm-demo"
+    },
+    {
+      "name": "C 端会话建立",
+      "ok": true,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "name": "C 端建单成功（自动 assigned）",
+      "ok": true,
+      "detail": {
+        "status": 200,
+        "ticket": "assigned"
+      }
+    },
+    {
+      "name": "B 端工单台可见该单",
+      "ok": true,
+      "detail": {
+        "dept": "服务支持团队",
+        "assignee": null,
+        "status": "assigned"
+      }
+    },
+    {
+      "name": "同值重复派单：200 + 幂等（无新 assign 事件）",
+      "ok": true,
+      "detail": {
+        "status": 200,
+        "before": 1,
+        "after": 1,
+        "ticket": {
+          "id": "tck-mun06wor001lqrp",
+          "workspaceId": "ws-aipm-demo",
+          "cUserId": "cu-mun06wny001q6ql",
+          "conversationId": "conv-F1TK1790706124491",
+          "kind": "repair",
+          "title": "F1 改派探针 F1TK1790706124491",
+          "payload": {
+            "note": "改派语义取证",
+            "severity": "low"
+          },
+          "status": "assigned",
+          "priority": "normal",
+          "dept": "服务支持团队",
+          "assignee": null,
+          "ratingScore": null,
+          "ratingComment": null,
+          "result": null,
+          "slaDeadline": "2026-09-29T20:22:04.000Z",
+          "createdAt": "2026-09-29T18:22:04.000Z",
+          "updatedAt": "2026-09-29T18:22:04.000Z"
+        }
+      }
+    },
+    {
+      "name": "跨部门改派：200 + 现场改派留痕 + 状态不变",
+      "ok": true,
+      "detail": {
+        "status": 200,
+        "events": 2,
+        "ticket": {
+          "id": "tck-mun06wor001lqrp",
+          "workspaceId": "ws-aipm-demo",
+          "cUserId": "cu-mun06wny001q6ql",
+          "conversationId": "conv-F1TK1790706124491",
+          "kind": "repair",
+          "title": "F1 改派探针 F1TK1790706124491",
+          "payload": {
+            "note": "改派语义取证",
+            "severity": "low"
+          },
+          "status": "assigned",
+          "priority": "normal",
+          "dept": "工程维修组",
+          "assignee": "MEM-002",
+          "ratingScore": null,
+          "ratingComment": null,
+          "result": null,
+          "slaDeadline": "2026-09-29T20:22:04.000Z",
+          "createdAt": "2026-09-29T18:22:04.000Z",
+          "updatedAt": "2026-09-29T18:22:04.000Z"
+        }
+      }
+    },
+    {
+      "name": "时间线可见改派轨迹（reassigned 标记）",
+      "ok": true,
+      "detail": {
+        "actions": [
+          "c_user:create",
+          "system:assign",
+          "system:assign"
+        ]
+      }
+    },
+    {
+      "name": "工单推进 → 办结",
+      "ok": true,
+      "detail": "done"
+    },
+    {
+      "name": "已办结工单再派单：409 语义错误（不是 5xx）",
+      "ok": true,
+      "detail": {
+        "httpStatus": 409,
+        "code": "CONFLICT",
+        "message": "工单状态机非法迁移：done → assigned"
+      }
+    },
+    {
+      "name": "已办结工单再派单：契约文案可判定（含『非法迁移』）",
+      "ok": true,
+      "detail": {
+        "httpStatus": 409,
+        "code": "CONFLICT",
+        "message": "工单状态机非法迁移：done → assigned"
+      }
+    },
+    {
+      "name": "不存在工单派单：404 NOT_FOUND",
+      "ok": true,
+      "detail": {
+        "httpStatus": 404,
+        "code": "NOT_FOUND",
+        "message": "工单不存在：tck-none-F1TK1790706124491"
+      }
+    }
+  ],
+  "timeline": [
+    {
+      "id": "198",
+      "ticketId": "tck-mun06wor001lqrp",
+      "action": "create",
+      "actorType": "c_user",
+      "actorId": "cu-mun06wny001q6ql",
+      "detail": {
+        "kind": "repair",
+        "title": "F1 改派探针 F1TK1790706124491",
+        "requestFingerprint": "ef6abf992f0f379be8fb5fd58b367b4ff7ec392fc13c95370fedb9ca222592e4"
+      },
+      "createdAt": "2026-09-29T18:22:04.000Z"
+    },
+    {
+      "id": "199",
+      "ticketId": "tck-mun06wor001lqrp",
+      "action": "assign",
+      "actorType": "system",
+      "actorId": "service-desk",
+      "detail": {
+        "dept": "服务支持团队",
+        "assignee": null
+      },
+      "createdAt": "2026-09-29T18:22:04.000Z"
+    },
+    {
+      "id": "200",
+      "ticketId": "tck-mun06wor001lqrp",
+      "action": "assign",
+      "actorType": "system",
+      "actorId": "service-desk",
+      "detail": {
+        "dept": "工程维修组",
+        "assignee": "MEM-002",
+        "reassigned": true,
+        "from_status": "assigned"
+      },
+      "createdAt": "2026-09-29T18:22:04.000Z"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+
+> @workloom/base@0.1.0 test /Users/mac/WorkLoom-fleet/.wt-mcd-fe/packages/base
+> vitest run
+
+
+ RUN  v5.0.1 /Users/mac/WorkLoom-fleet/.wt-mcd-fe/packages/base
+
+warning: adding embedded git repository: .workloom/t-conflict
+hint: You've added another git repository inside your current repository.
+hint: Clones of the outer repository will not contain the contents of
+hint: the embedded repository and will not know how to obtain it.
+hint: If you meant to add a submodule, use:
+hint: 
+hint: 	git submodule add <url> .workloom/t-conflict
+hint: 
+hint: If you added this path by mistake, you can remove it from the
+hint: index with:
+hint: 
+hint: 	git rm --cached .workloom/t-conflict
+hint: 
+hint: See "git help submodule" for more information.
+
+ Test Files  52 passed (52)
+      Tests  815 passed | 8 skipped (823)
+   Start at  02:22:46
+   Duration  14.75s (tests 84%, import 8%, transform 7%)
+

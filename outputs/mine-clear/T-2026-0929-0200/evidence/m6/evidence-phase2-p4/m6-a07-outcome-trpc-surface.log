@@ -1,0 +1,11 @@
++ node /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/assertions/m1-outcome-trpc-surface.mjs
+✓ access.me —— 已注册（HTTP 400）
+✓ approvals.batchApprove —— 已注册（HTTP 400）
+✓ approvals.decide —— 已注册（HTTP 400）
+✓ approvals.list —— 已注册（HTTP 200）
+✓ auth.loginAs —— 已注册（HTTP 400）
+✓ fence.activeRules —— 已注册（HTTP 200）
+✓ threads.dispatch —— 已注册（HTTP 400）
+✓ threads.events —— 已注册（HTTP 400）
+✓ threads.get —— 已注册（HTTP 400）
+PASS  MC-105 :: 9 个 acceptance tRPC 过程全部存在：access.me、approvals.batchApprove、approvals.decide、approvals.list、auth.loginAs、fence.activeRules、threads.dispatch、threads.events、threads.get

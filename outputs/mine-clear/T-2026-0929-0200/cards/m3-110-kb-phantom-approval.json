@@ -1,0 +1,68 @@
+{
+  "id": "MC-110",
+  "kind": "problem",
+  "level": "L4",
+  "severity": "P1",
+  "batch": 2,
+  "state": "open",
+  "title": "知识库待审批准先执行后补审批：幽灵待办 + 驳回不回滚（审批台/知识库/客户问答三面互相矛盾）",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "apps/server/src/service/router.ts:182@4ff9943",
+      "note": "service.kb.approveDocument：先把 kb_documents.status 置 active，再写 kb.publish 事件，最后才 INSERT approvals(status='pending') —— 审批行创建时动作已经执行"
+    },
+    {
+      "type": "code",
+      "ref": "packages/base/review-console/approvals.ts:175@4ff9943",
+      "note": "decide() 的联动只有两类：reject→步骤级审批线程置 cancelled（GR-10）、围栏提案/HR 汰换由 trpc 钩子处理；对 kb.publish 既无前置门禁也无驳回回滚"
+    },
+    {
+      "type": "code",
+      "ref": "apps/web/src/pages/p22/P22.tsx:973@4ff9943",
+      "note": "界面承诺『待审文档建议到「待审区」批准生效，审批记录会同步进入审批中心和事件账本』——承诺的审批记录实际是事后 pending 幽灵条目"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-kb-1790695144646.json",
+      "note": "真机实测：approveDocument 后 doc.status=active、kb.search 命中 1 条、待审区清空，同时 approvals.list(pending) 2→3 出现 kb.publish pending；随后 approvals.decide(reject) 该条 → approval=rejected 而文档仍 active、检索仍命中"
+    },
+    {
+      "type": "db",
+      "ref": "biz_events E-10355(kb.publish) + approvals apr-e-10355 + kb_documents kbd-mumtnkha001d4cq",
+      "note": "事件 E-10355 动作 kb.publish 与审批行 apr-e-10355 同事务；审批行状态先 pending 后被驳回，而文档始终 active"
+    }
+  ],
+  "root_cause": {
+    "file": "apps/server/src/service/router.ts",
+    "line": 182,
+    "commit": "4ff9943",
+    "symbol": "approveDocument"
+  },
+  "trigger_path": "P22 待审区点『批准生效』（或直接调 service.kb.approveDocument）→ 文档立即 active 且进入检索；审批中心同时多出一条 pending 的 kb.publish；之后在审批台驳回该条 → 文档仍在生效，C 端问答继续引用。",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "ws-aipm-demo 上传文档 kbd-* 后调用 service.kb.approveDocument",
+      "expect": "审批记录不得与已执行动作矛盾：pending 期间不得已生效；或批准后审批行直接 approved（当前实测 pending + 已生效）",
+      "command": "cd <repo> && node outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-kb.mjs",
+      "last_result": "fail",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-kb-1790695144646.json"
+    },
+    {
+      "kind": "property",
+      "given": "任意已生效知识文档的 kb.publish 审批",
+      "expect": "任何手势（approve/reject）后『审批台状态』与『检索/C 端问答可见性』不矛盾：驳回即不可检索，或声明该审批为不可回滚的事后留痕并在 UI 标注",
+      "command": "同上（脚本内 reject 后回读 kb_documents.status 与 service.kb.search 命中）",
+      "last_result": "fail",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-kb-1790695144646.json"
+    }
+  ],
+  "fix_plan": "把 kb.publish 改成真门禁：approveDocument 只写 staged 状态 + pending 审批（文档保持 pending_review）；由 approvals.decide 的钩子（同 activateFenceRuleAfterApproval 模式）在 approve 时置 active + 写事件，reject 时保持 pending_review 并落原因。",
+  "blast_radius": "影响 P22 待审区、审批中心计数（P4/P28）、C 端检索范围与 ask 事实面；注意与 MC-101（审批后自动续跑）共用 decide() 钩子点。",
+  "conflict_paths": [
+    "apps/server/src/service/router.ts",
+    "packages/base/review-console/approvals.ts"
+  ],
+  "notes": "M3 联动探针 2（mcd_linkage）。"
+}

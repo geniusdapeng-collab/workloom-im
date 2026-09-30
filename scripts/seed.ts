@@ -175,6 +175,21 @@ function loadSkills(): SkillDoc[] {
 function yunqiArchive(): Record<string, unknown> {
   return {
     property: { name: WS_NAME, city: "杭州", rooms: 86, star: "四钻" },
+    /**
+     * MC-306（2026-09-30 排雷修复）：行业规划器（apps/server/src/industry/hotel/acquisition-planner.ts）
+     * 唯一的价格锚点来源就是 `business.price_bands`（房型 → [低位, 高位]，单位元）。
+     * 出厂档案此前缺这一块 → 调价目标推不出 before/after → R1「涨幅 ≤8% 自动」不可达、
+     * R2「保底价 ¥380 熔断」永不触发，所有调价 100% 转人工。
+     * 价带与 R2/forbidden 同源（美团大床房保底 ¥380）：低位即保底线，区间取演示价位的保守带。
+     */
+    business: {
+      price_bands: {
+        雅致大床房: [420, 480],
+        美团大床房: [380, 440],
+        亲子双床房: [480, 560],
+        商旅大床房: [360, 420],
+      },
+    },
     // 数字CEO 宪章（D21，演示：董事长已完成深度授权 → 试用期第 2 天）
     charter: {
       version: 1,
@@ -550,6 +565,29 @@ async function main(): Promise<void> {
     );
   }
   console.log(`✓ 人类成员 ×${MEMBERS.length}（${MEMBERS.map((m) => `${m.name}/${m.role}`).join("、")}）`);
+
+  /**
+   * MC-113（M3 联动实测）：演示成员必须挂全局账号，否则 P28「统一待办」恒为空——
+   * accounts.inbox.unified 先按 `members.account_id` 解析账号，再跨 membership 聚合；
+   * 此前种子只建 members 不建 accounts，出厂演示工作区永远看不到待办（groups:[]）。
+   * 命名空间：账号 ID `acc-demo-hotel-mem-00x`、邮箱 `<member_no>@demo.workloom.local`、
+   * 手机号 1390000100x 均为演示保留值，与真实客户账号不冲突；重复执行幂等（回填缺失的绑定）。
+   */
+  for (const m of MEMBERS) {
+    const accountId = `acc-demo-hotel-${m.id.toLowerCase()}`;
+    await q(
+      `INSERT INTO accounts (id, phone, email, display_name, status)
+       VALUES ($1,$2,$3,$4,'active')
+       ON CONFLICT (id) DO UPDATE SET display_name=EXCLUDED.display_name`,
+      [accountId, `1390000100${m.id.slice(-1)}`, `${m.id.toLowerCase()}@demo.workloom.local`, m.name],
+    );
+    await q(
+      `UPDATE members SET account_id=$1
+        WHERE workspace_id=$2 AND member_no=$3 AND account_id IS DISTINCT FROM $1`,
+      [accountId, WS_ID, m.id],
+    );
+  }
+  console.log(`✓ 演示账号 ×${MEMBERS.length}（P28 统一待办跨店聚合的数据源）`);
 
   // Agent preset 实例（IM.5；F2.10 fence_bindings 原样落库）
   for (const p of presets) {

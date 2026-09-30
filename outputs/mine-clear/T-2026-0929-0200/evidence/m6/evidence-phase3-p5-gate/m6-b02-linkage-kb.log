@@ -1,0 +1,21 @@
++ node /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-kb.mjs
+✓ B 端登录 :: "ws-aipm-demo"
+✓ C 端会话建立（h5 演示直登） :: {"status":200}
+✓ 存在知识集可挂载探针文档 :: {"collections":["需求池","竞品档案","用户反馈","产出档案","评测中心"]}
+✓ 探针口令在变更前不可检索（基线） :: {"hits":0}
+✓ 上传返回 documentId :: {"documentId":"kbd-muna3syr001mdey","version":1,"chunks":1}
+✓ 新文档落 pending_review :: {"status":"pending_review","version":1}
+✓ 待审区可见新文档 :: {"pending":1}
+✓ 待审文档不入检索索引（承诺口径） :: {"hits":0}
+✓ 上传动作不产生 pending 审批（变更前对照） :: {"before":2,"after":2}
+✓ approveDocument 成功 :: {"ok":true,"status":"active","eventId":"E-12047","approvalId":"apr-e-12047","deduped":false}
+✓ 文档状态 → active :: {"status":"active"}
+✓ 生效后可检索（索引面联动） :: {"hits":1,"first":"M3 联动探针知识条目 M3KB1790722775783"}
+✓ 待审区已移除该文档 :: {"pending":0}
+✓ 审批中心出现 kb.publish 记录（承诺联动） :: {"record":{"approval_id":"apr-e-12047","status":"approved","decided_by":"MEM-001"}}
+✓ 记录为已裁决（approved + 决策人）：不存在「动作已执行却待办」的幽灵条目 :: {"status":"approved","decided_by":"MEM-001"}
+✓ 待审列表不含该文档（幽灵待办消失） :: {"pending":2}
+✓ C 端问答能引用生效后的知识（问答入口数据源覆盖） :: {"answer":"本条目由 M3 联动探针写入（标记 M3KB1790722775783）。\n\n- 探针口令：北极星布草协议\n- 布草更换周期：72 小时\n- 生效范围：仅用于排雷证据取证，不属于经营数据"}
+✓ 终态审批重复裁决幂等（deduped），知识库/检索面不被改坏 :: {"approval":"approved","deduped":true,"doc":"active","hits":1}
+
+联动探针 2：18/18 通过；证据 → /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/evidence/m3-kb-1790722775972.json

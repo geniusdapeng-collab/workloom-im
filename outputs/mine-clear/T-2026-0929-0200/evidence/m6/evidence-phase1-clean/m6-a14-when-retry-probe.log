@@ -1,0 +1,12 @@
++ node /Users/mac/Documents/Codex/2026-09-29/https-cnb-cool-workloom-ai-workloom-5/work/m6/when-retry-probe.mjs
+OK   dry-run 生成 — dryRunId=fdr-r7-mumzkb0z
+OK   无放行位时 confirmDryRun 拒绝 — status=400
+OK   拒绝文案指向 allowWhenChange=true（参数可达） — 围栏基线只可加严，本次变更被拒：基线规则 R7 when 被改写（params.guarantee_anomaly != true → true）：条件语义无法静态证明不放宽，须先 dry-run 回放 + 人工确认（L2.4）后，在 fe
+OK   同一条 dryRunId 显式放行后可再次确认（被拒不消耗 dry-run） — status=200 eventId=E-10374
+OK   提案进入审批队列 — approvalId=apr-e-10374
+OK   审批通过 — status=200 
+fence.rules readback: fr-r7-v2-ws-yunqi/v2/block/active | fr-r7-v1-ws-yunqi/hotel-baseline/v1/auto/active
+OK   显式放行的 when 改写已生效（覆盖行 active 且非出厂版本）
+OK   基线锚点行保持 active
+
+verdict: PASS

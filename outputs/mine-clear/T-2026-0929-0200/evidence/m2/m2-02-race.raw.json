@@ -1,0 +1,24 @@
+{
+  "targetIds": [
+    "apr-e-10498",
+    "apr-e-10501",
+    "apr-e-10504"
+  ],
+  "sweepRes": {
+    "role": "sweep",
+    "status": 200
+  },
+  "decideRes": {
+    "role": "decide",
+    "status": 200,
+    "data": {
+      "approvalId": "apr-e-10504",
+      "status": "approved",
+      "deduped": false,
+      "gestureEventId": "E-10505"
+    },
+    "code": null,
+    "message": null
+  },
+  "actions": []
+}

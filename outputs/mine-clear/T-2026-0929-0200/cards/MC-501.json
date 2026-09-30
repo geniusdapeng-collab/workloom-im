@@ -1,0 +1,51 @@
+{
+  "id": "MC-501",
+  "kind": "problem",
+  "level": "L2",
+  "severity": "P1",
+  "batch": 1,
+  "state": "fixed",
+  "title": "验收门禁假红：Z-11 启动补扫夹具缺 snapshot.action（被 MC-106 fail-closed 正确拒绝）",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "scripts/suite.ts:2686@88e6b51",
+      "note": "修复提交 88e6b51（fixer-F）"
+    },
+    {
+      "type": "log",
+      "ref": "work/fix-f/suite-red-n1.log → work/fix-f/reg-suite.log（470/470）",
+      "note": "红→绿对照（fixer-F 原始日志）"
+    }
+  ],
+  "root_cause": {
+    "file": "scripts/suite.ts",
+    "line": 2686,
+    "commit": "b67d651",
+    "symbol": "见 FIX-F-REPORT.md"
+  },
+  "trigger_path": "独立验收（RDAS v3.1 / 独立验证会话）在冻结基线 b67d651 上复现；详见 ACCEPTANCE-REPORT.md / VERIFY-REPORT.md",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "复跑 MC-501 的验收场景",
+      "expect": "红→绿（见修复卡断言）",
+      "command": "SUITE_SERVER_PORT=8972 SUITE_STUB_PORT=8973 tsx --env-file=<env> scripts/suite.ts",
+      "last_result": "pass",
+      "evidence": "work/fix-f/suite-red-n1.log → work/fix-f/reg-suite.log（470/470）"
+    },
+    {
+      "kind": "property",
+      "given": "同一场景在干净库与污染库下重复执行",
+      "expect": "结论一致（不因遗留数据波动）",
+      "command": "SUITE_SERVER_PORT=8972 SUITE_STUB_PORT=8973 tsx --env-file=<env> scripts/suite.ts",
+      "last_result": "pass",
+      "evidence": "work/fix-f/suite-red-n1.log → work/fix-f/reg-suite.log（470/470）"
+    }
+  ],
+  "regression": {
+    "command": "SUITE_SERVER_PORT=8972 SUITE_STUB_PORT=8973 tsx --env-file=<env> scripts/suite.ts",
+    "evidence": "work/fix-f/suite-red-n1.log → work/fix-f/reg-suite.log（470/470）"
+  },
+  "notes": "来源：独立验收/独立验证会话（非修复者自报）。"
+}

@@ -1,0 +1,68 @@
+{
+  "id": "MC-111",
+  "kind": "problem",
+  "level": "L4",
+  "severity": "P1",
+  "batch": 2,
+  "state": "open",
+  "title": "B 端 ask 助手答非所问：KB 命中挤占全部答案预算，系统事实不可见，仍声明『以上数字均来自事件库实时取数』",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "packages/runtime/src/ask.ts:175@4ff9943",
+      "note": "mergeKbFacts：KB 命中（最多 5 条，每条 value 截 160 字）被强制排在 base facts（事件规模/近窗动作/待审批/线程/围栏/记忆）之前，注释自述『顺序即优先级』"
+    },
+    {
+      "type": "code",
+      "ref": "packages/runtime/src/ask.ts:278@4ff9943",
+      "note": "composeAskAnswer：ASK_ANSWER_MAX_CHARS=120 顺序装行，装不下就不展示；首条 KB 事实单条 label+value 即可吃满预算，approvals/threads 等统计必然被丢弃"
+    },
+    {
+      "type": "code",
+      "ref": "apps/server/src/service/kb.ts:311@4ff9943",
+      "note": "searchKB：2-gram 召回 + score>0 即命中，无相关性下限；『有多少待审批事项』也会命中维修报修 FAQ（kbd-faq-repair 在账本里重复出现两次）"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-a<redacted-api-key>.json",
+      "note": "真机实测 5 问 5 答（ws-yunqi，出厂 mock 态 via=rule）：问待审批→答维修报修 FAQ；问进行中任务→答开夜床 FAQ；问工单→答报修进度 FAQ；问夜班→答发票重开 FAQ；均无被问数字"
+    },
+    {
+      "type": "db",
+      "ref": "biz_events T-130..T-134 的 ask.answer.decision",
+      "note": "账本 basis 记录『取数来源：kb:kbd-faq-repair、kb:kbd-faq-repair、biz_events、biz_events 近窗聚合、approvals、threads、fence_rules、org_memory』——审批/线程确实取了数，但答案正文一条都没展示（面与账本口径不一致）"
+    }
+  ],
+  "root_cause": {
+    "file": "packages/runtime/src/ask.ts",
+    "line": 175,
+    "commit": "4ff9943",
+    "symbol": "mergeKbFacts"
+  },
+  "trigger_path": "出厂默认（LLM_PROVIDER=mock → via=rule）在任一有 FAQ 知识库的工作区提问任意业务问题：KB 检索至少命中 1 条含常见 2-gram 的 FAQ → 首条 KB 事实吃满 120 字预算 → 答案只剩无关 FAQ + 『以上数字均来自事件库实时取数，可下钻溯源』的落款。",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "ws-yunqi 以 owner 提问『当前有多少待审批事项？』（同批还问线程/工单/夜班/客房用品）",
+      "expect": "答案包含当前待审批条数（形如「N 项」或「无」），不得用知识库 FAQ 代替；且答案未引用 KB 时不得出现『以上数字均来自事件库实时取数』",
+      "command": "cd <repo> && node outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-ask.mjs yunqi-hotel",
+      "last_result": "fail",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-a<redacted-api-key>.json"
+    },
+    {
+      "kind": "property",
+      "given": "任意工作区 + 任意问题",
+      "expect": "系统事实（审批/线程/工单/夜班）不因 KB 命中而全部消失：答案要么给被问域的数字，要么明确说明该域未接入事实面；KB 事实必须过相关性下限",
+      "command": "同上（脚本对 5 类问题逐一断言 ledger_sources 覆盖）",
+      "last_result": "fail",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-a<redacted-api-key>.json"
+    }
+  ],
+  "fix_plan": "三处最小改动：①searchKB 增加相关性下限（score 阈值/最少命中词数）并按 score 过滤；②composeAskAnswer 按『被问域优先』装行（问题词命中哪个域，该域事实优先于 KB），并在正文未含 KB 事实时去掉 KB 取数落款；③为工单/夜班补 ask 事实面（defaultAskFactProvider 增 c_tickets/night_runs 两个只读计数）。",
+  "blast_radius": "影响 P0 对话框、移动端问询与账本 basis 口径；ask 事实面扩充会改变 G 域套件对 facts 数量的断言，需同步更新。",
+  "conflict_paths": [
+    "packages/runtime/src/ask.ts",
+    "apps/server/src/service/kb.ts"
+  ],
+  "notes": "M3 联动探针 4（mcd_linkage）。"
+}

@@ -1,0 +1,187 @@
++ pnpm -C /Users/mac/WorkLoom-fleet/.wt-mcd-m6 db:verify-chain
+
+> workloom-im@0.1.1 db:verify-chain /Users/mac/WorkLoom-fleet/.wt-mcd-m6
+> tsx --env-file=.env scripts/verify-chain.ts
+
+✓ [demo/ws-aipm-demo] 22 条，六项检查全过 · 容忍 seq 小空洞 2887（ON CONFLICT 消耗）
+✓ [tenant-chaos-stmun0p2al/ws-chaos-stmun0p2al] 1 条，六项检查全过
+✓ [tenant-chaos-stmun0smd0/ws-chaos-stmun0smd0] 1 条，六项检查全过
+✓ [tenant-demo/ws-bundle-1790707122583-w3f39] 5 条，六项检查全过
+✓ [tenant-demo/ws-conc-stmun0p2al] 1 条，六项检查全过
+✓ [tenant-demo/ws-conc-stmun0smd0] 1 条，六项检查全过
+✓ [tenant-demo/ws-other-mun0sbxz] 1 条，六项检查全过
+✓ [tenant-demo/ws-suite-b-stmun0p2al] 1 条，六项检查全过
+✓ [tenant-demo/ws-suite-b-stmun0smd0] 1 条，六项检查全过
+✓ [tenant-demo/ws-suite-c-stmun0p2al] 1 条，六项检查全过
+✓ [tenant-demo/ws-suite-c-stmun0smd0] 1 条，六项检查全过
+✓ [tenant-demo/ws-yunqi] 2987 条，六项检查全过 · 容忍 seq 小空洞 20（ON CONFLICT 消耗）
+✓ [tenant-t26-mun0sbs0/ws-t26] 1 条，六项检查全过
+
+===== 结构化验证报告（JSON） =====
+{
+  "ok": true,
+  "workspaces": 13,
+  "total_events": 3024,
+  "total_issues": 0,
+  "issue_kinds": [],
+  "segments": [
+    {
+      "workspace_id": "ws-aipm-demo",
+      "tenant_id": "demo",
+      "events": 22,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 2887,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-chaos-stmun0p2al",
+      "tenant_id": "tenant-chaos-stmun0p2al",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-chaos-stmun0smd0",
+      "tenant_id": "tenant-chaos-stmun0smd0",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-bundle-1790707122583-w3f39",
+      "tenant_id": "tenant-demo",
+      "events": 5,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-conc-stmun0p2al",
+      "tenant_id": "tenant-demo",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-conc-stmun0smd0",
+      "tenant_id": "tenant-demo",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-other-mun0sbxz",
+      "tenant_id": "tenant-demo",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-suite-b-stmun0p2al",
+      "tenant_id": "tenant-demo",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-suite-b-stmun0smd0",
+      "tenant_id": "tenant-demo",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-suite-c-stmun0p2al",
+      "tenant_id": "tenant-demo",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-suite-c-stmun0smd0",
+      "tenant_id": "tenant-demo",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-yunqi",
+      "tenant_id": "tenant-demo",
+      "events": 2987,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 20,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 23,
+      "issues": []
+    },
+    {
+      "workspace_id": "ws-t26",
+      "tenant_id": "tenant-t26-mun0sbs0",
+      "events": 1,
+      "chain_ok": true,
+      "issues_total": 0,
+      "issue_kinds": [],
+      "tolerated_seq_gaps": 0,
+      "legacy_event_ids": 0,
+      "tolerated_backfills": 0,
+      "issues": []
+    }
+  ]
+}
+
+✅ 全库验证通过：13 个 workspace 段 / 3024 条事件，六项检查全绿

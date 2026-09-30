@@ -1,0 +1,31 @@
+## MC-104: approval.gesture 事件的 session_id（期望：指向线程）
+BEGIN
+ set_config  | set_config 
+-------------+------------
+ tenant-demo | ws-yunqi
+(1 row)
+
+ seq  | event_id | session_id |      action      |    links    
+------+----------+------------+------------------+-------------
+ 1376 | E-10359  | <NULL>     | approval.gesture | ["E-10358"]
+ 1370 | E-10353  | <NULL>     | approval.gesture | ["E-10352"]
+ 1368 | E-10351  | <NULL>     | approval.gesture | ["E-10350"]
+(3 rows)
+
+COMMIT
+
+## 线程时间线（threads.events 按 session_id 过滤）对应同一线程的事件动作列表
+BEGIN
+ set_config  | set_config 
+-------------+------------
+ tenant-demo | ws-yunqi
+(1 row)
+
+ session_id |                              actions                              
+------------+-------------------------------------------------------------------
+ T-129      | {desktop.gui,thread.dispatch}
+ T-128      | {competitor.fetch,pms.price.read,pms.price.write,thread.dispatch}
+ T-127      | {competitor.fetch,pms.price.read,pms.price.write,thread.dispatch}
+(3 rows)
+
+COMMIT

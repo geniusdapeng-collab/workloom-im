@@ -1,0 +1,52 @@
+{
+  "id": "MC-305",
+  "kind": "problem",
+  "level": "L1",
+  "severity": "P1",
+  "batch": 1,
+  "state": "open",
+  "title": "「无回执不算完成」只挡首跑：failed（未核实）线程重跑即变 completed，且 error 仍写着「无回执」（E3.7 被 replay 绕过）",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "packages/runtime/src/loop.ts:211-232@4ff9943f0e5b331619a67db06af32ec09e9d8616",
+      "note": "existingStepIds 只按「有 step_id 且非熔断/非挂起」判定步骤已完成，完全不看 receipt.synced——未核实步骤同样进 done 集合"
+    },
+    {
+      "type": "code",
+      "ref": "packages/runtime/src/loop.ts:604-612@4ff9943f0e5b331619a67db06af32ec09e9d8616",
+      "note": "unverified 只在**本次 run 实际处理的步骤**上累积；重跑时该步骤被 done 跳过 → unverified 为空 → 直接写 status='completed'（closed_at 也置位）"
+    },
+    {
+      "type": "db",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m2/m2-05-state-machine.json",
+      "note": "C1/C2/C3 断言实测（临时把一店一档 dataMode 置 real 模拟「无连接器」环境，用例结束已复原）：T-187 首跑 failed（error=「步骤 s1 无回执，标「未核实」」，事件 receipt.synced=false，C1/C2 绿）→ threads.run 一次 → status=completed，error 字段仍是「步骤 s1 无回执」（C3 红），无任何新回执事件"
+    }
+  ],
+  "root_cause": {
+    "file": "packages/runtime/src/loop.ts",
+    "line": 231,
+    "commit": "4ff9943f0e5b331619a67db06af32ec09e9d8616",
+    "symbol": "existingStepIds / runQuest 尾部 unverified 判定"
+  },
+  "trigger_path": "任何「执行了但没有可核验回执」的场景（真实数据态未接连接器、回执源故障、synced=false 的历史步骤）→ 线程 failed → 用户点重试/继续（UI、脚本或调度器再次 pick）→ 立即显示 completed。",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "dataMode=real（无连接器）跑一条写步骤线程 → failed → 再调 threads.run 一次",
+      "expect": "重跑后状态不得为 completed（应仍 failed/requires-human，或重新产生回执后才行）",
+      "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2e$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+      "last_result": "fail",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m2/m2-05-state-machine.raw.json"
+    },
+    {
+      "kind": "property",
+      "given": "任意线程终态为 completed",
+      "expect": "该线程每个已执行步骤对应的最新事件都满足 receipt.synced=true（或状态里显式标注 simulated 且 as-designed）；不得存在 synced=false 的步骤",
+      "command": "PATH=$(dirname $(which node)):$PATH M2_SFX=m2e2$(date +%H%M%S) node /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions/m2-05-state-machine.mjs",
+      "last_result": "fail",
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m2/m2-05-state-machine.raw.json"
+    }
+  ],
+  "notes": "修复方向：existingStepIds 只收 receipt.synced=true 的步骤（未核实步骤重跑时必须重新执行），或在 runQuest 收尾处对「线程全部步骤的历史 receipt」做二次核验，任一 unsynced 即保持 failed；重跑时清 error 字段。"
+}

@@ -13,13 +13,12 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { appRouter } from "./trpc/router.js";
-import { createContext } from "./trpc/context.js";
+import { createContext, trpcErrorRef } from "./trpc/context.js";
 import { serviceGateway } from "./service/gateway.js";
 import { getOwnerPool, getAppPool, getGatewayPool } from "@workloom/db";
 import { bundlesRoot } from "@workloom/base/bundles";
 import { registerFeedbackEnumsFromDisk } from "@workloom/base/evolve";
 import { startSkillDistAutoSync, buildManifest, receiveReflux, type RefluxPayload } from "@workloom/base/skill-ops";
-import { createHash } from "node:crypto";
 import { startThreadScheduler } from "./runtime/scheduler.js";
 import { gatewayAppend } from "@workloom/base/workdata";
 import { registerBundleAskFacts } from "./runtime/ask-facts-loader.js";
@@ -42,8 +41,16 @@ app.use(
   }),
 );
 
-/** 裸健康检查（不进 tRPC，供 start.sh/编排探活） */
-app.get("/health", (c) => c.json({ ok: true, service: "workloom-im-server" }));
+/**
+ * 裸健康检查（不进 tRPC，供 start.sh/编排探活）。
+ * SERVER_INSTANCE_ID（可选）：把调用方注入的实例指纹原样回显——E2E/门禁据此校验
+ * 「应答者就是本次拉起的那个进程」，避免端口被占时对别人的实例断言（MC-204）。
+ */
+app.get("/health", (c) => c.json({
+  ok: true,
+  service: "workloom-im-server",
+  ...(process.env.SERVER_INSTANCE_ID ? { instanceId: process.env.SERVER_INSTANCE_ID } : {}),
+}));
 
 /**
  * 本机克隆音色（小织/织伴的默认音色）
@@ -95,10 +102,8 @@ app.all("/trpc/*", async (c) => {
      * onError 内任何失败都必须吞掉：错误处理路径再抛错会把正常响应也带崩。
      */
     onError: ({ path, error, type, ctx }) => {
-      const ref = createHash("sha256")
-        .update(`${path ?? "-"}|${error.code}|${error.message}`)
-        .digest("hex")
-        .slice(0, 8);
+      // ref 与 errorFormatter（trpc/context.ts）同算法：客户端只看到通用文案 + ref，原文留在这里
+      const ref = trpcErrorRef(path, error.code, error.message);
       console.error(`[trpc] ${type ?? "unknown"} ${path ?? "-"} → ${error.code}: ${error.message}（ref=${ref}）`);
       if (error.code !== "INTERNAL_SERVER_ERROR") return;
       const identity = ctx?.identity;

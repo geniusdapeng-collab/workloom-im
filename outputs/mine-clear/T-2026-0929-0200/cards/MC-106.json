@@ -1,0 +1,50 @@
+{
+  "id": "MC-106",
+  "kind": "problem",
+  "level": "L1",
+  "severity": "P2",
+  "batch": 2,
+  "state": "open",
+  "title": "高危写动作的审批引用可复用：无消费语义，且无绑定字段的审批被当作通用授权",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "packages/base/workdata/gateway.ts:252@4ff9943",
+      "note": "checkHighRiskAuthorization 只在 snapshot 含 object_type/object_id/action 时才比对；三者皆缺则『视为通用授权放行』"
+    },
+    {
+      "type": "code",
+      "ref": "packages/base/review-console/approvals.ts:225@4ff9943",
+      "note": "decide() 只把 status 置 approved/edited，没有任何 consumed/one-shot 标记；同一 approvalRef 可被无限次引用（有效期内）"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m1-approval-reuse.log",
+      "note": "真机实测：一条 snapshot 无绑定的 approved 行被同一高危 agent 写动作引用两次，两次都放行（E-10368 / E-10369）"
+    }
+  ],
+  "root_cause": {
+    "file": "packages/base/workdata/gateway.ts",
+    "line": 252,
+    "commit": "4ff9943",
+    "symbol": "checkHighRiskAuthorization"
+  },
+  "trigger_path": "captain（hr.replacement/org.hiring）、skill-ops（skill_dist_install）等路径产生的审批行 snapshot 不含 object/action 绑定；若其 approvalId 被作为 approvalRef 传入高危写动作，即成为可复用的通用授权",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "同一 approvalRef 连续两次高危写动作（action=desktop.gui）",
+      "expect": "第二次被拒（逐次授权/一次性消费），或系统显式记录这是一次通用授权并留痕",
+      "command": "cd <repo> && node_modules/.bin/tsx --env-file=.env outputs/mine-clear/T-2026-0929-0200/assertions/m1-approval-reuse.mts",
+      "last_result": "fail"
+    },
+    {
+      "kind": "property",
+      "given": "任意 snapshot 缺少 object/action 绑定的 approved 审批",
+      "expect": "不得作为高危写动作的授权依据（缺少绑定即拒绝，而不是放行）",
+      "command": "同上（脚本夹具即无绑定快照）",
+      "last_result": "fail"
+    }
+  ],
+  "notes": "当前被『高危岗位段③不可达』（MC-108）掩盖：修好 MC-108 后本卡会立即变成可利用面，须同批处理。"
+}

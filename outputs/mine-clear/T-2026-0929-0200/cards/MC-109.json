@@ -1,0 +1,50 @@
+{
+  "id": "MC-109",
+  "kind": "problem",
+  "level": "L1",
+  "severity": "P1",
+  "batch": 1,
+  "state": "open",
+  "title": "首次自定义后规则丢失基线锚点：『只能收紧』守卫对该 rule_id 失效（当前被 MC-102 的静默 no-op 掩盖）",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "packages/base/fence-engine/dsl.ts:216@4ff9943",
+      "note": "checkCandidateAgainstBaseline 只在 current 中存在 is_baseline=true 的同 rule_id 行时才校验；基线行一旦 rolled_back，守卫直接放行"
+    },
+    {
+      "type": "code",
+      "ref": "packages/base/fence-engine/lifecycle.ts:288@4ff9943",
+      "note": "激活新版本时把同 rule_id 的旧 active 行（含平台基线行）置 rolled_back；新行 is_baseline=false，锚点随之丢失"
+    },
+    {
+      "type": "log",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m1-baseline-loss.log",
+      "note": "实测：R7 自定义为 review 后，再提 level=auto（放宽）——confirmDryRun 返回 200（守卫未拦），DB 中基线行 rolled_back、活动行 is_baseline=false"
+    }
+  ],
+  "root_cause": {
+    "file": "packages/base/fence-engine/lifecycle.ts",
+    "line": 288,
+    "commit": "4ff9943",
+    "symbol": "activateRuleVersion"
+  },
+  "trigger_path": "首次对某基线规则做（合法）加严 → 平台基线行转 rolled_back → 此后该 rule_id 的相对基线校验找不到锚点，任何 level/when 变更都不再受『只可加严』约束",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "R7 已自定义为 review（is_baseline=false，基线行 rolled_back）后，提交 level=auto 的放宽提案",
+      "expect": "提案被拒（基线只可加严），或明确标注该规则已脱离平台基线并列出补偿控制",
+      "command": "cd <repo> && MCD_LEVEL1=auto MCD_LEVEL2=auto node outputs/mine-clear/T-2026-0929-0200/assertions/m1-fence-rule-change.mjs（观察 confirmDryRun 是否 400）",
+      "last_result": "fail"
+    },
+    {
+      "kind": "property",
+      "given": "任意被自定义过的平台基线规则",
+      "expect": "平台基线的收紧下界始终可判定（锚点不丢），放宽路径必须被拒或显式留痕审批",
+      "command": "同上 + 特权直查 fence_rules 的 is_baseline/status 组合",
+      "last_result": "fail"
+    }
+  ],
+  "notes": "与 MC-102 是同一段代码的一对矛盾：no-op 让放宽申请『跑不通』，因此该洞目前未被实际利用；修 MC-102 前必须先补锚点（否则修复即引入 INV-7 绕过）。"
+}

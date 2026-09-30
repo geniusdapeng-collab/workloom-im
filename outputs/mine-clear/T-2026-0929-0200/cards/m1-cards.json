@@ -1,0 +1,196 @@
+[
+  {
+    "id": "MC-101",
+    "kind": "problem",
+    "level": "L4",
+    "severity": "P1",
+    "batch": 1,
+    "state": "open",
+    "title": "审批通过后线程不自动续跑：任务停在 pending_review，需人工再点『推进』",
+    "evidence": [
+      { "type": "code", "ref": "apps/server/src/runtime/scheduler.ts:84@4ff9943", "note": "调度器只挑 status='queued' 的线程；pending_review 不在扫描集合，也没有『审批通过 → 重新入队』路径" },
+      { "type": "code", "ref": "packages/base/review-console/approvals.ts:296@4ff9943", "note": "decide() 只在 reject 分支联动线程（cancelled）；approve/edit 不改线程状态" },
+      { "type": "code", "ref": "apps/web/src/pages/p4/P4.tsx:139@4ff9943", "note": "审批台三手势落库后只 load() 刷新列表，不调 threads.run" },
+      { "type": "log", "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m1-approval-resume.log", "note": "真机实测：T-127 关卡 approve 后 60s，线程仍 pending_review，事件数 4→4（无续跑）" },
+      { "type": "code", "ref": "scripts/acceptance/outcome.mjs:135@4ff9943", "note": "RDAS O 域测量注释假定『手势后的续跑是异步的（服务端 fire-and-forget）』，与基座实现不符" }
+    ],
+    "root_cause": { "file": "apps/server/src/runtime/scheduler.ts", "line": 84, "commit": "4ff9943", "symbol": "nextQueuedThread" },
+    "trigger_path": "threads.dispatch(runImmediately) → 步骤越围栏 → pending_review → 审批台点『通过』 → 线程状态与事件都不再变化；客户必须自己找到任务页点『推进』才继续，且界面没有提示",
+    "assertions": [
+      { "kind": "sample", "given": "T-12x 的步骤关卡被 approvals.decide(approve)", "expect": "60s 内线程离开 pending_review（进入 running/completed 或下一关卡）", "command": "cd <repo> && set -a && . ./.env && set +a && MCD_BASE=http://127.0.0.1:8899 node outputs/mine-clear/T-2026-0929-0200/assertions/m1-approval-resume.mjs", "last_result": "fail" },
+      { "kind": "property", "given": "任意步骤级审批被批准", "expect": "线程不会无限期停在 pending_review：要么自动续跑，要么写入显式的『等待人工推进』状态并在 UI 呈现", "command": "同上（脚本不依赖具体线程号，自行派遣新线程）", "last_result": "fail" }
+    ],
+    "notes": "与 MC-105（RDAS outcome 调不存在的过程）同源：验收器与基座对『审批后续跑』的假设不一致。"
+  },
+  {
+    "id": "MC-102",
+    "kind": "problem",
+    "level": "L1",
+    "severity": "P1",
+    "batch": 1,
+    "state": "open",
+    "title": "同一 rule_id 的第二次加严提案『已批准』但规则静默不生效（行 id 固定 + 激活幂等早退）",
+    "evidence": [
+      { "type": "code", "ref": "packages/base/fence-engine/lifecycle.ts:165@4ff9943", "note": "fenceRuleRowId 固定为 fr-<rule>-vnext-<ws>：同 rule_id 第二次提案必然撞主键" },
+      { "type": "code", "ref": "apps/server/src/trpc/router.ts:2246@4ff9943", "note": "confirmDryRun 的 INSERT ... ON CONFLICT (id) DO NOTHING：冲突即静默丢弃提案内容" },
+      { "type": "code", "ref": "apps/server/src/trpc/router.ts:1389@4ff9943", "note": "activateFenceRuleAfterApproval 在行状态非 draft/pending_approval 时 return null（幂等早退），不写失败证据、不报错" },
+      { "type": "log", "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m1-fence-rule-change.log", "note": "实测：第 1 次 auto→review 生效（v2）；第 2 次 review→block 审批 200 通过，回读仍 review/v2（未生效）" }
+    ],
+    "root_cause": { "file": "apps/server/src/trpc/router.ts", "line": 2246, "commit": "4ff9943", "symbol": "confirmDryRun" },
+    "trigger_path": "规则中心对同一 rule_id 做第二次加严（dryRun → confirmDryRun → 审批通过）→ 审批留痕为 approved，但 fence_rules 行未被更新，客户以为围栏已收紧",
+    "assertions": [
+      { "kind": "sample", "given": "对 R7 连续两次加严提案（review → block）并各自批准", "expect": "第二次批准后 fence.rules 回读 level=block，且版本号递增（旧版 rolled_back）", "command": "cd <repo> && set -a && . ./.env && set +a && MCD_BASE=http://127.0.0.1:8899 node outputs/mine-clear/T-2026-0929-0200/assertions/m1-fence-rule-change.mjs", "last_result": "fail" },
+      { "kind": "property", "given": "任意 rule_id 的任意次合法加严提案", "expect": "批准即生效，或明确拒绝并给出可复现原因；不存在『已批准但规则未变』的中间态", "command": "同上（循环 N 次并对 fence.rules 回读断言）", "last_result": "fail" }
+    ],
+    "notes": "修复时必须与 MC-109 一起处理：单纯改成版本化行 id 会打开『放宽基线』的口子。"
+  },
+  {
+    "id": "MC-109",
+    "kind": "problem",
+    "level": "L1",
+    "severity": "P1",
+    "batch": 1,
+    "state": "open",
+    "title": "首次自定义后规则丢失基线锚点：『只能收紧』守卫对该 rule_id 失效（当前被 MC-102 的静默 no-op 掩盖）",
+    "evidence": [
+      { "type": "code", "ref": "packages/base/fence-engine/dsl.ts:216@4ff9943", "note": "checkCandidateAgainstBaseline 只在 current 中存在 is_baseline=true 的同 rule_id 行时才校验；基线行一旦 rolled_back，守卫直接放行" },
+      { "type": "code", "ref": "packages/base/fence-engine/lifecycle.ts:288@4ff9943", "note": "激活新版本时把同 rule_id 的旧 active 行（含平台基线行）置 rolled_back；新行 is_baseline=false，锚点随之丢失" },
+      { "type": "log", "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m1-baseline-loss.log", "note": "实测：R7 自定义为 review 后，再提 level=auto（放宽）——confirmDryRun 返回 200（守卫未拦），DB 中基线行 rolled_back、活动行 is_baseline=false" }
+    ],
+    "root_cause": { "file": "packages/base/fence-engine/lifecycle.ts", "line": 288, "commit": "4ff9943", "symbol": "activateRuleVersion" },
+    "trigger_path": "首次对某基线规则做（合法）加严 → 平台基线行转 rolled_back → 此后该 rule_id 的相对基线校验找不到锚点，任何 level/when 变更都不再受『只可加严』约束",
+    "assertions": [
+      { "kind": "sample", "given": "R7 已自定义为 review（is_baseline=false，基线行 rolled_back）后，提交 level=auto 的放宽提案", "expect": "提案被拒（基线只可加严），或明确标注该规则已脱离平台基线并列出补偿控制", "command": "cd <repo> && MCD_LEVEL1=auto MCD_LEVEL2=auto node outputs/mine-clear/T-2026-0929-0200/assertions/m1-fence-rule-change.mjs（观察 confirmDryRun 是否 400）", "last_result": "fail" },
+      { "kind": "property", "given": "任意被自定义过的平台基线规则", "expect": "平台基线的收紧下界始终可判定（锚点不丢），放宽路径必须被拒或显式留痕审批", "command": "同上 + 特权直查 fence_rules 的 is_baseline/status 组合", "last_result": "fail" }
+    ],
+    "notes": "与 MC-102 是同一段代码的一对矛盾：no-op 让放宽申请『跑不通』，因此该洞目前未被实际利用；修 MC-102 前必须先补锚点（否则修复即引入 INV-7 绕过）。"
+  },
+  {
+    "id": "MC-108",
+    "kind": "problem",
+    "level": "L1",
+    "severity": "P0",
+    "batch": 0,
+    "state": "open",
+    "title": "高危岗位守卫空转：装配产出的 highRisk 无人消费，高危关卡可被批量放行（INV-4）",
+    "evidence": [
+      { "type": "code", "ref": "packages/runtime/src/assembly.ts:22@4ff9943", "note": "AssembledPreset 声明 highRisk（注释：Y-01 安全级修复位，审批快照据此派生 high_risk）" },
+      { "type": "code", "ref": "packages/runtime/src/loop.ts:534@4ff9943", "note": "步骤审批快照写 gate/tool/step_id/rule_ids/irreversible…但从不写 high_risk；actor 亦不带 highRisk（loop.ts:461/567）" },
+      { "type": "code", "ref": "packages/base/review-console/approvals.ts:62@4ff9943", "note": "批量/超时守卫 isHighRiskApproval 只读 tier=l4_chairman、snapshot.high_risk、snapshot.irreversible 三项" },
+      { "type": "log", "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m1-highrisk-batch.log", "note": "真机实测：desktop-agent（meta.high_risk=true，工具 desktop.gui=write）的关卡 tier=l2_captain、snapshot.high_risk=null → approvals.batchApprove 返回 approved=[apr-e-10358]，skipped=[]" },
+      { "type": "log", "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m1-approval-reuse.log", "note": "同一测试证实高危写动作的逐次授权（gateway 段③）也不可达：actor 不带 highRisk 时检查函数直接 return" }
+    ],
+    "root_cause": { "file": "packages/runtime/src/loop.ts", "line": 534, "commit": "4ff9943", "symbol": "runQuest（步骤审批快照/actor 构造）" },
+    "trigger_path": "用 desktop-agent（或任何 meta.high_risk=true 的岗位）派遣写任务 → 步骤挂起审批 → 审批中心『批量放行』一次通过（应逐条）；执行时 actor 不带 highRisk，段③逐次授权亦不触发",
+    "assertions": [
+      { "kind": "sample", "given": "desktop-agent 的写入步骤产生的待审批关卡", "expect": "batchApprove 跳过该关卡并给出『高危项不可批量采纳（须逐条）』", "command": "cd <repo> && set -a && . ./.env && set +a && MCD_BASE=http://127.0.0.1:8899 node outputs/mine-clear/T-2026-0929-0200/assertions/m1-highrisk-batch.mjs", "last_result": "fail" },
+      { "kind": "property", "given": "任意 meta.high_risk=true 岗位的任意写步骤", "expect": "关卡快照带 high_risk=true 且不可批量放行；执行路径携带逐次授权引用（gateway 段③可达）", "command": "同上 + 特权直查 approvals.snapshot->>'high_risk'", "last_result": "fail" }
+    ],
+    "notes": "与仓库既有 Y-01/W-04（同型守卫空转）同源；修复需同时覆盖：快照字段、批量守卫、超时扫描（高危不放行）、gateway actor.highRisk。"
+  },
+  {
+    "id": "MC-105",
+    "kind": "problem",
+    "level": "L2",
+    "severity": "P1",
+    "batch": 1,
+    "state": "open",
+    "title": "RDAS O 域执行器调用不存在的过程 approvals.batchRelease（404），自主交付率测量失真",
+    "evidence": [
+      { "type": "code", "ref": "scripts/acceptance/outcome.mjs:148@4ff9943", "note": "每轮介入都 POST /trpc/approvals.batchRelease 并把 released 记入 trial.interventions" },
+      { "type": "log", "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m1-batchrelease-404.log", "note": "真机实测：POST /trpc/approvals.batchRelease → 404 No procedure found（apps/server/src/trpc/router.ts 只有 decide/batchApprove/sweep）" },
+      { "type": "code", "ref": "apps/server/src/trpc/router.ts:1438@4ff9943", "note": "approvalsRouter 仅暴露 list/decide/batchApprove/sweep" }
+    ],
+    "root_cause": { "file": "scripts/acceptance/outcome.mjs", "line": 148, "commit": "4ff9943", "symbol": "runTrial（介入循环）" },
+    "trigger_path": "跑 pnpm acceptance:outcome（O 域 ADR/HIR）→ 每轮 batchRelease 404 → 低风险关卡无法按设计批量放行，只能逐条手势；配合 MC-101（无自动续跑）会让 trial 大面积停在 pending_review，passAtK/ADR/HIR 被系统性压低",
+    "assertions": [
+      { "kind": "sample", "given": "以 owner 身份 POST /trpc/approvals.batchRelease", "expect": "200 且返回 released 列表（或在 base 未实现时执行器明确降级并记录来源），而不是 404", "command": "cd <repo> && set -a && . ./.env && set +a && curl -s -X POST $MCD_BASE/trpc/approvals.batchRelease -H \"authorization: Bearer $TOKEN\" -d '{}' | head -c 200", "last_result": "fail" },
+      { "kind": "property", "given": "任意一次 O 域验收运行", "expect": "执行器引用的每个 tRPC 过程都在目标仓存在（启动前自检），缺失即 fail-fast 而不是静默降级", "command": "node scripts/acceptance/outcome.mjs --help / 自检脚本遍历 trpc 调用面", "last_result": "fail" }
+    ],
+    "notes": "与 MC-101 组合效应：验收器期望『批量放行 + 异步续跑』，基座两者都缺。"
+  },
+  {
+    "id": "MC-104",
+    "kind": "problem",
+    "level": "L4",
+    "severity": "P2",
+    "batch": 2,
+    "state": "open",
+    "title": "人工审批决定不进线程时间线：approval.gesture 事件缺 session_id",
+    "evidence": [
+      { "type": "code", "ref": "packages/base/review-console/approvals.ts:254@4ff9943", "note": "decide() 写手势事件时只传 {tenantId, workspaceId, actor}，未传 sessionId（links 有 row.event_id，但投影不按 links）" },
+      { "type": "code", "ref": "apps/server/src/trpc/router.ts:1248@4ff9943", "note": "threads.events 按 WHERE workspace_id=$1 AND session_id=$2 过滤，手势事件 session_id 为 NULL 因而不可见" },
+      { "type": "log", "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m1-gesture-session.log", "note": "DB 直查：E-10359/E-10353/E-10351 的 session_id 均为 NULL；对应线程 T-129/T-128/T-127 的动作列表只有 dispatch 与执行动作" }
+    ],
+    "root_cause": { "file": "packages/base/review-console/approvals.ts", "line": 254, "commit": "4ff9943", "symbol": "decide" },
+    "trigger_path": "审批台批准/驳回/编辑任一步骤关卡 → 线程详情的事件时间线看不到这次人工决定（全局账本有，线程投影没有），审计与回放时无法在任务维度确认『谁放行的这一步』",
+    "assertions": [
+      { "kind": "sample", "given": "对某线程步骤关卡执行 approvals.decide(approve)", "expect": "threads.events 返回该线程的事件列表包含 approval.gesture（且带 approvalId/gesture）", "command": "cd <repo> && set -a && . ./.env && set +a && MCD_BASE=http://127.0.0.1:8899 node outputs/mine-clear/T-2026-0929-0200/assertions/m1-approval-resume.mjs（脚本打印线程时间线动作列表）", "last_result": "fail" },
+      { "kind": "property", "given": "任意审批手势（approve/edit/reject）", "expect": "决策事件归属到被审批步骤所属线程（session_id 或等价的 links 投影），线程维度可完整回放", "command": "同上 + DB 直查 approval.gesture 的 session_id 非 NULL", "last_result": "fail" }
+    ],
+    "notes": "expireSweep 的 approval.expired 事件同样无 session_id（approvals.ts:389）。"
+  },
+  {
+    "id": "MC-103",
+    "kind": "problem",
+    "level": "L1",
+    "severity": "P2",
+    "batch": 2,
+    "state": "open",
+    "title": "基线 when 变更的错误文案指向 allowWhenChange，但产品路径没有这个参数（指引不可达）",
+    "evidence": [
+      { "type": "code", "ref": "packages/base/fence-engine/dsl.ts:197@4ff9943", "note": "拒绝文案：『…须先 dry-run 回放 + 人工确认（L2.4）后以 allowWhenChange 显式放行』" },
+      { "type": "code", "ref": "apps/server/src/trpc/router.ts:2214@4ff9943", "note": "fence.confirmDryRun 的 zod 入参只有 dryRunId + rule{ruleId,name,level,objectTypes,actions,when}，无 allowWhenChange（未知键被 strip）" },
+      { "type": "code", "ref": "apps/server/src/service/bundle.ts:1187@4ff9943", "note": "bundle 激活路径同样不传 allowWhenChange" },
+      { "type": "log", "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m1-allow-when-change.log", "note": "源码检索：allowWhenChange 仅出现在 dsl.ts 与 fence-engine.test.ts，无任何产品调用点" }
+    ],
+    "root_cause": { "file": "apps/server/src/trpc/router.ts", "line": 2214, "commit": "4ff9943", "symbol": "fence.confirmDryRun" },
+    "trigger_path": "客户在规则中心改一条基线规则的条件（when）→ 400 拒绝，提示用 allowWhenChange 放行 → 该参数在 API/SDK/UI 中不存在，客户无路可走",
+    "assertions": [
+      { "kind": "sample", "given": "对基线规则提交 when 变更提案（MCD_WHEN='true'）", "expect": "either 提供显式放行入参（dry-run+人工确认后生效）或错误文案改为『当前版本不支持改写基线条件』并给出替代路径", "command": "cd <repo> && MCD_WHEN=true node outputs/mine-clear/T-2026-0929-0200/assertions/m1-fence-rule-change.mjs", "last_result": "fail" },
+      { "kind": "property", "given": "任意拒绝消息里提到的开关/参数", "expect": "该开关在至少一条产品路径上可被设置（可被 API 调用验证），否则不得出现在提示文案中", "command": "grep -rn allowWhenChange apps packages scripts（产品调用点应为 1+）", "last_result": "fail" }
+    ],
+    "notes": "若产品决定不支持 when 变更，最小修法是文案与文档对齐；若支持，则需在 confirmDryRun 增加显式确认位并留痕。"
+  },
+  {
+    "id": "MC-106",
+    "kind": "problem",
+    "level": "L1",
+    "severity": "P2",
+    "batch": 2,
+    "state": "open",
+    "title": "高危写动作的审批引用可复用：无消费语义，且无绑定字段的审批被当作通用授权",
+    "evidence": [
+      { "type": "code", "ref": "packages/base/workdata/gateway.ts:252@4ff9943", "note": "checkHighRiskAuthorization 只在 snapshot 含 object_type/object_id/action 时才比对；三者皆缺则『视为通用授权放行』" },
+      { "type": "code", "ref": "packages/base/review-console/approvals.ts:225@4ff9943", "note": "decide() 只把 status 置 approved/edited，没有任何 consumed/one-shot 标记；同一 approvalRef 可被无限次引用（有效期内）" },
+      { "type": "log", "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m1-approval-reuse.log", "note": "真机实测：一条 snapshot 无绑定的 approved 行被同一高危 agent 写动作引用两次，两次都放行（E-10368 / E-10369）" }
+    ],
+    "root_cause": { "file": "packages/base/workdata/gateway.ts", "line": 252, "commit": "4ff9943", "symbol": "checkHighRiskAuthorization" },
+    "trigger_path": "captain（hr.replacement/org.hiring）、skill-ops（skill_dist_install）等路径产生的审批行 snapshot 不含 object/action 绑定；若其 approvalId 被作为 approvalRef 传入高危写动作，即成为可复用的通用授权",
+    "assertions": [
+      { "kind": "sample", "given": "同一 approvalRef 连续两次高危写动作（action=desktop.gui）", "expect": "第二次被拒（逐次授权/一次性消费），或系统显式记录这是一次通用授权并留痕", "command": "cd <repo> && node_modules/.bin/tsx --env-file=.env outputs/mine-clear/T-2026-0929-0200/assertions/m1-approval-reuse.mts", "last_result": "fail" },
+      { "kind": "property", "given": "任意 snapshot 缺少 object/action 绑定的 approved 审批", "expect": "不得作为高危写动作的授权依据（缺少绑定即拒绝，而不是放行）", "command": "同上（脚本夹具即无绑定快照）", "last_result": "fail" }
+    ],
+    "notes": "当前被『高危岗位段③不可达』（MC-108）掩盖：修好 MC-108 后本卡会立即变成可利用面，须同批处理。"
+  },
+  {
+    "id": "MC-107",
+    "kind": "problem",
+    "level": "L2",
+    "severity": "P3",
+    "batch": 3,
+    "state": "open",
+    "title": "全场景套件硬编码 STUB_PORT=8791：端口被占用即整轮中止，且无预检提示",
+    "evidence": [
+      { "type": "code", "ref": "scripts/suite.ts:2448@4ff9943", "note": "const STUB_PORT = 8791（无环境变量覆盖），listen 失败直接抛未捕获异常" },
+      { "type": "log", "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m1-suite-port.log", "note": "实测：本机另一会话的服务占用 8791 → 套件在 D24 段 EADDRINUSE 崩溃，整轮中止（此时 8787 已有 SUITE_SERVER_PORT 覆盖与占用预检，8791 没有）" }
+    ],
+    "root_cause": { "file": "scripts/suite.ts", "line": 2448, "commit": "4ff9943", "symbol": "STUB_PORT" },
+    "trigger_path": "同机并行跑两个验收/排雷会话（甲方机器常见）→ 第二个会话的套件在 stub 段崩溃，无法得到完整门禁结果",
+    "assertions": [
+      { "kind": "sample", "given": "8791 被其他进程占用时运行套件，并设置 SUITE_STUB_PORT=8913", "expect": "套件使用 8913 并在 stub 段通过（不因 8791 占用而崩溃）", "command": "cd <repo> && SUITE_SERVER_PORT=8911 SUITE_STUB_PORT=8913 node_modules/.bin/tsx --env-file=<env> scripts/suite.ts", "last_result": "fail" },
+      { "kind": "property", "given": "任意被占用的套件端口", "expect": "套件在启动前给出可操作的错误（端口 + 覆盖变量名），不出现未捕获 EADDRINUSE", "command": "同上（先占端口再跑）", "last_result": "fail" }
+    ],
+    "notes": "非产品缺陷，属交付/验收工具可用性；影响并行验收与复跑效率。"
+  }
+]

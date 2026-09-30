@@ -1,0 +1,14 @@
+m6-c-MC-201	PASS	rc=0
+m6-c-MC-202	PASS	rc=0
+m6-c-MC-203	PASS	rc=0
+m6-c-MC-204	PASS	rc=0
+m6-c-MC-205	PASS	rc=0
+m6-c-MC-208	PASS	rc=0
+m6-c-MC-210	PASS	rc=0
+m6-c-MC-206	PASS	rc=0
+m6-c-MC-207	PASS	rc=0
+m6-c-MC-209	PASS	rc=0
+m6-e01-sec-probe	FAIL	rc=1
+m6-e01b-sec-probe-prod	FAIL	rc=1
+m6-e02-observability	FAIL	rc=1
+m6-e03-error-leak	FAIL	rc=1
