@@ -293,6 +293,89 @@
         set -a; . ./.env; set +a
         pnpm ui:e2e
 
+# TEMP（T-2026-0929-0200）：Linux 视觉基线重生成流水线——本轮 UI 修复（数字职场遇阻/请示共存、
+# 夜班出征入口、紧急制动接线）使 PC 参考截图变化，需在 CNB 同镜像内跑 `pnpm ui:e2e:update`
+# 重生成 `*-linux.png` 并回推分支（依据 docs/cnb-migration-playbook.md §视觉基线）。
+# 基线重生成完成后本条应在同分支内删除，恢复 ui-gate 只读基线语义。
+.ui-baseline: &ui_baseline
+  name: ui-baseline
+  docker:
+    image: pgvector/pgvector:pg17
+    volumes:
+      - /cnb-cache/pnpm-store:copy-on-write
+      - /cnb-cache/node:copy-on-write
+      - /cnb-cache/ms-playwright:copy-on-write
+  env:
+    LLM_PROVIDER: mock
+    IM_DRIVER: mock
+    TOOL_UNVERIFIED_RATE: "0"
+    RUN_DB_TESTS: "1"
+    RELEASE_WORKSPACE_ID: ws-aipm-demo
+    PLAYWRIGHT_BROWSERS_PATH: /cnb-cache/ms-playwright
+    UI_BASELINE_BRANCH: task/T-2026-0929-0200
+  stages:
+    - name: 准备 Node 24 与 pnpm
+      script: |
+        set -eu
+        NODE_VERSION=v24.19.0
+        apt-get update -qq
+        apt-get install -y -qq curl xz-utils ca-certificates git >/dev/null
+        if [ ! -x /cnb-cache/node/bin/node ]; then
+          mkdir -p /cnb-cache/node
+          curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
+          tar -xJf /tmp/node.tar.xz -C /cnb-cache/node --strip-components=1
+        fi
+        for bin in /cnb-cache/node/bin/*; do ln -sf "$bin" /usr/local/bin/; done
+        corepack enable --install-directory /usr/local/bin
+        corepack prepare pnpm@10.14.0 --activate
+        pnpm config set store-dir /cnb-cache/pnpm-store
+        pnpm install --frozen-lockfile
+    - name: 启动 PostgreSQL 17 并迁移种子
+      script: |
+        set -eu
+        export PGDATA=/var/lib/postgresql/data
+        if [ ! -s "${PGDATA}/PG_VERSION" ]; then
+          mkdir -p "${PGDATA}"; chown -R postgres:postgres "${PGDATA}"
+          su postgres -c "initdb -D ${PGDATA} -U postgres --auth=trust --encoding=UTF8"
+        fi
+        su postgres -c "pg_ctl -D ${PGDATA} -l /tmp/postgres.log -o '-c listen_addresses=localhost -c port=5432' start" || true
+        for i in $(seq 1 60); do pg_isready -h localhost -p 5432 -U postgres >/dev/null 2>&1 && break; sleep 1; done
+        pg_isready -h localhost -p 5432 -U postgres
+        if ! psql -h localhost -p 5432 -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname='workloom'" | grep -q 1; then
+          psql -h localhost -p 5432 -U postgres -c "CREATE DATABASE workloom OWNER postgres;" >/dev/null
+        fi
+        psql -h localhost -p 5432 -U postgres -d workloom -c "CREATE EXTENSION IF NOT EXISTS vector;" >/dev/null
+        cp .env.example .env
+        set -a; . ./.env; set +a
+        pnpm db:migrate
+        pnpm db:seed:aipm
+        BUNDLE_DIR=bundles/hotel pnpm db:seed
+    - name: 三端构建
+      script: |
+        set -eu
+        pnpm -C apps/web build
+        pnpm -C apps/webb build
+        pnpm -C apps/webc build
+    - name: 安装 Playwright Chromium
+      script: |
+        set -eu
+        pnpm exec playwright install --with-deps chromium
+    - name: 重生成 Linux 基线并回推分支
+      script: |
+        set -eu
+        set -a; . ./.env; set +a
+        # 更新基线（用例断言若因基线差异失败不阻断本次生成）
+        pnpm ui:e2e:update || true
+        git config user.name "cnb-ui-baseline"
+        git config user.email "ui-baseline@cnb.cool"
+        git add tests/ui/workloom-clients.spec.ts-snapshots
+        if git diff --cached --quiet; then
+          echo "无基线变化（可能与平台/字体无关）"
+          exit 0
+        fi
+        git commit -q -m "test(ui): 重生成视觉基线（排雷 T-2026-0929-0200 界面变更）[T-2026-0929-0200]"
+        git push -q "https://cnb:${CNB_TOKEN}@cnb.cool/workloom-ai/workloom-im" "HEAD:refs/heads/${UI_BASELINE_BRANCH}"
+
 .ui-release: &ui_release
   name: ui-release
   docker:
@@ -737,6 +820,9 @@ $:
   # 发布共享 UI 制品：由 API 触发（event: api_trigger_ui_release），也可页面触发
   api_trigger_ui_release:
     - *ui_release
+  # TEMP（T-2026-0929-0200）：Linux 视觉基线重生成（用完即删，见 .ui-baseline 注释）
+  api_trigger_ui_baseline:
+    - *ui_baseline
   # 基座 fanout（云端自动更新的主通道）：
   #   · API 触发：event=api_trigger_base_sync，可用 env 覆盖 BASE_SYNC_MODE（required-only|full）
   #     与 BASE_SYNC_DRY_RUN=1（只报告不落地）；
