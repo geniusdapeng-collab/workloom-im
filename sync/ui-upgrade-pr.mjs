@@ -605,7 +605,10 @@ export function inspectMigratedConsumer(repoRoot, child, manifest) {
       // 实验车道：仓级扩展路径内的文件属本仓自有，不参与基座指纹比对；
       // 历史 state 里对这些路径的登记由升级 PR 自动退管（分叉容差）。
       extraAllowedIndustryExtensionPaths: child.industryExtensionPaths ?? [],
-      tolerateExtensionSnapshotOverlap: child.lane === "experiment",
+      // 仓级扩展路径全链路（T-2026-0930-0003）：实验车道默认开启；非实验的**产品分叉仓**
+      // 可显式声明 `tolerateExtensionSnapshotOverlap: true`（如 workloom）获得同一退管容差。
+      // 未声明者保持严格模式（默认不放宽）。
+      tolerateExtensionSnapshotOverlap: child.lane === "experiment" || child.tolerateExtensionSnapshotOverlap === true,
     });
     for (const issue of foundation.issues.filter((item) => item.code !== "INVALID_PRODUCT_IDENTITY")) {
       blockers.push(blocker(
@@ -1434,8 +1437,9 @@ async function upgradeChild(child, manifest, version, token, dryRun, foundationS
       extraAllowedIndustryExtensionPaths: child.industryExtensionPaths ?? [],
       // 实验车道受管文件分叉容差：稳定快照占用本仓声明的自有路径、或旧 state 已把
       // 这类路径登记成受管文件时，不退化成 fail closed，而是退管并原样保留本地版本。
-      // 非实验车道（lane !== "experiment"）保持严格模式。
-      tolerateExtensionSnapshotOverlap: child.lane === "experiment",
+      // 默认仅实验车道（lane === "experiment"）；行业仓需在 child-repos.json 显式声明
+      // `tolerateExtensionSnapshotOverlap: true`（产品分叉仓），其余保持严格模式（T-2026-0930-0003）。
+      tolerateExtensionSnapshotOverlap: child.lane === "experiment" || child.tolerateExtensionSnapshotOverlap === true,
     });
     const touched = setUiVersion({
       repo: checkout,

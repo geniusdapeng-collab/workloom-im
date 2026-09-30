@@ -77,10 +77,25 @@
     {
       "repo": "workloom-ai/workloom",
       "pathPrefix": "",
-      "uiRolloutWave": "paused",
-      "note": "获客增长系统（2026-09-30 起代码基线 = WorkLoom-growth@2edea37，产品身份自有）",
+      "uiRolloutWave": "W3B",
+      "note": "获客增长系统（2026-09-30 起代码基线 = WorkLoom-growth@2edea37，产品身份自有；产品分叉仓，客户端受管文件按仓级扩展路径自持）",
       "extraExclude": [],
-      "rolloutPauseNote": "2026-09-30 暂停 ui-v* 波次（原 W3B）：产品所有者指令 [T-2026-0929-0006]（CNB Issue #68 / PR #69）已把本仓代码整体复刻为 WorkLoom-growth@2edea37 并统一产品身份，客户端随之落在实验车道冻结的 0.1.1；其差异（页面/壳/语音/引导/mate-guide/hud/star-ring 等）由本仓 .workloom-client-extensions.json 声明为产品分叉，与 client-foundation「受管文件不得分叉」契约结构性冲突（rollout 实测 UPGRADE_PR_FAILED：85 个冲突 = MANAGED_FILE_MODIFIED 19 / MANAGED_FILE_DELETED 6 / UNTRACKED_MANAGED_FILE 40 / ILLEGAL_INDUSTRY_APP_PATH 20，另 preflight 报 UI_CONSUMER_CONTRACT_FAILED 207 + 非法行业路径 94）。恢复 ui-v* 波次的前置条件（二选一）：① 基座落地「仓级扩展路径全链路」（受管文件分叉容差扩展到行业仓）；② 本仓完成受管客户端文件对齐迁移（差异迁入 extensions/projections/config/theme 白名单）。暂停期间基座根级资产照常 base-sync，仅 ui-v* 客户端波次挂起。"
+      "industryExtensionPaths": [
+        "apps/*/src/App.tsx",
+        "apps/*/src/pages/**",
+        "apps/*/src/shell/**",
+        "apps/*/src/voice/**",
+        "apps/*/src/onboarding/**",
+        "apps/*/src/components/mate-guide/**",
+        "apps/*/src/components/hud/**",
+        "apps/*/src/components/star-ring/**",
+        "apps/*/src/components/MateWelcome.tsx",
+        "apps/*/src/components/WelcomeCeremony.tsx",
+        "apps/*/vitest.config.ts",
+        "apps/*/package.json"
+      ],
+      "tolerateExtensionSnapshotOverlap": true,
+      "rolloutResumeNote": "2026-09-30 解除挂起（恢复 W3B）：前置条件①「仓级扩展路径全链路」已落地（T-2026-0930-0003：`tolerateExtensionSnapshotOverlap` 从实验车道扩展到显式声明的行业仓），本仓 12 条产品分叉路径写入 `industryExtensionPaths` 并与仓内 .workloom-client-extensions.json 一致；rollout 时这些路径退管自持（state.retiredManagedForks 留痕），其余受管文件照常按稳定波次升级。"
     },
     {
       "repo": "workloom-ai/panda-cineforge",
@@ -138,8 +153,8 @@
     {
       "repo": "workloom-ai/WorkLoom-growth",
       "pathPrefix": "",
-      "uiRolloutWave": "paused",
-      "note": "获客增长新仓（与 workloom 同 productId，2026-09-18 由舰队扫描纳入）",
+      "uiRolloutWave": "W3B",
+      "note": "获客增长新仓（与 workloom 同 productId，2026-09-18 由舰队扫描纳入；实验车道，仓级扩展路径自持）",
       "extraExclude": [],
       "lane": "experiment",
       "experimentNote": "获客增长实验仓：在共享壳（hud/star-ring/Floor3D/P0 等）上做游戏化经营定制，属实验语义，不下发覆盖、不回流基座。；2026-09-20 增补：该仓在共享客户端壳内做获客游戏化定制（App 壳、页面 p1/p2/p21/p26/p3/p5/p6/p8、accounts/dev 页、voice 语音层、loommate 数字人、Stage3D/WelcomeCeremony/MateWelcome/SkillDistBanner、display 渲染工具与三端 manifest），这些路径登记为仓级扩展白名单：UI 波次不再判分叉、也不覆盖；其余受管文件照常随 ui-v* 稳定波次升级。",
@@ -173,7 +188,7 @@
         "apps/web/src/shell/IndustryRoutes.test.tsx",
         "apps/web/src/voice/**"
       ],
-      "rolloutPauseNote": "2026-09-23 暂停 0.1.7 起波次：该仓 industryExtensionPaths 把 App.tsx 等基座受管文件登记为行业扩展路径，与 client-foundation「快照不得占用行业扩展路径」契约结构性冲突（rollout 实测 UPGRADE_PR_FAILED），需协议层决策「实验车道受管文件分叉容差」后恢复；暂停期间基座根级资产照常 base-sync，仅 ui-v* 客户端波次挂起。"
+      "rolloutResumeNote": "2026-09-30 解除挂起（恢复 W3B）：协议 §10.3「实验车道受管文件分叉容差」已于 2026-09-27 落地（T-2026-0927-0001），本仓属实验车道（lane=experiment），rollout 时对已登记的 industryExtensionPaths 执行退管迁移（state.retiredManagedForks 留痕），不再 fail closed。"
     }
   ]
 }
