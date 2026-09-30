@@ -1500,6 +1500,9 @@ async function upgradeChild(child, manifest, version, token, dryRun, foundationS
       sourceRoot: baseDir,
       lane: child.lane ?? null,
       industryExtensionPaths: child.industryExtensionPaths ?? [],
+      // 产品分叉仓（非实验车道但显式声明 tolerateExtensionSnapshotOverlap）同样要带容差，
+      // 否则仓内自包含门禁（verify-client-foundation-consumer）会把声明路径判成漂移。
+      tolerateExtensionSnapshotOverlap: child.lane !== "experiment" && child.tolerateExtensionSnapshotOverlap === true,
     });
     for (const path of ADOPTION_SCRIPTS) {
       // apps/web 的生产 build 会执行文案边界；升级 PR 必须自带与稳定
