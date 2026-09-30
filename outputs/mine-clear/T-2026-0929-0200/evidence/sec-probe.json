@@ -250,7 +250,7 @@
     },
     "anonSession": {
       "status": 200,
-      "body": "{\"token\":\"eyJhbGciOiJIUzI1NiJ9.eyJ3b3Jrc3BhY2VJZCI6IndzLWFpcG0tZGVtbyIsImNVc2VySWQiOiJjdS1tdW10cGRrdzAwNTF5Ym8iLCJjaGFubmVsIjoiaDUiLCJzY29wZSI6ImMtdXNlciIsImlhdCI6MTc5MDY5NTIyOCwiaXNzIjoid29ya2xvb20tYyIsImV4cCI6MTc5MDczODQyOH0.Pg8lJJrQmtbB-nlYWsIi2gCj81Euj9suf-k7w2lPKYI\",\"user\":{\"id\":\"cu-mumtpdkw0051ybo\",\"workspaceId\":\"ws-aipm-demo\",\"channel\":\"h5\",\"openid\":\"probe-anon-mumtpdkr\",\"nickname\":\"匿名探针\",\""
+      "body": "{\"token\":\"<redacted-jwt>\",\"user\":{\"id\":\"cu-mumtpdkw0051ybo\",\"workspaceId\":\"ws-aipm-demo\",\"channel\":\"h5\",\"openid\":\"probe-anon-mumtpdkr\",\"nickname\":\"匿名探针\",\""
     },
     "anonNotifications": {
       "status": 200,
