@@ -17,7 +17,7 @@ import pg from "pg";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const EVIDENCE = join(HERE, "..", "evidence", "fix-e");
 const BASE = process.env.MCD_BASE ?? "http://127.0.0.1:8899";
-const APP_URL = process.env.DATABASE_APP_URL ?? "postgres://workloom_app:<redacted>@127.0.0.1:5432/workloom";
+const APP_URL = process.env.DATABASE_APP_URL ?? "postgres://workloom_app@127.0.0.1:5432/workloom";
 const MARK = `F1IN${Date.now()}`;
 
 const out = { probe: "f1-inbox-unified", started_at: new Date().toISOString(), base: BASE, mark: MARK, assertions: [] };

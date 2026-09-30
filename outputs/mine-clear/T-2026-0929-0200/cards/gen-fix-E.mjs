@@ -10,7 +10,7 @@ const DIR = dirname(fileURLToPath(import.meta.url));
 const repo = "outputs/mine-clear/T-2026-0929-0200";
 const E = "fix_e_semantics";
 const HEAD_SHA = "0c0a1ad"; // 批 E 最后一个提交（style(web) P28 信息色令牌）
-const RUN = "MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app:<redacted>@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway:<redacted>@127.0.0.1:5432/wl_mcd_fe";
+const RUN = "MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway@127.0.0.1:5432/wl_mcd_fe";
 
 const cards = [
   {

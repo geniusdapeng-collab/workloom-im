@@ -52,7 +52,7 @@
       "kind": "sample",
       "given": "演示成员 MEM-001 调用 accounts.inbox.unified（ai-pm-demo 与 yunqi-hotel）",
       "expect": "groups 非空且分店计数与库内 pending 审批/未办结工单一致；C 端建单后 pendingTickets +1、办结后回落",
-      "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app:<redacted>@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway:<redacted>@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-inbox-unified.mjs",
+      "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-inbox-unified.mjs",
       "last_result": "pass",
       "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-inbox-1790706124692.json"
     },

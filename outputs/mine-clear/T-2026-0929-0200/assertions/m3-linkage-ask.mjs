@@ -17,7 +17,7 @@ const EVIDENCE = join(HERE, "..", "evidence");
 const BASE = process.env.MCD_BASE ?? "http://127.0.0.1:8899";
 const WS_SLUG = process.argv[2] ?? process.env.MCD_WS ?? "yunqi-hotel";
 const MEMBER_NO = process.env.MCD_MEMBER ?? "MEM-001";
-const GW_URL = process.env.DATABASE_GATEWAY_URL ?? "postgres://workloom_gateway:<redacted>@127.0.0.1:5432/workloom";
+const GW_URL = process.env.DATABASE_GATEWAY_URL ?? "postgres://workloom_gateway@127.0.0.1:5432/workloom";
 
 const out = { probe: "m3-ask-coverage", started_at: new Date().toISOString(), base: BASE, workspaceSlug: WS_SLUG, assertions: [], answers: [] };
 const check = (name, ok, detail) => {

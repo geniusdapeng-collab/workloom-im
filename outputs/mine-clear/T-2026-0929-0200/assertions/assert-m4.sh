@@ -103,7 +103,7 @@ case "$CARD" in
     ;;
   MC-209)
     # 断言：审批队列查询不得对 (workspace_id,status) 全集排序
-    PLAN="$(PATH=/Users/mac/.local/pg17/bin:$PATH psql "${DATABASE_URL:-postgres://postgres:<redacted>@127.0.0.1:5432/wl_mcd_c}" -c "
+    PLAN="$(PATH=/Users/mac/.local/pg17/bin:$PATH psql "${DATABASE_URL:-postgres://postgres@127.0.0.1:5432/wl_mcd_c}" -c "
       BEGIN; SELECT set_config('app.workspace_id','ws-yunqi',true);
       EXPLAIN SELECT a.approval_id, a.created_at, e.payload FROM approvals a
         LEFT JOIN biz_events e ON e.tenant_id=a.tenant_id AND e.event_id=a.event_id

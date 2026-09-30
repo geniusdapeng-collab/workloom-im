@@ -59,7 +59,7 @@
 bash /Users/mac/Documents/Codex/2026-09-29/https-cnb-cool-workloom-ai-workloom-5/work/fix-b/serve-8941.sh &
 
 # 1) 复位 R7 到出厂基线态（反复复跑断言用）
-PGPASSWORD=workloom /Users/mac/.local/pg17/bin/psql -h 127.0.0.1 -p 5432 -U postgres -d wl_mcd_fb \
+PGPASSWORD=<redacted> /Users/mac/.local/pg17/bin/psql -h 127.0.0.1 -p 5432 -U postgres -d wl_mcd_fb \
   -f /Users/mac/Documents/Codex/2026-09-29/https-cnb-cool-workloom-ai-workloom-5/work/fix-b/reset-r7.sql
 
 # 2) 主断言（应 exit 0）

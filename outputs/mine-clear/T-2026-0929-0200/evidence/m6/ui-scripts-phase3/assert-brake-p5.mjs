@@ -14,7 +14,7 @@ import pg from "pg";
 
 const REPO = "/Users/mac/WorkLoom-fleet/.wt-mcd-m6";
 const WORK = "/Users/mac/Documents/Codex/2026-09-29/https-cnb-cool-workloom-ai-workloom-5/work/m6";
-const DB = process.env.M6_DB ?? "postgres://postgres:<redacted>@127.0.0.1:5432/wl_mcd_ff";
+const DB = process.env.M6_DB ?? "postgres://postgres@127.0.0.1:5432/wl_mcd_ff";
 const WS = "ws-aipm-demo";
 
 const results = [];

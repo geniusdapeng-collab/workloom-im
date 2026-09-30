@@ -73,8 +73,8 @@ bash work/fix-e/serve-fe.sh /Users/mac/WorkLoom-fleet/.wt-mcd-fe work/fix-e/serv
 # 1) 本批 5 个专用断言（应全绿）
 cd /Users/mac/WorkLoom-fleet/.wt-mcd-im/outputs/mine-clear/T-2026-0929-0200/assertions
 export MCD_BASE=http://127.0.0.1:8981 \
-       DATABASE_APP_URL=postgres://workloom_app:<redacted>@127.0.0.1:5432/wl_mcd_fe \
-       DATABASE_GATEWAY_URL=postgres://workloom_gateway:<redacted>@127.0.0.1:5432/wl_mcd_fe
+       DATABASE_APP_URL=postgres://workloom_app@127.0.0.1:5432/wl_mcd_fe \
+       DATABASE_GATEWAY_URL=postgres://workloom_gateway@127.0.0.1:5432/wl_mcd_fe
 node f1-kb-publish-gate.mjs && node f1-ask-coverage.mjs && node f1-ticket-reassign.mjs \
   && node f1-inbox-unified.mjs && node f1-floor-blocked-asking.mjs
 
