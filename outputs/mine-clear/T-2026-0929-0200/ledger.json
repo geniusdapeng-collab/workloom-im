@@ -764,7 +764,7 @@
         },
         {
           "type": "log",
-          "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-ask-1790695521766.json",
+          "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-a<redacted-api-key>.json",
           "note": "真机实测 5 问 5 答（ws-yunqi，出厂 mock 态 via=rule）：问待审批→答维修报修 FAQ；问进行中任务→答开夜床 FAQ；问工单→答报修进度 FAQ；问夜班→答发票重开 FAQ；均无被问数字"
         },
         {
@@ -787,7 +787,7 @@
           "expect": "答案包含当前待审批条数（形如「N 项」或「无」），不得用知识库 FAQ 代替；且答案未引用 KB 时不得出现『以上数字均来自事件库实时取数』",
           "command": "cd <repo> && node outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-ask.mjs yunqi-hotel",
           "last_result": "fail",
-          "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-ask-1790695521766.json"
+          "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-a<redacted-api-key>.json"
         },
         {
           "kind": "property",
@@ -795,7 +795,7 @@
           "expect": "系统事实（审批/线程/工单/夜班）不因 KB 命中而全部消失：答案要么给被问域的数字，要么明确说明该域未接入事实面；KB 事实必须过相关性下限",
           "command": "同上（脚本对 5 类问题逐一断言 ledger_sources 覆盖）",
           "last_result": "fail",
-          "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-ask-1790695521766.json"
+          "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-a<redacted-api-key>.json"
         }
       ],
       "fix_plan": "三处最小改动：①searchKB 增加相关性下限（score 阈值/最少命中词数）并按 score 过滤；②composeAskAnswer 按『被问域优先』装行（问题词命中哪个域，该域事实优先于 KB），并在正文未含 KB 事实时去掉 KB 取数落款；③为工单/夜班补 ask 事实面（defaultAskFactProvider 增 c_tickets/night_runs 两个只读计数）。",
@@ -807,7 +807,7 @@
       "notes": "M3 联动探针 4（mcd_linkage）。 | 已由 MC-442（fix_e_semantics）修复，修复提交见修复卡 evidence。",
       "regression": {
         "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-ask-coverage.mjs",
-        "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-ask-1790706124455.json"
+        "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-a<redacted-api-key>.json"
       },
       "verified_by": "mcd_verify",
       "verified_at": "2026-09-29T18:45:02.030Z",
@@ -3504,12 +3504,12 @@
         },
         {
           "type": "log",
-          "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-ask-1790706124455.json",
+          "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-a<redacted-api-key>.json",
           "note": "f1 ask 覆盖 20/20：四类系统问题数字与库内一致、账本 basis 含对应域、approvals 来源无 kb:"
         },
         {
           "type": "log",
-          "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-ask-1790706125002.json",
+          "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-a<redacted-api-key>.json",
           "note": "M3 探针 4 复跑 8/8（探针账本查询按 decision.basis 修正）"
         }
       ],
@@ -3527,7 +3527,7 @@
           "expect": "四类系统问题给出当前真实数字（与库内计数一致），知识型问题引用知识库；approvals 取数来源无 kb:；KB-only 答案不声称「数字来自事件库」",
           "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-ask-coverage.mjs",
           "last_result": "pass",
-          "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-ask-1790706124455.json"
+          "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-a<redacted-api-key>.json"
         },
         {
           "kind": "property",
@@ -3535,7 +3535,7 @@
           "expect": "被问域事实排序先于知识库；落款与正文实际取数来源一致；KB 命中必须过相关性下限",
           "command": "cd <repo> && node outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-ask.mjs yunqi-hotel（+ pnpm -C packages/runtime test / pnpm suite 的同名纯函数断言）",
           "last_result": "pass",
-          "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-ask-1790706125002.json"
+          "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-a<redacted-api-key>.json"
         }
       ],
       "regression": {

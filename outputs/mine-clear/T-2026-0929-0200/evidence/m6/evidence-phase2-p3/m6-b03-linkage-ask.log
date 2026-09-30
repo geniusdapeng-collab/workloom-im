@@ -42,4 +42,4 @@
 ✓ 系统类问答不得被知识库 FAQ 挤占（approvals 取数来源无 kb:） :: {"sources":["biz_events","biz_events 近窗聚合","approvals","c_tickets","threads","fence_rules","org_memory","night_runs"]}
 ✓ 落款与实际取数来源一致（KB-only 答案不声称事件库数字） :: {"answer":"关于「当前有多少待审批事项？」：\n· 当前待审批：3 项（决断队列）\n· 事件库规模：166 条五元事件（哈希链可验）\n以上数字均来自事件库实时取数，可下钻溯源。"}
 
-联动探针 4：8/8 通过；证据 → /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/evidence/m3-ask-1790706956460.json
+联动探针 4：8/8 通过；证据 → /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/evidence/m3-a<redacted-api-key>.json

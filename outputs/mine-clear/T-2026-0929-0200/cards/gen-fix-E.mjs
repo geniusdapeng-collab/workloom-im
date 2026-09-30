@@ -46,15 +46,15 @@ const cards = [
       { type: "code", ref: `packages/runtime/src/ask.ts:357@5a44312`, note: "ASK_KB_MIN_SCORE=0.65（噪声 0.53~0.64 / 真知识 0.64~0.69 校准）" },
       { type: "code", ref: `packages/runtime/src/ask.ts:133@5a44312`, note: "defaultAskFactProvider 增 c_tickets 未办结（含 SLA 超时）与 night_runs 最近班次事实" },
       { type: "code", ref: `packages/runtime/src/ask.ts:379@5a44312`, note: "composeAskAnswer 落款按正文实际事实类型生成（KB-only 不声称事件库数字）" },
-      { type: "log", ref: `${repo}/evidence/fix-e/f1-ask-1790706124455.json`, note: "f1 ask 覆盖 20/20：四类系统问题数字与库内一致、账本 basis 含对应域、approvals 来源无 kb:" },
-      { type: "log", ref: `${repo}/evidence/m3-ask-1790706125002.json`, note: "M3 探针 4 复跑 8/8（探针账本查询按 decision.basis 修正）" }
+      { type: "log", ref: `${repo}/evidence/fix-e/f1-a<redacted-api-key>.json`, note: "f1 ask 覆盖 20/20：四类系统问题数字与库内一致、账本 basis 含对应域、approvals 来源无 kb:" },
+      { type: "log", ref: `${repo}/evidence/m3-a<redacted-api-key>.json`, note: "M3 探针 4 复跑 8/8（探针账本查询按 decision.basis 修正）" }
     ],
     fix_plan: "①searchKB 增 minScore（ask 注入 0.65，P22 检索面保持宽召回）；②composeAskAnswer 按被问域排序并在正文未用 KB 时改落款口径；③补 c_tickets / night_runs 只读事实面",
     blast_radius: "P0 对话框、移动端问询、账本 basis 与 ask.answer 事实清单；行业包若注册自有 AskFactProvider 不受影响（domain 缺省即通用事实）",
     conflict_paths: ["packages/runtime/src/ask.ts", "apps/server/src/service/kb.ts", "apps/server/src/trpc/router.ts"],
     assertions: [
-      { kind: "sample", given: "ws-yunqi 出厂 mock 态依次提问：待审批 / 进行中任务 / 工单 / 夜班 / 毛巾更换", expect: "四类系统问题给出当前真实数字（与库内计数一致），知识型问题引用知识库；approvals 取数来源无 kb:；KB-only 答案不声称「数字来自事件库」", command: `cd <repo> && ${RUN} node outputs/mine-clear/T-2026-0929-0200/assertions/f1-ask-coverage.mjs`, last_result: "pass", evidence: `${repo}/evidence/fix-e/f1-ask-1790706124455.json` },
-      { kind: "property", given: "任意工作区任意问题（纯函数口径 + 真机 5 问）", expect: "被问域事实排序先于知识库；落款与正文实际取数来源一致；KB 命中必须过相关性下限", command: `cd <repo> && node outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-ask.mjs yunqi-hotel（+ pnpm -C packages/runtime test / pnpm suite 的同名纯函数断言）`, last_result: "pass", evidence: `${repo}/evidence/m3-ask-1790706125002.json` }
+      { kind: "sample", given: "ws-yunqi 出厂 mock 态依次提问：待审批 / 进行中任务 / 工单 / 夜班 / 毛巾更换", expect: "四类系统问题给出当前真实数字（与库内计数一致），知识型问题引用知识库；approvals 取数来源无 kb:；KB-only 答案不声称「数字来自事件库」", command: `cd <repo> && ${RUN} node outputs/mine-clear/T-2026-0929-0200/assertions/f1-ask-coverage.mjs`, last_result: "pass", evidence: `${repo}/evidence/fix-e/f1-a<redacted-api-key>.json` },
+      { kind: "property", given: "任意工作区任意问题（纯函数口径 + 真机 5 问）", expect: "被问域事实排序先于知识库；落款与正文实际取数来源一致；KB 命中必须过相关性下限", command: `cd <repo> && node outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-ask.mjs yunqi-hotel（+ pnpm -C packages/runtime test / pnpm suite 的同名纯函数断言）`, last_result: "pass", evidence: `${repo}/evidence/m3-a<redacted-api-key>.json` }
     ],
     regression: { command: "pnpm typecheck && pnpm -C packages/runtime test && pnpm suite", evidence: "work/fix-e/typecheck.log; work/fix-e/suite.log" },
     rollback: "git revert 5a44312", fixed_by: E, verified_by: null,

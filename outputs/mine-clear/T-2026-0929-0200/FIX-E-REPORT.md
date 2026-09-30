@@ -50,8 +50,8 @@
 |---|---|---|---|
 | MC-110 | `MCD_BASE=http://127.0.0.1:8981 … node …/f1-kb-publish-gate.mjs` | **19/19**：门禁（待审不入检索）、approved 记录（决策人/手势/post_hoc）、无幽灵待办、重复批准幂等、存量 pending 行 reject→退回待审且检索 0 命中、再批准→恢复、哈希链自检 | `evidence/fix-e/f1-kb-1790706124251.json` |
 | MC-110 | `… node m3-linkage-kb.mjs`（改写后） | **18/18** | `evidence/m3-kb-1790706124843.json` |
-| MC-111 | `… node f1-ask-coverage.mjs` | **20/20**：待审批 3 项 = 库内 3；进行中线程 = 库内 +1（本次 ask 线程本身）；工单 5 条未办结（SLA 超时 1）；夜班 2026-09-28 决策包（候选 14）；KB 问题走知识库且落款为知识库口径；账本 basis 含 approvals/c_tickets/night_runs，approvals 来源无 `kb:` | `evidence/fix-e/f1-ask-1790706124455.json` |
-| MC-111 | `… node m3-linkage-ask.mjs yunqi-hotel`（修正账本读取） | **8/8** | `evidence/m3-ask-1790706125002.json` |
+| MC-111 | `… node f1-ask-coverage.mjs` | **20/20**：待审批 3 项 = 库内 3；进行中线程 = 库内 +1（本次 ask 线程本身）；工单 5 条未办结（SLA 超时 1）；夜班 2026-09-28 决策包（候选 14）；KB 问题走知识库且落款为知识库口径；账本 basis 含 approvals/c_tickets/night_runs，approvals 来源无 `kb:` | `evidence/fix-e/f1-a<redacted-api-key>.json` |
+| MC-111 | `… node m3-linkage-ask.mjs yunqi-hotel`（修正账本读取） | **8/8** | `evidence/m3-a<redacted-api-key>.json` |
 | MC-112 | `… node f1-ticket-reassign.mjs` | **11/11**：同值重复派单 200 且 0 新事件；跨部门改派 200 且 +1 事件、状态不变；已办结再派 **409 CONFLICT**「工单状态机非法迁移：done → assigned」；不存在 **404 NOT_FOUND** | `evidence/fix-e/f1-ticket-1790706124591.json` |
 | MC-112/113 | `… node m3-linkage-ticket.mjs`（P28 检查改两段） | **18/18** | `evidence/m3-ticket-1790706125123.json` |
 | MC-113 | `… node f1-inbox-unified.mjs` | **10/10**：ai-pm-demo 分组 non-empty（pendingApprovals 4 = 库内）、建单 pendingTickets +1、办结回落；yunqi-hotel 计数一致；跨店隔离；种子 members.account_id 3/3 两库 | `evidence/fix-e/f1-inbox-1790706124692.json` |

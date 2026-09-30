@@ -20,7 +20,7 @@
 | 结论 | 等级 | 依据 |
 |---|---|---|
 | MC-110 知识库「先执行后补审批」幽灵待办 + 驳回不回滚 | **A** | 真机 `m3-kb-1790695144646.json` + 代码 `service/router.ts:182`、`approvals.ts:175` |
-| MC-111 ask 助手答非所问、系统事实被 KB 命中挤掉、取数口径不实 | **A** | 真机 5 问 5 答 `m3-ask-1790695521766.json` + 账本 basis + 代码 `ask.ts:175/278`、`kb.ts:311` |
+| MC-111 ask 助手答非所问、系统事实被 KB 命中挤掉、取数口径不实 | **A** | 真机 5 问 5 答 `m3-a<redacted-api-key>.json` + 账本 basis + 代码 `ask.ts:175/278`、`kb.ts:311` |
 | MC-112 重复派单 500（assigned→assigned） | **A** | 真机 `m3-ticket-1790695253479.json`（响应原文 500）+ 代码 `ticket.ts:174`、`gateway.ts:210`、`e2e.test.ts:952` |
 | MC-113 P28 统一待办出厂演示恒空 | **A**（含设计意图注记） | 真机 `m3-thread-*.json`/`m3-ticket-*.json` 的 `accounts.inbox.unified={"groups":[]}` + DB（`members.account_id` 全 NULL、`accounts` 0 行）+ 代码 `accounts-router.ts:559` |
 | MC-114 数字职场 blocked 压制 asking、请示直达号不可见 | **A** | 真机 `m3-thread-1790696247065.json`（S1 楼层快照）+ 代码 `floor.ts:231/235` |
@@ -81,7 +81,7 @@ threads.dispatch(mode=ask) → runAsk (packages/runtime/src/ask.ts:396)
 |---|---|---|---|---|---|
 | MC-101（增补） | 审批→执行面：批准后审批台/剧场/统一待办全部清零，线程仍 `pending_review`，无任何面提示「已批准待续跑」；IM 入口同样不续跑 | `evidence/m3-thread-1790696247065.json` | `apps/server/src/runtime/scheduler.ts:84@4ff9943`（只扫 queued）+ `approvals.ts:296@4ff9943`（仅 reject 联动） | decide 钩子内把步骤级线程重新入队（queued）或直接在事务后 `runQuestForThread`；移动/IM 通道同享 | `node .../m3-linkage-thread.mjs`（20s 窗口断言线程离开 pending_review） |
 | MC-110 | 知识库→审批台：批准动作先执行、审批行后置 pending（幽灵待办）；驳回后文档仍 active 且仍被检索/问答引用 | `evidence/m3-kb-1790695144646.json` | `apps/server/src/service/router.ts:182@4ff9943` | 文档保持 staged+pending，批准时由 decide 钩子置 active；驳回保持 pending_review | `node .../m3-linkage-kb.mjs`（pending 与实际生效一致性 + 驳回回滚） |
-| MC-111 | 问答→业务域：问待审批/工单/夜班均得到无关 FAQ，系统事实一条不展示，却落款「以上数字均来自事件库实时取数」 | `evidence/m3-ask-1790695521766.json` | `packages/runtime/src/ask.ts:175@4ff9943`（KB 优先）+ `:278`（120 字闸）+ `apps/server/src/service/kb.ts:311@4ff9943`（无相关性下限） | KB 相关性阈值；按被问域优先装行；未引用 KB 时去掉取数落款；补工单/夜班事实面 | `node .../m3-linkage-ask.mjs yunqi-hotel`（5 类问题逐一断言 sources/答案） |
+| MC-111 | 问答→业务域：问待审批/工单/夜班均得到无关 FAQ，系统事实一条不展示，却落款「以上数字均来自事件库实时取数」 | `evidence/m3-a<redacted-api-key>.json` | `packages/runtime/src/ask.ts:175@4ff9943`（KB 优先）+ `:278`（120 字闸）+ `apps/server/src/service/kb.ts:311@4ff9943`（无相关性下限） | KB 相关性阈值；按被问域优先装行；未引用 KB 时去掉取数落款；补工单/夜班事实面 | `node .../m3-linkage-ask.mjs yunqi-hotel`（5 类问题逐一断言 sources/答案） |
 | MC-112 | C 端建单→B 端派单：建单即 `assigned`，B 端再次派单 `assigned→assigned` 抛 500（应幂等或 409） | `evidence/m3-ticket-1790695253479.json` | `apps/server/src/service/ticket.ts:174@4ff9943` | assigned 态走「原地改派」分支；tRPC 层映射 `ServiceHttpError`；修 e2e 弱断言 | `node .../m3-linkage-ticket.mjs`（重复派单不得 5xx） |
 | MC-113 | 跨店统一待办：出厂演示下恒 `{"groups":[]}`（members.account_id 全 NULL），且只统计审批、工单/告警未纳入 | `evidence/m3-thread-*.json`（S0/S2）+ `evidence/m3-ticket-*.json` | `apps/server/src/trpc/accounts-router.ts:559@4ff9943` + `scripts/seed.ts:540@4ff9943` | 种子建账号并关联；或演示身份兜底解析；inbox 增工单待办计数 | `node .../m3-linkage-thread.mjs`（inbox 快照）+ 工单探针复查 |
 | MC-114 | 数字职场：同一员工「30 分钟内 blocked + 新 pending 请示」时只显示遇阻，`approvalId/pendingTier` 为 null，请示不可直达 | `evidence/m3-thread-1790696247065.json` | `packages/base/captain/floor.ts:235@4ff9943`（blocked 分支不带审批信息） | 照 X-05 共存口径：blocked 同时携带 asking 信息与直达号 | `node .../m3-linkage-thread.mjs`（asking/approvalId 断言） |
@@ -115,7 +115,7 @@ threads.dispatch(mode=ask) → runAsk (packages/runtime/src/ask.ts:396)
 | `assertions/m3-linkage-thread.mjs`（派遣→批准→各面快照） | 9/11（2 项断点：自动续跑、楼层 asking 压制） | `evidence/m3-thread-1790696247065.json` |
 | `assertions/m3-linkage-kb.mjs`（待审→生效→检索→C 端→事后驳回） | 16/17（1 项断点：幽灵审批/驳回不回滚） | `evidence/m3-kb-1790695144646.json` |
 | `assertions/m3-linkage-ticket.mjs`（C 端工单→B 端处置→回看） | 15/17（2 项：重复派单 500、统一待办未覆盖工单） | `evidence/m3-ticket-1790695253479.json` |
-| `assertions/m3-linkage-ask.mjs`（5 类问答事实面覆盖） | 4/6（2 项：审批/线程事实未进答案、来源口径不实） | `evidence/m3-ask-1790695521766.json` |
+| `assertions/m3-linkage-ask.mjs`（5 类问答事实面覆盖） | 4/6（2 项：审批/线程事实未进答案、来源口径不实） | `evidence/m3-a<redacted-api-key>.json` |
 | `assertions/m3-linkage-reject.mjs`（驳回→终态→时间线→结算） | 6/7（1 项：手势事件不进线程时间线） | `evidence/m3-reject-1790696508787.json` |
 
 复跑命令（服务端 `:8899` 以出厂 `.env` 起）：
@@ -139,7 +139,7 @@ done
 - 自主追加事项及理由：①把 MC-101/MC-104 两张既有卡做了跨面证据增补（避免重复上账、补上移动/IM 入口与逐面快照）；②重启了退出的共享服务端（探针需要真机，环境档位与配置未变）；③把「P22 只对 created 显示分派」「expireSweep 无 session_id」等观察写进报告供修复参考（未单独开卡，避免与 MC-112/MC-104 重复）。
 - 采用的假设：①以 ws-yunqi（hotel 演示工作区）作为主联动场景、ws-aipm-demo 作为 C 端网关默认工作区（`SERVICE_C_WORKSPACE_ID` 出厂值）；②「审批通过应自动续跑」以 MCD 模板「依赖客户端见证才生效」为准绳判定为断点（基座注释亦自述存在「审批自动续跑」路径）；③统一待办的口径取其代码注释与 P28 文案（审批/告警/工单）。
 - 置信度：**高**——六项断点均有真机响应原文 + 事实源直查 + 代码行号三方互证；扣分项为前端未做浏览器实拍（API/DB 面已取证）与 mock 态限制。
-- 建议复核（最值得亲自看的三处）：①`m3-ask-1790695521766.json` 的 5 条答案原文（助手答非所问最直观）；②`m3-kb-1790695144646.json` 里「审批 pending 而文档已 active」与驳回后仍可检索；③`m3-thread-1790696247065.json` 中批准后 20s 各面快照（待办清零 vs 线程挂起）。
+- 建议复核（最值得亲自看的三处）：①`m3-a<redacted-api-key>.json` 的 5 条答案原文（助手答非所问最直观）；②`m3-kb-1790695144646.json` 里「审批 pending 而文档已 active」与驳回后仍可检索；③`m3-thread-1790696247065.json` 中批准后 20s 各面快照（待办清零 vs 线程挂起）。
 
 ## 自检表
 

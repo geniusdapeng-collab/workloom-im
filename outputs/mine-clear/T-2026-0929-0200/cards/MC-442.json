@@ -30,12 +30,12 @@
     },
     {
       "type": "log",
-      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-ask-1790706124455.json",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-a<redacted-api-key>.json",
       "note": "f1 ask 覆盖 20/20：四类系统问题数字与库内一致、账本 basis 含对应域、approvals 来源无 kb:"
     },
     {
       "type": "log",
-      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-ask-1790706125002.json",
+      "ref": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-a<redacted-api-key>.json",
       "note": "M3 探针 4 复跑 8/8（探针账本查询按 decision.basis 修正）"
     }
   ],
@@ -53,7 +53,7 @@
       "expect": "四类系统问题给出当前真实数字（与库内计数一致），知识型问题引用知识库；approvals 取数来源无 kb:；KB-only 答案不声称「数字来自事件库」",
       "command": "cd <repo> && MCD_BASE=http://127.0.0.1:8981 DATABASE_APP_URL=postgres://workloom_app@127.0.0.1:5432/wl_mcd_fe DATABASE_GATEWAY_URL=postgres://workloom_gateway@127.0.0.1:5432/wl_mcd_fe node outputs/mine-clear/T-2026-0929-0200/assertions/f1-ask-coverage.mjs",
       "last_result": "pass",
-      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-ask-1790706124455.json"
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-a<redacted-api-key>.json"
     },
     {
       "kind": "property",
@@ -61,7 +61,7 @@
       "expect": "被问域事实排序先于知识库；落款与正文实际取数来源一致；KB 命中必须过相关性下限",
       "command": "cd <repo> && node outputs/mine-clear/T-2026-0929-0200/assertions/m3-linkage-ask.mjs yunqi-hotel（+ pnpm -C packages/runtime test / pnpm suite 的同名纯函数断言）",
       "last_result": "pass",
-      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-ask-1790706125002.json"
+      "evidence": "outputs/mine-clear/T-2026-0929-0200/evidence/m3-a<redacted-api-key>.json"
     }
   ],
   "regression": {

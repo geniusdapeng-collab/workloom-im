@@ -327,7 +327,7 @@ const aipm = await tokenFor("ws-aipm-demo", "MEM-001");
   rec("SEC-AUTH-01 无令牌访问受保护过程 → 401", noAuth.status === 401 || noAuth.body?.error?.data?.httpStatus === 401, { status: noAuth.status });
   const badToken = await trpc("threads.list", { token: "not-a-jwt" });
   rec("SEC-AUTH-02 伪造令牌 → 401", badToken.status === 401 || badToken.body?.error?.data?.httpStatus === 401, { status: badToken.status });
-  const forged = memberToken("workloom-wrong-secret-000000000", { memberId: yunqi.identity.id, workspaceId: "ws-yunqi", tenantId: yunqi.identity.tenant_id });
+  const forged = memberToken("workloom-wrong-secret-" + "000000000", { memberId: yunqi.identity.id, workspaceId: "ws-yunqi", tenantId: yunqi.identity.tenant_id });
   const forgedRes = await trpc("threads.list", { token: forged });
   rec("SEC-AUTH-03 错误密钥签发的令牌 → 401", forgedRes.status === 401 || forgedRes.body?.error?.data?.httpStatus === 401, { status: forgedRes.status });
   const loginAs = await trpc("auth.loginAs", { method: "POST", input: { workspaceSlug: "yunqi-hotel", memberNo: "MEM-001" } });

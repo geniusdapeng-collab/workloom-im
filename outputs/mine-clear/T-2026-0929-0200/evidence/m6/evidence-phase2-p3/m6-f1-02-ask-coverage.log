@@ -21,4 +21,4 @@
 ✓ kb：账本 basis 记录取数来源 :: {"basis":["取数来源：kb:kbd-faq-network、biz_events、biz_events 近窗聚合、c_tickets、threads、fence_rules、org_memory、night_runs","已遵守组织记忆 1 条（M3 偏好注入）"]}
 ✓ kb：KB-only 答案不得声称『数字来自事件库实时取数』 :: {"answer":"关于「住客问：房间里的毛巾多久更换一次？」：\n· 知识库·住客常见问答·网络与设施（房间里USB口不能充电怎么办？）：可先换用床头五孔插座；USB口故障请致电前台0报修，工程部会在120分钟内上门处理。\n以上内容来自知识库检索，可下钻溯源。"}
 
-f1 ask 覆盖：20/20 通过；证据 → /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-ask-1790706874804.json
+f1 ask 覆盖：20/20 通过；证据 → /Users/mac/WorkLoom-fleet/.wt-mcd-m6/outputs/mine-clear/T-2026-0929-0200/evidence/fix-e/f1-a<redacted-api-key>.json
