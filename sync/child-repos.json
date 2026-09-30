@@ -82,20 +82,36 @@
       "extraExclude": [],
       "industryExtensionPaths": [
         "apps/*/src/App.tsx",
+        "apps/*/src/audio/**",
+        "apps/*/src/components/AgentAvatar.tsx",
+        "apps/*/src/components/Floor3D.tsx",
+        "apps/*/src/components/MateWelcome.tsx",
+        "apps/*/src/components/SimBanner.tsx",
+        "apps/*/src/components/SkillDistBanner.tsx",
+        "apps/*/src/components/Stage3D.tsx",
+        "apps/*/src/components/ValueCounters.tsx",
+        "apps/*/src/components/WelcomeCeremony.tsx",
+        "apps/*/src/components/hud/**",
+        "apps/*/src/components/loomball/**",
+        "apps/*/src/components/loommate/**",
+        "apps/*/src/components/mate-guide/**",
+        "apps/*/src/components/star-ring/**",
+        "apps/*/src/components/welcomeScripts.ts",
+        "apps/*/src/lib/**",
+        "apps/*/src/onboarding/**",
         "apps/*/src/pages/**",
         "apps/*/src/shell/**",
+        "apps/*/src/vendor/**",
         "apps/*/src/voice/**",
-        "apps/*/src/onboarding/**",
-        "apps/*/src/components/mate-guide/**",
-        "apps/*/src/components/hud/**",
-        "apps/*/src/components/star-ring/**",
-        "apps/*/src/components/MateWelcome.tsx",
-        "apps/*/src/components/WelcomeCeremony.tsx",
         "apps/*/vitest.config.ts",
-        "apps/*/package.json"
+        "apps/*/vite.config.ts"
       ],
       "tolerateExtensionSnapshotOverlap": true,
-      "rolloutResumeNote": "2026-09-30 解除挂起（恢复 W3B）：前置条件①「仓级扩展路径全链路」已落地（T-2026-0930-0003：`tolerateExtensionSnapshotOverlap` 从实验车道扩展到显式声明的行业仓），本仓 12 条产品分叉路径写入 `industryExtensionPaths` 并与仓内 .workloom-client-extensions.json 一致；rollout 时这些路径退管自持（state.retiredManagedForks 留痕），其余受管文件照常按稳定波次升级。"
+      "rolloutResumeNote": "2026-09-30 解除挂起（恢复 W3B）：前置条件①「仓级扩展路径全链路」已落地（T-2026-0930-0003，本会话 follow-up 补齐 adoptBaseClientPaths）。本仓 24 条产品分叉路径由本仓自持（rollout 退管并记入 state.retiredManagedForks）；三端 apps/*/package.json 与文案代差的 apps/webb/src/Auth.tsx 显式声明为「采纳基座版」，保证 @workloom/ui 版本与 lock 完整性仍走基座通道。实测升级计划 ready=true：退管 71 条、更新 5 文件（三端 package.json、webb/Auth.tsx、web/main.tsx）+ 新建 styles/subtitle.css。",
+      "adoptBaseClientPaths": [
+        "apps/*/package.json",
+        "apps/webb/src/Auth.tsx"
+      ]
     },
     {
       "repo": "workloom-ai/panda-cineforge",
@@ -164,9 +180,23 @@
         "apps/web/src/pages/p0/**"
       ],
       "industryExtensionPaths": [
+        "apps/*/src/audio/**",
+        "apps/*/src/components/AgentAvatar.tsx",
+        "apps/*/src/components/Floor3D.tsx",
+        "apps/*/src/components/SimBanner.tsx",
+        "apps/*/src/components/ValueCounters.tsx",
         "apps/*/src/components/hud/**",
+        "apps/*/src/components/loomball/**",
+        "apps/*/src/components/mate-guide/**",
         "apps/*/src/components/star-ring/**",
+        "apps/*/src/components/welcomeScripts.ts",
+        "apps/*/src/lib/**",
+        "apps/*/src/onboarding/**",
+        "apps/*/src/pages/**",
         "apps/*/src/pages/p0/**",
+        "apps/*/src/shell/**",
+        "apps/*/vite.config.ts",
+        "apps/*/vitest.config.ts",
         "apps/web/src/App.tsx",
         "apps/web/src/components/MateWelcome.tsx",
         "apps/web/src/components/SkillDistBanner.tsx",
@@ -186,9 +216,15 @@
         "apps/web/src/pages/p6/**",
         "apps/web/src/pages/p8/**",
         "apps/web/src/shell/IndustryRoutes.test.tsx",
-        "apps/web/src/voice/**"
+        "apps/web/src/voice/**",
+        "apps/webb/src/App.tsx",
+        "apps/webb/src/Auth.tsx"
       ],
-      "rolloutResumeNote": "2026-09-30 解除挂起（恢复 W3B）：协议 §10.3「实验车道受管文件分叉容差」已于 2026-09-27 落地（T-2026-0927-0001），本仓属实验车道（lane=experiment），rollout 时对已登记的 industryExtensionPaths 执行退管迁移（state.retiredManagedForks 留痕），不再 fail closed。"
+      "rolloutResumeNote": "2026-09-30 解除挂起（恢复 W3B）：协议 §10.3「实验车道受管文件分叉容差」已落地，本仓 lane=experiment 默认开启；本会话把 industryExtensionPaths 由 23 条补齐到 39 条（2026-09-20 之后长出的 lib/audio/loomball/mate-guide/onboarding/pages/shell/vite|vitest 配置等），并显式声明 apps/*/package.json 为「采纳基座版」。实测升级计划 ready=true：退管 71 条、更新 4 文件 + 新建 styles/subtitle.css。",
+      "adoptBaseClientPaths": [
+        "apps/*/package.json"
+      ],
+      "tolerateExtensionSnapshotOverlap": true
     }
   ]
 }

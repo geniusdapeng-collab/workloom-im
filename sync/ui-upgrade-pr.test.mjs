@@ -670,6 +670,39 @@ process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", f
     // 显式挂起（paused）必须登记原因说明，且不影响其它仓的波次固化
     const paused = childManifest.children.filter((child) => child.uiRolloutWave === "paused");
     for (const child of paused) assert.ok((child.rolloutPauseNote ?? "").length >= 20, `${child.repo} 挂起缺少原因说明`);
+    // 非实验车道的产品分叉仓：必须登记原因（clientForkReason / rolloutResumeNote，≥20 字）+ 非空扩展路径；
+    // 且不得与 paused 同时出现；`adoptBaseClientPaths` 只允许"采纳基座版"的显式声明。
+    for (const child of childManifest.children.filter((item) => item.tolerateExtensionSnapshotOverlap === true && item.lane !== "experiment")) {
+      const reason = child.clientForkReason ?? child.rolloutResumeNote ?? "";
+      assert.ok(reason.length >= 20, `${child.repo} 分叉声明缺少理由`);
+      assert.ok(Array.isArray(child.industryExtensionPaths) && child.industryExtensionPaths.length > 0, `${child.repo} 分叉声明缺少扩展路径`);
+      assert.notEqual(child.uiRolloutWave, "paused", `${child.repo} 不得同时是 paused 与分叉容差`);
+      for (const pattern of child.industryExtensionPaths) {
+        assert.ok(pattern.startsWith("apps/") && !pattern.includes(".."), `非法扩展路径 ${pattern}`);
+      }
+      for (const pattern of child.adoptBaseClientPaths ?? []) {
+        assert.ok(pattern.startsWith("apps/") && !pattern.includes(".."), `非法采纳路径 ${pattern}`);
+      }
+      // 「采纳基座版」不得与扩展路径同路径（互斥语义）——引擎在计划阶段也会再查一遍
+      assert.ok(!(child.industryExtensionPaths ?? []).includes("apps/*/package.json"), `${child.repo} 不得把三端 package.json 登记为自持路径（快照装载会硬错）`);
+    }
+  });
+
+  it("仓级扩展路径全链路：分叉容差与「采纳基座版」的登记约束逐条失败闭合", () => {
+    const base = Array.from({ length: 9 }, (_, index) => ({ repo: `org/repo-${index}`, uiRolloutWave: "W1" }));
+    const fork = {
+      tolerateExtensionSnapshotOverlap: true,
+      clientForkReason: "产品分叉仓：三端壳之上的页面/壳/语音由本仓自持（测试用例）",
+      industryExtensionPaths: ["apps/*/src/pages/**"],
+    };
+    assert.equal(validateChildInventory([{ ...base[0], ...fork }, ...base.slice(1)], waveOrder), true);
+    assert.equal(validateChildInventory([{ ...base[0], ...fork, adoptBaseClientPaths: ["apps/*/package.json"] }, ...base.slice(1)], waveOrder), true);
+    assert.throws(() => validateChildInventory([{ ...base[0], ...fork, clientForkReason: "太短" }, ...base.slice(1)], waveOrder), /必须登记原因/);
+    assert.throws(() => validateChildInventory([{ ...base[0], ...fork, industryExtensionPaths: [] }, ...base.slice(1)], waveOrder), /industryExtensionPaths/);
+    assert.throws(() => validateChildInventory([{ ...base[0], ...fork, uiRolloutWave: "paused", rolloutPauseNote: "同时挂起与分叉（测试用例）" }, ...base.slice(1)], waveOrder), /二选一/);
+    assert.throws(() => validateChildInventory([{ ...base[0], ...fork, industryExtensionPaths: ["src/pages/**"] }, ...base.slice(1)], waveOrder), /非法/);
+    assert.throws(() => validateChildInventory([{ ...base[0], adoptBaseClientPaths: ["apps/*/package.json"] }, ...base.slice(1)], waveOrder), /必须先声明 tolerateExtensionSnapshotOverlap/);
+    assert.throws(() => validateChildInventory([{ ...base[0], ...fork, adoptBaseClientPaths: ["../etc/passwd"] }, ...base.slice(1)], waveOrder), /非法/);
   });
 
   it("逐路径识别缺 B 端移动、产品清单和 UI 状态，不只返回仓名", () => {
@@ -1268,7 +1301,10 @@ process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", f
       implementation,
       /installUiGovernance\(\{[\s\S]*?repo: workdir,[\s\S]*?repositoryRoot: checkout,[\s\S]*?sourceRoot: baseDir,[\s\S]*?lane: child\.lane \?\? null,[\s\S]*?industryExtensionPaths: child\.industryExtensionPaths \?\? \[\],[\s\S]*?\}\)/u,
     );
-    assert.match(implementation, /tolerateExtensionSnapshotOverlap: child\.lane === "experiment"/u);
+    // 分叉容差开关（协议 §10.3/§10.4）：实验车道默认开启；产品分叉仓可用
+    // tolerateExtensionSnapshotOverlap 显式声明；两处调用点都必须透传「采纳基座版」路径。
+    assert.match(implementation, /tolerateExtensionSnapshotOverlap: child\.lane === "experiment" \|\| child\.tolerateExtensionSnapshotOverlap === true/u);
+    assert.equal((implementation.match(/adoptBaseManagedPaths: child\.adoptBaseClientPaths \?\? \[\]/gu) ?? []).length, 2);
     assert.match(implementation, /verify-client-foundation-consumer\.mjs/u);
     assert.match(implementation, /ADOPTION_SCRIPTS/u);
     assert.match(implementation, /SYNC_TOKEN\|CNB_TOKEN\|GH_TOKEN\|GITHUB_TOKEN\|NPM_TOKEN\|NODE_AUTH_TOKEN/u);

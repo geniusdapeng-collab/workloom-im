@@ -208,6 +208,27 @@ export function effectiveExtensionPaths(config, extra = []) {
   return [...(config.allowedIndustryExtensionPaths ?? []), ...normalizeExtraExtensionPaths(extra)];
 }
 
+/**
+ * 仓级「采纳基座版」路径（2026-09-30，「仓级扩展路径全链路」）：
+ *
+ * 产品分叉仓（`clientForkPolicy: "repo-owned-paths"`）从异构血统迁入稳定客户端基座时，
+ * 会存在「既有文件没有可信旧基座指纹、且内容不同」的路径（实测 workloom 的
+ * `apps/web/package.json`、`apps/webb/src/Auth.tsx`）。引擎默认拒绝猜它是不是行业定制
+ * （UNTRACKED_MANAGED_FILE / MANAGED_FILE_MODIFIED），因此需要仓主**显式声明**
+ * 「这些路径不是本仓自有、按基座版覆盖」；声明本身走基座 PR 评审，与扩展路径同级。
+ *
+ * 约束：只允许 `apps/` 下、不含 `..`；不得与 industryExtensionPaths 语义重叠（二者互斥）。
+ */
+export function normalizeAdoptBasePaths(paths = []) {
+  const list = Array.isArray(paths) ? paths : [];
+  for (const pattern of list) {
+    if (typeof pattern !== "string" || !pattern.startsWith("apps/") || pattern.includes("..")) {
+      throw new Error(`非法「采纳基座版」路径：${pattern}`);
+    }
+  }
+  return list;
+}
+
 export function loadStableFoundationSnapshot(baseDir, manifest, requestedVersion, options = {}) {
   const root = realpathSync(resolve(baseDir));
   const config = validateFoundationConfig(manifest);
@@ -488,10 +509,18 @@ export function planClientFoundation({
   snapshot,
   mode = "upgrade",
   extraAllowedIndustryExtensionPaths = [],
+  adoptBaseManagedPaths = [],
   tolerateExtensionSnapshotOverlap = false,
 }) {
   if (!['scaffold', 'upgrade'].includes(mode)) throw new Error(`未知客户端基座模式：${mode}`);
   const config = validateFoundationConfig(manifest);
+  const adoptBasePatterns = normalizeAdoptBasePaths(adoptBaseManagedPaths);
+  const extensionPathsForAdoptCheck = effectiveExtensionPaths(config, extraAllowedIndustryExtensionPaths);
+  for (const pattern of adoptBasePatterns) {
+    if (matchesAny(pattern.replace(/\*\*$/u, "__workloom_probe__"), extensionPathsForAdoptCheck)) {
+      throw new Error(`「采纳基座版」路径与行业扩展路径重叠：${pattern}`);
+    }
+  }
   const toleratedSnapshotPaths = validateSnapshot(
     snapshot,
     manifest,
@@ -538,9 +567,15 @@ export function planClientFoundation({
     const beforeMode = beforeExists ? fileMode(destination) : null;
     const oldEntry = previous[path];
     const newFile = snapshot.files.get(path);
+    // 仓主显式声明「按基座版覆盖」的路径：跳过三类指纹冲突，交由下方正常流程
+    // 用稳定快照内容覆盖/重建（这是产品分叉仓迁入基座的显式迁移步骤）。
+    const adoptBase = matchesAny(path, adoptBasePatterns);
 
     if (oldEntry && beforeExists && beforeHash !== oldEntry.sha256) {
       if (!newFile || beforeHash !== sha256(newFile.content)) {
+        if (adoptBase) {
+          // 显式采纳：继续按快照内容覆盖
+        } else {
         conflicts.push({
           code: "MANAGED_FILE_MODIFIED",
           path,
@@ -549,25 +584,30 @@ export function planClientFoundation({
           actualSha256: beforeHash,
         });
         continue;
+        }
       }
     }
     if (!oldEntry && beforeExists && newFile && beforeHash !== sha256(newFile.content)) {
-      conflicts.push({
-        code: "UNTRACKED_MANAGED_FILE",
-        path,
-        message: "既有客户端文件没有可信旧基座指纹且内容不同；拒绝把它猜作可覆盖文件",
-        actualSha256: beforeHash,
-      });
-      continue;
+      if (!adoptBase) {
+        conflicts.push({
+          code: "UNTRACKED_MANAGED_FILE",
+          path,
+          message: "既有客户端文件没有可信旧基座指纹且内容不同；拒绝把它猜作可覆盖文件",
+          actualSha256: beforeHash,
+        });
+        continue;
+      }
     }
     if (oldEntry && !beforeExists && newFile) {
-      conflicts.push({
-        code: "MANAGED_FILE_DELETED",
-        path,
-        message: "行业仓删除了旧基座受管文件；请先恢复旧版或完成显式迁移",
-        expectedPreviousSha256: oldEntry.sha256,
-      });
-      continue;
+      if (!adoptBase) {
+        conflicts.push({
+          code: "MANAGED_FILE_DELETED",
+          path,
+          message: "行业仓删除了旧基座受管文件；请先恢复旧版或完成显式迁移",
+          expectedPreviousSha256: oldEntry.sha256,
+        });
+        continue;
+      }
     }
 
     if (!newFile) {
@@ -617,6 +657,7 @@ export function planClientFoundation({
     operations,
     conflicts,
     toleratedManagedPaths: [...toleratedManagedPaths].sort((left, right) => left.localeCompare(right)),
+    adoptBaseManagedPaths: [...adoptBasePatterns],
     ready: conflicts.length === 0,
   };
 }
@@ -639,6 +680,7 @@ export function applyClientFoundation({
   mode = "upgrade",
   dryRun = false,
   extraAllowedIndustryExtensionPaths = [],
+  adoptBaseManagedPaths = [],
   tolerateExtensionSnapshotOverlap = false,
 }) {
   const root = realpathSync(resolve(repoRoot));
@@ -650,6 +692,7 @@ export function applyClientFoundation({
     snapshot,
     mode,
     extraAllowedIndustryExtensionPaths,
+    adoptBaseManagedPaths,
     tolerateExtensionSnapshotOverlap,
   });
   if (!plan.ready) {
@@ -712,9 +755,11 @@ export function inspectClientFoundationState({
   targetRoot = repoRoot,
   manifest,
   extraAllowedIndustryExtensionPaths = [],
+  adoptBaseManagedPaths = [],
   tolerateExtensionSnapshotOverlap = false,
 }) {
   const config = validateFoundationConfig(manifest);
+  const adoptBasePatterns = normalizeAdoptBasePaths(adoptBaseManagedPaths);
   const root = realpathSync(resolve(repoRoot));
   const target = resolvePhysicalTarget(root, targetRoot);
   const issues = [];
@@ -748,6 +793,8 @@ export function inspectClientFoundationState({
   }
   for (const [path, entry] of Object.entries(state.managedFiles)) {
     if (toleratedLegacyPaths.has(path)) continue;
+    // 显式「采纳基座版」的路径：磁盘内容与旧指纹不同是预期状态（迁移中），不报漂移。
+    if (matchesAny(path, adoptBasePatterns)) continue;
     const destination = assertNoSymlinkPath(target, join(target, path), `检查 ${path}`);
     if (!existsSync(destination)) {
       issues.push({ code: "MANAGED_FILE_MISSING", path, message: "受管客户端文件缺失" });

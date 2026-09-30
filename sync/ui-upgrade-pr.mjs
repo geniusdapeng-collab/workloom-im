@@ -32,6 +32,8 @@ import {
   applyClientFoundation,
   inspectClientFoundationState,
   loadStableFoundationSnapshot,
+  normalizeAdoptBasePaths,
+  normalizeExtraExtensionPaths,
   resolveStableFoundationVersion,
 } from "./client-foundation.mjs";
 import { resolveUiReleaseArtifact, resolveUiVersion, setUiVersion } from "./set-ui-version.mjs";
@@ -344,6 +346,40 @@ export function validateChildInventory(children, waveOrder) {
     throw new Error("child-repos.json 必须提供无重复的 uiRolloutWaveOrder");
   }
   for (const child of children) {
+    /**
+     * 「仓级扩展路径全链路」的登记约束（T-2026-0930-0003 + follow-up）：
+     * 非实验车道的**产品分叉仓**用 `tolerateExtensionSnapshotOverlap: true` 打开分叉容差
+     * （workloom/growth 走这条），并可声明两类路径：
+     *   · `industryExtensionPaths`：本仓自持（升级时退管、保留本仓版本）；
+     *   · `adoptBaseClientPaths`：既有指纹不可信但**不是**本仓定制 → 按稳定快照覆盖/重建。
+     * 打开容差必须登记原因（≥20 字），否则退管会变成"静默失管"；两者语义互斥由引擎再查一遍。
+     * 注意：本段必须先于「paused 提前 continue」执行，否则 paused+容差 的非法组合会被放行。
+     */
+    const forkTolerance = child.tolerateExtensionSnapshotOverlap === true;
+    const isExperiment = child.lane === "experiment";
+    if (forkTolerance && !isExperiment) {
+      const reason = child.clientForkReason ?? child.rolloutResumeNote;
+      if (typeof reason !== "string" || reason.length < 20) {
+        throw new Error(`${child.repo} 声明 tolerateExtensionSnapshotOverlap 必须登记原因（clientForkReason 或 rolloutResumeNote，≥20 字）`);
+      }
+      if (!Array.isArray(child.industryExtensionPaths) || child.industryExtensionPaths.length === 0) {
+        throw new Error(`${child.repo} 声明 tolerateExtensionSnapshotOverlap 必须给出非空 industryExtensionPaths`);
+      }
+      if (child.uiRolloutWave === "paused") {
+        throw new Error(`${child.repo} 不能同时是 paused 与 tolerateExtensionSnapshotOverlap；二选一`);
+      }
+    }
+    if (Array.isArray(child.adoptBaseClientPaths) && child.adoptBaseClientPaths.length > 0) {
+      if (!forkTolerance) {
+        throw new Error(`${child.repo} 提供 adoptBaseClientPaths 必须先声明 tolerateExtensionSnapshotOverlap: true`);
+      }
+      // 格式校验走引擎同一套归一化（非 apps/ 前缀或含 .. 一律拒绝）；
+      // 与 industryExtensionPaths 的重叠由 planClientFoundation 在计划阶段抛错。
+      normalizeAdoptBasePaths(child.adoptBaseClientPaths);
+    }
+    if (Array.isArray(child.industryExtensionPaths) && child.industryExtensionPaths.length > 0) {
+      normalizeExtraExtensionPaths(child.industryExtensionPaths);
+    }
     if (!waveOrder.includes(child.uiRolloutWave)) {
       // 显式挂起：实验车道与快照契约结构性冲突等场景，必须登记原因与恢复条件（≥20 字）才可暂停波次；
       // 挂起仓不参与任何波次选择，也不计入前序未完成（否则会把后续全部波次卡死——0.1.7 实测）。
@@ -608,6 +644,9 @@ export function inspectMigratedConsumer(repoRoot, child, manifest) {
       // 仓级扩展路径全链路（T-2026-0930-0003）：实验车道默认开启；非实验的**产品分叉仓**
       // 可显式声明 `tolerateExtensionSnapshotOverlap: true`（如 workloom）获得同一退管容差。
       // 未声明者保持严格模式（默认不放宽）。
+      // 「采纳基座版」路径（T-2026-0929-0001 follow-up）：既有指纹不可信、但不是本仓定制
+      // 的路径按稳定快照覆盖/重建（如三端 package.json），否则会卡在 UNTRACKED_MANAGED_FILE。
+      adoptBaseManagedPaths: child.adoptBaseClientPaths ?? [],
       tolerateExtensionSnapshotOverlap: child.lane === "experiment" || child.tolerateExtensionSnapshotOverlap === true,
     });
     for (const issue of foundation.issues.filter((item) => item.code !== "INVALID_PRODUCT_IDENTITY")) {
@@ -1439,6 +1478,8 @@ async function upgradeChild(child, manifest, version, token, dryRun, foundationS
       // 这类路径登记成受管文件时，不退化成 fail closed，而是退管并原样保留本地版本。
       // 默认仅实验车道（lane === "experiment"）；行业仓需在 child-repos.json 显式声明
       // `tolerateExtensionSnapshotOverlap: true`（产品分叉仓），其余保持严格模式（T-2026-0930-0003）。
+      // 「采纳基座版」路径同前：显式声明后按快照覆盖，避免 UNTRACKED_MANAGED_FILE 卡波次。
+      adoptBaseManagedPaths: child.adoptBaseClientPaths ?? [],
       tolerateExtensionSnapshotOverlap: child.lane === "experiment" || child.tolerateExtensionSnapshotOverlap === true,
     });
     const touched = setUiVersion({
