@@ -28,6 +28,7 @@ import {
   rolloutHasFailure,
   sanitizedSubprocessEnvironment,
   selectRolloutBatch,
+  splitForkContractAdvisories,
   stageExactUpgradeChanges,
   validateChildInventory,
   validateRelease,
@@ -689,6 +690,24 @@ process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", f
   });
 
   it("仓级扩展路径全链路：分叉容差与「采纳基座版」的登记约束逐条失败闭合", () => {
+    // 产品分叉仓的 UI 消费契约降级：自持面的 contract 失败只记录、不阻断波次；
+    // 非分叉仓保持阻断（门禁强度不受影响）。
+    const contract = (code, message) => ({ code, phase: "phase-2", path: ".", message, remediation: "r" });
+    const sample = [
+      contract("UI_CONSUMER_CONTRACT_FAILED", "客户端可见英文未登记中文边界：B2A4E"),
+      contract("CLIENT_FOUNDATION_VERSION_DRIFT", "基座版本漂移"),
+    ];
+    const forkAdvisory = splitForkContractAdvisories({ repo: "org/fork", lane: "experiment" }, sample);
+    assert.deepEqual(forkAdvisory.blockers.map((item) => item.code), ["CLIENT_FOUNDATION_VERSION_DRIFT"]);
+    assert.equal(forkAdvisory.advisories.length, 1);
+    assert.equal(forkAdvisory.advisories[0].phase, "advisory");
+    assert.match(forkAdvisory.advisories[0].message, /仅记录不阻断/u);
+    const declared = splitForkContractAdvisories({ repo: "org/fork2", tolerateExtensionSnapshotOverlap: true }, sample);
+    assert.deepEqual(declared.blockers.map((item) => item.code), ["CLIENT_FOUNDATION_VERSION_DRIFT"]);
+    const strict = splitForkContractAdvisories({ repo: "org/strict" }, sample);
+    assert.equal(strict.advisories.length, 0);
+    assert.equal(strict.blockers.length, 2);
+
     const base = Array.from({ length: 9 }, (_, index) => ({ repo: `org/repo-${index}`, uiRolloutWave: "W1" }));
     const fork = {
       tolerateExtensionSnapshotOverlap: true,
@@ -854,7 +873,7 @@ process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", f
     assert.equal(report.ready, true);
     assert.equal(report.baseReleaseReady, true);
     assert.equal(report.allMigrationsCurrent, false);
-    assert.deepEqual(report.summary, { accessible: 9, unreachable: 0, stageOneReady: 0, phaseOneBlocked: 9, current: 0 });
+    assert.deepEqual(report.summary, { accessible: 9, unreachable: 0, stageOneReady: 0, phaseOneBlocked: 9, current: 0, advisories: 0 });
     assert.equal(report.repositories.length, 9);
     assert.ok(report.repositories.every((item) => item.blockers.some((entry) => entry.code === "MISSING_CLIENT_PACKAGE")));
   });
