@@ -360,15 +360,20 @@
       script: |
         set -eu
         pnpm exec playwright install --with-deps chromium
-    - name: 重生成 Linux 基线并回推分支
+    - name: 诊断 + 重生成 Linux 基线并回推分支
       script: |
         set -eu
         set -a; . ./.env; set +a
+        # 先原样跑一次门禁并把输出落盘（Linux 上的失败原因需要带回仓库才能离线分析）
+        mkdir -p outputs/diagnostics/ui-e2e
+        (pnpm ui:e2e > outputs/diagnostics/ui-e2e/e2e-linux.log 2>&1) || true
+        cp -R test-results/ui outputs/diagnostics/ui-e2e/test-results 2>/dev/null || true
         # 更新基线（用例断言若因基线差异失败不阻断本次生成）
-        pnpm ui:e2e:update || true
+        pnpm ui:e2e:update > outputs/diagnostics/ui-e2e/update.log 2>&1 || true
         git config user.name "cnb-ui-baseline"
         git config user.email "ui-baseline@cnb.cool"
         git add tests/ui/workloom-clients.spec.ts-snapshots
+        git add -f outputs/diagnostics/ui-e2e
         if git diff --cached --quiet; then
           echo "无基线变化（可能与平台/字体无关）"
           exit 0
