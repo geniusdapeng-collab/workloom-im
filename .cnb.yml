@@ -388,7 +388,7 @@
     volumes:
       - /cnb-cache/pnpm-store:copy-on-write
   env:
-    UI_VERSION: "0.1.18"
+    UI_VERSION: "0.1.19"
   stages:
     - name: 构建并打包 @workloom/ui
       script: |
