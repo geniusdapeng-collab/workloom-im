@@ -70,8 +70,8 @@ function useNightControl(enabled: boolean) {
     try {
       const r = await trpc.nightShift.pause.mutate({ runId: runningRunId }) as { elapsedMs: number; withinSla: boolean; pausedThreads: number };
       setBrakeNote(r.withinSla
-        ? { level: "ok", text: `已制动：${r.pausedThreads} 个运行任务挂起（${r.elapsedMs}ms）` }
-        : { level: "alert", text: `已制动但用时 ${r.elapsedMs}ms 超出目标，请复核 ${r.pausedThreads} 个任务的挂起状态` });
+        ? { level: "ok", text: `已制动：${r.pausedThreads} 个运行任务挂起（用时 ${r.elapsedMs} 毫秒）` }
+        : { level: "alert", text: `已制动但用时 ${r.elapsedMs} 毫秒，超出目标，请复核 ${r.pausedThreads} 个任务的挂起状态` });
       await load();
     } catch (error) {
       setBrakeNote({ level: "alert", text: operationFailure(error, "紧急制动") });
@@ -304,7 +304,7 @@ export function Bridge({
                       disabled={!canManageNight}
                       hint={canManageNight
                         ? "当前没有运行中的夜班：到夜班中心出征后可在此就地制动"
-                        : "当前身份无夜班管理权限（night.manage）"}
+                        : "当前身份无夜班管理权限"}
                     />
                     {brakeNote && <span role="status" className={`text-body ${brakeNote.level === "ok" ? "text-go" : "text-alert"}`}>{brakeNote.text}</span>}
                   </span>

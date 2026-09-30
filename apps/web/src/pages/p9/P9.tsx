@@ -298,7 +298,7 @@ export default function P9() {
               aria-busy={busy === "start" || undefined}
               onClick={() => void doStart()}
               className="cursor-pointer rounded-lg border border-holo/50 bg-holo/10 px-3.5 py-1.5 text-body font-extrabold text-holo disabled:cursor-wait disabled:opacity-50"
-              title="人类命令开启今晚夜班（F4.1 不经模型轮次）：就绪后全员上线，可随时紧急制动"
+              title="人类命令开启今晚夜班：就绪后全员上线，可随时紧急制动"
             >
               {busy === "start" ? "正在出征…" : <><Icon name="play" size={14} className="inline" /> 出征（开启夜班）</>}
             </button>
