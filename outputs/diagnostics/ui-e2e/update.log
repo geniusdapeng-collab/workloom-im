@@ -1,0 +1,225 @@
+
+> workloom-im@0.1.1 ui:e2e:update /workspace
+> playwright test --update-snapshots
+
+[base-api] 
+[base-api] > @workloom/server@0.1.0 start /workspace/apps/server
+[base-api] > tsx --env-file=../../.env src/index.ts
+[base-api] 
+
+[base-api] [auth] JWT_SECRET 长度 <32 字符，熵不足——生产环境请配置 ≥32 字符随机密钥
+
+[base-api] [service-c] SERVICE_C_DEMO_AUTH 已开启：h5/openid 演示直登可用（生产环境必须置 false 并配置渠道 code 交换凭据）
+
+[base-api] apps/webc 静态托管已挂载：/app/c → /workspace/apps/webc/dist
+
+[base-api] WorkLoom IM 底座 server 已启动：http://127.0.0.1:8877（tRPC: /trpc/*，C 端网关: /c/*）
+
+[base-api] [scheduler] 已启动：每 7000ms 扫描 queued 线程（每区每轮 ≤3 条，并发上限 10）
+
+[base-api] 反馈枚举表已装载：ai-pm→ws-aipm-demo（14 条）、hotel→ws-yunqi（11 条）
+
+[b-pc] 
+[b-pc] > @workloom/web@0.1.0 dev /workspace/apps/web
+[b-pc] > vite --host 127.0.0.1 --strictPort
+[b-pc] 
+
+[b-pc] 
+[b-pc]   VITE v8.3.0  ready in 219 ms
+[b-pc] 
+
+[b-pc]   ➜  Local:   http://127.0.0.1:3100/
+
+[b-mobile] 
+[b-mobile] > @workloom/webb@0.1.0 dev /workspace/apps/webb
+[b-mobile] > vite --host 127.0.0.1 --strictPort
+[b-mobile] 
+
+[b-mobile] 
+[b-mobile]   VITE v8.3.0  ready in 170 ms
+[b-mobile] 
+
+[b-mobile]   ➜  Local:   http://127.0.0.1:3101/
+
+[c-mobile] 
+[c-mobile] > @workloom/webc@0.1.0 dev /workspace/apps/webc
+[c-mobile] > vite --host 127.0.0.1 --strictPort
+[c-mobile] 
+
+[c-mobile] 
+[c-mobile]   VITE v8.3.0  ready in 208 ms
+[c-mobile] 
+
+[c-mobile]   ➜  Local:   http://127.0.0.1:3102/
+
+
+Running 15 tests using 1 worker
+
+[1/15] tests/ui/workloom-clients.spec.ts:208:3 › B 端 PC：WCAG 严重问题、窄屏与 200% 文字缩放门禁
+[2/15] tests/ui/workloom-clients.spec.ts:208:3 › B 端移动：WCAG 严重问题、窄屏与 200% 文字缩放门禁
+[3/15] tests/ui/workloom-clients.spec.ts:208:3 › C 端移动：WCAG 严重问题、窄屏与 200% 文字缩放门禁
+[base-api] [service-c] SERVICE_C_SECRET 长度不足 32 字符，请更换为高强度随机密钥
+
+[4/15] tests/ui/workloom-clients.spec.ts:225:1 › 共享按钮长中文可换行且不会溢出
+[5/15] tests/ui/workloom-clients.spec.ts:253:1 › PC 只有左侧页面导航，布局控制可由键盘关闭
+[base-api] [trpc] query access.me → UNAUTHORIZED: 未认证（缺少有效会话）（ref=cc0c3692）
+
+[base-api] (node:7163) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+[base-api] (Use `node --trace-deprecation ...` to show where the warning was created)
+
+[6/15] tests/ui/workloom-clients.spec.ts:265:1 › PC 窄屏主导航圈定焦点，Esc 关闭后恢复触发点
+[base-api] [trpc] query access.me → UNAUTHORIZED: 未认证（缺少有效会话）（ref=cc0c3692）
+
+[7/15] tests/ui/workloom-clients.spec.ts:281:1 › PC 工作区首帧按真实容器宽度采用安全布局
+[base-api] [trpc] query access.me → UNAUTHORIZED: 未认证（缺少有效会话）（ref=cc0c3692）
+
+[8/15] tests/ui/workloom-clients.spec.ts:365:1 › PC 关键公共能力在窄视口与 200% 文字下不溢出
+[base-api] [trpc] query access.me → UNAUTHORIZED: 未认证（缺少有效会话）（ref=cc0c3692）
+
+[9/15] (retries) tests/ui/workloom-clients.spec.ts:365:1 › PC 关键公共能力在窄视口与 200% 文字下不溢出 (retry #1)
+[base-api] [trpc] query access.me → UNAUTHORIZED: 未认证（缺少有效会话）（ref=cc0c3692）
+
+  1) tests/ui/workloom-clients.spec.ts:365:1 › PC 关键公共能力在窄视口与 200% 文字下不溢出 ──────────────────────────
+
+    Error: {
+      "viewport": 1024,
+      "viewportHeight": 720,
+      "documentWidth": 1024,
+      "offenders": [
+        {
+          "tag": "span",
+          "className": "ml-auto text-body text-neutral-500",
+          "clientWidth": 13,
+          "scrollWidth": 28,
+          "text": "织元演示租户"
+        }
+      ],
+      "verticallyClipped": [],
+      "fixedOffenders": []
+    }
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 9
+
+    - Array []
+    + Array [
+    +   Object {
+    +     "className": "ml-auto text-body text-neutral-500",
+    +     "clientWidth": 13,
+    +     "scrollWidth": 28,
+    +     "tag": "span",
+    +     "text": "织元演示租户",
+    +   },
+    + ]
+
+      118 |   });
+      119 |   expect(report.documentWidth, JSON.stringify(report, null, 2)).toBeLessThanOrEqual(report.viewport + 2);
+    > 120 |   expect(report.offenders, JSON.stringify(report, null, 2)).toEqual([]);
+          |                                                             ^
+      121 |   expect(report.verticallyClipped, JSON.stringify(report, null, 2)).toEqual([]);
+      122 |   expect(report.fixedOffenders, JSON.stringify(report, null, 2)).toEqual([]);
+      123 | }
+        at assertNoPageOverflow (/workspace/tests/ui/workloom-clients.spec.ts:120:61)
+        at /workspace/tests/ui/workloom-clients.spec.ts:381:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/ui/workloom-clients-PC-关键公共能力在窄视口与-200-文字下不溢出/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/ui/workloom-clients-PC-关键公共能力在窄视口与-200-文字下不溢出/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/ui/workloom-clients-PC-关键公共能力在窄视口与-200-文字下不溢出/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/ui/workloom-clients-PC-关键公共能力在窄视口与-200-文字下不溢出/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/ui/workloom-clients-PC-关键公共能力在窄视口与-200-文字下不溢出/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: {
+      "viewport": 1024,
+      "viewportHeight": 720,
+      "documentWidth": 1024,
+      "offenders": [
+        {
+          "tag": "span",
+          "className": "ml-auto text-body text-neutral-500",
+          "clientWidth": 13,
+          "scrollWidth": 28,
+          "text": "织元演示租户"
+        }
+      ],
+      "verticallyClipped": [],
+      "fixedOffenders": []
+    }
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 9
+
+    - Array []
+    + Array [
+    +   Object {
+    +     "className": "ml-auto text-body text-neutral-500",
+    +     "clientWidth": 13,
+    +     "scrollWidth": 28,
+    +     "tag": "span",
+    +     "text": "织元演示租户",
+    +   },
+    + ]
+
+      118 |   });
+      119 |   expect(report.documentWidth, JSON.stringify(report, null, 2)).toBeLessThanOrEqual(report.viewport + 2);
+    > 120 |   expect(report.offenders, JSON.stringify(report, null, 2)).toEqual([]);
+          |                                                             ^
+      121 |   expect(report.verticallyClipped, JSON.stringify(report, null, 2)).toEqual([]);
+      122 |   expect(report.fixedOffenders, JSON.stringify(report, null, 2)).toEqual([]);
+      123 | }
+        at assertNoPageOverflow (/workspace/tests/ui/workloom-clients.spec.ts:120:61)
+        at /workspace/tests/ui/workloom-clients.spec.ts:381:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/ui/workloom-clients-PC-关键公共能力在窄视口与-200-文字下不溢出-retry1/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/ui/workloom-clients-PC-关键公共能力在窄视口与-200-文字下不溢出-retry1/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/ui/workloom-clients-PC-关键公共能力在窄视口与-200-文字下不溢出-retry1/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/ui/workloom-clients-PC-关键公共能力在窄视口与-200-文字下不溢出-retry1/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/ui/workloom-clients-PC-关键公共能力在窄视口与-200-文字下不溢出-retry1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[10/15] tests/ui/workloom-clients.spec.ts:386:1 › PC 真实四层浮层按层级显示，Esc 后进先出
+[base-api] [trpc] query access.me → UNAUTHORIZED: 未认证（缺少有效会话）（ref=cc0c3692）
+
+[11/15] tests/ui/workloom-clients.spec.ts:460:1 › PC 键盘完成登录、定位待审、打开裁决并进入事件账本
+[base-api] [trpc] query access.me → UNAUTHORIZED: 未认证（缺少有效会话）（ref=cc0c3692）
+
+[12/15] tests/ui/workloom-clients.spec.ts:482:1 › B 端移动主导航与触控入口真实可用
+[13/15] tests/ui/workloom-clients.spec.ts:497:1 › B 端移动关键公共能力在窄屏、长中文与 200% 文字下不溢出
+[base-api] [trpc] query access.me → UNAUTHORIZED: 未认证（缺少有效会话）（ref=cc0c3692）
+
+[14/15] tests/ui/workloom-clients.spec.ts:526:1 › C 端底部导航写入历史并支持浏览器返回
+[15/15] tests/ui/workloom-clients.spec.ts:537:1 › C 端移动完整主流程页面在窄屏、长中文与 200% 文字下不溢出
+[16/15] tests/ui/workloom-clients.spec.ts:570:1 › 三端静态视觉基线
+  1 failed
+    tests/ui/workloom-clients.spec.ts:365:1 › PC 关键公共能力在窄视口与 200% 文字下不溢出 ───────────────────────────
+  14 passed (2.3m)
+ ELIFECYCLE  Command failed with exit code 1.
