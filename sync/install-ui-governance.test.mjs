@@ -223,6 +223,41 @@ test("首次接入拒绝覆盖行业已有 verifier，且不产生半套安装",
   }
 });
 
+test("产品分叉仓开关写入治理状态，且仓内私自改写下一次安装即 fail closed（§10.4）", () => {
+  const fx = fixture();
+  try {
+    installUiGovernance({
+      repo: fx.target,
+      sourceRoot: fx.source,
+      industryExtensionPaths: ["apps/*/src/pages/**"],
+      tolerateExtensionSnapshotOverlap: true,
+    });
+    const state = JSON.parse(readFileSync(join(fx.target, GOVERNANCE_STATE), "utf8"));
+    assert.equal(state.tolerateExtensionSnapshotOverlap, true);
+    assert.deepEqual(state.industryExtensionPaths, ["apps/*/src/pages/**"]);
+
+    // 基座声明不变 → 幂等重装通过
+    installUiGovernance({
+      repo: fx.target,
+      sourceRoot: fx.source,
+      industryExtensionPaths: ["apps/*/src/pages/**"],
+      tolerateExtensionSnapshotOverlap: true,
+    });
+
+    // 基座声明关掉开关 → 与仓内登记不一致，拒绝静默改写
+    assert.throws(
+      () => installUiGovernance({
+        repo: fx.target,
+        sourceRoot: fx.source,
+        industryExtensionPaths: ["apps/*/src/pages/**"],
+      }),
+      /分叉容差开关与基座声明不一致/u,
+    );
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
 test("v8 普通 base-sync 的可信旧字节可由稳定治理单元原子接管（含 Tiger pathPrefix）", () => {
   const fx = legacyFixture({ pathPrefix: "governance" });
   try {

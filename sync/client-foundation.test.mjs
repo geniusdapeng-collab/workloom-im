@@ -259,6 +259,38 @@ describe("三端客户端基座稳定分发", () => {
     assert.ok(errors.some((error) => error.includes("扩展白名单被修改")));
   });
 
+  it("产品分叉仓：治理状态登记 tolerateExtensionSnapshotOverlap 后，声明路径不再判漂移（§10.4）", () => {
+    const repo = createIndustryRepo();
+    applyClientFoundation({ repoRoot: repo, manifest: manifest(), snapshot: makeSnapshot(), mode: "scaffold" });
+    writeJson(join(repo, ".workloom-ui.json"), { package: "@workloom/ui", version: VERSION });
+    // 本仓自有页面（不在稳定快照里，也未进受管集合）
+    mkdirSync(join(repo, "apps/web/src/pages"), { recursive: true });
+    writeFileSync(join(repo, "apps/web/src/pages/Product.tsx"), "export const Product = () => null;\n");
+    // ① 未声明：严格模式，按「非白名单行业文件」拒绝
+    assert.ok(verifyClientFoundationConsumer(repo).some((error) => error.includes("非白名单行业文件")));
+    // ② 非实验车道但显式开容差 + 登记扩展路径：放行
+    writeJson(join(repo, ".workloom-ui-governance.json"), {
+      schemaVersion: "workloom.ui-governance-state/v1",
+      dependency: "npm:typescript@5.9.3",
+      yamlDependency: "npm:yaml@2.9.0",
+      updatePolicy: "stable-upgrade-pr-only",
+      files: {},
+      industryExtensionPaths: ["apps/*/src/pages/**"],
+      tolerateExtensionSnapshotOverlap: true,
+    });
+    assert.deepEqual(verifyClientFoundationConsumer(repo), []);
+    // ③ 关掉开关（保留路径声明）→ 回到严格模式：路径声明本身不足以洗白
+    writeJson(join(repo, ".workloom-ui-governance.json"), {
+      schemaVersion: "workloom.ui-governance-state/v1",
+      dependency: "npm:typescript@5.9.3",
+      yamlDependency: "npm:yaml@2.9.0",
+      updatePolicy: "stable-upgrade-pr-only",
+      files: {},
+      industryExtensionPaths: ["apps/*/src/pages/**"],
+    });
+    assert.ok(verifyClientFoundationConsumer(repo).some((error) => error.includes("非白名单行业文件")));
+  });
+
   it("禁止客户端基座降级，也禁止稳定标签同版本换提交", () => {
     const repo = createIndustryRepo();
     applyClientFoundation({ repoRoot: repo, manifest: manifest(), snapshot: makeSnapshot(), mode: "scaffold" });

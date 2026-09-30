@@ -215,6 +215,7 @@ export function installUiGovernance({
   onWrite,
   lane = null,
   industryExtensionPaths = [],
+  tolerateExtensionSnapshotOverlap = false,
 }) {
   const targetRoot = safeRoot(repo, "目标仓");
   const targetRepositoryRoot = safeRoot(repositoryRoot, "目标 Git 仓根");
@@ -256,6 +257,11 @@ export function installUiGovernance({
     }
     if (previousExtensions !== null && JSON.stringify(previousExtensions) !== JSON.stringify(declaredExtensions)) {
       throw new Error(`${GOVERNANCE_STATE} 登记的行业扩展路径与基座声明不一致；拒绝静默改写`);
+    }
+    // 产品分叉仓开关（§10.4）：仓内私自打开/关闭都会在下一次 rollout fail closed。
+    const previousTolerance = previous.tolerateExtensionSnapshotOverlap === true;
+    if (previousTolerance !== (tolerateExtensionSnapshotOverlap === true)) {
+      throw new Error(`${GOVERNANCE_STATE} 登记的分叉容差开关与基座声明不一致；拒绝静默改写`);
     }
   }
 
@@ -304,6 +310,7 @@ export function installUiGovernance({
     files,
     ...(declaredLane ? { lane: declaredLane } : {}),
     ...(declaredExtensions.length ? { industryExtensionPaths: declaredExtensions } : {}),
+    ...(tolerateExtensionSnapshotOverlap ? { tolerateExtensionSnapshotOverlap: true } : {}),
     ...(legacyProof ? {
       legacyTakeover: {
         sourceCommit: legacyProof.sourceCommit,
