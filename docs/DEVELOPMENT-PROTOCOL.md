@@ -185,6 +185,12 @@ CNB 每仓**最多 10 个标签**（实测：创建第 11 个返回 201 但不�
 恢复/回滚：删除 `tolerateExtensionSnapshotOverlap`/`adoptBaseClientPaths`（必要时保留 `industryExtensionPaths`）、
 `uiRolloutWave` 改回 `paused` 并补 `rolloutPauseNote`，即可回到"挂起"状态。
 
+**UI 消费契约在分叉仓的边界（2026-09-30 补，T-2026-0929-0001 follow-up）**：`UI_CONSUMER_CONTRACT_FAILED`
+（中文边界 / 动态值映射 / 文字出口 / 共享组件渲染等）只约束**基座受管面**。对已声明分叉容差的仓，
+这些发现降级为 `advisories`（保留在 preflight 报告里可查、可另立产品迁移任务卡），**不再阻断波次推进**——
+否则 `targetVersionApplied` 永远为 false，会把 W3B 之后的整条波次链永久卡死（workloom / growth 实测各 207 项）。
+非分叉仓不受影响，仍是硬门禁；回滚即删除该降级逻辑。
+
 ## 11. 隔离副本车道（isolated：双向不同步，2026-09-22 新增）
 
 **背景**：`workloom-growthtest`（AI超增长·实验版）与 `workloom-growthmatrix`（骇客帝国·实验版）是 2026-09-21 从

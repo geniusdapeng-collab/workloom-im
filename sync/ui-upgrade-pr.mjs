@@ -431,6 +431,26 @@ export function resolvePreflightTarget(manifest, packageJson, requestedVersion) 
  * 检查一个已克隆行业仓是否完成发布前存量迁移。
  * 该函数只读；所有问题均保留机器可读 code/path，供 CI 和迁移台账消费。
  */
+/**
+ * 产品分叉仓的 UI 消费契约降级（T-2026-0930-0003 / T-2026-0929-0001 follow-up）：
+ *
+ * `lane === "experiment"`（§10.3）或显式声明 `tolerateExtensionSnapshotOverlap: true`（§10.4）的仓，
+ * 其 `industryExtensionPaths` 内的客户端面由本仓自持、升级时退管——基座的 UI 消费契约只约束
+ * **基座受管面**，因此把 `UI_CONSUMER_CONTRACT_FAILED` 从阻断项降级为建议项（`advisories`）：
+ * 报告里照旧可见（可另立产品迁移任务卡），但不阻断波次顺序推进。
+ */
+export function splitForkContractAdvisories(child, blockers) {
+  const declaredFork = child?.lane === "experiment" || child?.tolerateExtensionSnapshotOverlap === true;
+  if (!declaredFork) return { blockers, advisories: [] };
+  const advisories = [];
+  const kept = blockers.filter((item) => {
+    if (item.code !== "UI_CONSUMER_CONTRACT_FAILED") return true;
+    advisories.push({ ...item, phase: "advisory", message: `［产品分叉仓自持面，仅记录不阻断］${item.message}` });
+    return false;
+  });
+  return { blockers: kept, advisories };
+}
+
 export function inspectMigratedConsumer(repoRoot, child, manifest) {
   const prefix = child.pathPrefix?.replace(/^\/+|\/+$/g, "") ?? "";
   const workdir = prefix ? join(repoRoot, prefix) : repoRoot;
@@ -734,7 +754,14 @@ export function preflightChildren({ children, waveOrder, manifest, version, targ
       const checkout = cloneChild(child, temp, token) ?? temp;
       const defaultBranch = run("git", ["branch", "--show-current"], checkout);
       const headSha = run("git", ["rev-parse", "HEAD"], checkout);
-      const blockers = inspectMigratedConsumer(checkout, child, manifest);
+      /**
+       * 产品分叉仓（协议 §10.3/§10.4）的 UI 消费契约降级为**建议项**：
+       * 这类仓的客户端面（页面/壳/语音/引导等）已由 `industryExtensionPaths` 声明为自持、
+       * 升级时从受管集合退管——基座的中文边界/动态值/共享组件渲染契约本就只约束**基座受管面**，
+       * 对自持面继续硬判会把波次永久卡死（W3B 实测：workloom / growth 各 207 项）。
+       * 因此仅记录为 `advisories`（留在报告里可查，可另立产品迁移任务卡），不再阻断波次推进。
+       */
+      const { blockers, advisories } = splitForkContractAdvisories(child, inspectMigratedConsumer(checkout, child, manifest));
       if (defaultBranch !== "main") {
         blockers.push(blocker(
           "DEFAULT_BRANCH_NOT_MAIN",
@@ -769,6 +796,7 @@ export function preflightChildren({ children, waveOrder, manifest, version, targ
         pathPrefix: child.pathPrefix || ".",
         wave: child.uiRolloutWave,
         headSha,
+        advisories,
         accessStatus: "accessible",
         migrationStatus: targetVersionApplied ? "current" : stageOneReady ? "phase-2-upgrade-required" : "phase-1-blocked",
         stageOneReady,
@@ -811,6 +839,7 @@ export function preflightChildren({ children, waveOrder, manifest, version, targ
   const stageOneReadyCount = repositories.filter((item) => item.stageOneReady).length;
   const currentCount = repositories.filter((item) => item.targetVersionApplied).length;
   const unreachableCount = repositories.length - accessibleCount;
+  const advisoryCount = repositories.reduce((total, item) => total + (item.advisories?.length ?? 0), 0);
   return {
     schemaVersion: "workloom.ui-downstream-preflight/v1",
     phase: "pre-publish",
@@ -835,6 +864,8 @@ export function preflightChildren({ children, waveOrder, manifest, version, targ
       stageOneReady: stageOneReadyCount,
       phaseOneBlocked: EXPECTED_DOWNSTREAM_COUNT - stageOneReadyCount - unreachableCount,
       current: currentCount,
+      // 产品分叉仓自持面的 UI 消费契约建议项（不阻断波次；见 splitForkContractAdvisories）
+      advisories: advisoryCount,
     },
     repositories,
   };
