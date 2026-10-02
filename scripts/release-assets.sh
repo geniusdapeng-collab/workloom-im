@@ -10,6 +10,16 @@ workloom_fetch_verified() { # <out> <asset-name> <url...>
   shift 2
   local url
   rm -f "$out" "$partial"
+  if [ -n "${WORKLOOM_ASSET_CACHE:-}" ] && [ -f "$WORKLOOM_ASSET_CACHE/$asset_name" ]; then
+    cp "$WORKLOOM_ASSET_CACHE/$asset_name" "$partial"
+    if node scripts/release-assets.mjs verify "$partial" "$asset_name"; then
+      mv -f "$partial" "$out"
+      return 0
+    fi
+    rm -f "$partial"
+    echo "❌ 本地缓存摘要不匹配：$asset_name"
+    return 1
+  fi
   for url in "$@"; do
     echo "  ↓ $url"
     if curl --http1.1 -fsSL \

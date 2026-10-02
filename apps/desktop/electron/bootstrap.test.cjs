@@ -4,7 +4,8 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { describe, it } = require("node:test");
+const { describe, it, after } = require("node:test");
+const { generatePayloadIntegrity, verifyPayloadIntegrity } = require("./payload-integrity.cjs");
 const {
   bootstrap,
   installPayloadAtomically,
@@ -34,8 +35,12 @@ function assertPrivateFile(file) {
   if (process.platform !== "win32") assert.equal(stat.mode & 0o777, 0o600);
 }
 
+const fixtureRoots = [];
+after(() => { for (const root of fixtureRoots) fs.rmSync(root, { recursive: true, force: true }); });
+
 function fixture(version, withCurrent = true) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "workloom-bootstrap-"));
+  fixtureRoots.push(root);
   const sourceRoot = path.join(root, "payload");
   const supportDir = path.join(root, "support");
   for (const part of ["runtime", "node", "pg", "nats"]) {
@@ -43,6 +48,13 @@ function fixture(version, withCurrent = true) {
     fs.writeFileSync(path.join(sourceRoot, part, "payload.txt"), `${part}-${version}`);
   }
   fs.writeFileSync(path.join(sourceRoot, "runtime", "VERSION"), version);
+  const put = (file, content) => { fs.mkdirSync(path.dirname(path.join(sourceRoot, file)), { recursive: true }); fs.writeFileSync(path.join(sourceRoot, file), content); };
+  put("VERSION", version);
+  put("PAYLOAD_VERSION", version);
+  put("runtime/product.manifest.json", JSON.stringify({ productId: "fixture-industry" }));
+  put("runtime/.env.defaults", "MODE=fixture\n");
+  for (const file of ["runtime/scripts/desktop-bootstrap-db.mjs", "node/bin/node", "pg/bin/postgres", "pg/bin/pg_ctl", "pg/bin/initdb", "nats/nats-server"]) put(file, "fixture\n");
+  generatePayloadIntegrity(sourceRoot);
   fs.mkdirSync(supportDir, { recursive: true });
   if (withCurrent) {
     for (const part of ["runtime", "node", "pg", "nats"]) {
@@ -144,6 +156,7 @@ describe("桌面载荷原子装配", () => {
     assert.equal(fs.readFileSync(path.join(f.supportDir, "runtime", ".env"), "utf8"), "JWT_SECRET=keep-me\n");
     assert.equal(fs.readFileSync(path.join(f.supportDir, "VERSION"), "utf8").trim(), "2.0.0");
     assert.equal(fs.existsSync(path.join(f.supportDir, ".bootstrapped")), false);
+    assert.deepEqual(verifyPayloadIntegrity(f.supportDir), verifyPayloadIntegrity(f.sourceRoot));
     tx.commit();
     assert.deepEqual(transientDirectories(f.supportDir), []);
   });
@@ -184,7 +197,7 @@ describe("桌面载荷原子装配", () => {
       payloadVer: "2.0.0",
       failAt: "after-stage",
     }), /故障注入/);
-    for (const part of ["runtime", "node", "pg", "nats"]) assert.equal(fs.existsSync(path.join(f.supportDir, part)), false);
+    for (const part of ["runtime", "node", "pg", "nats", "payload-integrity.json", "PAYLOAD_VERSION"]) assert.equal(fs.existsSync(path.join(f.supportDir, part)), false);
     assert.equal(fs.existsSync(path.join(f.supportDir, "VERSION")), false);
     assert.deepEqual(transientDirectories(f.supportDir), []);
   });

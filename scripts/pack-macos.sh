@@ -61,6 +61,7 @@ copy apps/desktop/WorkLoom.app "$APP"
 chmod +x "$APP/Contents/MacOS/WorkLoom"
 mkdir -p "$APP/Contents/Resources"
 cp apps/desktop/electron/bootstrap.cjs "$APP/Contents/Resources/bootstrap.cjs"
+cp apps/desktop/electron/diagnostic-redaction.cjs apps/desktop/electron/industry-runtime.cjs apps/desktop/electron/payload-integrity.cjs apps/desktop/electron/product-surface.cjs "$APP/Contents/Resources/"
 
 # 2. 产品载荷 runtime/
 echo "→ 装配产品载荷…"
@@ -154,6 +155,22 @@ else
   cp "$STAGE/nats-server-${NATS_VER}-darwin-${NATS_ARCH}/nats-server" "$APP/Contents/Resources/nats/"
   chmod +x "$APP/Contents/Resources/nats/nats-server"
   [ -x "$APP/Contents/Resources/nats/nats-server" ] || { echo "❌ nats-server 未随包"; exit 1; }
+fi
+
+# Ordinary runnable emergency packages use the same industry and integrity contract.
+# A structure-only package intentionally has no index and cannot pass bootstrap.
+PAYLOAD_ROOT="$APP/Contents/Resources"
+printf '%s\n' "$VERSION" > "$PAYLOAD_ROOT/VERSION"
+printf '%s\n' "$VERSION" > "$PAYLOAD_ROOT/PAYLOAD_VERSION"
+if [ "$STRUCTURE_ONLY" = "0" ]; then
+  INDUSTRY_PACKER="$(node -e 'const fs=require("node:fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const p=m.desktop?.industryPacker||"";if(p&&!/^scripts\/[A-Za-z0-9._-]+\.mjs$/.test(p))throw Error("行业载荷扩展路径无效");process.stdout.write(p)' "$PRODUCT_MANIFEST_PATH")"
+  if [ -n "$INDUSTRY_PACKER" ]; then
+    [ -f "$INDUSTRY_PACKER" ] && [ ! -L "$INDUSTRY_PACKER" ] || { echo "❌ 行业载荷扩展必须为受控普通文件"; exit 1; }
+    node "$INDUSTRY_PACKER" --platform mac --arch "$NODE_ARCH" --payload "$PAYLOAD_ROOT"
+    node "$INDUSTRY_PACKER" --verify --platform mac --arch "$NODE_ARCH" --payload "$PAYLOAD_ROOT"
+  fi
+  node scripts/payload-integrity.mjs generate --payload-dir "$PAYLOAD_ROOT"
+  node scripts/payload-integrity.mjs verify --payload-dir "$PAYLOAD_ROOT"
 fi
 
 # 6. 打包 + 校验和（保软链）

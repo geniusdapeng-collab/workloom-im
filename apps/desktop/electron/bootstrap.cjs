@@ -25,6 +25,11 @@ const { spawn, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const net = require("node:net");
+const { redactText, redactDiagnostic } = require("./diagnostic-redaction.cjs");
+const { requiredIndustryParts, resolveIndustryRuntime } = require("./industry-runtime.cjs");
+const { verifyPayloadIntegrity } = require("./payload-integrity.cjs");
+const { hasControlledProductMarker } = require("./product-surface.cjs");
 
 const IS_WIN = process.platform === "win32";
 
@@ -44,13 +49,13 @@ const PG_PORT = parseDesktopPort("WORKLOOM_PG_PORT", 5432);
 const NATS_PORT = parseDesktopPort("WORKLOOM_NATS_PORT", 4222);
 
 /* ---------------- 日志 ---------------- */
-function makeLogger(logDir) {
+function makeLogger(logDir, secretValues = []) {
   fs.mkdirSync(logDir, { recursive: true });
   const logFile = path.join(logDir, `launch-${Date.now()}.log`);
   // appendFileSync 同步落盘——进程异常退出（CI 冒烟失败）时日志不丢（v2.1.1 流未冲刷实证）
   return (msg) => {
-    const line = `${new Date().toTimeString().slice(0, 8)} ${msg}`;
-    try { fs.appendFileSync(logFile, line + "\n"); } catch { /* 忽略 */ }
+    const line = `${new Date().toTimeString().slice(0, 8)} ${redactText(msg, secretValues)}`;
+    try { fs.appendFileSync(logFile, line + "\n", { mode: 0o600 }); } catch { console.warn("启动诊断日志写入失败"); }
     console.log(line);
   };
 }
@@ -66,7 +71,7 @@ function run(cmd, args, opts = {}) {
 //（v2.1.2 Windows 冒烟挂死 15 分钟实证；与 bat 版 <nul >file 2>&1 句柄脱离同纪律）
 function runToLog(cmd, args, logFile) {
   fs.mkdirSync(path.dirname(logFile), { recursive: true });
-  const fd = fs.openSync(logFile, "a");
+  const fd = fs.openSync(logFile, "a", 0o600);
   try {
     const r = spawnSync(cmd, args, { stdio: ["ignore", fd, fd] });
     return { code: r.status ?? -1, out: "", err: "" };
@@ -77,18 +82,98 @@ function runToLog(cmd, args, logFile) {
 
 function spawnLogged(cmd, args, opts, logFile) {
   fs.mkdirSync(path.dirname(logFile), { recursive: true });
-  const fd = fs.openSync(logFile, "a");
-  const child = spawn(cmd, args, { stdio: ["ignore", fd, fd], ...opts });
-  child.on("error", () => {});
+  const append = (line) => {
+    try { fs.appendFileSync(logFile, `${redactText(line, opts.secretValues)}\n`, { mode: 0o600 }); }
+    catch { console.warn("子进程诊断日志写入失败"); }
+  };
+  const { secretValues: _privateLogValues, ...childOptions } = opts;
+  const child = spawn(cmd, args, { ...childOptions, detached: !IS_WIN, stdio: ["ignore", "pipe", "pipe"] });
+  for (const stream of [child.stdout, child.stderr]) {
+    let pending = "";
+    let droppingLongLine = false;
+    let discardedSuffix = "";
+    let insidePrivateKey = false;
+    const beginPrivateKey = /-----BEGIN (?:[A-Z ]*PRIVATE KEY|OPENSSH PRIVATE KEY)-----/u;
+    const endPrivateKey = /-----END (?:[A-Z ]*PRIVATE KEY|OPENSSH PRIVATE KEY)-----/u;
+    const appendLine = (line) => {
+      if (insidePrivateKey) {
+        if (endPrivateKey.test(line)) insidePrivateKey = false;
+        return;
+      }
+      if (beginPrivateKey.test(line) && !endPrivateKey.test(line)) {
+        insidePrivateKey = true;
+        append("[已脱敏私钥块]");
+        return;
+      }
+      append(line);
+    };
+    stream.setEncoding("utf8");
+    stream.on("data", (chunk) => {
+      pending += chunk;
+      const lines = pending.split(/\r?\n/u);
+      pending = lines.pop();
+      for (const line of lines) {
+        if (droppingLongLine) {
+          droppingLongLine = false;
+          const boundary = discardedSuffix + line;
+          if (beginPrivateKey.test(boundary) && !endPrivateKey.test(boundary)) insidePrivateKey = true;
+          else if (insidePrivateKey && endPrivateKey.test(boundary)) insidePrivateKey = false;
+          discardedSuffix = "";
+          continue;
+        }
+        if (line.length > 64_000) {
+          if (beginPrivateKey.test(line) && !endPrivateKey.test(line)) insidePrivateKey = true;
+          else if (insidePrivateKey && endPrivateKey.test(line)) insidePrivateKey = false;
+          append("子进程诊断输出过长，已省略该行");
+        } else appendLine(line);
+      }
+      if (pending.length > 64_000) {
+        const boundary = discardedSuffix + pending;
+        if (beginPrivateKey.test(boundary) && !endPrivateKey.test(boundary)) insidePrivateKey = true;
+        else if (insidePrivateKey && endPrivateKey.test(boundary)) insidePrivateKey = false;
+        // Retain only enough discarded suffix to recognize a split PEM header.
+        // The discarded line itself never reaches the log.
+        discardedSuffix = pending.slice(-128);
+        pending = "";
+        droppingLongLine = true;
+        append("子进程诊断输出过长，已省略该行");
+      }
+    });
+    stream.on("end", () => { if (pending && !droppingLongLine) appendLine(pending); pending = ""; });
+    stream.on("error", () => append("子进程诊断输出读取失败"));
+  }
+  child.once("error", () => { child.workloomSpawnFailed = true; append("子进程未能启动"); });
   return child;
 }
 
-function killTree(child) {
-  if (!child || child.killed) return;
+function killTree(child, signal = "SIGTERM") {
+  if (!child?.pid) return;
   try {
-    if (IS_WIN) spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore" });
-    else process.kill(child.pid, "SIGTERM");
+    if (IS_WIN) spawnSync(path.join(process.env.SystemRoot || "C:\\Windows", "System32", "taskkill.exe"), ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+    else process.kill(-child.pid, signal);
   } catch { /* 已退出 */ }
+}
+
+async function terminateChildren(children) {
+  const ownedGroupAlive = (child) => {
+    if (!child.pid) return false;
+    if (IS_WIN) return child.exitCode === null && child.signalCode === null && processIsAlive(child.pid);
+    try { process.kill(-child.pid, 0); return true; }
+    catch (error) { return error.code === "EPERM"; }
+  };
+  const awaitGroupExit = async (child, deadline) => {
+    while (ownedGroupAlive(child) && Date.now() < deadline) await sleep(25);
+    return !ownedGroupAlive(child);
+  };
+  await Promise.all(children.map(async (child) => {
+    if (!child.pid) return;
+    // An already exited leader still owns its process group while descendants
+    // remain. Waiting only for the leader's close event would miss that group.
+    killTree(child);
+    if (await awaitGroupExit(child, Date.now() + 3000)) return;
+    killTree(child, "SIGKILL");
+    if (!await awaitGroupExit(child, Date.now() + 3000)) throw new Error("本次子进程组停止检查未完成");
+  }));
 }
 
 function openExternalUrl(url, {
@@ -129,6 +214,97 @@ function tarExtractionPlan(archiveFile, destination, {
     archiveArg: relativeArchive.replaceAll("\\", "/"),
     stagedArchive: null,
   };
+}
+
+const ARCHIVE_CACHE_SCHEMA = "workloom.payload-archive-cache/v1";
+const ARCHIVE_CACHE_STAMP = ".source-archive.json";
+function systemTarPath() {
+  return IS_WIN ? path.join(process.env.SystemRoot || "C:\\Windows", "System32", "tar.exe") : "/usr/bin/tar";
+}
+function archiveEntryList(output) {
+  const entries = String(output).split(/\r?\n/u).filter(Boolean);
+  if (entries.some((entry) => {
+    const relative = entry.replace(/^\.\//u, "").replace(/\/$/u, "");
+    return relative && (path.isAbsolute(relative) || /[\\\0\r:]/u.test(relative)
+      || relative.split("/").some((part) => !part || part === ".."));
+  })) throw new Error("载荷归档文件清单无效，拒绝解压");
+  return entries;
+}
+function assertArchiveUnchanged(identity) {
+  let current;
+  try { current = fs.lstatSync(identity.archiveFile); }
+  catch { throw new Error("载荷归档在校验后不可读取"); }
+  const before = identity.stat;
+  if (!current.isFile() || current.isSymbolicLink() || current.dev !== before.dev || current.ino !== before.ino
+      || current.size !== before.size || current.mtimeMs !== before.mtimeMs || current.ctimeMs !== before.ctimeMs) {
+    throw new Error("载荷归档在校验时发生变化");
+  }
+}
+function readArchiveIdentity(archiveFile, expectedVersion) {
+  let stat;
+  try { stat = fs.lstatSync(archiveFile); } catch { throw new Error("载荷归档缺失"); }
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("载荷归档必须是普通文件");
+  let fd;
+  let identity;
+  try {
+    fd = fs.openSync(archiveFile, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+    const opened = fs.fstatSync(fd);
+    if (!opened.isFile() || opened.dev !== stat.dev || opened.ino !== stat.ino) throw new Error("载荷归档在读取前发生替换");
+    const hash = crypto.createHash("sha256");
+    const buffer = Buffer.allocUnsafe(1024 * 1024);
+    let bytes = 0;
+    for (let count = fs.readSync(fd, buffer, 0, buffer.length, null); count > 0; count = fs.readSync(fd, buffer, 0, buffer.length, null)) {
+      hash.update(buffer.subarray(0, count));
+      bytes += count;
+    }
+    const after = fs.fstatSync(fd);
+    if (bytes !== opened.size || after.size !== opened.size || after.mtimeMs !== opened.mtimeMs || after.ctimeMs !== opened.ctimeMs) {
+      throw new Error("载荷归档在读取时发生变化");
+    }
+    identity = { archiveFile, stat: opened, archiveSha256: hash.digest("hex") };
+    assertArchiveUnchanged(identity);
+  } finally { if (fd !== undefined) fs.closeSync(fd); }
+  // Read the current archive even on a cache hit: a version or a local stamp is
+  // insufficient evidence for the source index. Duplicate index members fail.
+  const cwd = fs.realpathSync.native(path.dirname(archiveFile));
+  const argument = path.basename(archiveFile);
+  const tarOptions = { cwd, maxBuffer: 64 * 1024 * 1024, timeout: 60_000 };
+  const listing = run(systemTarPath(), ["-tzf", argument], tarOptions);
+  if (listing.code !== 0) throw new Error("载荷归档文件清单读取失败");
+  const entries = archiveEntryList(listing.out);
+  const indexes = entries.filter((entry) => entry === "payload-integrity.json" || entry === "./payload-integrity.json");
+  if (indexes.length !== 1) throw new Error("载荷归档必须包含唯一的普通完整性索引");
+  const extracted = run(systemTarPath(), ["-xOzf", argument, indexes[0]], tarOptions);
+  if (extracted.code !== 0 || !extracted.out) throw new Error("载荷归档完整性索引读取失败");
+  let index;
+  try { index = JSON.parse(extracted.out); } catch { throw new Error("载荷归档完整性索引格式无效"); }
+  if (index?.schemaVersion !== "workloom.payload-integrity/v1" || index.payloadVersion !== expectedVersion) {
+    throw new Error("载荷归档完整性索引版本不匹配");
+  }
+  identity.payloadIntegritySha256 = crypto.createHash("sha256").update(extracted.out).digest("hex");
+  assertArchiveUnchanged(identity);
+  return identity;
+}
+function readArchiveCacheStamp(cacheDir) {
+  const file = path.join(cacheDir, ARCHIVE_CACHE_STAMP);
+  let fd;
+  try {
+    const before = fs.lstatSync(file);
+    if (!before.isFile() || before.isSymbolicLink() || before.size > 8192) return null;
+    fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+    const opened = fs.fstatSync(fd);
+    if (opened.dev !== before.dev || opened.ino !== before.ino) return null;
+    const value = JSON.parse(fs.readFileSync(fd, "utf8"));
+    const after = fs.fstatSync(fd);
+    const current = fs.lstatSync(file);
+    if (!current.isFile() || current.isSymbolicLink() || current.dev !== opened.dev || current.ino !== opened.ino
+        || after.size !== opened.size || after.mtimeMs !== opened.mtimeMs || after.ctimeMs !== opened.ctimeMs) return null;
+    return value;
+  } catch {
+    // An absent, invalid or unreadable stamp cannot authorize reuse. The caller
+    // re-extracts the source and verifies the entire resulting immutable tree.
+    return null;
+  } finally { if (fd !== undefined) fs.closeSync(fd); }
 }
 
 function atomicWrite(file, content, mode) {
@@ -648,11 +824,11 @@ function validateDatabaseHelper(nodeBin, helperFile, runCommand = run) {
   }
 }
 
-function writeInstallCheckpoint(supportDir, state) {
+function writeInstallCheckpoint(supportDir, state, secretValues = []) {
   atomicWrite(path.join(supportDir, "install-state.json"), `${JSON.stringify({
     schemaVersion: "workloom.install-state/v1",
     updatedAt: new Date().toISOString(),
-    ...state,
+    ...redactDiagnostic(state, new WeakSet(), secretValues),
   }, null, 2)}\n`, 0o600);
 }
 
@@ -662,16 +838,19 @@ function writeInstallCheckpoint(supportDir, state) {
  * 一旦发生便只能向前恢复，绝不能回滚到不理解新状态文件的旧 helper。
  */
 function installPayloadAtomically({ sourceRoot, supportDir, payloadVer, previousEnv, failAt = "", onPhase = () => {} }) {
-  const parts = ["runtime", "node", "pg", "nats"].filter((part) => fs.existsSync(path.join(sourceRoot, part)));
+  const parts = ["runtime", "node", "pg", "nats", "python"].filter((part) => fs.existsSync(path.join(sourceRoot, part)));
   if (!parts.includes("runtime") || !parts.includes("node") || !parts.includes("pg")) {
     throw new Error("载荷不完整：runtime、node、pg 必须同时存在");
   }
+  const missingIndustryParts = requiredIndustryParts(sourceRoot).filter((part) => !parts.includes(part));
+  if (missingIndustryParts.length) throw new Error(`载荷不完整：行业运行契约要求 ${missingIndustryParts.join("、")}`);
+  const sourceIdentity = verifyPayloadIntegrity(sourceRoot, { expectedVersion: payloadVer });
+  const assets = [...sourceIdentity.immutableRoots, "VERSION", "PAYLOAD_VERSION", "payload-integrity.json"];
+  const oldAssets = [...new Set([...assets, "python"])];
   const nonce = `${process.pid}-${crypto.randomBytes(5).toString("hex")}`;
   const stagingRoot = path.join(supportDir, `.install-staging-${nonce}`);
   const backupRoot = path.join(supportDir, `.install-backup-${nonce}`);
-  const versionFile = path.join(supportDir, "VERSION");
   const bootFlag = path.join(supportDir, ".bootstrapped");
-  const oldVersion = fs.existsSync(versionFile) ? fs.readFileSync(versionFile) : null;
   const oldBootFlag = fs.existsSync(bootFlag) ? fs.readFileSync(bootFlag) : null;
   const movedNew = [];
   const movedOld = [];
@@ -688,8 +867,6 @@ function installPayloadAtomically({ sourceRoot, supportDir, payloadVer, previous
       const backup = path.join(backupRoot, part);
       if (fs.existsSync(backup)) fs.renameSync(backup, path.join(supportDir, part));
     }
-    if (oldVersion === null) fs.rmSync(versionFile, { force: true });
-    else atomicWrite(versionFile, oldVersion);
     if (oldBootFlag === null) fs.rmSync(bootFlag, { force: true });
     else atomicWrite(bootFlag, oldBootFlag);
     fs.rmSync(stagingRoot, { recursive: true, force: true });
@@ -700,30 +877,34 @@ function installPayloadAtomically({ sourceRoot, supportDir, payloadVer, previous
   try {
     fs.mkdirSync(stagingRoot, { recursive: true });
     onPhase("staging");
-    for (const part of parts) {
-      fs.cpSync(path.join(sourceRoot, part), path.join(stagingRoot, part), { recursive: true, dereference: true });
+    for (const part of assets) {
+      // The source index has already checked every link and its final contained target.
+      // Preserve those exact relative link bytes; dereference would invalidate the index.
+      fs.cpSync(path.join(sourceRoot, part), path.join(stagingRoot, part), { recursive: true, dereference: false, verbatimSymlinks: true });
     }
     if (previousEnv && previousEnv.length > 0) {
       fs.writeFileSync(path.join(stagingRoot, "runtime", ".env"), previousEnv, { mode: 0o600 });
     }
-    const assembledVer = fs.readFileSync(path.join(stagingRoot, "runtime", "VERSION"), "utf8").trim();
-    if (assembledVer !== payloadVer) throw new Error(`暂存载荷版本不一致：期望 ${payloadVer}，实际 ${assembledVer || "缺失"}`);
+    verifyPayloadIntegrity(stagingRoot, { expectedProductId: sourceIdentity.productId, expectedVersion: payloadVer });
     fault("after-stage");
 
     fs.mkdirSync(backupRoot, { recursive: true });
     onPhase("swapping");
-    for (const [index, part] of parts.entries()) {
+    for (const part of oldAssets) {
       const current = path.join(supportDir, part);
       if (fs.existsSync(current)) {
         fs.renameSync(current, path.join(backupRoot, part));
         movedOld.push(part);
       }
+    }
+    for (const [index, part] of assets.entries()) {
+      const current = path.join(supportDir, part);
       fs.renameSync(path.join(stagingRoot, part), current);
       movedNew.push(part);
       if (index === 0) fault("after-first-swap");
     }
-    atomicWrite(versionFile, `${payloadVer}\n`);
     fs.rmSync(bootFlag, { force: true });
+    verifyPayloadIntegrity(supportDir, { expectedProductId: sourceIdentity.productId, expectedVersion: payloadVer });
     fault("after-version-swap");
     onPhase("swapped");
   } catch (error) {
@@ -743,19 +924,75 @@ function installPayloadAtomically({ sourceRoot, supportDir, payloadVer, previous
         fs.rmSync(stagingRoot, { recursive: true, force: true });
         fault("during-commit-cleanup");
         fs.rmSync(backupRoot, { recursive: true, force: true });
-      } catch { /* stale backup is safer than rolling runtime back after credential rotation */ }
+      } catch { onPhase("cleanup-deferred"); /* a stale backup must never roll back rotated credentials */ }
     },
   };
 }
 
-async function httpOk(url) {
+async function httpOk(url, expected = {}) {
+  let timer;
+  let response;
   try {
     const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 4000);
-    const r = await fetch(url, { signal: ctrl.signal });
-    clearTimeout(t);
-    return r.ok;
+    timer = setTimeout(() => ctrl.abort(), 4000);
+    const r = response = await fetch(url, { signal: ctrl.signal, redirect: "error" });
+    if (!r.ok || !expected.instanceId) return false;
+    if (expected.service) {
+      const text = await boundedHttpText(r, 64_000);
+      if (text === null) return false;
+      const body = JSON.parse(text);
+      return body.ok === true && body.service === expected.service && body.instanceId === expected.instanceId;
+    }
+    if (r.headers.get("x-workloom-instance-id") !== expected.instanceId
+        || r.headers.get("x-workloom-product-id") !== expected.productId) return false;
+    const body = await boundedHttpText(r, 2_000_000);
+    if (body === null) return false;
+    return hasControlledProductMarker(body, expected.productId);
   } catch { return false; }
+  finally {
+    clearTimeout(timer);
+    if (response?.body) {
+      try { await response.body.cancel(); } catch { return false; }
+    }
+  }
+}
+
+async function boundedHttpText(response, limit) {
+  if (!response.body) return null;
+  const reader = response.body.getReader();
+  const chunks = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) { await reader.cancel(); return null; }
+      chunks.push(Buffer.from(value));
+    }
+    return Buffer.concat(chunks, size).toString("utf8");
+  } finally { reader.releaseLock(); }
+}
+
+function portIsOccupied(port) {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.once("error", (error) => error.code === "EADDRINUSE" ? resolve(true) : reject(error));
+    probe.listen({ host: "127.0.0.1", port, exclusive: true }, () => probe.close(() => resolve(false)));
+  });
+}
+
+async function assertServicePortsFree(ports) {
+  if (new Set(Object.values(ports)).size !== Object.keys(ports).length) throw new Error("本机服务端口配置重复");
+  for (const [name, port] of Object.entries(ports)) {
+    if (await portIsOccupied(port)) throw new Error(`本机 ${name} 端口 ${port} 已被其他进程占用（EADDRINUSE）`);
+  }
+}
+
+function assertChildRunning(child, name) {
+  if (child.workloomSpawnFailed || child.exitCode !== null || child.signalCode !== null || !child.pid || !processIsAlive(child.pid)) {
+    throw new Error(`${name} 进程已退出，拒绝将外来服务显示为就绪`);
+  }
 }
 
 /* ---------------- 主流程 ---------------- */
@@ -781,22 +1018,45 @@ async function bootstrap(opts) {
     bootstrapLockReleased = bootstrapLock.release();
   };
   const logDir = path.join(supportDir, "logs");
-  const say = makeLogger(logDir);
+  const diagnosticSecrets = [];
+  const say = makeLogger(logDir, diagnosticSecrets);
   const status = (m, progress = {}) => { say(m); onStatus(m, progress); };
 
   const RUNTIME = path.join(supportDir, "runtime");
   const PGDATA = path.join(supportDir, "pgdata");
   const NODEEXE = path.join(supportDir, "node", IS_WIN ? "node.exe" : "bin", IS_WIN ? "" : "node");
   const NODE_BIN = IS_WIN ? path.join(supportDir, "node", "node.exe") : path.join(supportDir, "node", "bin", "node");
+  const instanceId = crypto.randomUUID();
   const PGBIN = path.join(supportDir, "pg", "bin");
   const pgBin = (n) => path.join(PGBIN, IS_WIN ? `${n}.exe` : n);
   const children = [];
+  let ready = false;
+  let stopped = false;
+  let servicesCleanupPromise = null;
+  let runtimeIdentity = null;
+  const invalidateReady = (phase, detail) => {
+    ready = false;
+    writeInstallCheckpoint(supportDir, { status: "stopped", phase, detail, recoverable: true,
+      ...(runtimeIdentity ? { runtimeIdentity } : {}) }, diagnosticSecrets);
+  };
+  const trackChild = (child, name) => {
+    children.push(child);
+    const exited = () => {
+      if (!ready || stopped) return;
+      stopped = true;
+      invalidateReady("child-exited", `${name}已退出，本次运行不再就绪`);
+      void cleanupCurrentServices().catch(() => say("子进程退出后的服务清理失败；本次运行仍未就绪"));
+    };
+    child.once("exit", exited);
+    child.once("error", exited);
+    return child;
+  };
   let pgStartedByBootstrap = false;
   let payloadTransaction = null;
   const failAt = opts.failAt || process.env.WORKLOOM_BOOTSTRAP_FAIL_AT || "";
   const checkpoint = (phase, detail, extra = {}) => writeInstallCheckpoint(supportDir, {
     status: "running", phase, detail, recoverable: true, ...extra,
-  });
+  }, diagnosticSecrets);
   const stopDatabaseIfOwned = () => {
     try {
       return stopOwnedPostgres({
@@ -810,12 +1070,24 @@ async function bootstrap(opts) {
       return false;
     }
   };
+  const cleanupCurrentServices = () => {
+    if (servicesCleanupPromise) return servicesCleanupPromise;
+    servicesCleanupPromise = (async () => {
+      await terminateChildren(children);
+      stopDatabaseIfOwned();
+      releaseBootstrapLock();
+    })();
+    return servicesCleanupPromise;
+  };
 
   // Log-directory creation above is benign; every payload/state/database mutation below is
   // serialized across Electron and the emergency browser shell by this shared lock.
   bootstrapLock = acquireBootstrapLock(supportDir);
   try {
   throwIfAborted();
+  checkpoint("starting", "本次启动正在检查运行环境");
+  if (new Set([SERVER_PORT, WEB_PORT, PG_PORT, NATS_PORT]).size !== 4) throw new Error("本机服务端口配置重复");
+  await assertServicePortsFree({ server: SERVER_PORT, web: WEB_PORT, nats: NATS_PORT });
   say(`== WorkLoom 织元 · 引导启动（resources=${resourcesDir}）==`);
   checkpoint("inspect", "正在检查本机版本与安装载荷", { percent: 3, etaSeconds: 150 });
   status("正在检查本机版本与安装载荷…", { phase: "inspect", percent: 3, etaSeconds: 150 });
@@ -824,7 +1096,7 @@ async function bootstrap(opts) {
   const readIf = (p) => { try { return fs.readFileSync(p, "utf-8").trim(); } catch { return null; } };
   // 载荷以单文件归档随包（electron-builder extraResources 对 **/node_modules/** 有硬排除、
   // filter 无效——v2.2.0/v2.2.1 三轮实证）：Resources 内为 payload.tar.gz；
-  // 按需解压到 supportDir/.payload-cache（PAYLOAD_VERSION 变化才重解），再按老逻辑装配。
+  // 缓存复用必须同时绑定当前归档字节、归档索引与完整缓存验证，不能只比较版本。
   // main.cjs 与 CI 必须传同一个 Resources 根目录。为兼容曾经错误传入
   // Resources/payload 的旧调试脚本，仅在父目录确有归档时回退一级。
   let resourceRoot = resourcesDir;
@@ -840,10 +1112,18 @@ async function bootstrap(opts) {
   if (!payloadVer || payloadVer === "unknown") {
     throw new Error(`载荷版本标记缺失（resources=${resourceRoot}）`);
   }
+  let packagedIdentity;
   if (fs.existsSync(archiveFile)) {
+    const archiveIdentity = readArchiveIdentity(archiveFile, payloadVer);
     const cacheDir = path.join(supportDir, ".payload-cache");
     const cacheVer = readIf(path.join(cacheDir, "PAYLOAD_VERSION")) || "none";
-    if (cacheVer !== payloadVer || !fs.existsSync(path.join(cacheDir, "runtime", "VERSION"))) {
+    const cacheStamp = readArchiveCacheStamp(cacheDir);
+    const reusable = cacheVer === payloadVer && fs.existsSync(path.join(cacheDir, "runtime", "VERSION"))
+      && cacheStamp?.schemaVersion === ARCHIVE_CACHE_SCHEMA
+      && cacheStamp.payloadVersion === payloadVer
+      && cacheStamp.archiveSha256 === archiveIdentity.archiveSha256
+      && cacheStamp.payloadIntegritySha256 === archiveIdentity.payloadIntegritySha256;
+    if (!reusable) {
       status(`→ 解压运行时载荷（${payloadVer}）…`, { phase: "payload-unpack", percent: 8, etaSeconds: 140 });
       fs.rmSync(cacheDir, { recursive: true, force: true });
       fs.mkdirSync(cacheDir, { recursive: true });
@@ -852,8 +1132,8 @@ async function bootstrap(opts) {
       const extraction = tarExtractionPlan(archiveFile, cacheDir);
       try {
         if (extraction.stagedArchive) fs.copyFileSync(archiveFile, extraction.stagedArchive, fs.constants.COPYFILE_EXCL);
-        const r = run("tar", ["-xzf", extraction.archiveArg], { cwd: extraction.cwd });
-        if (r.code !== 0) throw new Error(`载荷解压失败：${(r.err || r.out).slice(-300)}`);
+        const r = run(systemTarPath(), ["-xzf", extraction.archiveArg], { cwd: extraction.cwd, timeout: 180_000 });
+        if (r.code !== 0) throw new Error("载荷解压失败");
       } finally {
         if (extraction.stagedArchive) fs.rmSync(extraction.stagedArchive, { force: true });
       }
@@ -861,6 +1141,18 @@ async function bootstrap(opts) {
       status("载荷解压完成", { phase: "payload-unpacked", percent: 18, etaSeconds: 105 });
     }
     effResources = cacheDir;
+    packagedIdentity = verifyPayloadIntegrity(effResources, { expectedVersion: payloadVer });
+    if (packagedIdentity.payloadIntegritySha256 !== archiveIdentity.payloadIntegritySha256) {
+      throw new Error("缓存载荷完整性索引与当前归档不一致");
+    }
+    assertArchiveUnchanged(archiveIdentity);
+    if (!reusable) atomicWrite(path.join(cacheDir, ARCHIVE_CACHE_STAMP), JSON.stringify({
+      schemaVersion: ARCHIVE_CACHE_SCHEMA, payloadVersion: payloadVer,
+      archiveSha256: archiveIdentity.archiveSha256,
+      payloadIntegritySha256: packagedIdentity.payloadIntegritySha256,
+    }) + "\n", 0o600);
+  } else {
+    packagedIdentity = verifyPayloadIntegrity(effResources, { expectedVersion: payloadVer });
   }
   const installedVer = readIf(path.join(supportDir, "VERSION")) || "none";
   if (payloadVer !== installedVer) {
@@ -900,6 +1192,10 @@ async function bootstrap(opts) {
   if (assembledVer !== payloadVer) {
     throw new Error(`载荷版本不一致：期望 ${payloadVer}，实际 ${assembledVer || "缺失"}`);
   }
+  const installedIdentity = verifyPayloadIntegrity(supportDir, { expectedProductId: packagedIdentity.productId, expectedVersion: payloadVer });
+  if (installedIdentity.payloadIntegritySha256 !== packagedIdentity.payloadIntegritySha256) {
+    throw new Error("已安装载荷索引与本次应用资源不一致，拒绝采用同版本的其他载荷");
+  }
 
   const TSX_CLI = fs.existsSync(path.join(RUNTIME, "node_modules", "tsx", "dist", "cli.mjs"))
     ? path.join(RUNTIME, "node_modules", "tsx", "dist", "cli.mjs")
@@ -914,6 +1210,12 @@ async function bootstrap(opts) {
     if (!fs.existsSync(pgBin(executable))) throw new Error(`载荷不完整：PostgreSQL ${executable} 缺失`);
   }
   validateDatabaseHelper(NODE_BIN, DB_HELPER);
+  const industry = resolveIndustryRuntime({ runtimeRoot: RUNTIME, supportDir });
+  const industryEnv = industry.environment;
+  for (const check of industry.selftests) {
+    const result = run(check.executable, check.args, { cwd: supportDir, env: { ...process.env, ...industryEnv }, timeout: 30000 });
+    if (result.code !== 0 || result.out.trim() !== check.expectedStdout) throw new Error(`行业离线运行检查失败（${check.name}）：${redactText(result.err).slice(-300)}`);
+  }
   throwIfAborted();
 
   /* ---------- 0.5 桌面托管配置 ---------- */
@@ -960,6 +1262,11 @@ async function bootstrap(opts) {
   const adminPassword = databaseState.credentials.owner;
   const appPassword = databaseState.credentials.app;
   const gatewayPassword = databaseState.credentials.gateway;
+  diagnosticSecrets.push(adminPassword, appPassword, gatewayPassword, ...legacyOwnerPasswords);
+  for (const line of envText.split(/\r?\n/u)) {
+    const match = line.match(/^([A-Z][A-Z0-9_]*)=(.*)$/u);
+    if (match && /SECRET|TOKEN|PASSWORD|API_?KEY|PII_SALT/u.test(match[1]) && match[2]) diagnosticSecrets.push(match[2].replace(/^(['"])(.*)\1$/u, "$2"));
+  }
   const desktopConfig = buildDesktopEnvironment(envText, {
     runtimeDir: RUNTIME,
     pgPort: PG_PORT,
@@ -977,12 +1284,15 @@ async function bootstrap(opts) {
   const desktopEnv = {
     ...process.env,
     ...desktopConfig.values,
+    ...industryEnv,
+    SERVER_INSTANCE_ID: instanceId,
+    WORKLOOM_INSTANCE_ID: instanceId,
     WORKLOOM_PG_PORT: String(PG_PORT),
     WORKLOOM_SERVER_PORT: String(SERVER_PORT),
     WORKLOOM_WEB_PORT: String(WEB_PORT),
     WORKLOOM_NATS_PORT: String(NATS_PORT),
   };
-  const serverEnv = { ...desktopEnv, NODE_ENV: "production" };
+  const serverEnv = { ...desktopEnv, NODE_ENV: "production", SERVER_HOST: "127.0.0.1" };
   const runDatabaseHelper = (mode, legacyPasswords = []) => run(NODE_BIN, [DB_HELPER], {
     env: {
       ...desktopEnv,
@@ -1096,14 +1406,15 @@ async function bootstrap(opts) {
   const NATS_BIN = path.join(supportDir, "nats", IS_WIN ? "nats-server.exe" : "nats-server");
   if (fs.existsSync(NATS_BIN)) {
     throwIfAborted();
-    const listening = await httpOk(`http://127.0.0.1:${NATS_PORT}/`) || run(IS_WIN ? "netstat" : "lsof", IS_WIN ? ["-ano"] : ["-nP", `-iTCP:${NATS_PORT}`, "-sTCP:LISTEN"]).out.includes(String(NATS_PORT));
+    const listening = await portIsOccupied(NATS_PORT);
+    if (listening) throw new Error(`事件总线端口 ${NATS_PORT} 已被其他进程占用（EADDRINUSE）`);
     if (!listening) {
       status("→ 启动本机事件总线…", { phase: "event-bus", percent: 63, etaSeconds: 45 });
       const natsDir = path.join(supportDir, "nats-data");
       fs.mkdirSync(natsDir, { recursive: true });
-      const proc = spawnLogged(NATS_BIN, ["-js", "--store_dir", natsDir, "-a", "127.0.0.1", "-p", String(NATS_PORT)], {}, path.join(logDir, "nats.log"));
-      children.push(proc);
+      const proc = trackChild(spawnLogged(NATS_BIN, ["-js", "--store_dir", natsDir, "-a", "127.0.0.1", "-p", String(NATS_PORT)], {}, path.join(logDir, "nats.log")), "事件总线");
       await sleep(3000);
+      assertChildRunning(proc, "事件总线");
       throwIfAborted();
     }
     serverEnv.EVENT_BUS = "nats";
@@ -1155,18 +1466,19 @@ async function bootstrap(opts) {
   /* ---------- 4. 起服务：server(8787) + web preview(5173) ---------- */
   status("→ 启动 WorkLoom 服务…", { phase: "services-start", percent: 88, etaSeconds: 12 });
   checkpoint("services", "正在启动本机服务并执行健康检查", { targetVersion: payloadVer, percent: 88, etaSeconds: 12 });
-  const serverProc = spawnLogged(NODE_BIN, [TSX_CLI, `--env-file=${envFile}`, "src/index.ts"],
-    { cwd: path.join(RUNTIME, "apps", "server"), env: serverEnv }, path.join(logDir, "server.log"));
-  children.push(serverProc);
-  const webProc = spawnLogged(NODE_BIN, [VITE_JS, "preview", "--host", "127.0.0.1", "--port", String(WEB_PORT), "--strictPort"],
-    { cwd: path.join(RUNTIME, "apps", "web"), env: serverEnv }, path.join(logDir, "web.log"));
-  children.push(webProc);
+  const serverProc = trackChild(spawnLogged(NODE_BIN, [TSX_CLI, `--env-file=${envFile}`, "src/index.ts"],
+    { cwd: path.join(RUNTIME, "apps", "server"), env: serverEnv, secretValues: diagnosticSecrets }, path.join(logDir, "server.log")), "后端服务");
+  const webProc = trackChild(spawnLogged(NODE_BIN, [VITE_JS, "preview", "--host", "127.0.0.1", "--port", String(WEB_PORT), "--strictPort"],
+    { cwd: path.join(RUNTIME, "apps", "web"), env: serverEnv, secretValues: diagnosticSecrets }, path.join(logDir, "web.log")), "工作台服务");
 
   status("→ 等待工作台与服务就绪…", { phase: "services-health", percent: 90, etaSeconds: 10 });
   let ok = false;
+  const productId = installedIdentity.productId;
   for (let i = 0; i < 90 && !ok; i++) {
     throwIfAborted();
-    ok = (await httpOk(`http://127.0.0.1:${SERVER_PORT}/health`)) && (await httpOk(`http://127.0.0.1:${WEB_PORT}/`));
+    for (const child of children) assertChildRunning(child, "本机服务");
+    ok = (await httpOk(`http://127.0.0.1:${SERVER_PORT}/health`, { service: "workloom-im-server", instanceId }))
+      && (await httpOk(`http://127.0.0.1:${WEB_PORT}/`, { productId, instanceId }));
     if (!ok && i > 0 && i % 5 === 0) {
       const percent = Math.min(99, 90 + Math.floor(i / 10));
       status("→ 正在完成本机服务健康检查…", {
@@ -1177,26 +1489,42 @@ async function bootstrap(opts) {
     if (!ok) await sleep(1000);
   }
   if (!ok) throw new Error(`服务 90s 内未就绪（server:${SERVER_PORT} / web:${WEB_PORT}，详见 logs/）`);
+  for (const child of children) assertChildRunning(child, "本机服务");
+  const readyIntegrity = verifyPayloadIntegrity(supportDir, { expectedProductId: productId, expectedVersion: payloadVer });
+  if (readyIntegrity.payloadIntegritySha256 !== packagedIdentity.payloadIntegritySha256) throw new Error("就绪前载荷索引发生变化");
+  runtimeIdentity = { schemaVersion: "workloom.client-runtime-identity/v1", instanceId,
+    supportDir: fs.realpathSync.native(supportDir), productId,
+    productManifestSha256: readyIntegrity.productManifestSha256,
+    payloadVersion: payloadVer, payloadIntegritySha256: readyIntegrity.payloadIntegritySha256,
+    ports: { server: SERVER_PORT, web: WEB_PORT } };
   status("启动检查已全部通过", { phase: "ready", percent: 100, etaSeconds: 0 });
-  writeInstallCheckpoint(supportDir, { status: "complete", phase: "ready", detail: "安装与启动检查已完成", recoverable: true, targetVersion: payloadVer, percent: 100, etaSeconds: 0 });
+  writeInstallCheckpoint(supportDir, { status: "complete", phase: "ready", detail: "安装与启动检查已完成", recoverable: true, targetVersion: payloadVer, percent: 100, etaSeconds: 0, runtimeIdentity }, diagnosticSecrets);
+  ready = true;
 
   const webUrl = `http://127.0.0.1:${WEB_PORT}`;
-  let stopped = false;
   const stop = async () => {
-    if (stopped) return;
-    stopped = true;
-    say("→ 停止服务…");
-    for (const c of children) killTree(c);
-    stopDatabaseIfOwned();
-    releaseBootstrapLock();
+    if (!stopped) {
+      stopped = true;
+      invalidateReady("stopping", "本次运行正在停止，不再就绪");
+      say("→ 停止服务…");
+    }
+    // Repeated stop requests share the same cleanup and cannot resolve early
+    // while a previous request is still terminating the current children.
+    await cleanupCurrentServices();
+    invalidateReady("stopped", "本次运行已停止");
     say("== 已停止 ==");
   };
-  return { stop, webUrl };
+  return { stop, webUrl, runtimeIdentity };
   } catch (error) {
+    // The caller (Electron or the emergency CLI) must not receive the original
+    // child error after its known managed credentials have already been masked
+    // for persistence. Recreate the Error so the original stack/cause cannot leak.
+    const publicFailure = new Error(redactText(error instanceof Error ? error.message : String(error), diagnosticSecrets));
+    if (typeof error?.code === "string" && /^[A-Z0-9_]{1,40}$/u.test(error.code)) publicFailure.code = error.code;
     const rolledBack = Boolean(payloadTransaction);
     try {
       // 失败重试前必须回收本次派生的服务，避免端口占用导致下一次启动继续失败。
-      for (const child of children) killTree(child);
+      await terminateChildren(children);
       if (pgStartedByBootstrap) stopDatabaseIfOwned();
       payloadTransaction?.rollback();
       payloadTransaction = null;
@@ -1206,12 +1534,12 @@ async function bootstrap(opts) {
         detail: "本次安装或启动未完成",
         recoverable: true,
         rolledBack,
-        error: String(error instanceof Error ? error.message : error).slice(0, 500),
-      });
+        error: publicFailure.message.slice(0, 500),
+      }, diagnosticSecrets);
     } finally {
       releaseBootstrapLock();
     }
-    throw error;
+    throw publicFailure;
   }
 }
 
@@ -1259,7 +1587,7 @@ if (require.main === module) {
     })
     .catch(async (e) => {
       if (activeStop) await activeStop();
-      console.error(`❌ 引导失败：${e.message}`);
+      console.error(redactText(`❌ 引导失败：${e.message}`));
       process.exit(abortController.signal.aborted ? 130 : 1);
     });
 }
@@ -1287,4 +1615,10 @@ module.exports = {
   openExternalUrl,
   acquireBootstrapLock,
   tarExtractionPlan,
+  readArchiveIdentity,
+  httpOk,
+  portIsOccupied,
+  assertServicePortsFree,
+  assertChildRunning,
+  spawnLogged,
 };

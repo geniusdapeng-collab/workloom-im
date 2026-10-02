@@ -182,12 +182,27 @@ fi
 # ---------- 6. 启动器 ----------
 copy apps/desktop/windows/WorkLoom.bat "$PKG/WorkLoom.bat"
 copy apps/desktop/electron/bootstrap.cjs "$PKG/bootstrap.cjs"
+for helper in diagnostic-redaction.cjs industry-runtime.cjs payload-integrity.cjs product-surface.cjs; do
+  copy "apps/desktop/electron/$helper" "$PKG/$helper"
+done
 
 for f in node_modules/tsx/package.json node_modules/hono/package.json scripts/migrate.ts \
          scripts/product-runtime.mjs scripts/vite-product.mjs product.manifest.json apps/web/vite.config.ts; do
   [ -f "$R/$f" ] || { echo "❌ 应急载荷自检失败：runtime/$f 缺失"; exit 1; }
 done
 node scripts/payload-policy.mjs assert-runtime "$R"
+printf '%s\n' "$VERSION" > "$PKG/VERSION"
+printf '%s\n' "$VERSION" > "$PKG/PAYLOAD_VERSION"
+if [ "$STRUCTURE_ONLY" = "0" ]; then
+  INDUSTRY_PACKER="$(node -e 'const fs=require("node:fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const p=m.desktop?.industryPacker||"";if(p&&!/^scripts\/[A-Za-z0-9._-]+\.mjs$/.test(p))throw Error("行业载荷扩展路径无效");process.stdout.write(p)' "$PRODUCT_MANIFEST_PATH")"
+  if [ -n "$INDUSTRY_PACKER" ]; then
+    [ -f "$INDUSTRY_PACKER" ] && [ ! -L "$INDUSTRY_PACKER" ] || { echo "❌ 行业载荷扩展必须为受控普通文件"; exit 1; }
+    node "$INDUSTRY_PACKER" --platform win --arch x64 --payload "$PKG"
+    node "$INDUSTRY_PACKER" --verify --platform win --arch x64 --payload "$PKG"
+  fi
+  node scripts/payload-integrity.mjs generate --payload-dir "$PKG"
+  node scripts/payload-integrity.mjs verify --payload-dir "$PKG"
+fi
 
 # ---------- 7. 打包 + 校验和 ----------
 echo "→ 压缩…"

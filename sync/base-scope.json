@@ -190,7 +190,11 @@
       "sync/fanout-safety.test.mjs",
       "sync/fanout-rules.test.mjs",
       "scripts/acceptance/lib/regression-evidence.mjs",
-      "scripts/acceptance/lib/live/assertions.mjs"
+      "scripts/acceptance/lib/live/assertions.mjs",
+      "apps/desktop/electron/payload-integrity.cjs",
+      "apps/desktop/electron/product-surface.cjs",
+      "scripts/payload-integrity.mjs",
+      "docs/desktop-runtime-integrity-contract.md"
     ],
     "copiedFiles": {
       ".github/workflows/base-sync-heartbeat.yml": {
@@ -457,7 +461,9 @@
     "apps/server/package.json",
     "apps/desktop/**",
     "scripts/**",
-    "docker-compose.yml"
+    "docker-compose.yml",
+    "build/entitlements.mac.plist",
+    "build/entitlements.mac.inherit.plist"
   ],
   "exclude": [
     "bundles/**",

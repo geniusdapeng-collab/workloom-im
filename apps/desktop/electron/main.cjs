@@ -16,6 +16,8 @@
  *   WORKLOOM_SOURCE_MODE 仅由 pnpm app 源码编排器设为 1；复用外部源码 server/web
  *   WORKLOOM_SUPPORT_DIR 支持目录（默认当前应用独立 userData）
  *   WORKLOOM_APP_SMOKE   设为 1 时执行后端首启冒烟后退出
+ *   WORKLOOM_APP_SMOKE_TEST 设为 1 时，冒烟在退出前等待受限的 stdin 观察释放握手
+ *   WORKLOOM_APP_SMOKE_WAIT_MS 观察握手超时，1000 至 60000 毫秒，默认 30000
  *   WORKLOOM_RENDER_SMOKE 设为 1 时创建真实窗口并验证页面/数字人/像素后退出
  *   WORKLOOM_SAFE_RENDERING 设为 1 时禁用硬件加速并使用动态矢量渲染后端
  *   WORKLOOM_WEB_PORT    Web 端口（默认 5173）
@@ -27,6 +29,7 @@
 const { app, BrowserWindow, Tray, Menu, Notification, nativeImage, shell, dialog } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
+const { redactText, redactDiagnostic } = require("./diagnostic-redaction.cjs");
 
 // 测试/多产品实例的浏览器存储必须与运行时支持目录一致，避免 Local Storage 串包。
 if (process.env.WORKLOOM_SUPPORT_DIR) {
@@ -59,6 +62,7 @@ const { bootstrap } = require("./bootstrap.cjs");
 const TITLE = process.env.WORKLOOM_APP_TITLE ?? app.getName();
 const APP_SMOKE = process.env.WORKLOOM_APP_SMOKE === "1";
 const RENDER_SMOKE = process.env.WORKLOOM_RENDER_SMOKE === "1";
+const APP_SMOKE_TEST = process.env.WORKLOOM_APP_SMOKE_TEST === "1";
 const SOURCE_MODE = process.env.WORKLOOM_SOURCE_MODE === "1";
 const SAFE_RENDERING = process.env.WORKLOOM_SAFE_RENDERING === "1" || process.argv.includes("--safe-rendering");
 const WEB_PORT = Number(process.env.WORKLOOM_WEB_PORT || 5173);
@@ -176,10 +180,14 @@ function showSplash(message, error = "", reference = lastBootstrapReference ?? "
     splash.once("ready-to-show", () => splash && splash.show());
     splash.on("closed", () => { splash = null; });
     splash.webContents.on("will-navigate", (event, url) => {
-      if (!url.startsWith("workloom-action://")) return;
       event.preventDefault();
-      void handleSplashAction(url.slice("workloom-action://".length).replace(/\/$/, ""));
+      if (!/^workloom-action:\/\/(?:retry|logs|export|exit)\/?$/u.test(url)) return;
+      void handleSplashAction(url.slice("workloom-action://".length).replace(/\/$/, "")).catch(() => {
+        lastBootstrapError = "启动页面操作未完成";
+        console.warn(lastBootstrapError);
+      });
     });
+    splash.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   }
   splash.setResizable(Boolean(error));
   void splash.loadURL(SPLASH_HTML({ message, error, reference, startedAt: bootstrapStartedAt || Date.now(), progress }));
@@ -196,23 +204,30 @@ function diagnosticText() {
     `最近错误：${lastBootstrapError ?? "无"}`,
   ];
   try {
+    const directory = fs.lstatSync(logDir);
+    if (!directory.isDirectory() || directory.isSymbolicLink()) throw new Error("日志目录无效");
     const files = fs.readdirSync(logDir).filter((name) => /\.(?:log|json)$/i.test(name)).sort().slice(-12);
     for (const name of files) {
       const file = path.join(logDir, name);
-      const size = fs.statSync(file).size;
+      const stat = fs.lstatSync(file);
+      if (!stat.isFile() || stat.isSymbolicLink()) continue;
+      const size = stat.size;
       const start = Math.max(0, size - 200_000);
-      const fd = fs.openSync(file, "r");
+      const fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
       const buffer = Buffer.alloc(size - start);
-      fs.readSync(fd, buffer, 0, buffer.length, start);
-      fs.closeSync(fd);
-      sections.push(`\n===== ${name}（末尾 ${buffer.length} 字节）=====\n${buffer.toString("utf8")}`);
+      try { fs.readSync(fd, buffer, 0, buffer.length, start); }
+      finally { fs.closeSync(fd); }
+      let content = buffer.toString("utf8");
+      if (start > 0) {
+        const boundary = content.indexOf("\n");
+        content = boundary < 0 ? "[截断诊断行已省略]" : content.slice(boundary + 1);
+      }
+      sections.push(`\n===== ${name}（末尾 ${buffer.length} 字节）=====\n${redactText(content)}`);
     }
-  } catch (error) {
-    sections.push(`\n日志读取失败：${error instanceof Error ? error.message : String(error)}`);
+  } catch {
+    sections.push("\n日志读取失败：日志目录或文件不可读");
   }
-  return sections.join("\n")
-    .replace(/(JWT_SECRET|PII_SALT|API[_-]?KEY|ACCESS[_-]?TOKEN|REFRESH[_-]?TOKEN)\s*[:=]\s*[^\s,}\]]+/gi, "$1=[已脱敏]")
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [已脱敏]");
+  return redactText(sections.join("\n"));
 }
 
 async function handleSplashAction(action) {
@@ -238,8 +253,16 @@ async function handleSplashAction(action) {
   }
   if (action === "exit") {
     quitting = true;
-    if (handle) await handle.stop().catch(() => undefined);
-    handle = null;
+    const exitingHandle = handle;
+    try {
+      if (exitingHandle) await exitingHandle.stop();
+    } catch {
+      if (handle === exitingHandle) handle = null;
+      console.error("WorkLoom 安全退出时服务停止检查未完成");
+      app.exit(1);
+      return;
+    }
+    if (handle === exitingHandle) handle = null;
     app.quit();
   }
 }
@@ -249,6 +272,44 @@ function closeSplash() {
 }
 
 /* ---------- 主窗口 ---------- */
+function navigationTarget(raw) {
+  try {
+    if (typeof raw !== "string" || /[\0\r\n]/u.test(raw)) return "deny";
+    const url = new URL(raw);
+    if (url.username || url.password) return "deny";
+    if (url.origin === new URL(WEB_URL).origin) return "workbench";
+    const host = url.hostname.toLowerCase();
+    // A different localhost port must never be opened through the system shell.
+    const local = host === "localhost" || host.endsWith(".localhost") || /^127\./u.test(host)
+      || host === "[::1]" || host === "[::]" || /^\[::ffff:(?:127\.|7f)/u.test(host) || host === "0.0.0.0";
+    return url.protocol === "https:" && !local ? "external" : "deny";
+  } catch { return "deny"; }
+}
+
+function openSecureExternal(raw) {
+  if (navigationTarget(raw) !== "external") return;
+  try {
+    void Promise.resolve(shell.openExternal(raw)).catch(() => console.warn("系统浏览器未能打开外部链接"));
+  } catch { console.warn("系统浏览器未能打开外部链接"); }
+}
+
+function guardNavigation(contents) {
+  contents.setWindowOpenHandler(({ url }) => {
+    if (navigationTarget(url) === "workbench") return { action: "allow",
+      overrideBrowserWindowOptions: { webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } } };
+    openSecureExternal(url);
+    return { action: "deny" };
+  });
+  const preventOutsideWorkbench = (event, url) => {
+    if (navigationTarget(url) === "workbench") return;
+    event.preventDefault();
+    openSecureExternal(url);
+  };
+  contents.on("will-navigate", preventOutsideWorkbench);
+  contents.on("will-redirect", preventOutsideWorkbench);
+  contents.on("did-create-window", (child) => guardNavigation(child.webContents));
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: DEFAULT_W,
@@ -263,11 +324,7 @@ function createWindow() {
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
 
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith("http://127.0.0.1") || url.startsWith("http://localhost")) return { action: "allow" };
-    void shell.openExternal(url);
-    return { action: "deny" };
-  });
+  guardNavigation(win.webContents);
 
   // 去浏览器化（客户端即产品），但保留系统缩放与无障碍能力。
   win.webContents.on("context-menu", (e) => e.preventDefault());
@@ -292,16 +349,32 @@ function createWindow() {
     const logDir = path.join(supportDirResolved ?? app.getPath("userData"), "logs");
     try {
       fs.mkdirSync(logDir, { recursive: true });
-      fs.appendFileSync(path.join(logDir, "renderer-health.log"), `${new Date().toISOString()} renderer gone: ${JSON.stringify(details)}\n`);
+      fs.appendFileSync(path.join(logDir, "renderer-health.log"), `${new Date().toISOString()} renderer gone: ${JSON.stringify(redactDiagnostic(details))}\n`);
     } catch { /* 日志失败不影响退出流程 */ }
   });
   win.webContents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
     if (!isMainFrame || code === -3) return; // -3 = 用户取消导航
-    lastBootstrapError = `工作台页面加载失败（${description || code}）`;
+    lastBootstrapError = redactText(`工作台页面加载失败（${description || code}）`);
     lastBootstrapReference = `启动-${Date.now().toString(36).toUpperCase()}`;
     showSplash("服务仍在安全停止中；可随后重试或导出诊断。", publicStartupError(lastBootstrapError), lastBootstrapReference);
     if (win && !win.isDestroyed()) win.destroy();
     win = null;
+    const failedHandle = handle;
+    if (failedHandle) {
+      bootstrapRunning = true;
+      // Retain ownership while stopping so a concurrent application quit waits
+      // for this same runtime. Retrying cannot race a still-running old service.
+      void failedHandle.stop().then(() => {
+        if (!quitting) showSplash("本次后台服务已停止，可重试启动或导出诊断。", publicStartupError(lastBootstrapError), lastBootstrapReference);
+      }).catch(() => {
+        lastBootstrapError = "页面失败后的后台服务停止检查未完成";
+        console.error(lastBootstrapError);
+        if (!quitting) showSplash("停止检查未完成；可导出诊断或安全退出。", publicStartupError(lastBootstrapError), lastBootstrapReference);
+      }).finally(() => {
+        if (handle === failedHandle) handle = null;
+        bootstrapRunning = false;
+      });
+    }
   });
   win.once("ready-to-show", () => { closeSplash(); win.show(); });
 
@@ -375,7 +448,7 @@ async function runRenderSmoke() {
   const pixels = pixelHealth(shot);
   const report = { ...probe, pixels, safeRendering: SAFE_RENDERING, screenshotPath, checkedAt: new Date().toISOString() };
   const reportPath = path.join(logDir, SAFE_RENDERING ? "render-safe.json" : "render-default.json");
-  const saveReport = () => fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
+  const saveReport = () => fs.writeFileSync(reportPath, JSON.stringify(redactDiagnostic(report), null, 2));
   saveReport();
   const expectedMode = SAFE_RENDERING ? "vector2d" : "live2d-webgl";
   if (!report.productReady) throw new Error(`产品页面未就绪：${JSON.stringify(report)}`);
@@ -516,7 +589,7 @@ async function runRenderSmoke() {
   if (!switchedStage) throw new Error(`无法切换到舞台视图：${JSON.stringify(report)}`);
   report.reportStage = await captureProductScene(reportStageScene, "stage");
   saveReport();
-  console.log(`WorkLoom 渲染冒烟通过：${JSON.stringify(report)}`);
+  console.log(redactText(`WorkLoom 渲染冒烟通过：${JSON.stringify(report)}`));
 }
 
 /* ---------- 系统托盘 ---------- */
@@ -535,6 +608,79 @@ function createTray() {
 }
 
 /* ---------- 生命周期 ---------- */
+async function observeSmokeRuntime() {
+  const identity = handle?.runtimeIdentity;
+  const waitValue = process.env.WORKLOOM_APP_SMOKE_WAIT_MS ?? "30000";
+  const waitMs = Number(waitValue);
+  if (!/^\d+$/u.test(waitValue) || !Number.isInteger(waitMs) || waitMs < 1000 || waitMs > 60000) {
+    throw new Error("冒烟观察超时配置无效");
+  }
+  if (SOURCE_MODE || identity?.schemaVersion !== "workloom.client-runtime-identity/v1"
+      || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/u.test(identity.instanceId ?? "")
+      || typeof identity.supportDir !== "string" || !path.isAbsolute(identity.supportDir)
+      || typeof identity.productId !== "string" || !identity.productId
+      || typeof identity.payloadVersion !== "string" || !identity.payloadVersion
+      || !/^[a-f0-9]{64}$/u.test(identity.productManifestSha256 ?? "")
+      || !/^[a-f0-9]{64}$/u.test(identity.payloadIntegritySha256 ?? "")
+      || ![identity.ports?.server, identity.ports?.web].every((port) => Number.isInteger(port) && port > 0 && port <= 65535)
+      || identity.ports.server === identity.ports.web) {
+    throw new Error("冒烟观察缺少本次已验证安装身份");
+  }
+  // Only the public identity fields are emitted. Neither child output, environment,
+  // raw release input nor installation credentials belong in this protocol.
+  const runtimeIdentity = { schemaVersion: identity.schemaVersion, instanceId: identity.instanceId,
+    supportDir: identity.supportDir, productId: identity.productId,
+    productManifestSha256: identity.productManifestSha256, payloadVersion: identity.payloadVersion,
+    payloadIntegritySha256: identity.payloadIntegritySha256,
+    ports: { server: identity.ports.server, web: identity.ports.web } };
+  await new Promise((resolve, reject) => {
+    const input = process.stdin;
+    let buffer = Buffer.alloc(0);
+    let settled = false;
+    let timer;
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      input.off("data", onData);
+      input.off("end", onEnd);
+      input.off("close", onEnd);
+      input.off("error", onError);
+      input.pause();
+      if (error) reject(error); else resolve();
+    };
+    const fail = () => finish(new Error("冒烟观察释放未通过验证"));
+    const onEnd = () => fail();
+    const onError = () => fail();
+    const onData = (chunk) => {
+      const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      if (buffer.length + value.length > 4096) { fail(); return; }
+      buffer = Buffer.concat([buffer, value]);
+      const newline = buffer.indexOf(10);
+      if (newline < 0) return;
+      try {
+        const message = JSON.parse(buffer.subarray(0, newline).toString("utf8"));
+        if (Object.keys(message ?? {}).sort().join(",") !== "instanceId,schemaVersion"
+            || message.schemaVersion !== "workloom.app-smoke-release/v1"
+            || message.instanceId !== runtimeIdentity.instanceId
+            || buffer.subarray(newline + 1).toString("utf8").trim()) { fail(); return; }
+        finish();
+      } catch { fail(); }
+    };
+    // Bind the release listener before the observer can see READY, including the
+    // same-turn response case in a pipe. EOF and timeout always stop this launch.
+    input.on("data", onData);
+    input.once("end", onEnd);
+    input.once("close", onEnd);
+    input.once("error", onError);
+    timer = setTimeout(fail, waitMs);
+    try {
+      input.resume();
+      console.log(`WORKLOOM_APP_SMOKE_READY ${JSON.stringify({ schemaVersion: "workloom.app-smoke-ready/v1", runtimeIdentity })}`);
+    } catch { fail(); }
+  });
+}
+
 app.whenReady().then(async () => {
   const resourcesDir = process.env.WORKLOOM_RESOURCES
     ? path.resolve(process.env.WORKLOOM_RESOURCES)
@@ -584,7 +730,7 @@ app.whenReady().then(async () => {
         });
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = redactText(error instanceof Error ? error.message : String(error));
       lastBootstrapError = message;
       lastBootstrapReference = `启动-${Date.now().toString(36).toUpperCase()}`;
       if (APP_SMOKE || RENDER_SMOKE) {
@@ -598,9 +744,22 @@ app.whenReady().then(async () => {
       bootstrapRunning = false;
     }
     if (APP_SMOKE) {
-      await handle.stop();
-      handle = null;
-      app.exit(0);
+      try {
+        if (APP_SMOKE_TEST) await observeSmokeRuntime();
+        quitting = true;
+        await handle.stop();
+        handle = null;
+        app.exit(0);
+      } catch {
+        console.error("WorkLoom 启动冒烟失败：观察或停止检查未完成");
+        quitting = true;
+        if (handle) {
+          try { await handle.stop(); }
+          catch { console.error("WorkLoom 冒烟停止失败"); }
+        }
+        handle = null;
+        app.exit(1);
+      }
       return;
     }
     if (!RENDER_SMOKE) createTray();
@@ -608,14 +767,18 @@ app.whenReady().then(async () => {
     if (RENDER_SMOKE) {
       try {
         await runRenderSmoke();
+        if (APP_SMOKE_TEST) await observeSmokeRuntime();
         quitting = true;
         await handle.stop();
         handle = null;
         app.exit(0);
       } catch (error) {
-        console.error(`WorkLoom 渲染冒烟失败：${error instanceof Error ? error.stack : String(error)}`);
+        console.error(redactText(`WorkLoom 渲染冒烟失败：${error instanceof Error ? error.stack : String(error)}`));
         quitting = true;
-        if (handle) await handle.stop().catch(() => undefined);
+        if (handle) {
+          try { await handle.stop(); }
+          catch { console.error("WorkLoom 冒烟停止失败"); }
+        }
         handle = null;
         app.exit(1);
       }
@@ -630,7 +793,15 @@ app.on("before-quit", () => { quitting = true; });
 app.on("will-quit", (e) => {
   if (handle) {
     e.preventDefault();
-    void handle.stop().finally(() => { handle = null; app.exit(0); });
+    const quittingHandle = handle;
+    void quittingHandle.stop().then(() => {
+      if (handle === quittingHandle) handle = null;
+      app.exit(0);
+    }).catch(() => {
+      if (handle === quittingHandle) handle = null;
+      console.error("WorkLoom 退出时服务停止检查未完成");
+      app.exit(1);
+    });
   }
 });
 app.on("window-all-closed", () => { /* 托盘常驻——不因窗口全关而退出 */ });

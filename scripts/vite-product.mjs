@@ -18,6 +18,13 @@ export function workloomProductVite(clientLabel) {
   if (typeof clientLabel !== "string" || !clientLabel.trim()) throw new Error("缺少客户端中文名称");
   const product = loadProductRuntime(PRODUCT_ROOT);
   const title = `${product.displayName} · ${clientLabel}`;
+  const identifyInstance = (server) => {
+    server.middlewares.use((_request, response, next) => {
+      if (process.env.WORKLOOM_INSTANCE_ID) response.setHeader("x-workloom-instance-id", process.env.WORKLOOM_INSTANCE_ID);
+      response.setHeader("x-workloom-product-id", product.productId);
+      next();
+    });
+  };
   return Object.freeze({
     define: {
       __WORKLOOM_PRODUCT_NAME__: JSON.stringify(product.displayName),
@@ -27,12 +34,15 @@ export function workloomProductVite(clientLabel) {
     },
     plugin: {
       name: "workloom-product-identity",
+      configureServer: identifyInstance,
+      configurePreviewServer: identifyInstance,
       transformIndexHtml(html) {
         const marker = /<title data-workloom-product-title>[^<]*<\/title>/u;
         if (!marker.test(html)) {
           throw new Error("客户端 index.html 缺少受控产品标题标记");
         }
-        return html.replace(marker, `<title data-workloom-product-title>${escapeHtml(title)}</title>`);
+        const withoutOldIdentity = html.replace(/<meta\b[^>]*\bname\s*=\s*["']workloom-product-id["'][^>]*>/giu, "");
+        return withoutOldIdentity.replace(marker, `<meta name="workloom-product-id" content="${escapeHtml(product.productId)}"><title data-workloom-product-title>${escapeHtml(title)}</title>`);
       },
     },
   });

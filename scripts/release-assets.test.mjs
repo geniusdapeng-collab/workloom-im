@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -89,6 +90,7 @@ test("every packaging download is wired through the verified fetch boundary", as
   const repositoryRoot = fileURLToPath(root);
   const product = JSON.parse(await readFile(new URL("../product.manifest.json", import.meta.url), "utf8"));
   const desktopWorkflowPath = resolveDesktopWorkflowPath(repositoryRoot, product).absolute;
+  const legacyWorkflowFile = new URL("../.github/workflows/pack-self-contained.yml", import.meta.url);
   const files = {
     electron: await readFile(new URL("./pack-electron-payload.sh", import.meta.url), "utf8"),
     mac: await readFile(new URL("./pack-macos.sh", import.meta.url), "utf8"),
@@ -96,11 +98,21 @@ test("every packaging download is wired through the verified fetch boundary", as
     nats: await readFile(new URL("./embedded-nats.mjs", import.meta.url), "utf8"),
     pgvectorWin: await readFile(new URL("./build-pgvector-win.ps1", import.meta.url), "utf8"),
     desktopWorkflow: await readFile(desktopWorkflowPath, "utf8"),
-    legacyWorkflow: await readFile(new URL("../.github/workflows/pack-self-contained.yml", import.meta.url), "utf8"),
+    ...(existsSync(legacyWorkflowFile) ? { legacyWorkflow: await readFile(legacyWorkflowFile, "utf8") } : {}),
   };
   for (const name of ["electron", "mac", "win"]) {
     assert.match(files[name], /source scripts\/release-assets\.sh/);
     assert.match(files[name], /workloom_fetch_verified/);
+  }
+  for (const name of ["mac", "win"]) {
+    for (const helper of ["bootstrap.cjs", "diagnostic-redaction.cjs", "industry-runtime.cjs", "payload-integrity.cjs", "product-surface.cjs"]) {
+      assert.ok(files[name].includes(helper), `${name} standalone bootstrap is missing ${helper}`);
+    }
+  }
+  for (const name of ["electron", "mac", "win"]) {
+    assert.match(files[name], /payload-integrity\.mjs generate --payload-dir/u);
+    assert.match(files[name], /payload-integrity\.mjs verify --payload-dir/u);
+    assert.match(files[name], /INDUSTRY_PACKER/u);
   }
   const helper = await readFile(new URL("./release-assets.sh", import.meta.url), "utf8");
   assert.match(helper, /\.part\.\$\$/);
@@ -119,9 +131,22 @@ test("every packaging download is wired through the verified fetch boundary", as
   assert.doesNotMatch(files.pgvectorWin, /foreach \(\$pkg|git clone --depth 1 --branch/);
   assert.match(files.electron, /verify-windows-pg-provenance vendor\/pg-win\/WORKLOOM-PROVENANCE\.txt/);
   assert.match(files.win, /verify-windows-pg-provenance vendor\/pg-win\/WORKLOOM-PROVENANCE\.txt/);
-  for (const name of ["desktopWorkflow", "legacyWorkflow"]) {
-    assert.match(files[name], /runs-on: windows-2022/);
-    assert.doesNotMatch(files[name], /runs-on: windows-latest/);
+  if (files.legacyWorkflow) {
+    assert.match(files.legacyWorkflow, /runs-on: windows-2022/);
+    assert.doesNotMatch(files.legacyWorkflow, /runs-on: windows-latest/);
+  }
+  if (product.release?.workflow === ".cnb.yml") {
+    assert.match(files.desktopWorkflow, /namespace: group/u);
+    assert.match(files.desktopWorkflow, /tags: \[windows\]/u);
+    assert.doesNotMatch(files.desktopWorkflow, /allow_failure:\s*true|allowFailure:\s*true/u);
+    const nativePath = product.desktop?.nativeBuilders?.win;
+    assert.equal(typeof nativePath, "string");
+    const nativeSource = await readFile(new URL(`../${nativePath}`, import.meta.url), "utf8");
+    assert.match(nativeSource, /build-pgvector-win\.ps1/u);
+    assert.match(nativeSource, /pack-electron-payload\.sh/u);
+  } else {
+    assert.match(files.desktopWorkflow, /runs-on: windows-2022/);
+    assert.doesNotMatch(files.desktopWorkflow, /runs-on: windows-latest/);
   }
   for (const [name, source] of Object.entries(files)) {
     assert.doesNotMatch(source, /curl[^\n]+-o[^\n]+(?:node-|Postgres-|nats-server|nats\.(?:zip|tgz)|pg\.dmg)/, `${name} bypasses verified fetch`);

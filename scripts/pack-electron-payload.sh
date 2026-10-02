@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ============================================================
 # WorkLoom Electron 自包含载荷装配（desktop-production-release 流水线专用）
-# 产出：dist-payload/{runtime,node,pg,nats}——由 electron-builder extraResources 打入安装包
+# 产出：dist-payload/{runtime,node,pg,nats,python?} 与完整性索引
 #   runtime/  产品载荷（源码+迁移+种子+扁平 node_modules+web dist+VERSION）
 #   node/     Node 24 官方二进制（按平台/架构）
 #   pg/       PostgreSQL 17 + pgvector（bin/lib/share 两平台同构）
@@ -190,6 +190,13 @@ else
   chmod +x "$OUT/nats/nats-server"
 fi
 
+# ---------- 6. 产品清单声明的行业运行扩展 ----------
+INDUSTRY_PACKER="$(node -e 'const fs=require("node:fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const p=m.desktop?.industryPacker||"";if(p&&!/^scripts\/[A-Za-z0-9._-]+\.mjs$/.test(p))throw Error("行业载荷扩展路径无效");process.stdout.write(p)' "$PRODUCT_MANIFEST_PATH")"
+if [ -n "$INDUSTRY_PACKER" ]; then
+  [ -f "$INDUSTRY_PACKER" ] && [ ! -L "$INDUSTRY_PACKER" ] || { echo "❌ 行业载荷扩展必须为受控普通文件"; exit 1; }
+  node "$INDUSTRY_PACKER" --platform "$PLATFORM" --arch "$ARCH" --payload "$OUT"
+fi
+
 # ---------- 9. 载荷自检（v2.2.1 实证：NATS 段变量粘连致脚本中途异常但步骤未失败，
 #      DMG 带着残缺载荷照出——装配脚本必须自证完整，防"静默半成品"） ----------
 for f in runtime/node_modules/tsx/package.json runtime/node_modules/hono/package.json \
@@ -208,12 +215,16 @@ else
   [ -f "$OUT/pg/bin/initdb" ] || { echo "❌ 载荷自检失败：pg/bin/initdb 缺失"; exit 1; }
 fi
 node scripts/payload-policy.mjs assert-runtime "$R"
+[ -z "$INDUSTRY_PACKER" ] || node "$INDUSTRY_PACKER" --verify --platform "$PLATFORM" --arch "$ARCH" --payload "$OUT"
 echo "✓ 载荷自检通过"
 
 # ---------- 10. 载荷压缩包（electron-builder extraResources 对 **/node_modules/** 有硬排除，
 #      filter: ["**/*"] 无效——v2.2.0/v2.2.1 三轮实证；改单文件归档随包，
 #      不受目录过滤规则影响，bootstrap 首启按需解压） ----------
 echo "$VERSION" > "$OUT/PAYLOAD_VERSION"
+printf '%s\n' "$VERSION" > "$OUT/VERSION"
+node scripts/payload-integrity.mjs generate --payload-dir "$OUT"
+node scripts/payload-integrity.mjs verify --payload-dir "$OUT"
 rm -f dist-payload.tar.gz
 tar -czf dist-payload.tar.gz -C "$OUT" .
 [ -s dist-payload.tar.gz ] || { echo "❌ 载荷归档失败"; exit 1; }

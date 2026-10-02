@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import YAML from "yaml";
 import { resolveDesktopWorkflowPath } from "./desktop-workflow-path.mjs";
 
 const root = process.cwd();
@@ -75,16 +76,44 @@ if (product) {
     desktopWorkflowPath = path.join(repositoryRoot, ".github/workflows/desktop-production-release.yml");
   }
   const desktopWorkflow = fs.existsSync(desktopWorkflowPath) ? fs.readFileSync(desktopWorkflowPath, "utf8") : "";
-  for (const marker of [
-    "MAC_CSC_LINK",
-    "APPLE_APP_SPECIFIC_PASSWORD",
-    "codesign --verify --deep --strict",
-    "xcrun stapler validate",
-    "WIN_CSC_LINK",
-    "Get-AuthenticodeSignature",
-    "pnpm bundle:release",
-  ]) {
-    if (!desktopWorkflow.includes(marker)) errors.push(`桌面发布工作流缺少安全门禁：${marker}`);
+  if (product.release?.workflow === ".cnb.yml") {
+    let configured;
+    try { configured = YAML.parse(desktopWorkflow); }
+    catch (error) { errors.push(`CNB 桌面发布工作流无法解析：${error instanceof Error ? error.message : String(error)}`); }
+    for (const [trigger, event] of [["main", "push"], ["**", "pull_request"]]) {
+      const jobs = configured?.[trigger]?.[event];
+      for (const [platform, tags] of [["mac", ["mac", "arm64"]], ["win", ["windows"]]]) {
+        const nativePath = product.desktop?.nativeBuilders?.[platform];
+        if (typeof nativePath !== "string" || !/^scripts\/[A-Za-z0-9._-]+\.(?:sh|ps1)$/u.test(nativePath)) {
+          errors.push(`产品清单缺少受控 ${platform} 原生构建入口`);
+          continue;
+        }
+        const matches = Array.isArray(jobs) ? jobs.filter((job) => job.runner?.namespace === "group"
+          && tags.every((tag) => Array.isArray(job.runner.tags) && job.runner.tags.includes(tag))) : [];
+        if (matches.length !== 1 || matches[0].allow_failure || matches[0].allowFailure
+            || !matches[0].stages?.some((stage) => typeof stage.script === "string" && stage.script.replaceAll("\\", "/").includes(nativePath))) {
+          errors.push(`CNB ${trigger}/${event} 缺少必需的 ${platform} 原生桌面门禁`);
+        }
+      }
+    }
+    for (const [platform, markers] of [["mac", ["CSC_LINK", "APPLE_APP_SPECIFIC_PASSWORD", "codesign --verify --deep --strict", "xcrun stapler validate"]],
+      ["win", ["CSC_LINK", "Get-AuthenticodeSignature", "build-pgvector-win.ps1"]]]) {
+      const nativePath = product.desktop?.nativeBuilders?.[platform];
+      const file = typeof nativePath === "string" && /^scripts\/[A-Za-z0-9._-]+\.(?:sh|ps1)$/u.test(nativePath) ? path.join(root, nativePath) : null;
+      const source = file && fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+      const smokePath = product.desktop?.smokeRunner;
+      if (typeof smokePath !== "string" || !/^scripts\/[A-Za-z0-9._-]+\.mjs$/u.test(smokePath) || !fs.existsSync(path.join(root, smokePath))) {
+        errors.push("产品清单缺少受控原生桌面冒烟入口");
+      }
+      for (const marker of [...markers, "--frozen-lockfile", "pack-electron-payload.sh", smokePath ?? "缺少原生冒烟入口", "--render"]) {
+        if (!source.includes(marker)) errors.push(`${platform} 原生构建入口缺少安全门禁：${marker}`);
+      }
+    }
+  } else {
+    for (const marker of ["MAC_CSC_LINK", "APPLE_APP_SPECIFIC_PASSWORD", "codesign --verify --deep --strict",
+      "xcrun stapler validate", "WIN_CSC_LINK", "Get-AuthenticodeSignature", "pnpm bundle:release"]) {
+      if (!desktopWorkflow.includes(marker)) errors.push(`桌面发布工作流缺少安全门禁：${marker}`);
+    }
   }
 
   const releaseScript = path.join(root, "scripts/release.sh");
