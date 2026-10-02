@@ -3,8 +3,8 @@
  * WorkLoom IM · 基座能力同步引擎（Node >= 20，零第三方依赖）
  *
  *   detect --repo <子仓基座目录> [--base-dir <本地基座>]
- *   pull   --repo <子仓基座目录> [--base-dir <本地基座>] [--push] [--no-commit]
- *   push   --base <本地基座> [--dry-run]
+ *   pull   --repo <子仓基座目录> [--base-dir <本地基座>] [--no-commit]
+ *   push   --base <本地基座> --dry-run（只读计划；实际下发用 fanout-cnb 的 PR 通道）
  *
  * 行业代码仍写入 --repo/pathPrefix 指向的目录；requiredRootAssets 始终写入
  * 目标 Git 仓库根目录。AGENTS.md 只同步受控标记块，绝不覆盖仓库自有说明。
@@ -77,7 +77,7 @@ function gitAuthEnv(token = process.env.GH_TOKEN || "") {
   if (!token) return env;
   const count = Number.parseInt(env.GIT_CONFIG_COUNT || "0", 10) || 0;
   env.GIT_CONFIG_COUNT = String(count + 1);
-  env[`GIT_CONFIG_KEY_${count}`] = "http.extraHeader";
+  env[`GIT_CONFIG_KEY_${count}`] = "http.https://github.com/.extraHeader";
   env[`GIT_CONFIG_VALUE_${count}`] = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`;
   return env;
 }
@@ -110,7 +110,7 @@ function credentialFreeRemote(url) {
 function canSendGithubHeader(url) {
   if (!process.env.GH_TOKEN || !/^https?:\/\//i.test(url)) return false;
   try {
-    return new URL(url).hostname.toLowerCase() === "github.com";
+    return new URL(url).origin === "https://github.com";
   } catch {
     return false;
   }
@@ -1505,11 +1505,6 @@ function modePull(options) {
     );
     const report = { mode: "pull", child: childDir, dryRun: options.dryRun, requiredOnly: options.requiredOnly, noCommit: options.noCommit };
     syncToChild(baseDir, childDir, scope, report, extra, options);
-    if (options.push && report.committed && !options.dryRun) {
-      const origin = git(repoRoot, "remote", "get-url", "origin");
-      gitNetwork(repoRoot, origin, "push", "origin", "HEAD:main");
-      report.pushed = true;
-    }
     output(options, report, report.changed === 0
       ? `✅ ${options.requiredOnly ? "根级必备资产" : "基座内容"}已是最新（${report.baseSha.slice(0, 8)}）${report.committed ? "；同步状态已提交" : report.written ? "；同步状态已写入（未提交）" : ""}`
       : `${options.dryRun ? "[dry-run] " : ""}📦 ${options.requiredOnly ? "根级必备资产" : "基座"}对齐完成：内容 ${report.changed} · 普通复制 ${report.copied.length} · 锚点合并 ${report.merged.length} · AGENTS 受控块 ${report.managed.length}${report.written ? " · 已写入未提交" : ""}${report.pushed ? " · 已推送" : ""}${report.warnings.length ? `\n⚠️ ${report.warnings.join("\n⚠️ ")}` : ""}`);
@@ -1520,6 +1515,7 @@ function modePull(options) {
 }
 
 function modePush(options) {
+  if (!options.dryRun) throw new Error("直接推送 main 已禁止；请使用 sync/fanout-cnb.mjs 创建 PR，门禁通过后串行合并");
   const baseDir = resolve(options.base || join(SCRIPT_DIR, ".."));
   const baseScope = loadScope(baseDir);
   verifyBaseSourcesAtHead(baseDir, baseScope, options.requiredOnly, ["sync/child-repos.json"]);
@@ -1541,11 +1537,6 @@ function modePush(options) {
       const extra = [...new Set([...(child.extraExclude ?? []), ...options.extraExclude])];
       const scope = withExtraExclude(baseScope, extra);
       syncToChild(baseDir, childDir, scope, report, extra, { ...options, authoritativeExtraExclude: true });
-      if (report.committed && !options.dryRun) {
-        const origin = git(dir, "remote", "get-url", "origin");
-        gitNetwork(dir, origin, "push", "origin", "HEAD:main");
-        report.pushed = true;
-      }
       report.ok = true;
     } catch (error) {
       report.error = redact(error?.message).slice(0, 500);
@@ -1562,6 +1553,10 @@ function modePush(options) {
 
 function main(argv = process.argv.slice(2)) {
   const options = parseArgs(argv);
+  if (options.push || (options.mode === "push" && !options.dryRun)) {
+    console.error("直接推送 main 已禁止；请使用 sync/fanout-cnb.mjs 创建 PR，门禁通过后串行合并");
+    return 64;
+  }
   if (!["detect", "pull", "push"].includes(options.mode)) {
     console.error("用法: node base-sync.mjs detect|pull|push [--repo <path>] [--base <path>] [--base-dir <path>] [--base-url <prefix>] [--required-only] [--no-commit] [--adopt] [--push] [--dry-run] [--json]");
     return 64;

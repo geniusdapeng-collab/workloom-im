@@ -359,7 +359,9 @@
       ],
       "cadence": "monthly",
       "gate": "full",
-      "notes": "桌面载荷内嵌 17.x（Postgres.app 2.9.6-17 / EDB 树），CI 用 pgvector/pgvector:pg17 镜像；小版本升级必须重跑迁移与 RLS 用例；服务器小版本以 PGDG 发布人工复核"
+      "notes": "桌面载荷内嵌 17.x（Postgres.app 2.9.6-17 / EDB 树），CI 用 pgvector/pgvector:pg17 镜像；小版本升级必须重跑迁移与 RLS 用例；服务器小版本以 PGDG 发布人工复核；上游 Docker tag 查询指向官方 library/postgres（https://hub.docker.com/_/postgres/tags），镜像 tag 与桌面实际锁定版本分别展示，不据上游 tag 自动改载荷。",
+      "registryImage": "library/postgres",
+      "registrySource": "https://hub.docker.com/_/postgres/tags"
     },
     {
       "name": "pgvector",
