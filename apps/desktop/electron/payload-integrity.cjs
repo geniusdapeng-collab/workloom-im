@@ -97,7 +97,13 @@ function requiredRoots(root) {
   }
   // A bundled optional runtime is immutable too: an undeclared Python tree cannot
   // escape indexing just because it is absent from the product contract.
-  if (fs.existsSync(path.join(root, "python"))) extension = [...extension, "python"];
+  let optionalPython;
+  try { optionalPython = fs.lstatSync(path.join(root, "python")); }
+  catch (error) { if (error.code !== "ENOENT") reject("可选组件根不可读取"); }
+  if (optionalPython) {
+    if (!optionalPython.isDirectory() || optionalPython.isSymbolicLink()) reject("载荷组件根必须是普通目录");
+    extension = [...extension, "python"];
+  }
   return [...new Set([...ROOTS, ...extension])].sort();
 }
 function enumerate(root, roots) {

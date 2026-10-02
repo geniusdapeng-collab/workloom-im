@@ -129,6 +129,12 @@ test("undeclared bundled Python files also receive exact indexing", (t) => {
   f.write("python/unexpected.py", "x");
   assert.throws(() => verifyPayloadIntegrity(f.root));
 });
+test("an undeclared dangling optional component root cannot escape verification", (t) => {
+  const f = fixture(t);
+  generatePayloadIntegrity(f.root);
+  fs.symlinkSync("missing-python-root", path.join(f.root, "python"));
+  assert.throws(() => verifyPayloadIntegrity(f.root), /组件根必须是普通目录/u);
+});
 
 test("index path replacement after the held descriptor check is rejected", (t) => {
   const f = fixture(t);
