@@ -130,30 +130,34 @@ test("undeclared bundled Python files also receive exact indexing", (t) => {
   assert.throws(() => verifyPayloadIntegrity(f.root));
 });
 
-test("index path replacement during an open-file read is rejected despite held descriptor bytes", (t) => {
+test("index path replacement after the held descriptor check is rejected", (t) => {
   const f = fixture(t);
   generatePayloadIntegrity(f.root);
-  const file = path.join(f.root, "payload-integrity.json");
-  const originalRead = fs.readFileSync;
+  const file = path.join(fs.realpathSync.native(f.root), "payload-integrity.json");
   const originalOpen = fs.openSync;
+  const originalStat = fs.fstatSync;
   let indexFd;
+  let checks = 0;
   let injected = false;
   fs.openSync = function (entry, ...args) {
     const fd = originalOpen.call(fs, entry, ...args);
     if (entry === file) indexFd = fd;
     return fd;
   };
-  fs.readFileSync = function (entry, ...args) {
-    const bytes = originalRead.call(fs, entry, ...args);
-    if (typeof entry === "number" && entry === indexFd && !injected) {
+  fs.fstatSync = function (entry, ...args) {
+    const snapshot = originalStat.call(fs, entry, ...args);
+    if (entry === indexFd && ++checks === 2 && !injected) {
       injected = true;
       fs.renameSync(file, `${file}.previous`);
       fs.symlinkSync("payload-integrity.json.previous", file);
     }
-    return bytes;
+    return snapshot;
   };
   try {
-    assert.throws(() => verifyPayloadIntegrity(f.root), /索引在读取时发生变化/u);
-    assert.equal(injected, true);
-  } finally { fs.readFileSync = originalRead; fs.openSync = originalOpen; }
+    let failure;
+    try { verifyPayloadIntegrity(f.root); } catch (error) { failure = error; }
+    assert.equal(injected, true, "the exact canonical index path must actually be replaced");
+    assert.ok(failure, "the replaced index path must fail closed");
+    assert.match(failure.message, /索引在读取时发生变化/u);
+  } finally { fs.fstatSync = originalStat; fs.openSync = originalOpen; }
 });
