@@ -7,7 +7,7 @@ const apiUrl = "https://synthetic.invalid";
 const threadId = "synthetic-thread";
 const json = (data, status = 200) => new Response(JSON.stringify({ result: { data } }), { status });
 const task = () => ({ id: "PROD-01", kind: "product", title: "synthetic", state_asserts: [{ http: { url: `${apiUrl}/state`, status: 200, contains: "healthy" } }] });
-const executed = () => ({ event_id: "E-1", context: { time: new Date().toISOString() }, object: { id: threadId }, decision: { kind: "execute", step_id: "step-1", action: "test.execute" }, receipt: { synced: true, mode: "real", snapshot_uri: "https://synthetic.invalid/proof?token=must-not-be-recorded", verified_at: new Date().toISOString() } });
+const executed = () => ({ event_id: "E-1", context: { time: new Date().toISOString() }, object: { id: threadId }, decision: { kind: "execute", step_id: "step-1", action: "test.execute" }, receipt: { synced: true, mode: "real", snapshot_uri: "https://synthetic.invalid/proof", verified_at: new Date().toISOString() } });
 const answered = () => ({ event_id: "E-2", context: { time: new Date().toISOString() }, object: { id: threadId }, decision: { action: "ask.answer", params: { via: "llm" }, after: { text: "行业业务报告已读取：3项事实" } }, model_trace: { model_id: "synthetic-real-model" } });
 function setup(t, options = {}) {
   const original = globalThis.fetch;
@@ -34,6 +34,16 @@ test("product: completed matching thread, real receipt and every assertion joint
   assert.deepEqual(JSON.parse(poll.searchParams.get("input")), { threadId });
   assert.equal(result.receipt.realReceipts[0].snapshot_uri, `${apiUrl}/proof`);
   assert.match(result.receipt.evidenceSha256, /^[0-9a-f]{64}$/);
+});
+
+test("product: a credential query in the original event is withheld and cannot become successful hashed evidence", async (t) => {
+  // This was formerly the successful fixture. It stays here as an explicit
+  // disclosure negative; the successful fixture above has independent clean bytes.
+  const event = executed(); event.receipt.snapshot_uri += "?token=must-not-be-recorded";
+  setup(t, { events: [event] }); const input = task(); const result = await run(input);
+  assert.equal(result.status, "blocked"); assert.equal(result.receipt.synced, false); assert.equal(result.publicSafety.redacted, true);
+  assert.equal(JSON.stringify(result).includes("must-not-be-recorded"), false);
+  assert.equal((await verifyExpectations(input, result)).ok, false);
 });
 
 for (const status of ["failed", "paused", "pending_review", "cancelled", "canceled", "timeout"]) {

@@ -50,15 +50,20 @@ import { startStubProvider } from "./lib/live/stub-provider.mjs";
 import { assertSafeTaskId } from "./lib/live/media.mjs";
 import { verifyExpectations } from "./lib/live/verification.mjs";
 import { buildLiveChecks } from "./lib/live/checks.mjs";
+import { diagnosticReason, publicDiagnostic, publicResult, PublicBoundaryError, redactText as safeRedactText, sanitizePublic, secretVariants } from "./lib/live/safety.mjs";
 import { recordEvidenceRun, writeAcceptanceItems } from "../delivery/evidence.mjs";
 
+// Setup can fail before credentials/tasks have been resolved. Never let the
+// runtime print an untrusted JSON/parser/filesystem exception as public output.
+let stub = null;
+async function main() {
 const RUN_ID = `live-${randomUUID()}`;
 const RUN_STARTED_AT = new Date().toISOString();
 
 const argv = process.argv.slice(2);
 const arg = (name, fallback = null) => {
   const i = argv.indexOf(name);
-  if (i >= 0 && (argv.indexOf(name, i + 1) >= 0 || !argv[i + 1] || argv[i + 1].startsWith("--"))) throw new Error(`${name} 需要一个且仅一个值`);
+  if (i >= 0 && (argv.indexOf(name, i + 1) >= 0 || !argv[i + 1] || argv[i + 1].startsWith("--"))) throw new PublicBoundaryError(`${name} 需要一个且仅一个值`, "cli_input_invalid");
   return i >= 0 ? argv[i + 1] : fallback;
 };
 const has = (flag) => argv.includes(flag);
@@ -67,7 +72,7 @@ const booleanFlags = new Set(["--selftest", "--require-live", "--allow-prod-writ
 for (let i = 0; i < argv.length; i += 1) {
   const flag = argv[i];
   if (valuedFlags.has(flag)) { arg(flag); i += 1; }
-  else if (!booleanFlags.has(flag)) throw new Error("live 存在未知 CLI 参数；为防凭据进入日志而拒绝运行");
+  else if (!booleanFlags.has(flag)) throw new PublicBoundaryError("live 存在未知 CLI 参数；为防凭据进入日志而拒绝运行", "cli_input_invalid");
 }
 
 const REPO_ROOT = findRepoRoot();
@@ -77,7 +82,7 @@ const canonical = (path) => existsSync(path) ? realpathSync(path) : join(canonic
 const EVIDENCE_ROOT = canonical(resolve(arg("--evidence-root", dirname(OUT_DIR))));
 const evidencePath = (path) => {
   const rel = relative(EVIDENCE_ROOT, canonical(resolve(path)));
-  if (!rel || isAbsolute(rel) || rel === ".." || rel.startsWith(`..${sep}`)) throw new Error("live 输出必须位于 --evidence-root 之内");
+  if (!rel || isAbsolute(rel) || rel === ".." || rel.startsWith(`..${sep}`)) throw new PublicBoundaryError("live 输出必须位于 --evidence-root 之内", "output_boundary_invalid");
   return rel.split(sep).join("/");
 };
 evidencePath(OUT_DIR);
@@ -86,7 +91,7 @@ const SELFTEST = has("--selftest");
 const REQUIRE_LIVE = has("--require-live");
 const ONLY_TASKS = arg("--tasks", null)?.split(",").map((s) => s.trim()).filter(Boolean) ?? null;
 const TASK_TIMEOUT_MS = Number(arg("--timeout-s", "0")) > 0 ? Number(arg("--timeout-s")) * 1000 : 8 * 60_000;
-if (!Number.isFinite(Number(arg("--timeout-s", "0"))) || Number(arg("--timeout-s", "0")) < 0 || TASK_TIMEOUT_MS > 2_147_483_647) throw new Error("--timeout-s 必须是有限非负秒数且不能超过运行时计时器上限");
+if (!Number.isFinite(Number(arg("--timeout-s", "0"))) || Number(arg("--timeout-s", "0")) < 0 || TASK_TIMEOUT_MS > 2_147_483_647) throw new PublicBoundaryError("--timeout-s 必须是有限非负秒数且不能超过运行时计时器上限", "cli_input_invalid");
 const ALLOW_PROD_WRITES = has("--allow-prod-writes");
 /**
  * 凭据文件（推荐放在仓库外，如 ~/.workloom/live.env；只读、只进进程内存，不进报告）。
@@ -103,8 +108,11 @@ mkdirSync(join(OUT_DIR, "receipts"), { recursive: true });
 mkdirSync(join(OUT_DIR, "transcripts"), { recursive: true });
 const outputLock = `${OUT_DIR}.run-lock`;
 try { mkdirSync(outputLock); }
-catch (error) { if (error.code === "EEXIST") throw new Error("live 输出目录已有运行或未清理的运行锁；尚未调用模型，禁止并发覆盖证据"); throw error; }
-process.on("exit", () => rmSync(outputLock, { recursive: true, force: true }));
+catch (error) { if (error.code === "EEXIST") throw new PublicBoundaryError("live 输出目录已有运行或未清理的运行锁；尚未调用模型，禁止并发覆盖证据", "run_lock_active"); throw error; }
+process.on("exit", () => {
+  try { rmSync(outputLock, { recursive: true, force: true }); }
+  catch (error) { console.error(`[acceptance:live] ${diagnosticReason(error, "运行锁清理失败", "storage_unavailable")}`); process.exitCode = 1; }
+});
 
 const { profile, warnings: profileWarnings } = loadProfile(REPO_ROOT, args.profilePath);
 const liveProfile = profile.live ?? {};
@@ -112,7 +120,6 @@ const environment = resolveEnvironment(profile, { flag: ENV_FLAG, allowProdWrite
 const notes = [];
 
 /* ---------------------------- 自检模式：本地替身 ---------------------------- */
-let stub = null;
 let resolvedModels = [];
 let tasks = [];
 let modelsForRun = [];
@@ -146,14 +153,9 @@ if (SELFTEST) {
  */
 const credentialSources = [];
 const runnerEnv = { ...process.env };
-const secrets = () => [...new Set([
-  ...Object.entries(runnerEnv).filter(([key, value]) => /API_KEY|TOKEN|SECRET|PASSWORD|PRIVATE_KEY/iu.test(key) && typeof value === "string" && value.length >= 4).map(([, value]) => value),
-  // profile.apiKeyEnv is a credential contract even when its chosen variable
-  // name contains no KEY/TOKEN substring; never rely on naming for redaction.
-  ...resolvedModels.map((model) => runnerEnv[model.credentialEnv]).filter((value) => typeof value === "string" && value.length >= 4),
-])];
-const redactText = (value) => secrets().reduce((text, secret) => text.split(secret).join("[REDACTED]"), String(value));
-const redactValue = (value) => typeof value === "string" ? redactText(value) : Array.isArray(value) ? value.map(redactValue) : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).map(([key, child]) => [key, redactValue(child)])) : value;
+const safetyOptions = () => ({ env: runnerEnv, credentialEnvs: [...modelsForRun.map((model) => model.apiKeyEnv), ...resolvedModels.map((model) => model.credentialEnv)].filter(Boolean) });
+const secrets = () => secretVariants(safetyOptions());
+const redactText = (value) => safeRedactText(value, safetyOptions());
 /**
  * 自动发现封存凭据（v3.1.1）：
  *   ① `--env-file`（显式）→ ② `$WORKLOOM_LIVE_ENV` → ③ `~/.workloom/live.env`
@@ -282,7 +284,12 @@ if (!SELFTEST && liveProfile.enabled !== true) notes.push("profile.live.enabled 
 const taskIds = new Set();
 for (const task of tasks) {
   assertSafeTaskId(task.id);
-  if (taskIds.has(task.id)) throw new Error(`重复任务 ID ${task.id}：禁止重复付费执行或覆盖回执`);
+  // These values become WAL keys/details. A later report scrub cannot undo
+  // an earlier fsynced disclosure or safely rename an existing reservation.
+  if (sanitizePublic({ id: task.id, chain: task.chain ?? null }, safetyOptions()).changed) {
+    throw new PublicBoundaryError("任务身份或 chain 含需脱敏内容，尚未创建预算或调用供应商", "task_metadata_private");
+  }
+  if (taskIds.has(task.id)) throw new PublicBoundaryError("重复任务 ID：禁止重复付费执行或覆盖回执", "cli_input_invalid");
   taskIds.add(task.id);
 }
 if (SELFTEST) {
@@ -292,7 +299,7 @@ if (SELFTEST) {
 /* ---------------------------- 预算闸 ---------------------------- */
 const { budgets, warnings: budgetWarnings } = normalizeBudgets(liveProfile.budgets ?? {});
 notes.push(...budgetWarnings);
-const budgetOptions = { budgets, outDir: OUT_DIR, environmentKind: environment.kind, runId: RUN_ID };
+const budgetOptions = { budgets, outDir: OUT_DIR, environmentKind: environment.kind, runId: RUN_ID, credentialEnvs: safetyOptions().credentialEnvs };
 const budget = createBudget(budgetOptions);
 
 /* ---------------------------- 目标探测与指纹 ---------------------------- */
@@ -382,14 +389,16 @@ async function runTask(task) {
             const body = await r.json().catch(() => null);
             const rules = body?.result?.data;
             if (Array.isArray(rules) && rules.length > 0) {
+              const cleanRules = sanitizePublic(rules, { ...safetyOptions(), secrets: [token] });
+              if (cleanRules.changed) return { ...base, chain, status: "blocked", called: false, reason: "围栏规则含需脱敏内容，未写盘、未启动 DSH", publicSafety: { redacted: true, category: "evidence_redacted" }, ms: Date.now() - startedAt };
               fenceRulesFile = join(OUT_DIR, `fence-rules-${task.id}.json`);
-              writeFileSync(fenceRulesFile, JSON.stringify(rules, null, 1));
+              writeFileSync(fenceRulesFile, JSON.stringify(cleanRules.value, null, 1));
               console.log(`[acceptance:live] 围栏规则源就绪：${rules.length} 条 → ${fenceRulesFile}`);
             } else {
               console.log(`[acceptance:live] ⚠ 围栏规则源为空/不可用（HTTP ${r.status}）：工具调用将按 fail-closed 拒绝`);
             }
           } catch (error) {
-            console.log(`[acceptance:live] ⚠ 围栏规则源拉取失败：${error instanceof Error ? error.message : String(error)}`);
+            console.log(`[acceptance:live] ⚠ ${diagnosticReason(error, "围栏规则源拉取失败")}`);
           }
         }
         out = await runDshTask({
@@ -447,6 +456,8 @@ async function runTask(task) {
         usage: out.usage ?? null,
         tokens: out.tokens ?? null,
         called: out.called ?? false,
+        publicSafety: out.publicSafety,
+        diagnostic: out.diagnostic,
         modelResolved: out.model ?? null,
         verification: verified,
         multimodal: fixturePath ? { path: fixturePath, sha256: createHash("sha256").update(readFileSync(fixturePath)).digest("hex"), expectedToken: fixtureToken ?? task.imageExpectedToken ?? null } : null,
@@ -469,6 +480,8 @@ async function runTask(task) {
         artifacts: out.artifacts ?? [],
         receipt: out.receipt ?? null,
         called: out.called ?? null,
+        publicSafety: out.publicSafety,
+        diagnostic: out.diagnostic,
         measurementComplete: out.measurementComplete === true,
         produced: out.produced ?? null,
         knownProduced: out.knownProduced ?? null,
@@ -497,6 +510,8 @@ async function runTask(task) {
         artifacts: out.artifacts ?? [],
         receipt: out.receipt ?? null,
         called: out.called ?? null,
+        publicSafety: out.publicSafety,
+        diagnostic: out.diagnostic,
         measurementComplete: out.measurementComplete === true,
         durationSeconds: out.durationSeconds ?? null,
         units,
@@ -523,9 +538,9 @@ async function runTask(task) {
       // 保留低层确定性 transport 的业务回读测试；真实 CLI 先阻断，不触发登录/派单。
       return { ...base, chain: "product-dispatch", status: "blocked", called: false, reason: PRODUCT_DISPATCH_BUDGET_BLOCK, ms: Date.now() - startedAt };
     }
-    return { ...base, status: "failed", reason: `未知任务类型：${task.kind}`, ms: 0 };
+    return { ...base, status: "failed", reason: "未知任务类型，未执行适配器", ms: 0 };
   } catch (err) {
-    return { ...base, status: "failed", reason: String(err?.message ?? err).slice(0, 300), ms: Date.now() - startedAt };
+    return { ...base, status: "failed", reason: diagnosticReason(err, "验收任务执行失败，证据/用量未验证", "task_unavailable"), diagnostic: publicDiagnostic(err, "task_unavailable"), ms: Date.now() - startedAt };
   } finally {
     if (reserved && !settled) budget.commit({ taskId: task.id, kind: reserved.kind, measured: false, status: "blocked", detail: redactText(`${chain}:未取得实际量，按预占保守计量并冻结后续付费调用`) });
   }
@@ -534,8 +549,9 @@ async function runTask(task) {
 for (const task of tasks) {
   const out = await runTask(task);
   const declared = task.model ? modelById.get(task.model) : resolvedModels.find((model) => model.kind === task.kind);
-  const result = redactValue({ ...out, purpose: task.purpose ?? null, modelExpected: declared?.model ?? null, modelResolved: out.modelResolved ?? out.receipt?.model ?? null, allowedModels: task.allowedModels ?? [], fixtureMarker: task.fixtureMarker ?? null, residualDisclosure: task.residualDisclosure ?? null,
-    receiptPath: evidencePath(join(OUT_DIR, "receipts", `${task.id}.json`)), transcriptPath: evidencePath(join(OUT_DIR, "transcripts", `${task.id}.json`)) });
+  const result = publicResult({ ...out, purpose: task.purpose ?? null, modelExpected: declared?.model ?? null, modelResolved: out.modelResolved ?? out.receipt?.model ?? null, allowedModels: task.allowedModels ?? [], fixtureMarker: task.fixtureMarker ?? null, residualDisclosure: task.residualDisclosure ?? null,
+    receiptPath: evidencePath(join(OUT_DIR, "receipts", `${task.id}.json`)), transcriptPath: evidencePath(join(OUT_DIR, "transcripts", `${task.id}.json`)) }, safetyOptions());
+  if (result.publicSafety?.redacted === true && out.called !== false) budget.freeze({ taskId: task.id, reason: "任务公开证据需要脱敏，后续付费模态已冻结" });
   if (result.status === "ok" && result.eventEvidence && result.receipt.evidenceSha256 !== createHash("sha256").update(JSON.stringify(result.eventEvidence.events)).digest("hex")) {
     result.status = "failed"; result.reason = "线程事件包含需脱敏的凭据，脱敏后散列不再一致；不能计为完成"; result.receipt.synced = false; result.verification.ok = false;
   }
@@ -547,7 +563,7 @@ for (const task of tasks) {
   writeFileSync(join(OUT_DIR, "transcripts", `${result.id}.json`), JSON.stringify(result, null, 1));
 }
 
-if (stub) await stub.close();
+if (stub) { await stub.close(); stub = null; }
 
 /* ---------------------------- 汇总与报告 ---------------------------- */
 const budgetSummary = budget.persist();
@@ -574,7 +590,7 @@ if (failed.length && !environment.isProduction && noCredentials) {
   notes.push(`本机预览 + 缺真实凭据：${failed.length} 个失败任务按“未验证”处理（失败清单保留：${failed.map((f) => f.id).join("、")}）`);
 }
 
-const report = redactValue({
+const reportSafety = sanitizePublic({
   at: new Date().toISOString(),
   spec: "rdas/v3.1",
   selftest: SELFTEST,
@@ -602,7 +618,9 @@ const report = redactValue({
   verdict,
   notes,
   profileWarnings,
-});
+}, safetyOptions());
+const report = reportSafety.value;
+if (reportSafety.changed) { report.verdict = "fail"; report.publicSafety = { redacted: true, category: "evidence_redacted" }; }
 const outputFiles = new Set([join(OUT_DIR, "budget-ledger.jsonl"), join(OUT_DIR, "budget-summary.json"), ...results.flatMap((task) => [join(EVIDENCE_ROOT, task.receiptPath), join(EVIDENCE_ROOT, task.transcriptPath), ...(task.artifacts ?? []).map((artifact) => artifact.path), task.audit?.file, task.multimodal?.path, task.evidence?.patchPath, task.evidence?.budgetConfigFile]).filter(Boolean)]);
 const patchPath = join(OUT_DIR, "dsh-home", "profiles", "headless", "cordis.patch.yml");
 if (existsSync(patchPath)) outputFiles.add(patchPath);
@@ -618,7 +636,7 @@ for (const path of outputFiles) {
     if (scrubbed !== text) { writeFileSync(path, scrubbed); bytes = Buffer.from(scrubbed); redactedFiles += 1; }
   }
   scannedFiles += 1;
-  if (secrets().some((secret) => bytes.includes(Buffer.from(secret)))) leakedFiles += 1;
+  if (secrets().filter((secret) => secret.length >= 4).some((secret) => bytes.includes(Buffer.from(secret)))) leakedFiles += 1;
 }
 report.secretScan = { passed: leakedFiles === 0 && redactedFiles === 0, scannedFiles, leakedFiles, redactedFiles, basis: "本次继承凭据值扫描；不替代仓库完整 secret 扫描" };
 if (!report.secretScan.passed) report.verdict = "fail";
@@ -627,18 +645,30 @@ const outputPaths = [...outputFiles].filter((path) => existsSync(path) && lstatS
 report.checks = buildLiveChecks(report, { reportPath, outputPaths, secretScan: report.secretScan, requestedTaskIds: tasks.map((task) => task.id) });
 writeFileSync(join(OUT_DIR, "live-report.json"), JSON.stringify(report, null, 1));
 writeFileSync(join(OUT_DIR, "live-report.md"), renderMarkdown(report));
-const exitCode = failed.length || anyFalseSuccess || !report.secretScan.passed ? 1 : SELFTEST ? blocked.length || results.length === 0 || results.some((result) => result.status === "skipped") || REQUIRE_LIVE ? 2 : 0 : report.verdict === "pass" ? 0 : 2;
+const exitCode = failed.length || anyFalseSuccess || !report.secretScan.passed || report.verdict === "fail" ? 1 : SELFTEST ? blocked.length || results.length === 0 || results.some((result) => result.status === "skipped") || REQUIRE_LIVE ? 2 : 0 : report.verdict === "pass" ? 0 : 2;
 const run = recordEvidenceRun({ repoRoot: REPO_ROOT, artifactRoot: EVIDENCE_ROOT, runId: RUN_ID, command: redactText([process.execPath, ...process.argv.slice(1)].join(" ")), actor: "acceptance:live", role: "automation", exitCode,
   startedAt: RUN_STARTED_AT, finishedAt: new Date().toISOString(), outputPaths: [...outputPaths, reportPath, evidencePath(join(OUT_DIR, "live-report.md"))], exec: { file: process.execPath, args: process.argv.slice(1).map(redactText) } });
 writeAcceptanceItems({ artifactRoot: EVIDENCE_ROOT, run, checks: report.checks });
 
 console.log(`[acceptance:live] 结论：${report.verdict}；任务 ${results.length}（ok ${byStatus.ok ?? 0} / blocked ${byStatus.blocked ?? 0} / failed ${byStatus.failed ?? 0}）；产物 ${OUT_DIR}`);
 process.exitCode = exitCode;
+}
+
+try { await main(); }
+catch (error) {
+  console.error(`[acceptance:live] ${diagnosticReason(error, "验收 CLI 准备/执行失败", "cli_unavailable")}`);
+  process.exitCode = 1;
+  if (stub) {
+    try { await stub.close(); }
+    catch (cleanupError) { console.error(`[acceptance:live] ${diagnosticReason(cleanupError, "自检服务清理失败", "cleanup_unavailable")}`); }
+    finally { stub = null; }
+  }
+}
 
 /* ---------------------------- helpers ---------------------------- */
 /**
- * 统一失败原因口径：blocked 用原始原因；调用失败保留**适配器原始错误**（不再只剩“未满足期望”）；
- * 调用成功但判定不过才写“未满足期望”。这样报告能直接指出 404/参数不支持等真实原因。
+ * blocked/失败保留适配器的安全类别、HTTP 状态和本地校验原因；
+ * 调用成功但判定不过才写“未满足期望”。未知上游正文和进程输出不进公开诊断。
  */
 function failureReason(out, verified) {
   if (out.status === "blocked") return out.reason;

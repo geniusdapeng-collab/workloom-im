@@ -4,7 +4,9 @@
  * PG 集成（RUN_DB_TESTS=1）：入站落库+幂等 / openid 映射 / 手势回调闭环（L5.3 幂等、未映射拒绝、readonly 403）/ 出站留痕
  * 纪律：集成用例自备数据（唯一后缀隔离），不依赖种子状态、不跨用例污染——可重跑
  */
-import { describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
+import type pg from "pg";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   CHANNEL_REGISTRY,
   APPROVAL_CHANNEL_ENUM,
@@ -61,7 +63,7 @@ describe("审批卡片组装（M5/F5.1 同源投影）", () => {
       payload: {
         decision: { action: "price.adjust", before: { price: 400 }, after: { price: 432 } },
         object: { type: "room_price", id: "rt-1", label: "大床房" },
-        rule_impact: [{ rule_id: "R1", version: "v1", result: "review" }],
+        rule_impact: [{ rule_id: "R1", result: "review" }],
       },
       snapshot: { expires_at: "2026-08-18T08:30:00+08:00" },
     });
@@ -89,24 +91,46 @@ describe("Mock 通道驱动（D4 同纪律）", () => {
 
 /* ================= PG 集成（RUN_DB_TESTS=1 时启用） ================= */
 
-const RUN_DB = process.env.RUN_DB_TESTS === "1" && !!process.env.DATABASE_GATEWAY_URL;
+const RUN_DB = process.env.RUN_DB_TESTS === "1" && !!process.env.DATABASE_APP_URL && !!process.env.DATABASE_GATEWAY_URL;
 const d = RUN_DB ? describe : describe.skip;
 
 d("PG 集成（G8/L1.4/L5.3/E5.2/L5.1）", async () => {
-  const pg = (await import("pg")).default;
+  const Pg = (await import("pg")).default;
   const { ingestInbound, handleGestureCallback, sendApprovalCard, resolveMemberByOpenid } = await import("./index.js");
-  const app = new pg.Pool({ connectionString: process.env.DATABASE_APP_URL });
-  const gateway = new pg.Pool({ connectionString: process.env.DATABASE_GATEWAY_URL });
-  const scope = { tenantId: "tenant-demo", workspaceId: "ws-yunqi" };
+  const app = new Pg.Pool({ connectionString: process.env.DATABASE_APP_URL });
+  const gateway = new Pg.Pool({ connectionString: process.env.DATABASE_GATEWAY_URL });
   // 自备数据唯一后缀（可重跑纪律）
-  const sfx = `im${Date.now().toString(36)}`;
+  const sfx = `im${randomUUID().replaceAll("-", "")}`;
+  const scope = { tenantId: `tenant-${sfx}`, workspaceId: `ws-${sfx}` };
   const openId = `ou_${sfx}`;
 
   const setScoped = async (c: pg.PoolClient) => {
     await c.query("SELECT set_config('app.workspace_id', $1, false)", [scope.workspaceId]);
     await c.query("SELECT set_config('app.tenant_id', $1, false)", [scope.tenantId]);
   };
-  /** openid 绑定到种子成员（MEM-001 owner / MEM-003 readonly；只 UPDATE 不 INSERT——不污染种子成员数断言，openid 键带 sfx 唯一可重跑） */
+  beforeAll(async () => {
+    const c = await app.connect();
+    try {
+      await c.query("BEGIN");
+      await setScoped(c);
+      await c.query("INSERT INTO tenants (id, name) VALUES ($1, 'IM 本地合成测试租户')", [scope.tenantId]);
+      await c.query("INSERT INTO workspaces (id, tenant_id, name, slug, industry) VALUES ($1, $2, 'IM 本地合成测试工作区', $1, 'synthetic')", [scope.workspaceId, scope.tenantId]);
+      await c.query(
+        `INSERT INTO members (id, workspace_id, member_no, name, role) VALUES
+         ($1, $3, 'MEM-001', '合成主理人', 'owner'),
+         ($2, $3, 'MEM-003', '合成只读成员', 'readonly')`,
+        [`owner-${sfx}`, `readonly-${sfx}`, scope.workspaceId],
+      );
+      await c.query("COMMIT");
+    } catch (error) {
+      await c.query("ROLLBACK");
+      throw error;
+    } finally { c.release(); }
+  });
+  // append-only 事件保留合成 scope 便于复查；只关闭本测试自己建立的连接池。
+  afterAll(async () => { await Promise.all([app.end(), gateway.end()]); });
+
+  /** openid 绑定到本测试自备成员，唯一 scope 不改写演示或其他测试的成员。 */
   const bindOpenid = async (memberNo: string, oid: string) => {
     const c = await app.connect();
     try {
@@ -258,6 +282,26 @@ d("PG 集成（G8/L1.4/L5.3/E5.2/L5.1）", async () => {
       channel: "dingtalk", approvalId, operatorOpenId: openId,
       conversationId: `conv-${sfx}`, gesture: "reject",
     })).rejects.toThrowError(/驳回必须/);
+  });
+
+  it("审批及重复回调仍成功；通知异常只保留安全类别和HTTP状态，不反射驱动内容", async () => {
+    await bindOpenid("MEM-001", openId);
+    const { approvalId } = await prepareApproval("safe-notify");
+    const canary = ["SYNTHETIC", "private", sfx].join("_");
+    const warnings: unknown[][] = []; const warn = console.warn;
+    const driver = new MockChannelDriver("dingtalk");
+    driver.sendText = async () => { throw Object.assign(new Error(canary), { status: 401 }); };
+    try {
+      console.warn = (...values: unknown[]) => { warnings.push(values); };
+      const callback = { channel: "dingtalk" as const, approvalId, operatorOpenId: openId, conversationId: "synthetic-local-only", gesture: "approve" as const };
+      const first = await handleGestureCallback(app, gateway, scope, callback, driver);
+      const repeated = await handleGestureCallback(app, gateway, scope, callback, driver);
+      expect(first.status).toBe("approved"); expect(first.deduped).toBe(false);
+      expect(repeated.status).toBe("approved"); expect(repeated.deduped).toBe(true);
+      expect(warnings).toHaveLength(2);
+      expect(JSON.stringify(warnings)).not.toContain(canary);
+      expect(JSON.stringify(warnings)).toContain("401");
+    } finally { console.warn = warn; }
   });
 
   it("审批卡片出站即留痕（approval.card.sent 事件落库 G8）；未启用通道拒绝", async () => {

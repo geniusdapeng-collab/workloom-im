@@ -14,7 +14,12 @@
  * `environment.allowWrites: true`），且写入必须带夹具标记并披露残留。
  */
 import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { join } from "node:path";
+import { inspectClientIdentity } from "./client-identity.mjs";
+import { diagnosticReason, publicDiagnostic, publicUrl, safeError, safeHttpEndpoint, sanitizePublic } from "./live/safety.mjs";
+
+const require = createRequire(import.meta.url);
 
 export const ENVIRONMENT_KINDS = ["local-preview", "client-runtime", "deployed"];
 
@@ -28,19 +33,19 @@ export const DEFAULT_ENVIRONMENT = {
   timeouts: { healthMs: 8000, probeMs: 20000 },
 };
 
-/** 秘密值一律不进日志/报告：只保留前 4 位与长度 */
+/** 秘密值不显示前缀、长度或短值。可用性另用布尔值记录。 */
 export function maskSecret(value) {
-  const text = String(value ?? "");
-  if (!text) return "";
-  if (text.length <= 4) return "****";
-  return `${text.slice(0, 4)}…（len=${text.length}）`;
+  return value === null || value === undefined || value === "" ? "" : "****";
 }
 
 /** 读取 .env（不写入 process.env；只做只读指纹与凭据可用性判断） */
 export function loadEnvFile(path) {
   const out = {};
   if (!existsSync(path)) return out;
-  for (const raw of readFileSync(path, "utf-8").split("\n")) {
+  let text;
+  try { text = readFileSync(path, "utf-8"); }
+  catch (error) { throw safeError(error, "环境凭据文件不可读取", "credential_file_unavailable"); }
+  for (const raw of text.split("\n")) {
     const line = raw.trim();
     if (!line || line.startsWith("#")) continue;
     const eq = line.indexOf("=");
@@ -84,7 +89,7 @@ export function resolveEnvironment(profile, { flag = null, allowProdWrites = fal
   if (new Set(declarations).size > 1) throw new Error("环境档位冲突：CLI / 父执行器 / profile 必须一致");
   const kind = declarations[0] ?? DEFAULT_ENVIRONMENT.kind;
   if (!ENVIRONMENT_KINDS.includes(kind)) {
-    throw new Error(`未知环境档位：${kind}（可选 ${ENVIRONMENT_KINDS.join(" | ")}）`);
+    throw new Error(`未知环境档位（可选 ${ENVIRONMENT_KINDS.join(" | ")}）`);
   }
   const ports = profile?.startup?.ports ?? { pc: 3000, bMobile: 3001, cMobile: 3002, server: 8787 };
   const target = declared.target ?? {};
@@ -132,6 +137,7 @@ export function resolveEnvironment(profile, { flag = null, allowProdWrites = fal
     declaredTarget: kind === "client-runtime" ? true : declaredTarget,
     targetDeclaredExplicitly: declaredTarget,
     supportDir,
+    expectedProductId: profile?.productId ?? profile?.identity?.productId ?? null,
     allowWrites: Boolean(allowProdWrites || declared.allowWrites || process.env.ACCEPTANCE_ALLOW_PROD_WRITES === "1"),
     timeouts: { ...DEFAULT_ENVIRONMENT.timeouts, ...(declared.timeouts ?? {}) },
     /** 生产档位禁止的步骤：装依赖、迁移/种子复位、起本机预览、写演示夹具 */
@@ -139,40 +145,75 @@ export function resolveEnvironment(profile, { flag = null, allowProdWrites = fal
   };
 }
 
-async function probe(url, { timeoutMs, expect = "any" } = {}) {
-  const started = Date.now();
+async function boundedProbeText(response, limit) {
+  if (!response.body) throw safeError(null, "目标响应没有可读正文", "target_body_invalid");
+  const declaredLength = response.headers.get("content-length");
+  if (declaredLength !== null && /^\d+$/u.test(declaredLength) && Number(declaredLength) > limit) {
+    await response.body.cancel();
+    throw safeError(null, "目标响应正文超过探测上限", "target_body_invalid");
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let size = 0;
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
-    const text = await res.text().catch(() => "");
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) {
+        await reader.cancel();
+        throw safeError(null, "目标响应正文超过探测上限", "target_body_invalid");
+      }
+      chunks.push(Buffer.from(value));
+    }
+    return Buffer.concat(chunks, size).toString("utf8");
+  } finally { reader.releaseLock(); }
+}
+
+async function probe(url, { timeoutMs, expect = "any", identity = null } = {}) {
+  const started = Date.now();
+  const visibleUrl = publicUrl(url);
+  if (!safeHttpEndpoint(url)) return { url: visibleUrl, status: 0, ok: false, ms: 0, detail: "探测目标 URL 含无效协议或凭据/查询/片段" };
+  let response;
+  try {
+    const res = response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs), redirect: "error" });
+    if (!res.ok) {
+      if (res.body) await res.body.cancel();
+      return { url: visibleUrl, status: res.status, ok: false, ms: Date.now() - started };
+    }
+    const text = await boundedProbeText(res, expect === "json" ? 64_000 : 2_000_000);
     let json = null;
     try { json = JSON.parse(text); } catch { /* 非 JSON 健康页（HTML 预览）按文本判定 */ }
-    const ok = res.ok && (expect !== "json" || Boolean(json));
-    return { url, status: res.status, ok, ms: Date.now() - started, sample: text.slice(0, 160), json };
+    const serviceMatches = json?.ok === true && json?.service === "workloom-im-server";
+    const instanceMatches = !identity || json?.instanceId === identity.instanceId;
+    const surfaceMatches = !identity || res.headers.get("x-workloom-instance-id") === identity.instanceId
+      && res.headers.get("x-workloom-product-id") === identity.productId
+      && require("../../../apps/desktop/electron/product-surface.cjs").hasControlledProductMarker(text, identity.productId);
+    const ok = res.ok && (expect === "json" ? serviceMatches && instanceMatches : surfaceMatches);
+    return { url: visibleUrl, status: res.status, ok, ms: Date.now() - started,
+      ...(expect === "json" ? { serviceMatches, ...(identity ? { instanceMatches } : {}) } : identity ? { productInstanceMatches: surfaceMatches } : {}) };
   } catch (err) {
-    return { url, status: 0, ok: false, ms: Date.now() - started, error: String(err?.message ?? err).slice(0, 200) };
+    return { url: visibleUrl, status: response?.status ?? 0, ok: false, ms: Date.now() - started, error: diagnosticReason(err, "目标探测失败/超时"), diagnostic: publicDiagnostic(err) };
   }
 }
 
 /** 目标可达性与身份探测：/health（server）+ 三端首页可加载 */
 export async function probeEnvironment({ env, timeoutMs = 8000 } = {}) {
   const checks = [];
+  const client = env.kind === "client-runtime" ? inspectClientIdentity({ supportDir: env.supportDir, urls: env.urls, expectedProductId: env.expectedProductId }) : null;
   if (env.urls.api) {
-    const apiHealth = await probe(`${env.urls.api}/health`, { timeoutMs, expect: "json" });
+    const apiHealth = await probe(`${env.urls.api}/health`, { timeoutMs, expect: "json", identity: client?.ok ? client.identity : null });
     checks.push({ name: "server.health", ...apiHealth });
   } else {
     checks.push({ name: "server.health", ok: false, detail: "未声明 apiUrl（生产部署档位必须显式声明）" });
   }
-  const payloadRoot = env.supportDir && existsSync(join(env.supportDir, "runtime")) ? env.supportDir : null;
-  if (payloadRoot) {
-    const versionFile = join(payloadRoot, "runtime", "VERSION");
-    checks.push({ name: "client.payload", ok: existsSync(versionFile), detail: versionFile, version: existsSync(versionFile) ? readFileSync(versionFile, "utf-8").trim() : null });
-  }
+  if (client) checks.push({ name: "client.identity", ...client });
   for (const [name, url] of Object.entries({ pc: env.urls.pc, bMobile: env.urls.bMobile, cMobile: env.urls.cMobile })) {
     if (!url) continue;
-    const r = await probe(url, { timeoutMs });
+    const r = await probe(url, { timeoutMs, identity: client?.ok ? client.identity : null });
     checks.push({ name: `surface.${name}`, ...r });
   }
-  return { ok: checks.filter((c) => c.name.startsWith("server.") || c.name.startsWith("surface.")).every((c) => c.ok), checks };
+  return { ok: checks.every((c) => c.ok === true), checks };
 }
 
 const readJsonSafe = (path) => {
@@ -187,11 +228,10 @@ export function fingerprintEnvironment({ repoRoot, env, profile, git = null }) {
   const envFile = loadEnvFile(join(repoRoot, ".env"));
   const clientEnv = env.supportDir ? loadEnvFile(join(env.supportDir, "runtime", ".env")) : {};
   const dshPkg = readJsonSafe(join(repoRoot, "packages", "runtime", "dsh-gate", "package.json"));
-  const runtimeVersion = env.supportDir && existsSync(join(env.supportDir, "runtime", "VERSION"))
-    ? readFileSync(join(env.supportDir, "runtime", "VERSION"), "utf-8").trim()
-    : null;
-  const installState = env.supportDir ? readJsonSafe(join(env.supportDir, "install-state.json")) : null;
-  const pick = (obj, keys) => Object.fromEntries(keys.map((k) => [k, obj?.[k] ?? ""]));
+  const client = env.kind === "client-runtime" ? inspectClientIdentity({ supportDir: env.supportDir, urls: env.urls, expectedProductId: env.expectedProductId }) : null;
+  const runtimeVersion = client?.ok ? client.identity.payloadVersion : null;
+  const installState = client?.ok ? client.installState : null;
+  const pick = (obj, keys) => Object.fromEntries(keys.map((k) => [k, k === "LLM_BASE_URL" ? obj?.[k] ? publicUrl(obj[k]) : "" : obj?.[k] ?? ""]));
   const provider = {
     repo: pick(envFile, ["LLM_PROVIDER", "LLM_BASE_URL", "LLM_MODEL"]),
     repoApiKeySet: Boolean(envFile.LLM_API_KEY),
@@ -199,7 +239,7 @@ export function fingerprintEnvironment({ repoRoot, env, profile, git = null }) {
     clientApiKeySet: Boolean(clientEnv.LLM_API_KEY),
     productionKeySet: Boolean(process.env.VOLCENGINE_ARK_API_KEY),
   };
-  return {
+  const result = {
     at: new Date().toISOString(),
     environmentKind: env.kind,
     isProduction: env.isProduction,
@@ -208,6 +248,8 @@ export function fingerprintEnvironment({ repoRoot, env, profile, git = null }) {
     supportDir: env.supportDir,
     clientRuntimeVersion: runtimeVersion,
     clientInstallState: installState ? { status: installState.status, phase: installState.phase, updatedAt: installState.updatedAt } : null,
+    clientIdentity: client?.ok ? client.identity : null,
+    clientIdentityVerified: client?.ok === true,
     repo: {
       commit: git?.commit ?? null,
       branch: git?.branch ?? null,
@@ -219,6 +261,7 @@ export function fingerprintEnvironment({ repoRoot, env, profile, git = null }) {
     dsh: { package: dshPkg?.name ?? null, version: dshPkg?.dependencies?.["@deepseek-ai/dsh"] ?? null },
     provider,
   };
+  return sanitizePublic(result, { env: { ...process.env, ...envFile, ...clientEnv }, credentialEnvs: (profile?.live?.models ?? []).map((model) => model.apiKeyEnv).filter(Boolean) }).value;
 }
 
 /** 指纹转 Markdown（报告用） */

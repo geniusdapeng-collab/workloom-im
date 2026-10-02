@@ -44,11 +44,14 @@ async function fakeDshMain() {
     emit("llm/retry", { turn: 0, step: 0, retry: 1 }); emit("llm/retry-started", { turn: 0, step: 0, retry: 1 });
   }
   const stream = await attempt();
-  emit("assistant/message", { turn: 0, step: 0, usage, stream, message: { source: { kind: "model", provider: "deepseek-official", model }, content: [{ type: "text", text: "TASK_COMPLETE synthetic process" }] } });
+  emit("assistant/message", { turn: 0, step: 0, usage, stream, message: { source: { kind: "model", provider: "deepseek-official", model }, content: [{ type: "text", text: mode === "event-secret" ? encodeURIComponent(process.env.DEEPSEEK_API_KEY) : "TASK_COMPLETE synthetic process" }] } });
   emit("step/end", { turn: 0, step: 0 });
   if (mode === "unknown-event") emit("future/required", { reason: "unsupported accounting boundary" });
   emit("turn/end", { turn: 0, reason: { kind: mode === "terminal-error" ? "error" : "completed" } });
   if (mode === "audit-tamper") fs.appendFileSync(auditFile, "{truncated\n");
+  if (mode === "stdout-secret") console.log(encodeURIComponent(process.env.DEEPSEEK_API_KEY));
+  if (mode === "stderr-private") console.error("SYNTHETIC_UNKNOWN_PRIVATE_DRIVER_DETAIL");
+  if (mode === "fence-private") console.log("[workloom-fence] judge tool=SYNTHETIC_UNKNOWN_PRIVATE_FENCE_DETAIL");
   console.log("TASK_COMPLETE synthetic stdout cannot replace the durable evidence");
 }
 
@@ -59,13 +62,15 @@ function fixture(t, mode = "complete", caps = {}) {
   writeFileSync(bin, `#!/usr/bin/env node\n(${fakeDshMain.toString()})().catch((error) => { console.error(error.message); process.exitCode = 1; });\n`, { mode: 0o700 });
   writeFileSync(join(gate, "node_modules/@deepseek-ai/dsh/package.json"), JSON.stringify({ version: "0.2.0-rc.2", fixture: true }));
   writeFileSync(join(gate, "profile.cordis.patch.yml"), "# synthetic gate template\n");
-  for (const file of ["audit.plugin.mjs", "budget.mjs", "usage.mjs"]) {
+  for (const file of ["audit.plugin.mjs", "budget.mjs", "usage.mjs", "safety.mjs"]) {
     const target = join(repoRoot, "scripts/acceptance/lib/live", file); mkdirSync(dirname(target), { recursive: true }); copyFileSync(fileURLToPath(new URL(file, import.meta.url)), target);
   }
   const workDir = join(repoRoot, "outputs/live"); mkdirSync(workDir, { recursive: true });
   const budgetOptions = { outDir: workDir, runId: "synthetic-run", environmentKind: "synthetic", budgets: normalizeBudgets(caps).budgets };
   const budget = createBudget(budgetOptions);
-  const options = { repoRoot, workDir, model: "deepseek-flash", prompt: "synthetic", rulesFile: join(workDir, "synthetic-rules.json"), taskId: "LLM-R1", budgetOptions, expectedTokens: 100, timeoutMs: 5000, baseUrl: "http://127.0.0.1:1/explicit-anthropic", env: { DEEPSEEK_API_KEY: "synthetic-not-a-real-key", DSH_SYNTHETIC_MODE: mode } };
+  // Cold subprocess/module loading can share the machine with browser suites.
+  // Only the explicit timeout case below tests a short deadline.
+  const options = { repoRoot, workDir, model: "deepseek-flash", prompt: "synthetic", rulesFile: join(workDir, "synthetic-rules.json"), taskId: "LLM-R1", budgetOptions, expectedTokens: 100, timeoutMs: 30_000, baseUrl: "http://127.0.0.1:1/explicit-anthropic", env: { DEEPSEEK_API_KEY: "synthetic-not-a-real-key", DSH_SYNTHETIC_MODE: mode } };
   writeFileSync(options.rulesFile, "[]\n");
   return { ...options, options, budget, requests: () => existsSync(join(workDir, "synthetic-provider-calls.json")) ? JSON.parse(readFileSync(join(workDir, "synthetic-provider-calls.json"))).count : 0 };
 }
@@ -136,4 +141,32 @@ test("DSH subprocess: unknown installed runtime, forbidden rules credential and 
   }
   const f = fixture(t); writeFileSync(join(f.repoRoot, "packages/runtime/dsh-gate/node_modules/@deepseek-ai/dsh/package.json"), '{"version":"unverified"}');
   assert.equal((await runDshTask(f.options)).status, "blocked"); assert.equal(f.requests(), 0);
+});
+
+for (const mode of ["event-secret", "stdout-secret"]) {
+  test(`DSH subprocess: ${mode} cannot expose a credential, retain successful evidence or admit a later modality`, async (t) => {
+    const f = fixture(t, mode); const result = await runDshTask(f.options);
+    assert.equal(result.status, "blocked"); assert.equal(result.publicSafety.redacted, true); assert.equal(result.receipt.synced, false);
+    assert.equal(f.requests(), 1); assert.equal(f.budget.summary().actual.llmTokens, 10); assert.equal(result.tokens, 10);
+    assert.equal(result.usage.complete, true); assert.equal(f.budget.reserve({ taskId: "IMG-NEXT", kind: "image", units: 1 }).allowed, false);
+    for (const value of [JSON.stringify(result), readFileSync(result.audit.file, "utf8")]) {
+      assert.equal(value.includes(f.options.env.DEEPSEEK_API_KEY), false); assert.equal(value.includes(encodeURIComponent(f.options.env.DEEPSEEK_API_KEY)), false);
+    }
+    assert.equal(Object.hasOwn(result, "raw"), false); assert.equal(Object.hasOwn(result.evidence, "transcript"), false);
+    assert.equal(result.evidence.processOutput.withheld, true);
+  });
+}
+
+test("DSH subprocess: unknown stderr is withheld while complete independent durable evidence remains measured", async (t) => {
+  const f = fixture(t, "stderr-private"); const result = await runDshTask(f.options);
+  assert.equal(result.status, "ok", result.reason); assert.equal(result.tokens, 10); assert.equal(result.evidence.processOutput.stderrBytes > 0, true);
+  assert.equal(JSON.stringify(result).includes("SYNTHETIC_UNKNOWN_PRIVATE_DRIVER_DETAIL"), false); assert.equal(result.evidence.processOutput.withheld, true);
+});
+
+test("DSH subprocess: matched fence stdout retains an observation count without exposing unknown tool text", async (t) => {
+  const f = fixture(t, "fence-private"); const result = await runDshTask(f.options);
+  assert.equal(result.status, "ok", result.reason); assert.equal(result.tokens, 10);
+  assert.equal(result.fenceHits.length, 1); assert.equal(result.receipt.fenceJudgements, 1);
+  assert.equal(JSON.stringify(result).includes("SYNTHETIC_UNKNOWN_PRIVATE_FENCE_DETAIL"), false);
+  assert.equal(result.fenceHits[0].withheld, true);
 });

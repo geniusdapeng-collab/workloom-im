@@ -17,7 +17,7 @@ const yamlRoot = dirname(require.resolve('yaml/package.json'));
 function fixture(t, { suite = true, production = false, fault = null, selftest = true, provider = 'mock' } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'rdas-outcome-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  for (const path of ['scripts/acceptance/outcome.mjs', 'scripts/acceptance/lib/profile.mjs', 'scripts/acceptance/lib/target.mjs', 'scripts/acceptance/lib/outcome-contract.mjs', 'scripts/acceptance/lib/outcome-fixture.mjs', 'scripts/acceptance/lib/live/budget.mjs', 'scripts/delivery/evidence.mjs']) {
+  for (const path of ['scripts/acceptance/outcome.mjs', 'scripts/acceptance/lib/profile.mjs', 'scripts/acceptance/lib/target.mjs', 'scripts/acceptance/lib/client-identity.mjs', 'scripts/acceptance/lib/live/safety.mjs', 'scripts/acceptance/lib/outcome-contract.mjs', 'scripts/acceptance/lib/outcome-fixture.mjs', 'scripts/acceptance/lib/live/budget.mjs', 'scripts/delivery/evidence.mjs']) {
     mkdirSync(dirname(join(root, path)), { recursive: true }); copyFileSync(join(source, path), join(root, path));
   }
   for (const path of ['acceptance/outcomes', 'bundles/industry/presets', 'node_modules']) mkdirSync(join(root, path), { recursive: true });

@@ -71,7 +71,7 @@ test('G07: production CLI/profile conflict blocks before any command or target r
   assert.deepEqual(readLog(f.commandLog), []);
 });
 test('G07: production avoids checkout/pull/install/seed/local probes and propagates one environment', async (t) => {
-  const server = createServer((req, res) => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ ok: true })); });
+  const server = createServer((req, res) => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ ok: true, service: 'workloom-im-server' })); });
   await new Promise((done) => server.listen(0, '127.0.0.1', done));
   t.after(() => new Promise((done) => server.close(done)));
   const apiUrl = `http://127.0.0.1:${server.address().port}`;
@@ -88,6 +88,20 @@ test('G07: production avoids checkout/pull/install/seed/local probes and propaga
     assert.equal(step.argv.filter((arg) => arg === '--profile').length, 1, JSON.stringify(step));
     assert.ok(step.argv.includes('--evidence-root'));
   }
+});
+test('G07: a health-only foreign service cannot qualify as a deployed WorkLoom target', async (t) => {
+  let requests = 0;
+  const server = createServer((req, res) => { requests += 1; res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ ok: true })); });
+  await new Promise((done) => server.listen(0, '127.0.0.1', done));
+  t.after(() => new Promise((done) => server.close(done)));
+  const f = fixture(t, { kind: 'deployed', target: { apiUrl: `http://127.0.0.1:${server.address().port}` } });
+  const result = await run(f);
+  assert.equal(result.code, 1, result.out);
+  assert.equal(result.state.steps.preview.status, 'fail');
+  assert.match(result.state.steps.preview.detail, /server\.health/);
+  assert.equal(result.state.target, undefined);
+  assert.equal(requests, 1);
+  assert.equal(readLog(f.commandLog).some((c) => c.name !== 'git' || c.args.some((a) => ['fetch', 'checkout', 'pull', 'install', 'db:migrate', 'preview:all'].includes(a))), false);
 });
 test('G06: report unverified exit 2 is preserved in aggregate result', async (t) => {
   const f = fixture(t, { reportExit: 2 });

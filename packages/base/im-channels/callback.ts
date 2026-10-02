@@ -14,6 +14,7 @@ import { decide, type GestureInput } from "../review-console/approvals.js";
 import { ChannelError, getChannel, type ApprovalChannel } from "./registry.js";
 import { resolveMemberByOpenid } from "./inbound.js";
 import type { ChannelDriver } from "./cards.js";
+import { safeChannelDiagnostic, safeChannelLabel } from "./safe-diagnostic.js";
 
 /* ================= P0-1 通道验签 seam =================
  * 契约（与 dsh-im 桥约定）：
@@ -157,7 +158,7 @@ export async function handleGestureCallback(
       await driver.sendText({ conversationId: cb.conversationId }, text);
     } catch (err) {
       // 回执发送失败（IM 平台抖动）只记录日志，不影响审批操作结果
-      console.warn(`[im-channels] 回执发送失败（审批 ${r.approvalId}，通道 ${cb.channel}）：`, err instanceof Error ? err.message : err);
+      console.warn("[im-channels] 回执发送失败；审批结果保持已提交：", { channel: safeChannelLabel(cb.channel), ...safeChannelDiagnostic(err) });
     }
   }
   return result;
