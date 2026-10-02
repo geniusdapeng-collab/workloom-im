@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { pathToFileURL } from "node:url";
 import { fixture, llm, model, report, run } from "./cli-fixtures.mjs";
 
 test("live CLI fixture: child resolves installed source Playwright without inherited NODE_PATH and retains explicit module paths", (t) => {
@@ -14,7 +15,7 @@ test("live CLI fixture: child resolves installed source Playwright without inher
     // Full CLI media playback and receipt checks run in live-cli-browser.test.mjs.
     writeFileSync(join(f.repo, "scripts/acceptance/live.mjs"), `import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { loadChromium } from "./lib/playwright.mjs";
+const { loadChromium } = await import(${JSON.stringify(pathToFileURL(join(f.repo, "scripts/acceptance/lib/playwright.mjs")).href)});
 assert.equal(typeof loadChromium(process.cwd()).launch, "function");
 assert.equal(process.env.WORKLOOM_TEST_ONLY_PARENT_VALUE, undefined);
 const require = createRequire(new URL("../../package.json", import.meta.url));
