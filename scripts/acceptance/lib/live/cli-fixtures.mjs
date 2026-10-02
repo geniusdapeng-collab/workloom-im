@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const source = fileURLToPath(new URL("../../../../", import.meta.url));
@@ -22,7 +22,10 @@ export function fixture(t, overrides = {}) {
   return { repo, out: join(repo, "outputs/acceptance/live") };
 }
 export function run(f, flags = [], extraEnv = {}, { timeoutMs = 60_000 } = {}) {
+  // The committed temporary repo contains source only. Resolve browser packages
+  // from this test's installed root without copying dependencies or ambient keys.
+  const nodePath = [...new Set([join(source, "node_modules"), ...[process.env.NODE_PATH, extraEnv.NODE_PATH].flatMap((value) => typeof value === "string" ? value.split(delimiter).filter(Boolean) : [])])].join(delimiter);
   return spawnSync(process.execPath, [join(f.repo, "scripts/acceptance/live.mjs"), "--out", f.out, "--no-auto-keys", "--no-keys-from-client", ...flags], { cwd: f.repo, encoding: "utf8", timeout: timeoutMs, maxBuffer: 1024 * 1024,
-    env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: tmpdir(), NODE_PATH: process.env.NODE_PATH ?? "", ...(process.env.PLAYWRIGHT_BROWSERS_PATH ? { PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH } : {}), ...extraEnv } });
+    env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: tmpdir(), ...(process.env.PLAYWRIGHT_BROWSERS_PATH ? { PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH } : {}), ...extraEnv, NODE_PATH: nodePath } });
 }
 export const report = (f) => JSON.parse(readFileSync(join(f.out, "live-report.json"), "utf8"));
