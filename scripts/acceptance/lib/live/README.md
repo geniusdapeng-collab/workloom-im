@@ -18,7 +18,13 @@ node scripts/acceptance/live.mjs --profile acceptance/profile.json --require-liv
 
 指定 `--out` 时，目录必须处在 `--evidence-root` 下；默认 evidence root 是输出目录的父目录。一次执行有独立 run ID，并用 `<out>.run-lock` 防止并发覆盖。重复任务 ID、含路径的任务 ID、重复有值参数、无值参数、未知 CLI 参数与非法超时会在模型占额前拒绝。崩溃后遗留的运行锁不会自动删除；确认原进程已退出且保存证据后，才能人工处置。
 
-凭据只在进程内存中使用。可用显式进程环境或仓外 `--keys-file`；自动发现规则见执行器文件头。报告只记来源和键名。本轮输出还对继承凭据做精确值扫描；这不替代完整仓库秘密扫描。测试使用合成凭据，不能将测试中的 `synthetic` 或 `stub` key 配到真实端点。
+准备与执行阶段共用外层安全异常出口，损坏 profile 的 JSON 解析异常、文件异常及重复任务 ID 均以安全诊断和退出码 `1` 结束，原异常正文和输入值不进入 stdout/stderr。准备阶段失败不会创建预算账本或调用供应商；如果已经为 selftest 启动了本地服务，异常出口会关闭该服务，并在正常进程退出时清理本次持有的运行锁。
+
+任务 ID 和 chain 会进入持久化占额身份或说明，因此在预算创建之前先检查它们是否含已知凭据及编码变体；命中即固定诊断、非零退出和零供应商调用。低层适配器也在执行前检查任务身份、声明模型和允许模型名，防止这些值先进入产物文件名或 DSH 配置。最终输出扫描只作为补充核验，不能代替这两处写盘前拒绝。
+
+凭据只在进程内存中使用。可用显式进程环境或仓外 `--keys-file`；自动发现规则见执行器文件头。报告只记来源和键名。`safety.mjs` 在公开结果与审计落盘前移除显式模型凭据变量、自定义凭据变量及已知敏感字段，覆盖原值、URI/重复 URI 编码、JSON 转义、base64/base64url 和 URL 用户信息、查询、片段；掩码不保留秘密前缀或长度。短凭据按完整值或分隔边界匹配，避免把干净主机名中的普通字母误删。该边界和最终输出扫描不替代完整仓库秘密扫描。测试使用合成凭据，不能将测试中的 `synthetic` 或 `stub` key 配到真实端点。
+
+HTTP 错误与未知网络、文件、浏览器或驱动异常只公开固定诊断类别和合法数值 HTTP 状态，不反射错误正文、原异常或 cause。公开对象复制不执行 getter、`toJSON` 或任意字符串强制转换；危险原型键和循环对象不能带出内容。供应商成功响应、任务标识、实际模型名或原始产品事件若需要脱敏，会保留 `publicSafety.redacted`，取消成功回执与验证，并冻结后续付费入口；独立取得的 token、图片用量或已有失败状态仍如实记录。
 
 ## profile 与任务
 
@@ -44,6 +50,10 @@ node scripts/acceptance/live.mjs --profile acceptance/profile.json --require-liv
 
 `environment`、三端与 server 地址、写入授权和夹具/残留声明由 profile/target 控制器统一处理。声明值与 CLI/父执行器档位冲突会拒绝。端点必须是无用户名、口令、查询或片段的 HTTP(S) 根。OpenAI 兼容根与 DSH Messages 根分别解析；模型和实际返回路由必须留档，换模仅认预声明的 `allowedModels`。
 
+`/health` 必须在成功 HTTP 响应中明确给出 `ok: true` 与 `service: "workloom-im-server"`。`client-runtime` 另须有普通、可读且未被替换的当前 `install-state.json`：完整 ready 状态、产品/版本、当前 UUID、端口、loopback 地址、产品清单与不可变载荷索引指纹均一致。身份检查复用仓内 `apps/desktop/electron/payload-integrity.cjs`，逐项校验实际不可变文件、链接和版本，并在校验后重读 ready 状态；不读取 mutable `.env` 或数据库状态。服务当前 UUID 与 PC 页实例/产品头和 HTML 产品元数据还须匹配。单独的 VERSION、可打开网页或沿用旧 UUID 均不能证明真实安装就绪。`local-preview` 仍是独立的本地管道档位，无法据此让生产或真实客户端通过。
+
+HTTP 探测拒绝重定向，并按实际流入字节限制健康正文为 64,000 字节、网页正文为 2,000,000 字节；声明大小与分块响应均受检查。网页身份复用与桌面启动器相同的 `apps/desktop/electron/product-surface.cjs`，只接受受控页面显式 head 中唯一、完整的产品 meta。注释、script/style/title/noscript 文本、template、属性文本、body 中的同名文字和重复标记均不能提供身份。该模块识别打包器生成的固定页面契约；它不承担通用 HTML 解析。
+
 图片任务声明 `images`（正整数）、`prompt` 与可选 `minArtifacts`；视频声明 `durationSeconds`（10–15 秒）、`prompt` 与可选 `durationRange`。`params` 不得覆盖模型、输入、数量或时长，不能用参数绕过已经预占的额度。组图模型逐轮或一次生成的返回数量都按实际计量；超量返回不能变成成功。
 
 ## 预算日志
@@ -68,6 +78,8 @@ node scripts/acceptance/live.mjs --profile acceptance/profile.json --require-liv
 `runDshTask` 只支持锁定的 `0.2.0-rc.2` 事件协议，并回读已安装 package 版本。模型凭据通过 `@deepseek-ai/dsh-llm-deepseek-api-key` 的 `apiKeyEnv` 传给子进程；显式 Messages 端点进 patch，密钥和 `rulesToken` 不得落盘。临时 HOME 必须处在本次输出目录；子进程只接收运行所需环境和显式模型变量。
 
 `audit.plugin.mjs` 监听上游双参数 `session/event(Session, SessionEvent)`，按会话 ID 与 seq 哈希、fsync 落盘。事件重放幂等；身份复用、缺号、损坏、尾部截断、凭据脱敏、未知 required event 都不能作为完成证据。`llm/stream` 每次请求/重试分别走共享预算，再取得真实 usage；缺失或不安全 usage、异常 stream 和未结算请求都保守持额并冻结。
+
+审计事件和 stream chunks 在计算 hash 与写文件前经过同一凭据边界；发生脱敏后审计不能恢复为可验收状态。DSH stdout、stderr 与未知原始 transcript 仅记 withheld 与字节/截断计数，不进入公开回执；最终答案须来自独立核验的 durable 事件。stdout 或事件里的凭据会冻结预算，未知 stderr 本身不覆盖已经核验的计量和终态。
 
 `usage.mjs` 按 durable `turn/start`、`step/start`、请求路由、assistant message/attempt、retry、step/end 和 turn/end 汇总完整生命周期，包含 cache buckets。成功同时需要进程退出 `0`、未截断、真实非空答案、completed turn、每次预算结算与事件累计相同、实际 provider/model 路由在允许范围、哈希链有效。终端文字 `TASK_COMPLETE` 本身不证明这些条件。
 
@@ -124,6 +136,9 @@ URL 只是来源。下载必须 HTTP 成功、非零字节且在大小界限内�
 
 ```sh
 node --test scripts/acceptance/lib/live/budget.test.mjs \
+  scripts/acceptance/lib/live/safety.test.mjs \
+  scripts/acceptance/lib/environment-safety.test.mjs \
+  scripts/acceptance/lib/client-identity.test.mjs \
   scripts/acceptance/lib/live/live-truth.test.mjs \
   scripts/acceptance/lib/live/providers.test.mjs \
   scripts/acceptance/lib/live/providers-http.test.mjs \
@@ -143,4 +158,4 @@ node --test scripts/acceptance/lib/live/media-decoder.test.mjs \
   scripts/acceptance/lib/live/live-cli-browser.test.mjs
 ```
 
-`dsh-process.test.mjs` 启动真实子进程并加载实际 audit/budget/usage 代码，但子进程的 DSH runtime metadata 和 provider 都是合成 fixture；它证明适配机制的物理请求计量与错误路径，不能证明官方完整 CLI 或真实供应商已通过。`live-cli-wire.test.mjs` 使用真实 CLI 和 loopback HTTP，验证非 selftest LLM 在供应商/DSH 登录前零调用、`expectedTokens` 不可绕过、内部 selftest 计量、媒体错误后持额并禁止后续全部模态、完整图片用量与交付失败分开、以及自定义凭据变量的错误体在写预算日志前即脱敏；`providers-http.test.mjs` 还通过真实 loopback HTTP 检查图片/视频的实际 fetch 超时。正式 LLM 仍然未验证；接通可信前置总量约束之前，不得以“补凭据重跑”宣称其已可执行。官方完整 runtime/真实客户端/真实付费模型的独立验收须单独披露，禁止用本目录测试替代。
+`dsh-process.test.mjs` 启动真实子进程并加载实际 audit/budget/usage 代码，但子进程的 DSH runtime metadata 和 provider 都是合成 fixture；它证明适配机制的物理请求计量、事件/stdout 脱敏冻结、未知 stderr 不回显及错误路径，不能证明官方完整 CLI 或真实供应商已通过。`live-cli-wire.test.mjs` 使用真实 CLI 和 loopback HTTP，验证非 selftest LLM 在供应商/DSH 登录前零调用、`expectedTokens` 不可绕过、内部 selftest 计量、媒体错误后持额并禁止后续全部模态、完整图片用量与交付失败分开、自定义凭据变量的错误体在写预算日志前即脱敏，以及返回模型含凭据时只保留实际生成量并阻断下一次请求；`providers-http.test.mjs` 还通过真实 loopback HTTP 检查图片/视频的实际 fetch 超时。`client-identity.test.mjs` 由普通合成字节生成真实索引和 ready 契约，覆盖完整正对照、文件/链接/索引漂移、旧状态、wrong port/host、服务实例与 web 产品不一致；这些契约测试不代表实际客户端安装成功。正式 LLM 仍然未验证；接通可信前置总量约束之前，不得以“补凭据重跑”宣称其已可执行。官方完整 runtime/真实客户端/真实付费模型的独立验收须单独披露，禁止用本目录测试替代。

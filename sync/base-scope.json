@@ -194,7 +194,13 @@
       "apps/desktop/electron/payload-integrity.cjs",
       "apps/desktop/electron/product-surface.cjs",
       "scripts/payload-integrity.mjs",
-      "docs/desktop-runtime-integrity-contract.md"
+      "docs/desktop-runtime-integrity-contract.md",
+      "scripts/acceptance/lib/client-identity.mjs",
+      "scripts/acceptance/lib/client-identity.test.mjs",
+      "apps/desktop/electron/payload-integrity.test.cjs",
+      "scripts/payload-integrity.test.mjs",
+      "scripts/acceptance/lib/live/safety.mjs",
+      "scripts/acceptance/lib/live/safety.test.mjs"
     ],
     "copiedFiles": {
       ".github/workflows/base-sync-heartbeat.yml": {

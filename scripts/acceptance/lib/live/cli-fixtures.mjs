@@ -7,7 +7,7 @@ import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const source = fileURLToPath(new URL("../../../../", import.meta.url));
-const closure = ["scripts/acceptance/live.mjs", "scripts/acceptance/lib/profile.mjs", "scripts/acceptance/lib/target.mjs", "scripts/acceptance/lib/playwright.mjs", "scripts/delivery/evidence.mjs", ...["assertions", "audit.plugin", "budget", "checks", "media", "providers", "stub-provider", "test-fixtures", "usage", "verification"].map((name) => `scripts/acceptance/lib/live/${name}.mjs`)];
+const closure = ["scripts/acceptance/live.mjs", "scripts/acceptance/lib/profile.mjs", "scripts/acceptance/lib/target.mjs", "scripts/acceptance/lib/client-identity.mjs", "scripts/acceptance/lib/playwright.mjs", "scripts/delivery/evidence.mjs", ...["assertions", "audit.plugin", "budget", "checks", "media", "providers", "safety", "stub-provider", "test-fixtures", "usage", "verification"].map((name) => `scripts/acceptance/lib/live/${name}.mjs`)];
 export const model = { id: "synthetic-model", kind: "llm", model: "synthetic-model", adapter: "model-gateway", apiKeyEnv: "SYNTHETIC_API_KEY", baseUrlEnv: "SYNTHETIC_BASE_URL" };
 export const llm = { id: "LLM-R1", kind: "llm", model: model.id, chain: "model-gateway", title: "synthetic reasoning", prompt: "synthetic", expect: ["STUB"] };
 export function fixture(t, overrides = {}) {

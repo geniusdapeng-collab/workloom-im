@@ -9,6 +9,7 @@
 import type pg from "pg";
 import { gatewayAppend } from "../workdata/gateway.js";
 import { getChannel, type ApprovalChannel } from "./registry.js";
+import { ChannelRecordingError, channelDiagnosticText, safeChannelDiagnostic, safeChannelLabel, type SafeChannelDiagnostic } from "./safe-diagnostic.js";
 
 /** 通道审批卡片（通道无关的中间结构；各驱动自行映射为 AI Card/富文本） */
 export interface ApprovalCard {
@@ -72,9 +73,12 @@ export interface ChannelDriver {
 }
 
 export class ChannelDriverError extends Error {
+  readonly diagnostic: SafeChannelDiagnostic;
   constructor(channel: string, cause: unknown) {
-    super(`通道「${channel}」出站失败：${cause instanceof Error ? cause.message : String(cause)}`);
+    const diagnostic = safeChannelDiagnostic(cause);
+    super(`通道「${safeChannelLabel(channel)}」出站失败（${channelDiagnosticText(diagnostic)}）`);
     this.name = "ChannelDriverError";
+    this.diagnostic = Object.freeze(diagnostic);
   }
 }
 
@@ -151,8 +155,10 @@ export async function sendApprovalCard(
     return { channelMsgId: sent.channelMsgId, eventId: ev.eventId };
   } catch (err) {
     // 已发未留痕：补写补偿事件（best-effort 一次；失败则抛错交人工对账）
-    console.warn(`[im-channels] approval.card.sent 留痕写失败（审批 ${card.approvalId} 已外发 ${sent.channelMsgId}），补写补偿事件：`, err instanceof Error ? err.message : err);
-    const comp = await gatewayAppend(gateway, { ...scope, actor }, {
+    const diagnostic = safeChannelDiagnostic(err);
+    console.warn("[im-channels] approval.card.sent 留痕写失败；卡片已外发，补写补偿事件：", diagnostic);
+    let comp: Awaited<ReturnType<typeof gatewayAppend>>;
+    try { comp = await gatewayAppend(gateway, { ...scope, actor }, {
       ...base,
       object: { type: "approval", id: card.approvalId },
       decision: {
@@ -161,11 +167,11 @@ export async function sendApprovalCard(
           original_action: "approval.card.sent",
           approval_id: card.approvalId, event_id: card.eventId,
           conversation_id: target.conversationId, channel_msg_id: sent.channelMsgId,
-          send_error: err instanceof Error ? err.message : String(err),
+          send_error: channelDiagnosticText(diagnostic),
         },
         basis: ["补偿事件：卡片已外发但 approval.card.sent 留痕写失败（外发不可撤回，先发后写口径）"],
       },
-    });
+    }); } catch (compensationError) { throw new ChannelRecordingError(compensationError); }
     return { channelMsgId: sent.channelMsgId, eventId: comp.eventId, compensated: true };
   }
 }

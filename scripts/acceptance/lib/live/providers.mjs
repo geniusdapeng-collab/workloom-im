@@ -30,6 +30,7 @@ import { loadChromium } from "../playwright.mjs";
 import { readDshAudit } from "./audit.plugin.mjs";
 import { foldDshUsage, normalizeOpenAiUsage } from "./usage.mjs";
 import { evaluateEventAssertion, freshReceipt, realExecution } from "./assertions.mjs";
+import { diagnosticReason, publicDiagnostic, publicResult, publicUrl, safeError, safeHttpEndpoint, sanitizePublic } from "./safety.mjs";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const modelIdentity = (value) => typeof value === "string" && value.trim() ? value.trim() : null;
@@ -108,7 +109,7 @@ export function resolveLiveModels(models = [], env = process.env) {
       // 端点缺失不是阻断项：两个适配器都有内置默认端点（可用环境变量覆盖）
       if (!declaredBase.value) warnings.push(`端点未显式配置，使用内置默认 ${DSH_DEEPSEEK_DEFAULTS.baseURL}（可用 ${unique([m.baseUrlEnv, ...DSH_DEEPSEEK_DEFAULTS.fallbackBaseEnvs]).join(" / ")} 覆盖）`);
       if (adapter === "model-gateway" && String(openAiBase.value ?? "") && String(openAiBase.value) !== resolved.baseUrl) {
-        warnings.push(`model-gateway 端点按 OpenAI 兼容根归一：${openAiBase.value} → ${resolved.baseUrl}（Anthropic 兼容根不接受 /chat/completions）`);
+        warnings.push("model-gateway 端点按 OpenAI 兼容根归一（Anthropic 兼容根不接受 /chat/completions）");
       }
       if (!m.model) resolved.modelNote = `model 未显式声明，按端点推导/内置默认 ${resolved.model}（dsh 内置目录：deepseek-flash 支持文本+图像）`;
     } else if (adapter === "gen-http" || adapter === "arkcli") {
@@ -122,7 +123,13 @@ export function resolveLiveModels(models = [], env = process.env) {
       resolved.credentialEnv = null;
       resolved.model = m.model ?? null;
     }
-    return { ...resolved, ready: missing.length === 0, missing, warnings };
+    if (resolved.baseUrl && !safeHttpEndpoint(resolved.baseUrl)) {
+      missing.push("模型端点必须是无凭据、查询或片段的 HTTP(S) 根");
+      resolved.baseUrl = publicUrl(resolved.baseUrl);
+    }
+    const clean = sanitizePublic({ ...resolved, ready: missing.length === 0, missing, warnings }, { env, credentialEnvs: unique([m.apiKeyEnv, resolved.credentialEnv]) });
+    if (clean.changed) { clean.value.ready = false; clean.value.missing.push("模型声明含需脱敏内容，不能授权真实 transport"); }
+    return clean.value;
   });
 }
 
@@ -189,7 +196,7 @@ function renderLivePatch({ repoRoot, auditFile, budgetConfigFile, rulesUrl, rule
  * 跑一次真实的 dsh headless 任务。
  * @returns {{status:"ok"|"failed"|"blocked", answer, audit, fenceHits, ms, model, evidence, receipt}}
  */
-export async function runDshTask({
+async function runDshTaskInternal({
   repoRoot,
   workDir,
   model,
@@ -235,7 +242,7 @@ export async function runDshTask({
   mkdirSync(join(dshHome, "profiles", "headless"), { recursive: true });
   const auditFile = join(workDir, `dsh-audit-${taskId}-${budgetOptions.runId}.jsonl`);
   const budgetConfigFile = join(workDir, `dsh-budget-${taskId}.json`);
-  writeFileSync(budgetConfigFile, JSON.stringify({ ...budgetOptions, taskId, expectedTokens, expectedModel: model, allowedModels }, null, 1), { mode: 0o600 });
+  writeFileSync(budgetConfigFile, JSON.stringify({ ...budgetOptions, taskId, expectedTokens, expectedModel: model, allowedModels, credentialEnvs: unique([...(budgetOptions.credentialEnvs ?? []), "DEEPSEEK_API_KEY"]) }, null, 1), { mode: 0o600 });
   const processEnv = { PATH: `${dirname(process.execPath)}${delimiter}${process.env.PATH ?? ""}`, HOME: dshHome, ...(process.env.NODE_PATH ? { NODE_PATH: process.env.NODE_PATH } : {}), ...env, DSH_HOME: dshHome };
 
   // ① 初始化 headless profile（幂等：已存在 package.json 即跳过）
@@ -271,7 +278,8 @@ export async function runDshTask({
   });
   const ms = Date.now() - started;
   const out = `${res.stdout}${res.stderr}`;
-  const fenceHits = (out.match(/\[workloom-fence\] judge tool=[^\n]*/g) ?? []).map((l) => l.trim());
+  const outputSafety = sanitizePublic(out, { env, credentialEnvs: ["DEEPSEEK_API_KEY"] });
+  const fenceHits = (out.match(/\[workloom-fence\] judge tool=[^\n]*/g) ?? []).map(() => ({ source: "process-output", withheld: true }));
   const audit = readDshAudit(auditFile);
   const usage = audit.ok ? foldDshUsage(audit.events) : { complete: false, completed: false, totalTokens: null, calls: null, routes: [], reason: audit.reason };
   let taskReservations = budget.summary().reservations.filter((row) => row.taskId === taskId);
@@ -282,9 +290,9 @@ export async function runDshTask({
   const called = taskReservations.length > 0;
   const measured = usage.complete === true && taskReservations.length === usage.calls && taskReservations.every((row) => row.settlement?.measured === true) && taskReservations.reduce((sum, row) => sum + row.settlement.tokens, 0) === usage.totalTokens;
   const routeOk = usage.routes.length > 0 && usage.routes.every((route) => route.provider === "deepseek-official" && (route.model === model || allowedModels.includes(route.model)));
-  if (called && (!measured || audit.redacted)) budget.freeze({ taskId, reason: audit.redacted ? "DSH 事件脱敏后不能成为真实成功证据" : usage.reason ?? "DSH durable usage 与逐请求预算结算不一致" });
+  if (called && (!measured || audit.redacted || outputSafety.changed)) budget.freeze({ taskId, reason: audit.redacted || outputSafety.changed ? "DSH 输出/事件脱敏后不能成为真实成功证据" : usage.reason ?? "DSH durable usage 与逐请求预算结算不一致" });
   const budgetState = budget.summary();
-  const blocked = !measured || !routeOk || audit.redacted || budgetState.frozenBy.length > 0 || budgetState.blocked.some((row) => row.taskId === taskId);
+  const blocked = !measured || !routeOk || audit.redacted || outputSafety.changed || budgetState.frozenBy.length > 0 || budgetState.blocked.some((row) => row.taskId === taskId);
   const answer = usage.answer ?? null;
   const ok = res.code === 0 && !res.truncated && audit.ok && measured && routeOk && usage.completed && Boolean(answer?.trim()) && !blocked && budgetState.exceeded.length === 0;
   const chain = { ok: audit.ok && !audit.redacted, detail: audit.ok ? `完整 ${audit.lines} 条；sha256 ${audit.head}` : audit.reason };
@@ -303,7 +311,8 @@ export async function runDshTask({
     requestedModel: model,
     audit: { file: auditFile, lines: audit.lines, chain },
     fenceHits,
-    evidence: { transcript: out.slice(-8000), command: `${bin} --profile headless <task>`, patchPath, budgetConfigFile, runtimeVersion: version },
+    evidence: { processOutput: { withheld: true, stdoutBytes: Buffer.byteLength(res.stdout), stderrBytes: Buffer.byteLength(res.stderr), truncated: res.truncated === true }, command: `${bin} --profile headless <task>`, patchPath, budgetConfigFile, runtimeVersion: version },
+    ...(audit.redacted || outputSafety.changed ? { publicSafety: { redacted: true, category: "evidence_redacted" } } : {}),
     receipt: {
       kind: "dsh-harness",
       model: actualModel,
@@ -320,7 +329,6 @@ export async function runDshTask({
       synced: ok,
       verified_at: new Date().toISOString(),
     },
-    raw: out.slice(-2000),
   };
 }
 
@@ -343,7 +351,7 @@ function runProcess(cmd, args, { cwd, env, timeoutMs }) {
     };
     child.stdout.on("data", (d) => capture(d, "stdout"));
     child.stderr.on("data", (d) => capture(d, "stderr"));
-    child.on("error", (err) => { clearTimeout(timer); resolve({ code: -1, stdout, stderr: `${stderr}\n${err.message}` }); });
+    child.on("error", () => { clearTimeout(timer); resolve({ code: -1, stdout, stderr: `${stderr}\nDSH process launch failed` }); });
     child.on("close", (code) => { clearTimeout(timer); resolve({ code: killed ? -9 : (code ?? -1), stdout, stderr, truncated }); });
   });
 }
@@ -355,7 +363,7 @@ function runProcess(cmd, args, { cwd, env, timeoutMs }) {
 export const LLM_TOTAL_BUDGET_BLOCK = "文本模型入口缺少可信的输入、输出及重试总 token 用量上界；expectedTokens 只是估算，DSH maxTokens 仅约束输出。正式非 selftest 执行在调用前阻断，尚未预占、登录、启动 DSH 或请求供应商，真实 LLM 链未验证";
 
 /** Controlled low-level transport only; formal CLI blocks external LLM admission before this adapter. */
-export async function runChatTask({ resolved, prompt, timeoutMs = 180_000, env = process.env, image = null }) {
+async function runChatTaskInternal({ resolved, prompt, timeoutMs = 180_000, env = process.env, image = null }) {
   if (!resolved?.ready) return { status: "blocked", called: false, reason: resolved?.missing?.join("；") ?? "文本模型未配置" };
   const apiKey = pickEnv([resolved.credentialEnv, DSH_DEEPSEEK_DEFAULTS.apiKeyEnv, "LLM_API_KEY"], env).value;
   if (!apiKey) return { status: "blocked", called: false, reason: "文本模型凭据未配置" };
@@ -373,7 +381,7 @@ export async function runChatTask({ resolved, prompt, timeoutMs = 180_000, env =
     ]
     : prompt;
   const started = Date.now();
-  const unknown = (status, reason) => ({ status, reason, called: true, tokens: null, usage: { complete: false, calls: 1, totalTokens: null, reason: "已尝试请求，供应商实际计量不可得" }, ms: Date.now() - started,
+  const unknown = (status, reason, diagnostic) => ({ status, reason, ...(diagnostic ? { diagnostic } : {}), called: true, tokens: null, usage: { complete: false, calls: 1, totalTokens: null, reason: "已尝试请求，供应商实际计量不可得" }, ms: Date.now() - started,
     receipt: { kind: "model-gateway", endpoint: url, id: null, model: null, usageComplete: false, tokens: null, synced: false, verified_at: new Date().toISOString() } });
   let res;
   try {
@@ -384,13 +392,14 @@ export async function runChatTask({ resolved, prompt, timeoutMs = 180_000, env =
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (err) {
-    return unknown("blocked", `模型调用失败/超时，实际用量未验证：${String(err?.message ?? err).slice(0, 200)}`);
+    return unknown("blocked", diagnosticReason(err, "模型调用失败/超时，实际用量未验证"), publicDiagnostic(err));
   }
   const text = await res.text().catch(() => "");
   let json = null;
   try { json = JSON.parse(text); } catch { /* 非 JSON 错误体 */ }
   if (!res.ok) {
-    return unknown([401, 403].includes(res.status) ? "blocked" : "failed", `HTTP ${res.status}：${text.slice(0, 300)}`);
+    const error = { status: res.status };
+    return unknown([401, 403].includes(res.status) ? "blocked" : "failed", diagnosticReason(error, "模型 HTTP 调用失败，实际用量未验证"), publicDiagnostic(error));
   }
   const answer = typeof json?.choices?.[0]?.message?.content === "string" ? json.choices[0].message.content : "";
   const usage = normalizeOpenAiUsage(json?.usage);
@@ -441,13 +450,14 @@ function supportsSequentialImageGeneration(model) {
 }
 
 /** 生图（同步 API）：POST {base}/images/generations → data[].url */
-export async function runImageTask({ resolved, task, timeoutMs = 300_000, env = process.env, artifactsDir }) {
+async function runImageTaskInternal({ resolved, task, timeoutMs = 300_000, env = process.env, artifactsDir }) {
   const preflight = (reason) => ({ status: "blocked", called: false, measurementComplete: false, produced: null, reason });
   if (!resolved?.ready) return preflight(resolved?.missing?.join("；") ?? "图片模型未配置");
   try { assertSafeTaskId(task.id); } catch (error) { return preflight(error.message); }
   const apiKey = pickEnv([resolved.credentialEnv, "SEEDREAM_API_KEY", "VOLCENGINE_ARK_API_KEY", "ARK_API_KEY"], env).value;
   if (!apiKey) return preflight("图片模型凭据未配置");
   const base = String(resolved.baseUrl).replace(/\/$/, "");
+  if (!safeHttpEndpoint(base)) return preflight("图片模型端点必须是无凭据、查询或片段的 HTTP(S) 根");
   const count = Number(task.images ?? 1);
   if (!Number.isSafeInteger(count) || count <= 0 || count > LIVE_BUDGET_CAPS.maxImages) return preflight("图片张数必须是配额范围内的正整数");
   if (["model", "prompt", "response_format", "sequential_image_generation", "sequential_image_generation_options", "n"].some((key) => Object.hasOwn(task.params ?? {}, key))) {
@@ -499,12 +509,12 @@ export async function runImageTask({ resolved, task, timeoutMs = 300_000, env = 
         signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (err) {
-      return { error: `生图调用失败/超时，实际张数未验证：${String(err?.message ?? err).slice(0, 200)}`, urls: [], measurementComplete: false };
+      return { error: diagnosticReason(err, "生图调用失败/超时，实际张数未验证"), diagnostic: publicDiagnostic(err), urls: [], measurementComplete: false };
     }
     const text = await res.text().catch(() => "");
     let json = null;
     try { json = JSON.parse(text); } catch { /* 非 JSON */ }
-    if (!res.ok) return { error: `HTTP ${res.status}：${text.slice(0, 300)}；实际张数未验证`, urls: [], measurementComplete: false };
+    if (!res.ok) return { error: diagnosticReason({ status: res.status }, "生图 HTTP 调用失败，实际张数未验证"), diagnostic: publicDiagnostic({ status: res.status }), urls: [], measurementComplete: false };
     const urls = Array.isArray(json?.data) ? json.data.map((d) => d?.url).filter((url) => typeof url === "string" && url) : [];
     const generatedImages = json?.usage?.generated_images;
     // URL 数量只证明观察到的输出；只有完整供应商 usage 才能回填实际张数。
@@ -530,7 +540,7 @@ export async function runImageTask({ resolved, task, timeoutMs = 300_000, env = 
     lastJson = r.json ?? lastJson;
     if (r.error) {
       // 未知轮次立即停止；此前返回 URL 与可信部分用量留在回执，不能再调用下一轮。
-      return finish(r.measurementComplete ? "failed" : "blocked", r.error, r.measurementComplete === true);
+      return { ...finish(r.measurementComplete ? "failed" : "blocked", r.error, r.measurementComplete === true), ...(r.diagnostic ? { diagnostic: r.diagnostic } : {}) };
     }
     if (!groupable && urls.length >= count) break;
   }
@@ -548,13 +558,14 @@ export async function runImageTask({ resolved, task, timeoutMs = 300_000, env = 
 }
 
 /** 生视频（异步任务制）：POST {base}/contents/generations/tasks → GET …/tasks/{id} */
-export async function runVideoTask({ resolved, task, timeoutMs = 20 * 60_000, env = process.env, artifactsDir, pollMs = 8000 }) {
+async function runVideoTaskInternal({ resolved, task, timeoutMs = 20 * 60_000, env = process.env, artifactsDir, pollMs = 8000 }) {
   const preflight = (reason) => ({ status: "blocked", called: false, measurementComplete: false, durationSeconds: null, reason });
   if (!resolved?.ready) return preflight(resolved?.missing?.join("；") ?? "视频模型未配置");
   try { assertSafeTaskId(task.id); } catch (error) { return preflight(error.message); }
   const apiKey = pickEnv([resolved.credentialEnv, "SEEDANCE_API_KEY", "VOLCENGINE_ARK_API_KEY", "ARK_API_KEY"], env).value;
   if (!apiKey) return preflight("视频模型凭据未配置");
   const base = String(resolved.baseUrl).replace(/\/$/, "");
+  if (!safeHttpEndpoint(base)) return preflight("视频模型端点必须是无凭据、查询或片段的 HTTP(S) 根");
   const duration = Number(task.durationSeconds ?? 12);
   if (!Number.isFinite(duration) || duration < LIVE_BUDGET_CAPS.minVideoSeconds || duration > LIVE_BUDGET_CAPS.maxVideoSeconds) return preflight("视频时长超出配额允许范围");
   if (["model", "content", "duration"].some((key) => Object.hasOwn(task.params ?? {}, key))) return preflight("视频 params 不得覆盖模型、内容或已占额时长");
@@ -562,7 +573,7 @@ export async function runVideoTask({ resolved, task, timeoutMs = 20 * 60_000, en
   let taskId = null;
   let last = null;
   let actualModel = null;
-  const unknown = (reason) => ({ status: "blocked", reason, called: true, measurementComplete: false,
+  const unknown = (reason, diagnostic) => ({ status: "blocked", reason, ...(diagnostic ? { diagnostic } : {}), called: true, measurementComplete: false,
     ms: Date.now() - started, model: actualModel, requestedModel: resolved.model, taskId, durationSeconds: null, artifacts: [],
     receipt: { kind: "gen-http.video", model: actualModel, requestedModel: resolved.model, endpoint: `${base}/contents/generations/tasks`, taskId,
       durationSeconds: null, reportedDurationSeconds: last?.duration ?? last?.data?.duration ?? null,
@@ -584,14 +595,15 @@ export async function runVideoTask({ resolved, task, timeoutMs = 20 * 60_000, en
       signal: AbortSignal.timeout(Math.max(1, Math.min(timeoutMs, 120_000))),
     });
   } catch (err) {
-    return unknown(`视频提交失败/超时，实际时长未验证：${String(err?.message ?? err).slice(0, 200)}`);
+    return unknown(diagnosticReason(err, "视频提交失败/超时，实际时长未验证"), publicDiagnostic(err));
   }
   const submitText = await submit.text().catch(() => "");
   let submitJson = null;
   try { submitJson = JSON.parse(submitText); } catch { /* 非 JSON */ }
-  if (!submit.ok) return unknown(`提交 HTTP ${submit.status}：${submitText.slice(0, 300)}；实际时长未验证`);
+  if (!submit.ok) return unknown(diagnosticReason({ status: submit.status }, "视频提交 HTTP 调用失败，实际时长未验证"), publicDiagnostic({ status: submit.status }));
   const submittedId = submitJson?.id ?? submitJson?.data?.id;
-  if (typeof submittedId !== "string" || !submittedId.trim()) return unknown(`未返回有效 task_id：${submitText.slice(0, 200)}；实际时长未验证`);
+  if (typeof submittedId !== "string" || !submittedId.trim()) return unknown("未返回有效 task_id；实际时长未验证");
+  if (sanitizePublic(submittedId, { env, credentialEnvs: [resolved.credentialEnv] }).changed) return { ...unknown("供应商 task_id 含需脱敏内容，禁止继续轮询"), publicSafety: { redacted: true, category: "evidence_redacted" } };
   taskId = submittedId;
 
   while (Date.now() - started < timeoutMs) {
@@ -600,10 +612,10 @@ export async function runVideoTask({ resolved, task, timeoutMs = 20 * 60_000, en
     const r = await fetch(`${base}/contents/generations/tasks/${encodeURIComponent(taskId)}`, {
       headers: { authorization: `Bearer ${apiKey}` },
       signal: AbortSignal.timeout(Math.max(1, Math.min(60_000, timeoutMs - (Date.now() - started)))),
-    }).catch((err) => ({ ok: false, status: 0, text: async () => String(err?.message ?? err) }));
+    }).catch((err) => ({ ok: false, status: 0, diagnostic: publicDiagnostic(err), text: async () => "" }));
     const text = await r.text().catch(() => "");
-    try { last = JSON.parse(text); } catch { last = { raw: text.slice(0, 200) }; }
-    if (!r.ok) return unknown(`视频轮询 HTTP ${r.status}；实际时长未验证`);
+    try { last = JSON.parse(text); } catch { last = null; }
+    if (!r.ok) return unknown(r.status ? diagnosticReason({ status: r.status }, "视频轮询失败，实际时长未验证") : "视频轮询连接失败/超时，实际时长未验证", r.diagnostic ?? publicDiagnostic({ status: r.status }));
     if ((last?.id ?? last?.data?.id) !== taskId) return unknown("视频轮询返回的任务身份与提交不一致；实际时长未验证");
     actualModel = modelIdentity(last?.model ?? last?.data?.model);
     const status = last?.status ?? last?.data?.status;
@@ -647,10 +659,10 @@ export async function runVideoTask({ resolved, task, timeoutMs = 20 * 60_000, en
       };
     }
     if (["failed", "cancelled", "canceled", "expired"].includes(status)) {
-      return unknown(`生成任务 ${status}，实际时长未验证：${JSON.stringify(last).slice(0, 300)}`);
+      return unknown(`生成任务 ${status}，实际时长未验证`, { category: "upstream_task_failed" });
     }
   }
-  return unknown(`轮询超时（${Math.round(timeoutMs / 1000)}s），实际时长未验证；最后状态：${JSON.stringify(last).slice(0, 200)}`);
+  return unknown(`轮询超时（${Math.round(timeoutMs / 1000)}s），实际时长未验证`, { category: "timeout" });
 }
 
 /* ------------------------------------------------------------------ */
@@ -660,15 +672,17 @@ export async function runVideoTask({ resolved, task, timeoutMs = 20 * 60_000, en
 export const PRODUCT_DISPATCH_BUDGET_BLOCK = "产品入口缺少可信的服务端逐请求预算预占/结算接口；派单的意图分类、规划与回答可能隐式调用模型，requireModel:false 不能证明无费用。尚未登录或派单，生产产品模型链未验证";
 
 export async function loginAsMember({ apiUrl, workspaceSlug, memberNo = "MEM-001", timeoutMs = 20_000 }) {
-  const res = await fetch(`${apiUrl}/trpc/auth.loginAs`, {
+  if (!safeHttpEndpoint(apiUrl)) throw safeError(null, "登录目标必须是无凭据、查询或片段的 HTTP(S) 根", "invalid_endpoint");
+  let res;
+  try { res = await fetch(`${apiUrl}/trpc/auth.loginAs`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ workspaceSlug, memberNo }),
     signal: AbortSignal.timeout(timeoutMs),
-  });
+  }); } catch (error) { throw safeError(error, "登录请求失败/超时"); }
   const json = await res.json().catch(() => ({}));
   const token = json?.result?.data?.token;
-  if (!token) throw new Error(`登录失败（loginAs）：${JSON.stringify(json).slice(0, 200)}`);
+  if (!res.ok || typeof token !== "string" || !token.trim()) throw safeError({ status: res.status }, "登录失败（loginAs）");
   return token;
 }
 
@@ -680,7 +694,7 @@ export async function loginAsMember({ apiUrl, workspaceSlug, memberNo = "MEM-001
  *   - `http`：{ url, status, contains }
  *   - `sql` ：{ query, params, op, value }（需调用方提供 pg client；生产档位默认禁用）
  */
-export async function runProductDispatchTask({
+async function runProductDispatchTaskInternal({
   apiUrl,
   token,
   task,
@@ -690,6 +704,7 @@ export async function runProductDispatchTask({
   allowDb = false,
 }) {
   if (task?.requireModel === true) return { status: "blocked", called: false, reason: PRODUCT_DISPATCH_BUDGET_BLOCK, ms: 0 };
+  if (!safeHttpEndpoint(apiUrl)) return { status: "blocked", called: false, reason: "产品端点必须是无凭据、查询或片段的 HTTP(S) 根", ms: 0 };
   const started = Date.now();
   const headers = { "content-type": "application/json", authorization: `Bearer ${token}` };
   let d = {};
@@ -888,7 +903,7 @@ export async function createMultimodalFixture({ repoRoot, outDir, expectToken = 
     }
     return { path: target, kind: "generated", expectToken };
   } catch (err) {
-    return { path: null, kind: "unavailable", reason: `playwright 渲染夹具失败：${String(err?.message ?? err).slice(0, 160)}` };
+    return { path: null, kind: "unavailable", reason: diagnosticReason(err, "playwright 渲染夹具失败", "fixture_unavailable"), diagnostic: publicDiagnostic(err, "fixture_unavailable") };
   }
 }
 
@@ -900,3 +915,26 @@ export function readImageFixture(path) {
 }
 
 export { maskSecret };
+
+function evidenceOptions(options) {
+  return { env: { ...process.env, ...(options.env ?? {}) }, credentialEnvs: [options.resolved?.credentialEnv, ...(options.budgetOptions?.credentialEnvs ?? [])].filter(Boolean), secrets: [options.token, options.rulesToken].filter((value) => typeof value === "string" && value) };
+}
+async function publicAdapter(implementation, options) {
+  try {
+    const safety = evidenceOptions(options);
+    // Artifact names and DSH task/model config are written before completion.
+    // Reject private identifiers before the implementation can perform I/O.
+    const metadata = { taskId: options.taskId ?? options.task?.id ?? null,
+      chain: options.task?.chain ?? null, model: options.model ?? options.resolved?.model ?? null,
+      allowedModels: options.allowedModels ?? null };
+    if (sanitizePublic(metadata, safety).changed) return { status: "blocked", called: false, measurementComplete: false,
+      reason: "适配器身份/模型声明含需脱敏内容，尚未执行外部调用或写入任务配置", diagnostic: { category: "adapter_metadata_private" } };
+    return publicResult(await implementation(options), safety);
+  }
+  catch (error) { throw safeError(error, "验收适配器执行失败，证据/用量未验证", "adapter_unavailable"); }
+}
+export const runDshTask = (options) => publicAdapter(runDshTaskInternal, options);
+export const runChatTask = (options) => publicAdapter(runChatTaskInternal, options);
+export const runImageTask = (options) => publicAdapter(runImageTaskInternal, options);
+export const runVideoTask = (options) => publicAdapter(runVideoTaskInternal, options);
+export const runProductDispatchTask = (options) => publicAdapter(runProductDispatchTaskInternal, options);

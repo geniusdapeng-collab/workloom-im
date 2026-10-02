@@ -1,7 +1,7 @@
 /** Actual CLI + loopback HTTP; all provider keys/data are synthetic and no external calls occur. */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -28,6 +28,56 @@ function child(f, flags = [], extraEnv = {}) {
   });
 }
 
+test("live CLI setup: malformed profile parser errors cannot reflect an inherited credential", async (t) => {
+  const secret = ["SYNTHETIC", "SETUP", "KEY"].join("_");
+  const s = await server(t, () => ({ choices: [], usage: {} }));
+  const f = fixture(t);
+  writeFileSync(join(f.repo, "acceptance/profile.json"), secret);
+  const result = await child(f, [], { SYNTHETIC_API_KEY: secret, SYNTHETIC_BASE_URL: s.url });
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout.includes(secret), false); assert.equal(result.stderr.includes(secret), false);
+  assert.equal(existsSync(join(f.out, "budget-ledger.jsonl")), false);
+  assert.equal(existsSync(`${f.out}.run-lock`), false);
+  assert.equal(s.calls.length, 0);
+});
+
+test("live CLI setup: duplicate credential-bearing task ids fail safely and close a selftest server before admission", async (t) => {
+  const secret = ["SYNTHETIC", "SETUP", "KEY"].join("_");
+  const s = await server(t, () => ({ choices: [], usage: {} }));
+  const input = { ...llm, id: secret };
+  for (const flags of [[], ["--selftest"]]) {
+    const f = fixture(t, { live: { enabled: true, models: [model], tasks: [input, input] } });
+    const result = await child(f, flags, { SYNTHETIC_API_KEY: secret, SYNTHETIC_BASE_URL: s.url });
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout.includes(secret), false); assert.equal(result.stderr.includes(secret), false);
+    assert.equal(existsSync(join(f.out, "budget-ledger.jsonl")), false);
+    assert.equal(existsSync(`${f.out}.run-lock`), false);
+    assert.equal(s.calls.length, 0);
+  }
+});
+
+test("live CLI setup: credential-bearing task metadata never reaches a fsynced budget or provider I/O", async (t) => {
+  const secret = ["SYNTHETIC", "METADATA", "KEY"].join("_");
+  for (const field of ["id", "chain"]) for (const value of [secret, Buffer.from(secret).toString("base64url")]) {
+    let f;
+    let observedSecretInLedger = false;
+    const s = await mediaServer(t, "image-known-usage", ({ url }) => {
+      if (url === "/images/generations") observedSecretInLedger ||= readFileSync(join(f.out, "budget-ledger.jsonl"), "utf8").includes(value);
+    });
+    const task = { ...imageTask, chain: "gen-http", [field]: value };
+    f = fixture(t, mediaProfile(s.url, [task]));
+    const result = await child(f, [], { SYNTHETIC_API_KEY: secret, SYNTHETIC_BASE_URL: s.url });
+    assert.equal(result.status, 1);
+    assert.equal(observedSecretInLedger, false);
+    assert.equal(s.calls.length, 0);
+    assert.equal(existsSync(join(f.out, "budget-ledger.jsonl")), false);
+    assert.equal(existsSync(`${f.out}.run-lock`), false);
+    for (const output of [result.stdout, result.stderr]) {
+      assert.equal(output.includes(secret), false); assert.equal(output.includes(value), false);
+    }
+  }
+});
+
 test("live CLI wire: opaque product tasks stop before login/dispatch even when requireModel is false", async (t) => {
   const s = await server(t, () => { throw new Error("no provider is authorized"); });
   for (const requireModel of [true, false]) {
@@ -48,7 +98,8 @@ test("live CLI wire: missing media usage freezes later paid tasks, retains reser
   const result = await child(f, [], { CUSTOM_MODEL_ACCESS: secret, SYNTHETIC_BASE_URL: s.url }); assert.equal(result.status, 2, result.stderr);
   const actual = report(f); assert.equal(actual.tasks[0].status, "blocked"); assert.equal(actual.tasks[1].status, "blocked"); assert.equal(actual.budget.measurementComplete, false);
   assert.equal(actual.budget.actual.images, 0); assert.equal(actual.budget.unmeasured.images, 1); assert.equal(actual.budget.used.images, 1); assert.equal(s.calls.filter((call) => call.url === "/images/generations").length, 1);
-  assert.equal(actual.secretScan.passed, true); assert.equal(actual.tasks[0].reason.includes("[REDACTED]"), true);
+  assert.equal(actual.secretScan.passed, true); assert.match(actual.tasks[0].reason, /upstream_authentication|HTTP 403/);
+  assert.equal(actual.tasks[0].diagnostic.category, "upstream_authentication");
   for (const value of [JSON.stringify(actual), result.stdout, result.stderr, readFileSync(join(f.out, "transcripts/IMG-01.json"), "utf8"), readFileSync(join(f.out, "receipts/IMG-01.json"), "utf8"), readFileSync(join(f.out, "budget-ledger.jsonl"), "utf8")]) assert.equal(value.includes(secret), false);
 });
 
@@ -79,18 +130,19 @@ test("live CLI: invalid timeout and duplicate valued flags reject before output 
   const f = fixture(t); const result = run(f, ["--timeout-s", "1", "--timeout-s", "2"]); assert.equal(result.status, 1); assert.equal(existsSync(join(f.out, "budget-ledger.jsonl")), false);
 });
 
-async function mediaServer(t, mode) {
+async function mediaServer(t, mode, observe = null) {
   const calls = [];
   const instance = http.createServer(async (req, res) => {
     let text = ""; for await (const bytes of req) text += bytes;
     const input = text ? JSON.parse(text) : null; calls.push({ method: req.method, url: req.url, input });
+    if (observe) observe({ url: req.url, input });
     const json = (status, body) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(body)); };
     const url = `http://127.0.0.1:${instance.address().port}`;
     if (req.url === "/images/generations") {
       if (mode === "image-echo-key") return json(403, { error: `synthetic echoed credential ${String(req.headers.authorization ?? "").replace(/^Bearer /u, "")}` });
       if (mode === "image-network") return req.socket.destroy();
       if (mode === "image-http" || mode === "image-partial" && calls.filter((call) => call.url === req.url).length > 1) return json(403, { error: "synthetic image denied" });
-      return json(200, { model: input.model, usage: mode === "image-missing-usage" ? undefined : { generated_images: 1 }, data: [{ url: `${url}/unreadable.png` }] });
+      return json(200, { model: mode === "image-secret-model" ? String(req.headers.authorization ?? "").replace(/^Bearer /u, "") : input.model, usage: mode === "image-missing-usage" ? undefined : { generated_images: 1 }, data: [{ url: `${url}/unreadable.png` }] });
     }
     if (req.url === "/contents/generations/tasks") return mode === "video-submit-http" ? json(403, { error: "synthetic submit denied" }) : json(200, { id: "synthetic-video-1" });
     if (req.url === "/contents/generations/tasks/synthetic-video-1") return mode === "video-poll-http" ? json(403, { error: "synthetic poll denied" })
@@ -133,4 +185,17 @@ test("live CLI media budget: known supplier image usage is retained even if deli
   const actual = report(f); assert.equal(actual.tasks[0].status, "failed"); assert.equal(actual.tasks[0].measurementComplete, true); assert.equal(actual.tasks[0].receipt.synced, false);
   assert.equal(actual.budget.actual.images, 2); assert.equal(actual.budget.unmeasured.images, 0); assert.equal(actual.budget.measurementComplete, true); assert.deepEqual(actual.budget.frozenBy, []);
   assert.equal(actual.tasks[1].status, "failed"); assert.equal(actual.tasks[1].measurementComplete, true); assert.equal(s.calls.filter((call) => call.url === "/images/generations").length, 2);
+});
+
+test("live CLI safety: redacted returned model freezes later paid I/O while retaining the actual supplier image count", async (t) => {
+  const secret = ["synthetic", "only", "returned", "model", "credential"].join("-");
+  const s = await mediaServer(t, "image-secret-model");
+  const f = fixture(t, mediaProfile(s.url, [imageTask, { ...imageTask, id: "IMG-NEXT" }]));
+  const result = await child(f, [], { SYNTHETIC_API_KEY: secret, SYNTHETIC_BASE_URL: s.url }); assert.equal(result.status, 1, result.stderr);
+  const actual = report(f); assert.equal(actual.tasks[0].status, "failed"); assert.equal(actual.tasks[0].publicSafety.redacted, true);
+  assert.equal(actual.tasks[0].receipt.synced, false); assert.equal(actual.tasks[0].measurementComplete, true);
+  assert.equal(actual.budget.actual.images, 1); assert.equal(actual.budget.unmeasured.images, 0); assert.equal(actual.budget.reservations[0].settlement.measured, true);
+  assert.equal(actual.budget.frozenBy.length, 1); assert.equal(actual.tasks[1].status, "blocked");
+  assert.equal(s.calls.filter((call) => call.url === "/images/generations").length, 1);
+  for (const value of [JSON.stringify(actual), result.stdout, result.stderr, readFileSync(join(f.out, "transcripts/IMG-01.json"), "utf8"), readFileSync(join(f.out, "receipts/IMG-01.json"), "utf8"), readFileSync(join(f.out, "budget-ledger.jsonl"), "utf8")]) assert.equal(value.includes(secret), false);
 });

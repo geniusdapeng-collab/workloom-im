@@ -4,11 +4,12 @@ import { constants, closeSync, existsSync, fstatSync, lstatSync, mkdirSync, open
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadChromium } from "../playwright.mjs";
+import { diagnosticReason, publicDiagnostic, PublicBoundaryError, publicResourceUrl, safeError } from "./safety.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 const LIMITS = { image: 64 * 1024 * 1024, video: 256 * 1024 * 1024 };
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
-const failure = (message, code = "MEDIA_INVALID") => Object.assign(new Error(message), { code });
+const failure = (message, code = "MEDIA_INVALID") => Object.assign(new PublicBoundaryError(message, code === "MEDIA_VERIFIER_UNAVAILABLE" ? "media_verifier_unavailable" : "media_invalid"), { code });
 
 export function assertSafeTaskId(id) {
   if (typeof id !== "string" || id.length > 120 || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(id) || id.includes("..")) {
@@ -18,10 +19,7 @@ export function assertSafeTaskId(id) {
 }
 
 export function publicArtifactUrl(value) {
-  try {
-    const url = new URL(value);
-    return url.origin !== "null" ? `${url.origin}${url.pathname}` : `${url.protocol}//${url.host}${url.pathname}`;
-  } catch { return "(invalid artifact URL)"; }
+  return publicResourceUrl(value);
 }
 
 function artifactRoot(dir) {
@@ -147,11 +145,11 @@ async function decode(bytes, { kind, mime, repoRoot = REPO_ROOT, timeoutMs = 30_
   try {
     const chromium = loadChromium(repoRoot);
     try { browser = await chromium.launch({ env }); }
-    catch (error) {
+    catch {
       // Branded Chrome is supported by Playwright and supplies proprietary media codecs.
       // Both launches use a fresh temporary profile; neither touches an active browser session.
       try { browser = await chromium.launch({ channel: "chrome", env }); }
-      catch { throw failure(`本地媒体解码器不可用：${String(error.message).split("\n")[0]}`, "MEDIA_VERIFIER_UNAVAILABLE"); }
+      catch { throw failure("本地媒体解码器不可用，不能验证交付物", "MEDIA_VERIFIER_UNAVAILABLE"); }
     }
   } catch (error) {
     if (error.code) throw error;
@@ -161,23 +159,25 @@ async function decode(bytes, { kind, mime, repoRoot = REPO_ROOT, timeoutMs = 30_
     const context = await browser.newContext({ serviceWorkers: "block" });
     await context.route("**/*", (route) => route.abort());
     const page = await context.newPage();
-    return await page.evaluate(async ({ base64, mime, kind, timeoutMs }) => {
+    const content = await page.evaluate(async ({ base64, mime, kind, timeoutMs }) => {
       const raw = atob(base64);
       const data = Uint8Array.from(raw, (c) => c.charCodeAt(0));
       const url = URL.createObjectURL(new Blob([data], { type: mime }));
       let media;
       let timer;
       try {
-        return await new Promise((resolve, reject) => {
-          const fail = (message) => reject(new Error(message));
-          timer = setTimeout(() => fail("本地媒体解码超时"), timeoutMs);
+        // Cross-realm exceptions are unknown Playwright diagnostics. Return only
+        // local enum values so the parent can author a safe, specific failure.
+        return await new Promise((resolve) => {
+          const fail = (failureCode) => resolve({ failureCode });
+          timer = setTimeout(() => fail("decode_timeout"), timeoutMs);
           if (kind === "image") {
             media = new Image();
-            media.onerror = () => fail("图片内容无法解码");
+            media.onerror = () => fail("image_decode_failed");
             media.onload = () => {
               const width = media.naturalWidth;
               const height = media.naturalHeight;
-              if (!width || !height || width * height > 100_000_000) return fail("图片尺寸无效或超出校验上限");
+              if (!width || !height || width * height > 100_000_000) return fail("image_dimensions_invalid");
               const canvas = document.createElement("canvas");
               canvas.width = 1;
               canvas.height = 1;
@@ -192,15 +192,15 @@ async function decode(bytes, { kind, mime, repoRoot = REPO_ROOT, timeoutMs = 30_
             media.playsInline = true;
             let frames = 0;
             const onFrame = () => { frames += 1; if (!media.ended) media.requestVideoFrameCallback(onFrame); };
-            media.onerror = () => fail("视频内容无法解码");
+            media.onerror = () => fail("video_decode_failed");
             media.onloadeddata = async () => {
-              if (!Number.isFinite(media.duration) || media.duration <= 0 || !media.videoWidth || !media.videoHeight) return fail("视频时长/画面无效");
+              if (!Number.isFinite(media.duration) || media.duration <= 0 || !media.videoWidth || !media.videoHeight) return fail("video_dimensions_invalid");
               media.requestVideoFrameCallback(onFrame);
               media.playbackRate = 8;
-              try { await media.play(); } catch { fail("视频不能播放"); }
+              try { await media.play(); } catch { fail("video_play_failed"); }
             };
             media.onended = () => {
-              if (frames === 0) return fail("视频没有可解码画面");
+              if (frames === 0) return fail("video_frames_missing");
               resolve({ width: media.videoWidth, height: media.videoHeight, durationSeconds: media.duration, decodedFrames: frames, decoded: true, decoder: "browser" });
             };
             media.src = url;
@@ -213,10 +213,25 @@ async function decode(bytes, { kind, mime, repoRoot = REPO_ROOT, timeoutMs = 30_
         URL.revokeObjectURL(url);
       }
     }, { base64: bytes.toString("base64"), mime, kind, timeoutMs });
+    const reasons = {
+      decode_timeout: "本地媒体解码超时",
+      image_decode_failed: "图片内容无法解码",
+      image_dimensions_invalid: "图片尺寸无效或超出校验上限",
+      video_decode_failed: "视频内容无法解码",
+      video_dimensions_invalid: "视频时长/画面无效",
+      video_play_failed: "视频不能播放",
+      video_frames_missing: "视频没有可解码画面",
+    };
+    if (Object.hasOwn(reasons, content?.failureCode)) throw failure(reasons[content.failureCode]);
+    if (!content || content.decoded !== true || !Number.isFinite(content.width) || content.width <= 0 || !Number.isFinite(content.height) || content.height <= 0
+      || kind === "video" && (!Number.isFinite(content.durationSeconds) || content.durationSeconds <= 0 || !Number.isSafeInteger(content.decodedFrames) || content.decodedFrames <= 0)) {
+      throw failure("本地媒体解码未返回有效画面证据");
+    }
+    return content;
   } finally { await browser.close(); }
 }
 
-export async function inspectLocalArtifact({ path, artifactsDir, kind, timeoutMs, repoRoot }) {
+async function inspectLocalArtifactInternal({ path, artifactsDir, kind, timeoutMs, repoRoot }) {
   const read = localBytes(path, artifactsDir, kind);
   const format = mediaFormat(read.bytes, kind);
   const content = await decode(read.bytes, { ...format, kind, timeoutMs, repoRoot });
@@ -224,6 +239,11 @@ export async function inspectLocalArtifact({ path, artifactsDir, kind, timeoutMs
   const sha256 = hash(read.bytes);
   if (hash(reread.bytes) !== sha256) throw failure("媒体在解码期间发生变化");
   return { path: read.absolute, bytes: read.bytes.length, sha256, ...format, ...content };
+}
+
+export async function inspectLocalArtifact(options) {
+  try { return await inspectLocalArtifactInternal(options); }
+  catch (error) { throw safeError(error, "本地媒体读取/解码核验失败", "media_invalid"); }
 }
 
 async function responseBytes(response, limit) {
@@ -259,7 +279,7 @@ export async function downloadArtifact({ url, artifactsDir, taskId, index = 1, k
     if (!["http:", "https:"].includes(remote.protocol) || remote.username || remote.password) throw failure("媒体 URL 不是无凭据的 HTTP(S) 地址");
     const root = artifactRoot(artifactsDir);
     const response = await fetch(url, { signal: AbortSignal.timeout(Math.max(1, Math.min(180_000, timeoutMs))) });
-    if (!response.ok) throw failure(`媒体下载 HTTP ${response.status}`);
+    if (!response.ok) throw new PublicBoundaryError(`媒体下载 HTTP ${response.status}`, "media_download_http", response.status);
     const bytes = await responseBytes(response, LIMITS[kind]);
     if (!bytes.length) throw failure("媒体下载返回零字节");
     const format = mediaFormat(bytes, kind);
@@ -278,7 +298,8 @@ export async function downloadArtifact({ url, artifactsDir, taskId, index = 1, k
     if (hash(landed.bytes) !== inspected.sha256) throw failure("媒体落盘后散列不一致");
     return { ok: true, artifact: { ...inspected, path, url: publicArtifactUrl(url) } };
   } catch (error) {
-    return { ok: false, status: error.code === "MEDIA_VERIFIER_UNAVAILABLE" ? "blocked" : "failed", reason: String(error.message ?? "媒体校验失败").slice(0, 240) };
+    const diagnostic = publicDiagnostic(error, "media_download_failed");
+    return { ok: false, status: diagnostic.category === "media_verifier_unavailable" ? "blocked" : "failed", reason: diagnosticReason(error, "媒体下载/核验失败", "media_download_failed"), diagnostic };
   } finally { if (temp) rmSync(temp, { force: true }); }
 }
 
@@ -301,7 +322,7 @@ export async function verifyArtifactReceipts({ artifacts = [], receipt, artifact
       }
       if (kind === "video" && [artifact, expected].some((item) => !Number.isFinite(item.durationSeconds) || Math.abs(item.durationSeconds - actual.durationSeconds) > 0.01)) throw failure("视频真实时长与回执不一致");
       verified.push(actual);
-    } catch (error) { problems.push(String(error.message ?? "产物不可读").slice(0, 240)); }
+    } catch (error) { problems.push(diagnosticReason(error, "产物不可读取或核验", "media_invalid")); }
   }
   return { ok: problems.length === 0 && verified.length > 0, problems, verified };
 }
