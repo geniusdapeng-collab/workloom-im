@@ -230,7 +230,7 @@ test("代码 PR 拒绝：门禁红 / 无门禁结果 / 冲突 / 冷却期内 / �
 });
 
 test("代码 PR 拒绝：治理与高风险路径不由无人值守扫描合并", () => {
-  for (const path of ["sync/fanout-rules.mjs", "docs/DEVELOPMENT-PROTOCOL.md", ".cnb.yml", "platform-ops/deploy.yml", "packages/db/migrations/0001_init.sql", "AGENTS.md"]) {
+  for (const path of ["sync/fanout-rules.mjs", "docs/DEVELOPMENT-PROTOCOL.md", ".cnb.yml", "platform-ops/deploy.yml", "packages/db/migrations/0001_init.sql", "AGENTS.md", "scripts/ui-release-registration.mjs", "scripts/tools/cnb-api.mjs", "scripts/tools/provision-protocol.mjs", "scripts/ci/verify-commit-msg.mjs", "acceptance/profile.json", "scripts/capability-status.mjs", "scripts/generate-capabilities.mjs", "scripts/oss-watch.mjs", "scripts/oss-inventory.mjs"]) {
     const verdict = codeMergeEligibility({
       pull: codePull(),
       files: [path],

@@ -2,8 +2,8 @@
 /**
  * 基座 fanout（CNB 版）：把 workloom-im 的根级受控资产变更，变成舰队每一条子仓的同步 PR。
  *
- * 与 GitHub 时代的 `sync/base-sync.mjs push` 的差别：
- *   · push 模式直接把子仓 main 推到新版本（无 PR、无门禁）；本脚本只**开 PR**，
+ * 与已禁用的历史 `sync/base-sync.mjs push` 的差别：
+ *   · 历史 push 模式直接更新子仓 main；该入口现在失败关闭。本脚本只**开 PR**，
  *     由子仓自己的 .cnb.yml 门禁 + 自动合并流水线决定是否落地（协议 §1/§9）。
  *   · 先用 CNB API 低成本比对子仓 `.workloom-base-sync.json` 的资产摘要，只有真漂移的子仓
  *     才会被 clone；舰队巡检因此可以在流水线里每 30 分钟跑一次而不浪费构建资源。
@@ -28,7 +28,7 @@ import {
   hasInFlightSyncPull, pausedWaveChildren, requiredAssetDigests, syncDrift, syncedChildren, SYNC_BRANCH_PREFIX,
 } from "./fanout-rules.mjs";
 import { isolatedFleet } from "../scripts/tools/fleet-rules.mjs";
-import { addPullLabels, createPull, listPulls, rawFile, requireToken } from "../scripts/tools/cnb-api.mjs";
+import { addPullLabels, createPull, gitAuthenticationEnvironment, listPulls, rawFile, redactCredentials, requireToken } from "../scripts/tools/cnb-api.mjs";
 
 const SCRIPT_DIR = fileURLToPath(new URL(".", import.meta.url));
 const DEFAULT_BASE_DIR = resolve(SCRIPT_DIR, "..");
@@ -41,7 +41,7 @@ function arg(name, fallback = "") {
 const has = (name) => process.argv.includes(name);
 
 export function redact(text, token = process.env.CNB_TOKEN ?? "") {
-  let value = String(text ?? "");
+  let value = redactCredentials(text ?? "", token);
   for (const secret of [token, token ? encodeURIComponent(token) : ""].filter(Boolean)) {
     value = value.split(secret).join("[REDACTED]");
   }
@@ -63,19 +63,12 @@ function cloneChild(slug, dir, baseUrl) {
 }
 
 /**
- * 推送同步分支。凭据只经 git 配置的 `http.extraHeader` 注入，
+ * 推送同步分支。凭据只经限定 CNB HTTPS 来源的子进程配置注入，
  * 不写进 remote URL（既避免令牌落进日志/进程表，也避开基座秘密扫描的
  * credential-in-url 规则）。
  */
 function pushBranch(dir, slug, branch, token, baseUrl) {
-  const count = Number.parseInt(process.env.GIT_CONFIG_COUNT || "0", 10) || 0;
-  const env = {
-    ...process.env,
-    GIT_TERMINAL_PROMPT: "0",
-    GIT_CONFIG_COUNT: String(count + 1),
-    [`GIT_CONFIG_KEY_${count}`]: "http.extraHeader",
-    [`GIT_CONFIG_VALUE_${count}`]: `AUTHORIZATION: basic ${Buffer.from(`cnb:${token}`).toString("base64")}`,
-  };
+  const env = gitAuthenticationEnvironment(token);
   try {
     execFileSync("git", ["push", `${baseUrl}/${slug}.git`, `HEAD:refs/heads/${branch}`], {
       cwd: dir,
@@ -117,8 +110,8 @@ function pullBody({ mode, baseSha, baseRepo, files }) {
     "",
     "## 处理规则",
     "",
-    "- 本 PR 只覆盖根级受控资产（全景认知 / 开发协议 / AGENTS 受控区块 / 同步登记文件），不含行业语义与运行时代码；",
-    "- 门禁由本仓 `.cnb.yml` 执行；全绿后 `scripts/tools/merge-sync-prs.mjs` 会自动合并 `sync/base-*` 分支的纯同步 PR；",
+    mode === 'required-only' ? "- 本 PR 覆盖根级受控资产及其执行依赖，不覆盖行业业务实现；" : "- 本 PR 覆盖受控清单内的公共基座资产，行业身份和声明的扩展路径由本仓保留；",
+    "- 门禁由本仓 `.cnb.yml` 执行；无人值守合并仅限非执行性白名单。协议、规则、执行器、同步器与发布器即使全绿，也须已授权的会话显式审查并串行合并；",
     "- 需要暂缓时：关掉本 PR 即可，fanout 在存在在途同步 PR 时不会重复开门。",
     "",
     `> 相关：${baseRepo} sync/fanout-cnb.mjs`,
@@ -130,6 +123,8 @@ async function main() {
   if (mode !== "required-only" && mode !== "full") throw new Error(`--mode 只支持 required-only|full，收到 ${mode}`);
   const baseDir = resolve(arg("--base-dir", DEFAULT_BASE_DIR));
   const baseUrl = arg("--base-url", DEFAULT_BASE_URL).replace(/\/$/, "");
+  // Validate before acquiring a credential or performing any API/Git operation.
+  if (baseUrl !== DEFAULT_BASE_URL) throw new Error('--base-url 只允许无凭据的 https://cnb.cool 来源');
   const only = arg("--only", "").split(",").map((item) => item.trim()).filter(Boolean);
   const dryRun = has("--dry-run");
   const noPr = has("--no-pr");
@@ -144,6 +139,7 @@ async function main() {
   const digests = requiredAssetDigests(baseDir, scope.raw);
   const isolated = isolatedFleet(fleet);
   const selected = (fleet.children ?? []).filter((child) => !only.length || only.includes(child.repo));
+  if (selected.some((child) => !/^[A-Za-z0-9_-]+\/[A-Za-z0-9_.-]+$/.test(child?.repo ?? '') || child.repo.split('/').some((part) => part === '.' || part === '..'))) throw new Error('子仓 slug 必须是安全的 owner/repository');
   const { synced: subscribed, skipped: skippedIsolated } = syncedChildren(selected, isolated);
   /**
    * full 波次跳过 paused 波次仓（2026-09-29 实测事故）：
@@ -226,7 +222,8 @@ async function main() {
         ...(report.managed ?? []),
         ...(report.adopted ?? []),
       ];
-      const pullBodyText = pullBody({ mode, baseSha: commit, baseRepo, files: changedFiles.length ? changedFiles : ["(仅同步登记文件 .workloom-base-sync.json)"] });
+      record.headSha = commit;
+      const pullBodyText = pullBody({ mode, baseSha, baseRepo, files: changedFiles.length ? changedFiles : ["(仅同步登记文件 .workloom-base-sync.json)"] });
       const pull = await createPull(child.repo, {
         title: `sync(base): 基座根级资产同步 → ${baseSha.slice(0, 8)}（fanout 自动）`,
         head: branch,

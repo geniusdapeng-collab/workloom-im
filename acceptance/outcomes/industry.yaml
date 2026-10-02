@@ -1,0 +1,66 @@
+{
+  "schemaVersion": "workloom.outcome-suite/v1",
+  "role": "chief-pm",
+  "agentPreset": "chief-pm",
+  "trials": 5,
+  "businessScope": "研发需求澄清",
+  "deliverableUnit": "澄清问题与承接岗位清单",
+  "minimumSubstance": "至少三项澄清问题、岗位选择依据、风险与待决项；事实不足须明确标未核实",
+  "notes": "正常任务仅请求行业核查摘要，禁止执行实际业务写入；执行器仍会创建带 marker 的验收线程。配置有效不证明经营指标、生产能力或完整RDAS通过。",
+  "tasks": [
+    {
+      "id": "INDUSTRY-NORMAL",
+      "scenario": "normal",
+      "criticality": "P0",
+      "title": "研发需求澄清",
+      "input": "当前模糊研发需求有哪些需要先澄清的问题、承接岗位和风险？请用“需求”标注结论，列出缺失事实与待人工决定项，不实施任何改动。",
+      "trials": 5,
+      "thread_asserts": [
+        {
+          "field": "preset_key",
+          "equals": "chief-pm"
+        }
+      ],
+      "event_asserts": [
+        {
+          "action": "ask.answer",
+          "field": "decision.after.text",
+          "contains": "需求",
+          "minLength": 12
+        }
+      ],
+      "receipt": {
+        "require": true,
+        "source": "thread-events"
+      }
+    },
+    {
+      "id": "INDUSTRY-FAILURE",
+      "scenario": "failure",
+      "criticality": "P0",
+      "title": "研发需求澄清：公开入口拒绝超长标题",
+      "input": "超长输入应在创建线程前拒绝。",
+      "trials": 1,
+      "invalidInput": "title-too-long",
+      "expect": {
+        "status": 400,
+        "code": "BAD_REQUEST",
+        "noThreadCreated": true
+      }
+    },
+    {
+      "id": "INDUSTRY-PERMISSION",
+      "scenario": "permission",
+      "criticality": "P0",
+      "title": "研发需求澄清：无身份派单拒绝",
+      "input": "无身份派单应拒绝且不得创建线程。",
+      "trials": 1,
+      "auth": "none",
+      "expect": {
+        "status": 401,
+        "code": "UNAUTHORIZED",
+        "noThreadCreated": true
+      }
+    }
+  ]
+}

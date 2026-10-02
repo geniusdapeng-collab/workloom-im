@@ -6,7 +6,7 @@
 # 与 GitHub 版的差异（受 CNB 能力边界约束，README/§13 有登记）：
 #   - CNB services 只支持 docker / vscode，没有 GH Actions 的 service containers；
 #     因此 DB 闸门用 pgvector/pgvector:pg17 作为流水线镜像，在容器内直接拉起 PostgreSQL 17。
-#   - 三端 Playwright 视觉门禁（ui:e2e）暂未纳入 v1，作为后续补入项。
+#   - 三端 Playwright 响应式/视觉/无障碍已进入独立 ui-gate，作为 main 必需状态检查。
 #   - 桌面安装包发布已迁入 CNB（见文件末尾 `desktop-release`）：签名/公证密钥与自托管
 #     mac/windows 构建节点未就绪时 fail-closed；`.github/workflows/*` 仅保留为发布策略事实源。
 
@@ -62,7 +62,7 @@
         set -eu
         # 依赖变更（package.json / pnpm-lock.yaml / requirements.txt）必须同步刷新清单；
         # 未刷新即红灯：node scripts/oss-inventory.mjs --write 后一并提交。
-        node --test scripts/oss-inventory.test.mjs
+        node --test scripts/oss-inventory.test.mjs scripts/oss-watch.test.mjs
         pnpm oss:check
 
     - name: 桌面运行时锁与载荷边界
@@ -110,8 +110,10 @@
     - name: 基座同步与客户端接入门禁
       script: |
         set -eu
-        node --test scripts/verify-ui-consumer.test.mjs sync/base-sync.test.mjs sync/client-foundation.test.mjs sync/set-ui-version.test.mjs sync/ui-upgrade-pr.test.mjs sync/fanout-rules.test.mjs sync/merge-sync-prs.test.mjs
-        node --test scripts/delivery/mine-clear.test.mjs
+        node --test scripts/verify-ui-consumer.test.mjs sync/base-sync.test.mjs sync/direct-push.test.mjs sync/client-foundation.test.mjs sync/set-ui-version.test.mjs sync/ui-upgrade-pr.test.mjs sync/fanout-rules.test.mjs sync/fanout-safety.test.mjs sync/merge-sync-prs.test.mjs
+        node --test scripts/delivery/*.test.mjs
+        node --test scripts/acceptance/lib/profile-contract.test.mjs scripts/acceptance/profile-check.test.mjs scripts/acceptance/outcome.test.mjs scripts/acceptance/fleet-run.test.mjs scripts/acceptance/lib/environment-safety.test.mjs scripts/acceptance/lib/outcome-contract.test.mjs scripts/acceptance/lib/live/budget.test.mjs scripts/acceptance/lib/live/live-truth.test.mjs scripts/acceptance/lib/live/providers.test.mjs scripts/acceptance/lib/live/usage.test.mjs scripts/acceptance/lib/live/audit.test.mjs scripts/acceptance/lib/live/providers-http.test.mjs scripts/acceptance/lib/live/dsh-process.test.mjs scripts/acceptance/lib/live/live-cli-wire.test.mjs scripts/acceptance/lib/live/product.test.mjs scripts/acceptance/lib/live/media-negative.test.mjs scripts/acceptance/lib/live/live-cli.test.mjs
+        node --test scripts/capability-status.test.mjs scripts/tools/provision-safety.test.mjs scripts/ui-release-registration.test.mjs
         node --test apps/desktop/electron/bootstrap.test.cjs scripts/desktop-bootstrap-db.test.mjs
 
     - name: 三端生产构建
@@ -287,6 +289,11 @@
         set -eu
         pnpm exec playwright install --with-deps chromium
 
+    - name: 媒体真实性（实际解码与 live CLI 证据）
+      script: |
+        set -eu
+        node --test scripts/acceptance/lib/live/media-decoder.test.mjs scripts/acceptance/lib/live/live-cli-browser.test.mjs
+
     - name: 三端响应式、视觉与无障碍门禁
       script: |
         set -eu
@@ -379,7 +386,15 @@
           exit 0
         fi
         git commit -q -m "test(ui): 重生成视觉基线（排雷 T-2026-0929-0200 界面变更）[T-2026-0929-0200]"
-        git push -q "https://cnb:${CNB_TOKEN}@cnb.cool/workloom-ai/workloom-im" "HEAD:refs/heads/${UI_BASELINE_BRANCH}"
+        node --input-type=module -e '
+          import {spawnSync} from "node:child_process";
+          import {gitAuthenticationEnvironment,redactCredentials,requireToken} from "./scripts/tools/cnb-api.mjs";
+          const branch=process.env.UI_BASELINE_BRANCH;
+          if(!/^task\/T-[0-9]{4}-[0-9]{4}-[0-9]{4}$/.test(branch??"")) throw new Error("UI_BASELINE_BRANCH 必须为任务分支");
+          const token=requireToken();
+          const run=spawnSync("git",["push","origin",`HEAD:refs/heads/${branch}`],{encoding:"utf8",timeout:60000,env:gitAuthenticationEnvironment(token)});
+          if(run.error||run.status!==0) throw new Error(redactCredentials(`基线分支推送失败：${run.error?.code??run.stderr}`,token));
+        '
 
 .ui-release: &ui_release
   name: ui-release
@@ -421,40 +436,20 @@
           fs.writeFileSync("/workspace/dist/release-metadata.json", JSON.stringify({version:ver,asset,size:buf.length,sha512:digest},null,2));
           console.log("artifact", asset, buf.length, digest);
         '
-    - name: 登记 integrity 并打稳定标签（同一次发布自洽）
+    - name: 核对已受审登记并创建不可变稳定标签
       script: |
         set -eu
-        META=/workspace/dist/release-metadata.json
-        META_FILE="$META" node -e '
-          const fs=require("fs");
-          const meta=JSON.parse(fs.readFileSync(process.env.META_FILE,"utf8"));
-          const path="sync/base-capabilities.json";
-          const manifest=JSON.parse(fs.readFileSync(path,"utf8"));
-          const ver=meta.version;
-          for (const [label,current] of [["ui",manifest.ui.latestStableVersion],["clientFoundation",manifest.clientFoundation.latestStableVersion]]) {
-            if (current!==ver) throw new Error(`${label}.latestStableVersion=${current} 与发布版本 ${ver} 不一致；请先在 PR 内升版`);
-          }
-          manifest.ui.candidateVersion=ver;
-          manifest.ui.distribution.integrityByVersion[ver]=meta.sha512;
-          fs.writeFileSync(path, JSON.stringify(manifest,null,2)+"\n");
-          console.log("registered", ver, meta.sha512);
-        '
-        git config user.name "cnb-ui-release"
-        git config user.email "ui-release@cnb.cool"
-        git add sync/base-capabilities.json
-        git commit -q -m "sync(base): 登记 @workloom/ui $UI_VERSION 发布资产实测 sha512（ui-release 流水线自证提交）"
-        RELEASE_SHA="$(git rev-parse HEAD)"
-        git push -q "https://cnb:${CNB_TOKEN}@cnb.cool/workloom-ai/workloom-im" "HEAD:refs/heads/main"
-        # 标签必须指向登记了真实摘要的这个提交；同一版本重跑时强制对齐（制品内容即上面打包的字节）。
-        git tag -f "ui-v${UI_VERSION}" "$RELEASE_SHA"
-        git push -f -q "https://cnb:${CNB_TOKEN}@cnb.cool/workloom-ai/workloom-im" "refs/tags/ui-v${UI_VERSION}"
-        RELEASE_SHA="$RELEASE_SHA" node -e 'require("fs").writeFileSync("/workspace/dist/release-commit.txt", process.env.RELEASE_SHA + "\n")'
-        echo "RELEASE_SHA=$RELEASE_SHA"
+        # main 中的真实 sha512 必须先由评审 + 必需门禁通过的 PR 登记。
+        # 缺少登记时硬阻断；本发布任务不能直推 main、强改标签或替代评审。
+        node scripts/ui-release-registration.mjs /workspace/dist/release-metadata.json /workspace/dist/release-commit.txt
     - name: 发布到 CNB Release
       script: |
         set -eu
         cat > /tmp/publish.mjs <<'JS'
         import fs from 'node:fs';
+        import {resolve} from 'node:path';
+        import {pathToFileURL} from 'node:url';
+        const {redactCredentials}=await import(pathToFileURL(resolve('scripts/tools/cnb-api.mjs')).href);
         const API='https://api.cnb.cool', REPO='workloom-ai/workloom-im';
         const ver=process.env.UI_VERSION;
         const tag=`ui-v${ver}`, asset=`workloom-ui-${ver}.tgz`;
@@ -463,35 +458,34 @@
         const releaseSha=fs.readFileSync('/workspace/dist/release-commit.txt','utf8').trim();
         const J={'Authorization':`Bearer ${token}`,'Accept':'application/json','Content-Type':'application/json'};
         async function req(url, opts={}) {
-          const r=await fetch(url,{...opts,headers:{...J,...(opts.headers||{})}});
+          if(new URL(url).origin!==API) throw new Error('拒绝把发布凭据发送到非 CNB API 来源');
+          const r=await fetch(url,{...opts,signal:AbortSignal.timeout(30000),headers:{...J,...(opts.headers||{})}});
           const t=await r.text();
-          if(!r.ok) throw new Error(`${r.status} ${t.slice(0,400)}`);
+          if(!r.ok) throw Object.assign(new Error(redactCredentials(`${r.status} ${t.slice(0,400)}`,token)),{status:r.status});
           return t?JSON.parse(t):{};
         }
         let rel;
         try { rel = await req(`${API}/${REPO}/-/releases/tags/${tag}`); }
-        catch { rel = await req(`${API}/${REPO}/-/releases`, {method:'POST', body: JSON.stringify({tag_name:tag,name:tag,body:'WorkLoom 织元共享 UI 制品（CNB 托管）',target_commitish:releaseSha,draft:false,prerelease:false,make_latest:'false'})}); }
+        catch(error) { if(error.status!==404) throw error; rel = await req(`${API}/${REPO}/-/releases`, {method:'POST', body: JSON.stringify({tag_name:tag,name:tag,body:'WorkLoom 织元共享 UI 制品（CNB 托管）',target_commitish:releaseSha,draft:false,prerelease:false,make_latest:'false'})}); }
         const buf=fs.readFileSync(`/workspace/dist/${asset}`);
         const up=await req(`${API}/${REPO}/-/releases/${rel.id}/asset-upload-url`, {method:'POST', body: JSON.stringify({asset_name:asset,size:buf.length,overwrite:true})});
-        const put=await fetch(up.upload_url,{method:'PUT',body:buf,headers:{'Content-Type':'application/octet-stream'}});
-        if(!put.ok) throw new Error('upload '+put.status+' '+(await put.text()).slice(0,200));
+        const put=await fetch(up.upload_url,{method:'PUT',body:buf,signal:AbortSignal.timeout(30000),headers:{'Content-Type':'application/octet-stream'}});
+        if(!put.ok) throw new Error(redactCredentials('upload '+put.status+' '+(await put.text()).slice(0,200),token));
         await req(up.verify_url, {method:'POST', body:'{}'});
         const after=await req(`${API}/${REPO}/-/releases/tags/${tag}`);
         // 回读校验：远端资产字节必须与本地打包字节逐字节一致，且等于登记摘要。
         const {createHash}=await import('node:crypto');
-        const downloaded=Buffer.from(await (await fetch(`https://cnb.cool/${REPO}/-/releases/download/${tag}/${asset}`)).arrayBuffer());
+        const response=await fetch(`https://cnb.cool/${REPO}/-/releases/download/${tag}/${asset}`,{signal:AbortSignal.timeout(30000)});
+        if(!response.ok) throw new Error(`回读发布资产失败 HTTP ${response.status}`);
+        const downloaded=Buffer.from(await response.arrayBuffer());
         const digest='sha512-'+createHash('sha512').update(downloaded).digest('base64');
         if(downloaded.length!==meta.size || digest!==meta.sha512) throw new Error(`发布资产与登记摘要不一致：${downloaded.length}/${digest}`);
         console.log('assets', (after.assets||[]).map(a=>`${a.name}:${a.size}`).join(', '));
         console.log('DONE', `https://cnb.cool/${REPO}/-/releases/download/${tag}/${asset}`);
         JS
         if ! node /tmp/publish.mjs; then
-          # 上传/校验失败 → 回滚登记提交与标签，绝不把「已登记但无制品」的半态留在 main。
-          echo "发布失败：回滚登记提交与稳定标签，保持 main 自洽"
-          RELEASE_SHA="$(cat /workspace/dist/release-commit.txt)"
-          git revert --no-edit "$RELEASE_SHA"
-          git push -q "https://cnb:${CNB_TOKEN}@cnb.cool/workloom-ai/workloom-im" "HEAD:refs/heads/main" || true
-          git push -q --delete "https://cnb:${CNB_TOKEN}@cnb.cool/workloom-ai/workloom-im" "refs/tags/ui-v${UI_VERSION}" || true
+          # 失败保持已受审 main 与不可变标签；下次以同一登记摘要幂等重试上传。
+          echo "发布资产上传或回读失败；保持登记提交与标签，拒绝报告发布成功"
           exit 1
         fi
 
