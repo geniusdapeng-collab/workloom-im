@@ -129,3 +129,31 @@ test("undeclared bundled Python files also receive exact indexing", (t) => {
   f.write("python/unexpected.py", "x");
   assert.throws(() => verifyPayloadIntegrity(f.root));
 });
+
+test("index path replacement during an open-file read is rejected despite held descriptor bytes", (t) => {
+  const f = fixture(t);
+  generatePayloadIntegrity(f.root);
+  const file = path.join(f.root, "payload-integrity.json");
+  const originalRead = fs.readFileSync;
+  const originalOpen = fs.openSync;
+  let indexFd;
+  let injected = false;
+  fs.openSync = function (entry, ...args) {
+    const fd = originalOpen.call(fs, entry, ...args);
+    if (entry === file) indexFd = fd;
+    return fd;
+  };
+  fs.readFileSync = function (entry, ...args) {
+    const bytes = originalRead.call(fs, entry, ...args);
+    if (typeof entry === "number" && entry === indexFd && !injected) {
+      injected = true;
+      fs.renameSync(file, `${file}.previous`);
+      fs.symlinkSync("payload-integrity.json.previous", file);
+    }
+    return bytes;
+  };
+  try {
+    assert.throws(() => verifyPayloadIntegrity(f.root), /索引在读取时发生变化/u);
+    assert.equal(injected, true);
+  } finally { fs.readFileSync = originalRead; fs.openSync = originalOpen; }
+});

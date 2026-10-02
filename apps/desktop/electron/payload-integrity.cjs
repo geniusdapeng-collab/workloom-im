@@ -36,7 +36,9 @@ function readSmall(file, label, maxBytes = 1_000_000) {
     if (!opened.isFile() || opened.dev !== stat.dev || opened.ino !== stat.ino) reject(`${label}在读取前发生替换`);
     const bytes = fs.readFileSync(fd);
     const after = fs.fstatSync(fd);
-    if (bytes.length !== stat.size || after.mtimeMs !== opened.mtimeMs || after.ctimeMs !== opened.ctimeMs) reject(`${label}在读取时发生变化`);
+    const current = fs.lstatSync(file);
+    if (bytes.length !== stat.size || after.mtimeMs !== opened.mtimeMs || after.ctimeMs !== opened.ctimeMs
+        || !current.isFile() || current.isSymbolicLink() || current.dev !== opened.dev || current.ino !== opened.ino) reject(`${label}在读取时发生变化`);
     return bytes;
   } finally { if (fd !== undefined) fs.closeSync(fd); }
 }
