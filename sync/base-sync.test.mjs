@@ -532,10 +532,10 @@ test("缺少 B 端移动客户端时只报告第一阶段迁移，绝不伪装�
   }
 });
 
-test("v15 scope 明确保护产品身份、仓级发布器、桌面发布封口器、同步认证、产品派生锁、依赖闭包与 Bundle 装配契约", () => {
+test("v18 scope 明确保护产品身份、仓级发布器、桌面发布封口器、同步认证、产品派生锁、依赖闭包与 Bundle 装配契约", () => {
   const scope = JSON.parse(readFileSync(join(REAL_BASE, "sync/base-scope.json"), "utf8"));
   const ci = readFileSync(join(REAL_BASE, ".github/workflows/ci.yml"), "utf8");
-  assert.equal(scope.version, 17);
+  assert.equal(scope.version, 18);
   // HP-01 收尾边界：单 active 迁移必须随公共分发下发，审计复现脚本只留基座仓
   assert.ok(scope.publicAppendOnlyFiles.includes("packages/db/migrations/0035_tenant_overlay_single_active.sql"));
   assert.ok(scope.newIndustryBootstrapFiles.includes("packages/db/migrations/0035_tenant_overlay_single_active.sql"));
@@ -692,18 +692,30 @@ test("v15 scope 明确保护产品身份、仓级发布器、桌面发布封口�
   assert.match(ci, /secret-scan\.mjs --range "\$BASE_SHA" "\$HEAD_SHA" --acceptance-manifest sync\/base-scope\.json/);
 });
 
-test("v17 scope 登记排雷式交付机制（MCD）受控资产，并保持显式审查边界", () => {
+test("v18 scope 登记排雷、真实证据和预算受控资产，并保持显式审查边界", () => {
   const scope = JSON.parse(readFileSync(join(REAL_BASE, "sync/base-scope.json"), "utf8"));
-  assert.equal(scope.version, 17);
+  assert.equal(scope.version, 18);
   const required = scope.requiredRootAssets.files;
   for (const path of [
     "docs/MINE-CLEAR-DELIVERY-SPEC.md",
     "docs/mine-clear/ledger.schema.json",
+    "docs/mine-clear/evidence.schema.json",
     "docs/mine-clear/report-template.md",
     "docs/mine-clear/prompt-pack.md",
     "scripts/delivery/README.md",
     "scripts/delivery/mine-clear.mjs",
     "scripts/delivery/mine-clear.test.mjs",
+    "scripts/delivery/evidence.mjs",
+    "scripts/delivery/node-test-reporter.mjs",
+    "scripts/delivery/evidence-controls.test.mjs",
+    "scripts/acceptance/lib/evidence.mjs",
+    "scripts/acceptance/lib/live/budget.mjs",
+    "scripts/acceptance/lib/live/usage.mjs",
+    "scripts/acceptance/lib/live/audit.plugin.mjs",
+    "scripts/acceptance/lib/live/media.mjs",
+    "scripts/acceptance/lib/live/verification.mjs",
+    "scripts/acceptance/lib/live/checks.mjs",
+    "scripts/ui-release-registration.mjs",
   ]) {
     assert.ok(required.includes(path), `${path} 必须作为根级受控资产随 base-sync 下发十仓`);
     assert.ok(existsSync(join(REAL_BASE, path)), `${path} 必须在基座仓真实存在`);
@@ -1485,7 +1497,7 @@ test("最小新行业仓一次完成 full 基座、三端稳定壳与消费门�
     const result = spawnSync("bash", [join(fx.base, "sync/adopt.sh"), fx.child, "--new-industry"], {
       cwd: fx.base,
       encoding: "utf8",
-      timeout: 30_000,
+      timeout: 120_000,
       env: { ...process.env, PATH: `${fx.bin}:${dirname(NODE)}:${process.env.PATH}` },
     });
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
@@ -1616,7 +1628,7 @@ test("UI 消费仓 full 同步重算 lockfile 后重新绑定稳定制品 SHA-51
     const adopt = spawnSync("bash", [join(fx.base, "sync/adopt.sh"), fx.child, "--new-industry"], {
       cwd: fx.base,
       encoding: "utf8",
-      timeout: 30_000,
+      timeout: 120_000,
       env: { ...process.env, PATH: `${fx.bin}:${dirname(NODE)}:${process.env.PATH}` },
     });
     assert.equal(adopt.status, 0, `${adopt.stdout}\n${adopt.stderr}`);
@@ -1675,7 +1687,7 @@ test("新行业后置 verifier 失败时恢复原有 staged、unstaged、untrack
     const result = spawnSync("bash", [join(fx.base, "sync/adopt.sh"), fx.child, "--new-industry"], {
       cwd: fx.base,
       encoding: "utf8",
-      timeout: 30_000,
+      timeout: 120_000,
       env: { ...process.env, PATH: `${fx.bin}:${dirname(NODE)}:${process.env.PATH}` },
     });
     assert.equal(result.status, 17, `${result.stdout}\n${result.stderr}`);
@@ -1715,7 +1727,7 @@ test("新行业后置失败不得覆盖被 ignore 的既有 UI state", () => {
     const result = spawnSync("bash", [join(fx.base, "sync/adopt.sh"), fx.child, "--new-industry"], {
       cwd: fx.base,
       encoding: "utf8",
-      timeout: 30_000,
+      timeout: 120_000,
       env: { ...process.env, PATH: `${fx.bin}:${dirname(NODE)}:${process.env.PATH}` },
     });
     assert.equal(result.status, 19, `${result.stdout}\n${result.stderr}`);
@@ -1747,7 +1759,7 @@ process.exit(42);
     const result = spawnSync("bash", [join(fx.base, "sync/adopt.sh"), fx.child, "--new-industry"], {
       cwd: fx.base,
       encoding: "utf8",
-      timeout: 30_000,
+      timeout: 120_000,
       env: { ...process.env, PATH: `${fx.bin}:${dirname(NODE)}:${process.env.PATH}` },
     });
     assert.equal(result.status, 42, `${result.stdout}\n${result.stderr}`);

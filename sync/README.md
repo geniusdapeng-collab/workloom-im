@@ -27,7 +27,7 @@ Bundle 装配运行时、组合投影与客群装配加载器属于公共基座�
 
 ### 稳定 UI 制品与三端客户端基座
 
-`packages/ui` 是 B 端 PC、B 端移动和 C 端移动三端基础组件、设计令牌、图标与交互原语的唯一源码。`apps/web`、`apps/webb`、`apps/webc` 则是同样属于基座的三端应用基础层，统一承载应用壳、左侧/底部导航、布局、状态接线和客户端 API 契约。两者都不走普通 base-sync：前者以稳定 `@workloom/ui` tarball 上传到同版本 GitHub Release，后者由 `sync/client-foundation.mjs` 从同一不可变 `ui-v*` 稳定标签读取。`base-scope.json` 完整排除三个 app 根，防止普通文件同步和客户端基座形成双写通道。
+`packages/ui` 是 B 端 PC、B 端移动和 C 端移动三端基础组件、设计令牌、图标与交互原语的唯一源码。`apps/web`、`apps/webb`、`apps/webc` 则是同样属于基座的三端应用基础层，统一承载应用壳、左侧/底部导航、布局、状态接线和客户端 API 契约。两者都不走普通 base-sync：前者以稳定 `@workloom/ui` tarball 上传到同版本 CNB Release，后者由 `sync/client-foundation.mjs` 从同一不可变 `ui-v*` 稳定标签读取。`base-scope.json` 完整排除三个 app 根，防止普通文件同步和客户端基座形成双写通道。
 
 `ui-v*` 只表示共享 UI 与三端客户端基座的稳定版本，不代表任何行业 Bundle 已进入 stable。UI 标签流水线只校验仓内候选 Bundle 的契约、摘要和投影一致性，不读取 Bundle 发布私钥，也不临时生成签名或公钥环。行业 Bundle 的 stable 清单、Ed25519 签名、公钥环和可追溯制品由独立发布生命周期产生；桌面生产构建仍必须消费经过签名的 Bundle。
 
@@ -87,7 +87,7 @@ node sync/base-sync.mjs push --base . --dry-run --required-only
 - `--json`：输出机器可读报告；
 - `--base-dir`：使用已固定的本地基座 checkout；
 - `--extra-exclude a,b`：追加仓级排除规则；
-- `--push`：pull 提交后直接推 `HEAD:main`，仅保留为受控人工入口，自动化默认采用 PR。
+- `--push`：不再允许直接推送 `main`，已拒绝执行（退出 64）；请在任务分支提交并创建 PR。
 
 默认 pull 会自动提交，因此开始前要求目标仓库完全干净；存在任何非本次改动就会在写入前拒绝。必须在有意保留脏工作树时使用 `--no-commit`，随后由操作者人工审查和白名单暂存。引擎只允许显式白名单暂存。`--adopt` 是 `adopt.sh` 的受限内部开关，只能与 `pull --no-commit` 组合：存量治理接入附加 `--required-only`，新行业接入则执行完整公共基座同步。
 
@@ -120,7 +120,7 @@ bash sync/adopt.sh /path/to/new-industry --new-industry --dry-run
 
 ## 存量八仓按波次升级
 
-`sync/ui-upgrade-pr.mjs --rollout` 每次都先要求执行提交固定在同版本 `ui-v*` 标签，以 npm 11.6.2 / pnpm 10.14.0 从标签隔离生成本地 `npm pack`，再把本地 tarball 的 sha512、`base-capabilities.json` 对应版本的 SRI 登记、同标签 GitHub Release 的真实下载字节做三方比较；只确认版本号、URL 可访问或资产名相同都不授予 rollout 权限。完整性一致后才加载客户端基座，并只在临时 clone 中做指纹升级、lockfile 更新和消费门禁。验证通过才推送 `chore/workloom-ui-v<版本>` 独立分支并创建 PR，永不直推 `main`。W1 → W5 顺序是可执行门禁；更晚波次不能越过未完成前序。dry-run 同样执行制品完整性核验，并在临时 clone 中运行真实迁移和门禁，但不写远端仓、分支或 PR。
+`sync/ui-upgrade-pr.mjs --rollout` 每次都先要求执行提交固定在同版本 `ui-v*` 标签，以 npm 11.6.2 / pnpm 10.14.0 从标签隔离生成本地 `npm pack`，再把本地 tarball 的 sha512、`base-capabilities.json` 对应版本的 SRI 登记、同标签 CNB Release 的真实下载字节做三方比较；只确认版本号、URL 可访问或资产名相同都不授予 rollout 权限。完整性一致后才加载客户端基座，并只在临时 clone 中做指纹升级、lockfile 更新和消费门禁。验证通过才推送 `chore/workloom-ui-v<版本>` 独立分支并创建 PR，永不直推 `main`。W1 → W5 顺序是可执行门禁；更晚波次不能越过未完成前序。dry-run 同样执行制品完整性核验，并在临时 clone 中运行真实迁移和门禁，但不写远端仓、分支或 PR。
 
 pnpm 10.14 对 URL tarball 生成的 lockfile 只登记 `resolution.tarball`，默认不写 `resolution.integrity`；因此仅把 SHA-512 放在 `.workloom-ui.json` 并不能让包管理器校验下载字节。新行业接入和存量 rollout 都必须先执行 `install --lockfile-only`，再由零外部依赖的 `sync/ui-lockfile-integrity.mjs` 校验 stable state、canonical Release URL、根 override、固定三端 importer 与唯一 packages 记录，并原子注入 state 的 SHA-512；随后才执行 `install --frozen-lockfile`。安装完成后的 consumer verifier 使用固定 `yaml-governance=npm:yaml@2.9.0` 再做完整 YAML 语义复验。缺摘要、摘要不一致、同 URL 异字节、重复 UI 记录或任一端未绑定都必须 fail closed。
 
@@ -128,19 +128,19 @@ pnpm 10.14 对 URL tarball 生成的 lockfile 只登记 `resolution.tarball`，�
 
 没有 `.workloom-client-foundation.json` 的存量仓不会被猜测覆盖：与目标稳定标签逐字节相同的文件可建立初始指纹；任何不同内容都以 `UNTRACKED_MANAGED_FILE` 阻断，要求人工先把合法行业差异迁入白名单扩展路径。已登记 state 后，`MANAGED_FILE_MODIFIED`、`MANAGED_FILE_DELETED`、非法客户端路径同样阻断整个 PR。
 
-## 自动化与凭据
+## 自动化与凭据（当前 CNB 通道）
 
-- `@workloom/ui` 不依赖 npm 账号或第三方 registry；包清单以 `private: true` 关闭误发 npm 的旁路，但仍允许受控 `npm pack` 生成安装制品。`ui-v*` 标签通过全门禁后，由绑定 `production` environment 的独立 job 使用当前 run 的短期 `GITHUB_TOKEN`（仅 `contents: write`）创建同标签 GitHub Release 并上传唯一 `workloom-ui-<版本>.tgz`；已有 Release 只有在下载字节、实算 sha512、pack metadata 与受控 manifest 登记全部一致时才幂等继续，异内容或多个 tgz 一律 fail closed；
-- GitHub 仓库必须把 `production` environment 配置为 required reviewers + 受保护部署分支/标签，并用 ruleset 限制 `ui-v*` 标签创建。workflow 还会把发布/续跑对象固定到不可变提交并验证其属于 `origin/main` 历史；代码内祖先校验不能替代仓库侧保护规则；
-- 八个公开下游仓的只读 preflight 永远无 token 执行。Release 发布 job 不接触跨仓写入身份；标签触发后的自动 job只复核制品并提示按 W1→W5 在本地继续。跨仓升级继续使用最小权限 GitHub App installation token 或经审计的人工本地凭据，且只在实际 rollout step 注入，编排器不会把它继承给 pnpm/npm/verifier 子进程，也不把个人 PAT 保存为长期自动化 secret；
-- 父仓 plan 在不接触跨仓凭据时先执行 YAML、密钥扫描器和同步引擎测试；PR 事件停在本地验证；
-- 可选 fan-out 只使用限定到清单仓库的短期 GitHub App installation token：先做 private-safe 跨仓 dry-run，再以精确 `base_sha` 和 `mode=required-only|full` 发送 `repository_dispatch`，并仅对 GitHub 标记为 `disabled_inactivity` 的 heartbeat 做恢复与运行监控；未配置 App 时公开九仓仍由各自 schedule 工作；
-- 子仓 heartbeat 先以公开只读、无 token 的方式把基座 `main` 固定为不可变提交，再执行该提交里的引擎；同步阶段显式拒绝残留认证 header；
-- 发生变更后，子仓在注入写令牌前执行 `pnpm install --frozen-lockfile --ignore-scripts`，并按脚本存在性运行 typecheck/test；heartbeat 同时输出三端迁移状态：缺端或未锁定稳定制品时明确标记为未合规，已接入 UI 清单时必须通过消费门禁；验证后要求工作树干净，最后才用本仓短期、最小权限 `GITHUB_TOKEN` 推同仓分支并创建 PR；
-- Git 远端 URL 永不拼入令牌。确需命令行认证时，引擎只通过临时 Git 环境配置传递 HTTP header，并对错误做二次脱敏；
-- 成功、失败和 dry-run 路径都会清理临时 clone。
+当前有效执行器是 `.cnb.yml`：每 30 分钟调用 `fanout-cnb.mjs` 与 `merge-sync-prs.mjs`，新仓扫描与 OSS 扫描按该文件的 crontab。`.github/workflows/*` 留作历史模板和部分发布策略校验源，文件存在不代表 GitHub 通道仍在运行。
 
-个人访问令牌可**按 `AGENTS.md` §7 在会话内一次性使用**（由产品所有者在当前任务中授权，例如触发跨仓 fanout），但不得配置为长期自动化 secret、不得写入任何文件/remote/脚本/日志，也不得提交——令牌永不进入互联网。同仓 `GITHUB_TOKEN` 创建的事件不保证自动触发后续 PR CI，因此 heartbeat 自身的推送前验证是硬门槛；同步 PR 仍须人工评审，若仓库另有可触发的外部 CI，再把它作为附加门槛。
+- `@workloom/ui` 以同版本 CNB Release 的不可变 tarball 分发；rollout 对本地 pack、登记 SRI 和下载字节做三方比较。下载失败、同版本异内容或散列不匹配即阻断。
+- `fanout-cnb.mjs` 先固定基座 commit，逐仓生成同步分支和 PR；公共机制、行业资产与隔离副本边界由 `base-scope.json` 和 `child-repos.json` 执行。
+- `merge-sync-prs.mjs` 在合并前重新回读 source/base HEAD、完整路径、risk 标签、平台 mergeable 状态及非空状态检查。治理文件不进入无人值守合并白名单，必须获得当前任务的明确审查授权；普通 PR 仍受平台评审规则约束。
+- 根级 `base-sync.mjs pull --push` 和非 dry-run 的 `push` 模式已 fail-closed；所有远端落地都走任务分支和 PR，门禁全绿后串行合并，合后回读。
+- 同步计划、污染检查、只含白名单的暂存、秘密扫描和事务回滚仍由引擎执行；`--no-commit` 只把审查结果留在本地。
+- 凭据只进入需要认证的进程环境：限定 `https://cnb.cool/` 的一次性 HTTP header，不写 remote URL、Git config、脚本、日志或 PR。只读公开 GitHub 上游保持匿名。成功、失败及 dry-run 都清理临时 clone。
+- 纳管工具必须回读 main 的 PR、状态检查、评审及管理员推送/强推/删除限制，命名为 main 的空壳规则不算保护。缺隔离登记、协议资产或可识别 CI 即拒绝纳管。
+
+个人访问令牌可按 `AGENTS.md` §7 在当前任务授权内一次性使用。平台是否已应用强保护必须以 API 回读为准，源码中的默认 payload 不能替代平台状态。
 
 ## 状态与验真语义
 
@@ -176,4 +176,4 @@ node --check sync/client-foundation.mjs
 node --check sync/ui-lockfile-integrity.mjs
 ```
 
-测试覆盖 AGENTS 三态迁移与 report、同 SHA 文件验真、Tiger 根级落点、旧 state 迁移、静态 heartbeat 自升级、来源 HEAD 约束、白名单提交、脏树拒绝、`--required-only --no-commit`、required-only push、lockfile/密钥扫描事务回滚、凭据脱敏、源/目标/dangling/pathPrefix symlink 对抗、相对依赖闭包与子仓依赖缝、临时 clone 全路径清理、linked worktree 跨仓前缀接入、父仓专属文件的精确派生清理，以及最小新行业 full 接入、三端 scaffold、latest-stable-only、稳定标签取源、dry-run、更新/新增/删除、旧摘要冲突关闭、扩展路径白名单和产品身份保护。
+测试覆盖 AGENTS 三态迁移与 report、同 SHA 文件验真、Tiger 根级落点、旧 state 迁移、静态 heartbeat 自升级、来源 HEAD 约束、白名单提交、脏树拒绝、`--required-only --no-commit`、required-only dry-run 与禁止直推 main、lockfile/密钥扫描事务回滚、凭据脱敏、源/目标/dangling/pathPrefix symlink 对抗、相对依赖闭包与子仓依赖缝、临时 clone 全路径清理、linked worktree 跨仓前缀接入、父仓专属文件的精确派生清理，以及最小新行业 full 接入、三端 scaffold、latest-stable-only、稳定标签取源、dry-run、更新/新增/删除、旧摘要冲突关闭、扩展路径白名单和产品身份保护。
