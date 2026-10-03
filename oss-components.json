@@ -2,7 +2,7 @@
   "meta": {
     "schema": "workloom.oss-components/v2",
     "name": "WorkLoom 开源组件登记表（oss-watch）",
-    "updated": "2026-09-27",
+    "updated": "2026-10-03",
     "doc": "docs/OPEN_SOURCE_COMPONENTS.md",
     "plan": "docs/oss-update-plan.md",
     "state": ".oss-watch-state.json",
@@ -359,7 +359,9 @@
       ],
       "cadence": "monthly",
       "gate": "full",
-      "notes": "桌面载荷内嵌 17.x（Postgres.app 2.9.6-17 / EDB 树），CI 用 pgvector/pgvector:pg17 镜像；小版本升级必须重跑迁移与 RLS 用例；服务器小版本以 PGDG 发布人工复核"
+      "notes": "桌面载荷内嵌 17.x（Postgres.app 2.9.6-17 / EDB 树），CI 用 pgvector/pgvector:pg17 镜像；小版本升级必须重跑迁移与 RLS 用例；服务器小版本以 PGDG 发布人工复核；上游 Docker tag 查询指向官方 library/postgres（https://hub.docker.com/_/postgres/tags），镜像 tag 与桌面实际锁定版本分别展示，不据上游 tag 自动改载荷。",
+      "registryImage": "library/postgres",
+      "registrySource": "https://hub.docker.com/_/postgres/tags"
     },
     {
       "name": "pgvector",
@@ -1621,6 +1623,129 @@
       "currentSource": "packages/base/computer-use/toolkit/requirements.txt",
       "latest": "1.45.1",
       "latest_checked_at": "2026-09-19T10:15:16.000Z"
+    },
+    {
+      "name": "Kokoro-82M（织伴本机女声模型）",
+      "repo": "https://github.com/hexgrad/kokoro",
+      "license": "Apache-2.0",
+      "channel": "github",
+      "usage": "asset",
+      "probe": {
+        "kind": "regex",
+        "file": "apps/server/src/voice/loommate-voice.json",
+        "pattern": "\"revision\": \"([a-f0-9]{64})\""
+      },
+      "scope": [
+        "本机可选织伴语音包（zf_001，已试听选定；不随基础客户端打包）"
+      ],
+      "cadence": "monthly",
+      "gate": "standard",
+      "notes": "固定 Kokoro-82M-v1.1-zh ONNX INT8 图与声线集 SHA-256；约 168 MB，配套 ZHG2P(version=1.1)，英文回调显式保留。产品所有者在 A/B/C 试听后选定 A / zf_001，旧小妮口音验收撤回。CPU 子进程推理，不支持任意情绪指令。导出器 MIT，模型 Apache-2.0；更新必须重跑听感、文本完整性、延迟与回退。"
+    },
+    {
+      "name": "Misaki（织伴中文文本转发音）",
+      "package": "misaki",
+      "repo": "https://github.com/hexgrad/misaki",
+      "license": "Apache-2.0",
+      "channel": "pypi",
+      "usage": "service",
+      "probe": {
+        "kind": "regex",
+        "file": "apps/server/src/voice/loommate-voice.json",
+        "pattern": "\"pythonDependency\": \"misaki\\[zh\\]==([0-9.]+)\""
+      },
+      "scope": [
+        "已有语音工位 venv；scripts/install-loommate-voice.py 安装可选 zh 依赖"
+      ],
+      "cadence": "monthly",
+      "gate": "standard",
+      "notes": "可选本机语音环境；固定 0.9.4 中的中文 1.1 发音前端与 EspeakFallback 英文回调。发音版本和依赖计入缓存，不混用旧模型发音。",
+      "latest": "0.9.4",
+      "latest_checked_at": "2026-10-02T16:00:00.000Z"
+    },
+    {
+      "name": "mlx-audio（既有个人克隆工位）",
+      "package": "mlx-audio",
+      "repo": "https://github.com/Blaizzy/mlx-audio",
+      "license": "MIT",
+      "channel": "pypi",
+      "usage": "service",
+      "probe": {
+        "kind": "regex",
+        "file": "apps/server/src/voice/loommate-voice.json",
+        "pattern": "\"mlxAudioVersion\": \"([0-9.]+)\""
+      },
+      "scope": [
+        "现有个人克隆/影视工位；女声安装器不升级该共享环境的 mlx-audio"
+      ],
+      "cadence": "monthly",
+      "gate": "standard",
+      "notes": "保留已安装且实测的 0.5.5，女声安装器只校验版本。织伴默认使用独立 CPU ONNX 后端；现有影视和个人克隆模型配置保持独立。升级需重跑原工位回归。",
+      "latest": "0.5.7",
+      "latest_checked_at": "2026-10-02T16:00:00.000Z"
+    },
+    {
+      "name": "ONNX Runtime（织伴 CPU 女声推理）",
+      "package": "onnxruntime",
+      "repo": "https://github.com/microsoft/onnxruntime",
+      "license": "MIT",
+      "channel": "pypi",
+      "usage": "service",
+      "probe": {
+        "kind": "regex",
+        "file": "apps/server/src/voice/loommate-voice.json",
+        "pattern": "\"runtimeDependency\": \"onnxruntime==([0-9.]+)\""
+      },
+      "scope": [
+        "可选本机织伴工位；scripts/loommate-voice-engine.py"
+      ],
+      "cadence": "monthly",
+      "gate": "standard",
+      "notes": "固定并实测 1.30.0，显式 CPUExecutionProvider；导入前禁用遥测。不改 Node 或行业依赖锁。模型与声音不联网推理；更新需真实合成、并发、进程恢复回归。",
+      "latest": "1.30.0",
+      "latest_checked_at": "2026-10-02T19:30:00.000Z"
+    },
+    {
+      "name": "phonemizer-fork（织伴英文文本转音素）",
+      "package": "phonemizer-fork",
+      "repo": "https://github.com/bootphon/phonemizer",
+      "license": "GPL-3.0-or-later",
+      "channel": "pypi",
+      "usage": "service",
+      "probe": {
+        "kind": "regex",
+        "file": "apps/server/src/voice/loommate-voice.json",
+        "pattern": "\"phonemizer-fork==([0-9.]+)\""
+      },
+      "scope": [
+        "可选本机独立语音工位；不打入客户端基础包"
+      ],
+      "cadence": "monthly",
+      "gate": "standard",
+      "notes": "官方 PyPI 固定并实测 3.3.2；用于 Misaki 英文回调，防止混合文本漏读。更新需真实中英混读、离线安装及错误回归；保留组件各自许可。",
+      "latest": "3.3.2",
+      "latest_checked_at": "2026-10-03T00:30:00.000Z"
+    },
+    {
+      "name": "espeakng-loader（织伴本机英文发音库加载）",
+      "package": "espeakng-loader",
+      "repo": "https://github.com/thewh1teagle/espeakng-loader",
+      "license": "MIT（loader）；GPL-3.0-or-later（所带 eSpeak NG）",
+      "channel": "pypi",
+      "usage": "service",
+      "probe": {
+        "kind": "regex",
+        "file": "apps/server/src/voice/loommate-voice.json",
+        "pattern": "\"espeakng-loader==([0-9.]+)\""
+      },
+      "scope": [
+        "可选本机独立语音工位；不打入客户端基础包"
+      ],
+      "cadence": "monthly",
+      "gate": "standard",
+      "notes": "官方 PyPI 固定并实测 0.2.4；用于 Misaki 英文回调，防止混合文本漏读。更新需真实中英混读、离线安装及错误回归；保留组件各自许可。",
+      "latest": "0.2.4",
+      "latest_checked_at": "2026-10-03T00:30:00.000Z"
     }
   ]
 }

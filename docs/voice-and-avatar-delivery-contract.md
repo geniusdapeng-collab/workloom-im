@@ -6,45 +6,30 @@
 
 - 所有播报只能进入 `VoiceEngine` 单消费者队列；除熔断外不得打断正在播放的句子。
 - 同一角色第一次选中系统 voice 后必须锁定，后续段落不得重新猜测；voice 列表未就绪时锁定系统默认声，宁可全程一致，也不能中途变声。
-- **织伴（小织）的默认音色 = 本机克隆音色**（配音工位音色档案 `zh-myvoice`，可用 `WORKLOOM_VOICE_PROFILE` 覆盖）；
-  客户端经本机服务端 `/api/voice/speech` 取音频，**工位未配置/不可达时回落到系统柔和中文女声**并锁定同一音色
-  （降级只换声线，不让播报消失）。链路与纪律见 §2。
+- **织伴（小织）的默认音色 = 本机 Kokoro-82M-v1.1-zh 普通话女生声线 `zf_001`**（逻辑档案 `loommate-sweet`）；
+  客户端经服务端 `/api/voice/speech` 取音频。女声引擎失败时优先本机本人克隆 `zh-myvoice`，
+  两条路径都不可用才回落现有系统语音。服务端 `WORKLOOM_VOICE_PROFILE=zh-myvoice` 可明确选择本人音色。
+  同机已有的私有 `bridge-token` 自动读取；实际声线由响应头 `x-voice-profile` 标识。安装、缓存与边界见 [织伴自然女声](loommate-expressive-voice.md)。
 - 除织伴外的数字员工保持各自的系统音色（按角色稳定锁定，避免"全员一个声"）；角色可用 `neural:false` 显式关掉克隆音色。
 - 角色配置明确区分男女声；系统语音回落时优先 `Flo / Tingting / Xiaoxiao / Xiaoyi / Meijia / Sinji`，音高只做轻微修饰。
 - TTS 开始时环境声自动 duck 到 0，结束后平滑恢复；首次安装默认“仅反馈+仪式”，不默认播放连续白噪。
 - 欢迎介绍控制在四个短段内：问候、系统价值、权限原则、团队引出。字幕与语音使用同一文本，禁止另起长文案。
 
-## 2. 神经 TTS：本机克隆音色（默认）与选型备选
+## 2. 本机神经女声与克隆备选
 
-**已落地的默认路径**：本机配音工位（`bundles/ai-video/connectors/voice-bridge`，Apple 原生 MLX 引擎）承载
-音色档案与零样本克隆；服务端 `apps/server/src/voice/station.ts` 只按 profile 名请求并做幂等缓存
-（同 profile+文本只合成一次），客户端 `apps/web/src/voice/neuralVoice.ts` 负责播放与口型驱动。
+默认路径由 `apps/server/src/voice/station.ts` 从本机织伴独立 CPU 模型工位获取 `zf_001` 的完整 WAV，
+`apps/web/src/voice/neuralVoice.ts` 用同一播放队列驱动字幕与口型。旧前端默认档案名在服务器映射到新女声，
+不要求行业页面或数字人形象升级。其他岗位的角色声音配置独立。
 
-- **声纹不出域**：参考音频、音色档案与授权回执只留**本机工位** `~/.workloom/voice-station/profiles/<profile>/`；
-  服务端与客户端只传 profile 名与文本，音色样本不进仓库、不进数据库、不上行蜂群。
-- **能力先探测再使用**：客户端启动时探测一次 `/api/voice/status`，探到才走克隆音色；
-  未探到（工位没起、非本机部署、未授权）一律走系统语音 —— 不允许"每句话都等一次失败往返"。
-- **口型**：克隆音频没有 `onboundary` 事件，客户端用 `AudioContext + AnalyserNode` 的播放进度回调
-  `onProgress(0–1)` 估算字位，喂给同一套 `emitLip` 链路（与系统语音的 boundary 语义一致）。
-- 版权与授权：克隆他人声音必须先有授权声明（围栏 `G-VOICE1`）；对外发布另需 `G-VOICE6`。
+- 模型为可选本机语音包，约 168 MB，只安装一份，不进入每个基础客户端包；离线运行不临时下载权重。
+- 能力探测依旧经过 `/api/voice/status`；本机凭据可读取时启用神经路径。首次安装后重启服务器并刷新页面。
+- 女声失败优先本人克隆；参考音频和声音授权记录留在本机工位，不进仓库、数据库或蜂群。
+- 克隆他人声音仍需授权声明；对外发布继续遵循现有声音授权围栏。
+- 同模型、声线、发音前端、语速与文本的有效缓存直接播放；长文本分段完整合成；损坏 WAV 不算成功。
+- Kokoro 当前提供自然韵律与女生声线，不支持任意情绪指令；听感以真实试听为准。
+- 未安装语音包或工位不可达时保留系统 TTS 与字幕兜底。当前女声包仅验证 Apple Silicon macOS，其他系统不得冒充已安装。
 
-系统 TTS 作为零下载兜底保留；不能把数 GB 模型强塞进每个基础安装包。
-
-备选引擎（按需评估，不改变上面这条默认路径）：
-
-- `QwenAudio/CosyVoice`：Apache-2.0，中文与多语言、流式输出、情绪/语速/音量指令均由官方实现；形态是独立本机 sidecar。
-- `RVC-Boss/GPT-SoVITS`（MIT）：中文/粤语/日韩克隆第一梯队，官方支持 Apple Silicon；需自带 api_v2 服务。
-- `debpalash/VoiceStudio`（AGPL-3.0）：带 GUI 与配音工作区，可直连 GPT-SoVITS。
-- `hexgrad/Kokoro-82M`：模型小、Apache-2.0，适合轻量包，但中文情绪控制不是首选。
-- 不采用 `fishaudio/fish-speech`：Fish Audio Research License（研究用途）+ 仅 Linux/WSL2 + 4B 参数，不满足"跑在本机 + 可商用"。
-
-备选：
-
-- `fishaudio/fish-speech`：表达力和多角色能力强，需在商业分发前单独复核模型权重许可与运行资源。
-- `hexgrad/Kokoro-82M`：模型小、Apache-2.0 权重，适合轻量包，但中文情绪控制不是当前首选。
-- `appautomaton/mlx-speech`：Apple Silicon 本机推理友好，可做 macOS 实验后端；不是 Windows 的统一交付方案。
-
-神经语音包进入正式发布前必须实测：M1/M3 首包延迟、实时率、峰值内存、中文数字/英文缩写读法、离线可用、许可证与安装包增量。未过门禁不得替换稳定兜底。
+候选比较、实测延迟、固定版本、许可证和回滚步骤见 [织伴自然女声](loommate-expressive-voice.md)。
 
 ## 3. 数字员工视觉
 
@@ -74,5 +59,5 @@
 4. 角色名牌 DOM 中不存在系统默认人名，且团队人数与 Bundle 编制一致；
 5. 欢迎页、团队仪式、职场和舞台四张截图通过非黑屏、人物包围盒、标签密度检查；
 6. 默认与安全渲染模式分别验收。
-7. 织伴（小织）播报默认走本机克隆音色：`/api/voice/status` 探测为真时音频来自工位（响应头 `x-voice-profile`），
-   工位不可用时回落系统女声且**不得中途换声**；两种模式下字幕与语音文本仍逐字一致。
+7. 织伴播报正常时响应头为 `x-voice-profile: loommate-sweet`；故障回退本人音色时为 `zh-myvoice`，
+   两者的字幕、文本、口型与单消费者队列保持同一契约。系统语音回落时锁定选中的系统声线。

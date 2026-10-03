@@ -1,327 +1,252 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, mkdirSync, renameSync, rmSync, chmodSync } from "node:fs";
+import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, it } from "node:test";
-import { createBudget, normalizeBudgets, LIVE_BUDGET_CAPS } from "./budget.mjs";
+import { spawn } from "node:child_process";
+import { test } from "node:test";
+import { createBudget, LIVE_BUDGET_CAPS, normalizeBudgets } from "./budget.mjs";
 
-function fixture(t, declared = {}) {
-  const root = mkdtempSync(join(tmpdir(), "rdas-budget-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  const outDir = join(root, "run");
-  return { root, outDir, budget: createBudget({ budgets: normalizeBudgets(declared).budgets, outDir }) };
+function directory(t) {
+  const out = mkdtempSync(join(tmpdir(), "workloom-budget-"));
+  t.after(() => rmSync(out, { recursive: true, force: true }));
+  return out;
 }
-const request = (taskId, tokens = 3) => ({ taskId, kind: "llm", tokens });
-const settle = (budget, gate, taskId, actual) => budget.commit({ reservationId: gate.reservationId, taskId, kind: "llm", ...actual });
+function budget(t, caps = {}) {
+  return createBudget({ budgets: normalizeBudgets(caps).budgets, outDir: directory(t), environmentKind: "synthetic" });
+}
+const llm = (taskId, tokens) => ({ taskId, kind: "llm", tokens, measured: true });
 
-// Every accepted reservation is charged before a provider can start; each
-// settlement belongs to one reservation, even if asynchronous jobs finish later.
-describe("RDAS reservation and settlement", () => {
-  it("sums per-call tokens and preserves failures without a settlement", (t) => {
-    const { budget } = fixture(t, { maxLlmTokens: 20 });
-    for (const id of ["a", "b"]) {
-      const gate = budget.reserve(request(id));
-      assert.equal(gate.allowed, true);
-      settle(budget, gate, id, { tokens: 3 });
-    }
-    budget.reserve(request("failed", 4));
-    assert.equal(budget.summary().used.llmTokens, 10);
-    assert.equal(budget.summary().used.llmCalls, 3);
-    assert.deepEqual(budget.summary().accounting.pending, ["failed"]);
-  });
-
-  it("checks prospective totals and allows the exact cap", (t) => {
-    const { budget } = fixture(t, { maxLlmTokens: 5 });
-    assert.equal(budget.reserve(request("oversized", 6)).allowed, false);
-    const a = budget.reserve(request("a"));
-    assert.equal(a.allowed, true);
-    settle(budget, a, "a", { tokens: 3 });
-    assert.equal(budget.reserve(request("b", 3)).allowed, false);
-    assert.equal(budget.reserve(request("exact", 2)).allowed, true);
-    assert.equal(budget.reserve(request("past", 1)).allowed, false);
-    assert.equal(budget.summary().used.llmTokens, 5);
-  });
-
-  it("reserves all concurrent calls before await and settles out of order", async (t) => {
-    const { budget } = fixture(t, { maxLlmTokens: 12, maxLlmCalls: 3 });
-    const gates = await Promise.all(["a", "b", "c", "d"].map(async (id) => budget.reserve(request(id, 4))));
-    assert.deepEqual(gates.map((g) => g.allowed), [true, true, true, false]);
-    assert.equal(new Set(gates.slice(0, 3).map((g) => g.reservationId)).size, 3);
-    assert.equal(budget.summary().used.llmTokens, 12);
-    settle(budget, gates[2], "c", { tokens: 1 });
-    settle(budget, gates[0], "a", { tokens: 4 });
-    settle(budget, gates[1], "b", { tokens: 2 });
-    assert.equal(budget.summary().used.llmTokens, 12);
-    assert.equal(budget.summary().accounting.verified, true);
-  });
-
-  it("keeps the estimate after asynchronous provider failure", async (t) => {
-    const { budget } = fixture(t, { maxLlmTokens: 4 });
-    const run = async () => {
-      assert.equal(budget.reserve(request("failed", 4)).allowed, true);
-      await Promise.resolve();
-      throw new Error("local adapter fault");
-    };
-    await assert.rejects(run, /local adapter fault/);
-    assert.equal(budget.summary().used.llmTokens, 4);
-    assert.equal(budget.reserve(request("next", 1)).allowed, false);
-    assert.equal(budget.summary().accounting.verified, false);
-  });
-
-  it("charges only a reservation's upward usage and cost delta, never refunds", (t) => {
-    const { budget } = fixture(t, { maxLlmTokens: 30, maxCostCny: 10, pricing: { llmCnyPer1kTokens: 1000 } });
-    const a = budget.reserve(request("a", 2));
-    const b = budget.reserve(request("b", 3));
-    assert.equal(budget.summary().used.costCny, 5);
-    assert.equal(settle(budget, b, "b", { tokens: 4, costCny: 6 }).allowed, true);
-    settle(budget, a, "a", { tokens: 1, costCny: 0 });
-    assert.equal(budget.summary().used.llmTokens, 6);
-    assert.equal(budget.summary().used.costCny, 8);
-  });
-
-  it("deduplicates an exact settlement and rejects conflicting repeats", (t) => {
-    const { budget } = fixture(t);
-    const a = budget.reserve(request("a", 2));
-    const before = settle(budget, a, "a", { tokens: 5, costCny: 1 });
-    const repeated = settle(budget, a, "a", { tokens: 5, costCny: 1 });
-    assert.equal(before.allowed, true);
-    assert.equal(repeated.allowed, true);
-    assert.equal(repeated.idempotent, true);
-    assert.equal(budget.summary().used.llmTokens, 5);
-    assert.equal(budget.summary().used.costCny, 1);
-    assert.equal(settle(budget, a, "a", { tokens: 6, costCny: 2 }).allowed, false);
-    assert.equal(budget.summary().used.llmTokens, 5);
-    assert.equal(budget.reserve(request("a", 2)).allowed, false);
-  });
-
-  it("rejects free, forged, cross-task or cross-kind settlements", (t) => {
-    const { budget } = fixture(t);
-    assert.equal(budget.commit({ taskId: "free", kind: "llm", tokens: 3 }).allowed, false);
-    const a = budget.reserve(request("a", 2));
-    for (const input of [
-      { reservationId: "missing", taskId: "a", kind: "llm", tokens: 4 },
-      { reservationId: a.reservationId, taskId: "other", kind: "llm", tokens: 4 },
-      { reservationId: a.reservationId, taskId: "a", kind: "image", units: 4 },
-    ]) assert.equal(budget.commit(input).allowed, false);
-    assert.equal(budget.summary().used.llmTokens, 2);
-    assert.equal(settle(budget, a, "a", { tokens: 3 }).allowed, true);
-    assert.equal(budget.summary().used.llmTokens, 3);
-  });
-
-  it("charges actual overshoot, reports it, and blocks every future kind", (t) => {
-    const { budget } = fixture(t, { maxLlmTokens: 5 });
-    const a = budget.reserve(request("a", 3));
-    assert.equal(settle(budget, a, "a", { tokens: 6 }).allowed, false);
-    assert.equal(budget.summary().used.llmTokens, 6);
-    assert.equal(budget.summary().exceeded.length, 1);
-    for (const input of [request("b", 1), { taskId: "image", kind: "image", units: 1 }, { taskId: "video", kind: "video", units: 10 }]) {
-      assert.equal(budget.reserve(input).allowed, false);
-    }
-  });
-
-  it("charges cost overshoot and denies later reservations", (t) => {
-    const { budget } = fixture(t, { maxCostCny: 0.5 });
-    const a = budget.reserve(request("a", 3));
-    assert.equal(settle(budget, a, "a", { tokens: 3, costCny: 0.6 }).allowed, false);
-    assert.equal(budget.summary().used.costCny, 0.6);
-    assert.equal(budget.reserve(request("b", 1)).allowed, false);
-  });
-
-  it("missing or zero usage remains explicitly estimated and unverified", (t) => {
-    const { budget } = fixture(t);
-    const cases = [["missing", {}], ["zero", { tokens: 0 }], ["declared", { tokens: 3, usageVerified: false }]];
-    const gates = cases.map(([id]) => budget.reserve(request(id)));
-    for (const [index, [id, usage]] of cases.entries()) {
-      assert.equal(settle(budget, gates[index], id, usage).usageVerified, false);
-    }
-    assert.equal(budget.reserve(request("after-unknown", 1)).allowed, false);
-    assert.equal(budget.summary().used.llmTokens, 9);
-    assert.equal(budget.summary().accounting.mode, "estimated");
-    assert.equal(budget.summary().accounting.verified, false);
-    assert.deepEqual(budget.summary().accounting.unverified, ["missing", "zero", "declared"]);
-  });
-
-  it("validates malformed reservations without subtracting quota or cost", (t) => {
-    const { budget } = fixture(t);
-    for (const input of [
-      {}, { taskId: "", kind: "llm", tokens: 1 }, { taskId: "../x", kind: "llm", tokens: 1 },
-      { taskId: "a\n", kind: "llm", tokens: 1 }, { taskId: "a", kind: "unknown", units: 1 },
-      ...[-1, 0, 0.5, NaN, Infinity, "3", Number.MAX_SAFE_INTEGER + 1].map((tokens) => request("a", tokens)),
-      ...[-1, 0, 1.5, NaN, Infinity, "1"].map((units) => ({ taskId: "a", kind: "image", units })),
-      { taskId: "a", kind: "llm", tokens: 3, units: -1 },
-      { taskId: "a", kind: "image", units: 1, tokens: 3 },
-    ]) assert.equal(budget.reserve(input).allowed, false, JSON.stringify(input));
-    assert.deepEqual(budget.summary().used, { llmCalls: 0, llmTokens: 0, images: 0, videoClips: 0, videoSeconds: 0, costCny: 0, wallClockMin: 0 });
-    assert.equal(budget.reserve(request("中文-01", 1)).allowed, true);
-  });
-
-  it("rejects invalid settlement values but keeps the original reservation", (t) => {
-    const { budget } = fixture(t);
-    const a = budget.reserve(request("a", 3));
-    for (const actual of [
-      ...[-1, 0.5, NaN, Infinity, "3"].map((tokens) => ({ tokens })),
-      ...[-1, NaN, Infinity, "1"].map((costCny) => ({ tokens: 3, costCny })),
-    ]) assert.equal(settle(budget, a, "a", actual).allowed, false);
-    assert.equal(budget.summary().used.llmTokens, 3);
-    assert.equal(settle(budget, a, "a", { tokens: 3 }).allowed, true);
-  });
+test("budget: pending reservations and committed usage share the exact token boundary", (t) => {
+  const b = budget(t, { maxLlmTokens: 10_000 });
+  assert.equal(b.reserve(llm("first", 4000)).allowed, true);
+  assert.equal(b.reserve(llm("second", 6000)).allowed, true);
+  assert.equal(b.reserve(llm("excess", 1)).allowed, false);
+  assert.equal(b.summary().pending.llmTokens, 10_000);
+  b.commit(llm("first", 4000)); b.commit(llm("second", 6000));
+  assert.equal(b.summary().used.llmTokens, 10_000);
+  assert.equal(b.summary().actual.llmTokens, 10_000);
+  assert.equal(b.summary().pending.llmTokens, 0);
 });
 
-describe("all quota dimensions and immutable evidence", () => {
-  it("every zero cap blocks the relevant action before usage is charged", (t) => {
-    for (const [key, input] of [
-      ["maxLlmCalls", request("a")], ["maxLlmTokens", request("a")],
-      ["maxImages", { taskId: "a", kind: "image", units: 1 }],
-      ["maxVideoClips", { taskId: "a", kind: "video", units: 10 }],
-      ["maxVideoSecondsTotal", { taskId: "a", kind: "video", units: 10 }],
-      ["maxCostCny", request("a")], ["maxWallClockMin", request("a")],
-    ]) {
-      const { budget } = fixture(t, { [key]: 0 });
-      assert.equal(budget.reserve(input).allowed, false, key);
-      assert.equal(budget.summary().used.costCny, 0);
-      assert.equal(budget.summary().used.llmCalls, 0);
-    }
-  });
-
-  it("allows an exact decimal cost boundary and keeps small costs visible", (t) => {
-    const { budget } = fixture(t, { maxCostCny: 0.3, pricing: { imageCny: 0.1 } });
-    assert.equal(budget.reserve({ taskId: "a", kind: "image", units: 3 }).allowed, true);
-    assert.equal(budget.summary().used.costCny, 0.3);
-    assert.equal(budget.reserve({ taskId: "b", kind: "image", units: 1 }).allowed, false);
-    const tiny = fixture(t).budget;
-    tiny.reserve(request("a", 3));
-    assert.equal(tiny.summary().used.costCny, 0.000006);
-  });
-
-  it("checks image count, video clip/seconds and the 10-15 second range", (t) => {
-    const { budget } = fixture(t, { maxImages: 3, maxVideoClips: 3, maxVideoSecondsTotal: 32 });
-    const image = budget.reserve({ taskId: "image", kind: "image", units: 3 });
-    assert.equal(image.allowed, true);
-    budget.commit({ reservationId: image.reservationId, taskId: "image", kind: "image", units: 2 });
-    assert.equal(budget.reserve({ taskId: "past-image", kind: "image", units: 1 }).allowed, false);
-    for (const units of [-1, 0, 9, 16, 32, 10.5, Infinity]) {
-      assert.equal(budget.reserve({ taskId: `bad-${String(units)}`, kind: "video", units }).allowed, false);
-    }
-    for (const [id, units] of [["a", 10], ["b", 12], ["c", 10]]) {
-      assert.equal(budget.reserve({ taskId: id, kind: "video", units }).allowed, true);
-    }
-    assert.equal(budget.reserve({ taskId: "past-video", kind: "video", units: 10 }).allowed, false);
-    assert.equal(budget.summary().used.videoSeconds, 32);
-    assert.equal(budget.summary().used.videoClips, 3);
-    assert.equal(budget.summary().used.images, 3);
-  });
-
-  it("records actual generated counts/duration over estimate and trips limits", (t) => {
-    for (const kind of ["image", "video"]) {
-      const root = mkdtempSync(join(tmpdir(), `rdas-${kind}-`));
-      t.after(() => rmSync(root, { recursive: true, force: true }));
-      const budget = createBudget({ budgets: normalizeBudgets({ maxImages: 2 }).budgets, outDir: root });
-      const units = kind === "image" ? 2 : 10;
-      const gate = budget.reserve({ taskId: kind, kind, units });
-      assert.equal(budget.commit({ reservationId: gate.reservationId, taskId: kind, kind, units: kind === "image" ? 3 : 16 }).allowed, false);
-      assert.equal(budget.summary().used[kind === "image" ? "images" : "videoSeconds"], kind === "image" ? 3 : 16);
-    }
-  });
-
-  it("uses a strict wall clock boundary, retains started tasks on late settlement", (t) => {
-    const realNow = Date.now;
-    let now = 1_000_000;
-    t.mock.method(Date, "now", () => now);
-    const { budget } = fixture(t, { maxWallClockMin: 1 });
-    const a = budget.reserve(request("a"));
-    now += 60_000;
-    assert.equal(budget.reserve(request("boundary")).allowed, false);
-    assert.equal(settle(budget, a, "a", { tokens: 4 }).allowed, false);
-    assert.equal(budget.summary().used.llmTokens, 4);
-    assert.equal(typeof realNow(), "number");
-  });
-
-  it("never overwrites a previous run's append-only ledger", (t) => {
-    const { budget, outDir } = fixture(t);
-    const a = budget.reserve(request("a"));
-    settle(budget, a, "a", { tokens: 3 });
-    budget.persist();
-    const before = readFileSync(budget.ledgerPath, "utf8");
-    assert.throws(() => createBudget({ budgets: normalizeBudgets().budgets, outDir }), /EEXIST/);
-    assert.equal(readFileSync(budget.ledgerPath, "utf8"), before);
-    const rows = before.trim().split("\n").map(JSON.parse);
-    assert.equal(rows[0].event, "reserve");
-    assert.equal(rows[1].event, "commit");
-    assert.equal(rows[0].reservationId, rows[1].reservationId);
-    assert.equal(rows[0].tokens, 3);
-    assert.equal(rows[1].chargedTokens, 3);
-    assert.equal(JSON.parse(readFileSync(join(outDir, "budget-summary.json"), "utf8")).used.llmTokens, 3);
-  });
-
-  it("fails closed if the audit journal cannot be written", (t) => {
-    const { budget } = fixture(t);
-    renameSync(budget.ledgerPath, `${budget.ledgerPath}.old`);
-    mkdirSync(budget.ledgerPath);
-    assert.throws(() => budget.reserve(request("a")), /EISDIR/);
-    assert.equal(budget.summary().used.llmTokens, 0);
-    assert.equal(budget.summary().accounting.auditFailure, true);
-    assert.equal(budget.reserve(request("b")).allowed, false);
-  });
-
-  it("does not dispatch when filesystem permissions deny the journal", (t) => {
-    const { budget } = fixture(t);
-    chmodSync(budget.ledgerPath, 0);
-    try {
-      assert.throws(() => budget.reserve(request("a")), /EACCES|EPERM/);
-      assert.equal(budget.summary().used.llmCalls, 0);
-      assert.equal(budget.reserve(request("b")).allowed, false);
-    } finally {
-      chmodSync(budget.ledgerPath, 0o600);
-    }
-  });
-
-  it("fails visibly on summary persistence errors", (t) => {
-    const { budget, outDir } = fixture(t);
-    mkdirSync(join(outDir, "budget-summary.json"));
-    assert.throws(() => budget.persist(), /EISDIR/);
-  });
-
-  it("does not let a caller mutate cap/pricing/summary objects to grant quota", (t) => {
-    const declared = { maxLlmTokens: 3, pricing: { llmCnyPer1kTokens: 10 } };
-    const { budget } = fixture(t, declared);
-    declared.maxLlmTokens = 300_000;
-    declared.pricing.llmCnyPer1kTokens = 0;
-    const snapshot = budget.summary();
-    assert.throws(() => { snapshot.budgets.maxLlmTokens = 300_000; }, TypeError);
-    assert.throws(() => { budget.pricing.llmCnyPer1kTokens = 0; }, TypeError);
-    snapshot.blocked.push({ taskId: "foreign", reason: "not a real denial" });
-    assert.equal(budget.summary().blocked.length, 0);
-    budget.reserve(request("a"));
-    assert.equal(budget.reserve(request("b", 1)).allowed, false);
-    assert.equal(budget.summary().used.costCny, 0.03);
-  });
+test("budget: sums every independent actual usage and its cost", (t) => {
+  const b = budget(t);
+  b.reserve(llm("first", 1000)); b.reserve(llm("second", 1000));
+  b.commit(llm("first", 2000)); b.commit(llm("second", 3000));
+  const s = b.summary();
+  assert.equal(s.used.llmTokens, 5000);
+  assert.equal(s.actual.llmTokens, 5000);
+  assert.equal(s.used.costCny, 0.01);
 });
 
-describe("configuration is finite, nonnegative, integral where metered, and only tighter", () => {
-  it("clamps attempted relaxation and preserves valid stricter settings", () => {
-    const { budgets, warnings } = normalizeBudgets({ maxLlmCalls: 100, maxLlmTokens: 6, minVideoSeconds: 1, pricing: { imageCny: 1 } });
-    assert.equal(budgets.maxLlmCalls, LIVE_BUDGET_CAPS.maxLlmCalls);
-    assert.equal(budgets.maxLlmTokens, 6);
-    assert.equal(budgets.minVideoSeconds, LIVE_BUDGET_CAPS.minVideoSeconds);
-    assert.equal(budgets.pricing.imageCny, 1);
-    assert.equal(warnings.length, 2);
-  });
+test("budget: identical reserve and commit retries are idempotent, conflicting retries are refused", (t) => {
+  const b = budget(t);
+  b.reserve(llm("first", 1000));
+  assert.equal(b.reserve(llm("first", 1000)).duplicate, true);
+  assert.equal(b.reserve(llm("first", 2000)).allowed, false);
+  assert.equal(b.commit(llm("first", 2000)).committed, true);
+  assert.equal(b.commit(llm("first", 2000)).duplicate, true);
+  assert.equal(b.commit(llm("first", 3000)).committed, false);
+  assert.equal(b.summary().used.llmCalls, 1);
+  assert.equal(b.summary().used.llmTokens, 2000);
+  const rows = readFileSync(b.ledgerPath, "utf8").trim().split("\n").map(JSON.parse);
+  assert.equal(rows.filter((x) => x.event === "reserve").length, 1);
+  assert.equal(rows.filter((x) => x.event === "commit").length, 1);
+});
 
-  it("rejects invalid limits/prices and contradictory duration ranges", () => {
-    for (const value of [-1, NaN, Infinity, "3", Number.MAX_SAFE_INTEGER + 1]) {
-      assert.throws(() => normalizeBudgets({ maxLlmTokens: value }), /live\.budgets/);
-    }
-    assert.throws(() => normalizeBudgets({ maxImages: 1.5 }), /live\.budgets/);
-    for (const value of [-1, NaN, Infinity, "1"]) {
-      assert.throws(() => normalizeBudgets({ pricing: { imageCny: value } }), /pricing/);
-    }
-    assert.throws(() => normalizeBudgets({ minVideoSeconds: 16 }), /区间/);
-    assert.throws(() => normalizeBudgets(null), /live\.budgets/);
-  });
+test("budget: a new physical attempt requires a new reservationId", (t) => {
+  const b = budget(t);
+  const first = { ...llm("task", 1000), reservationId: "task:attempt-1" };
+  const second = { ...llm("task", 1000), reservationId: "task:attempt-2" };
+  b.reserve(first); b.commit(first); b.reserve(second); b.commit(second);
+  assert.equal(b.summary().used.llmCalls, 2);
+  assert.equal(b.summary().used.llmTokens, 2000);
+});
 
-  it("revalidates direct createBudget inputs instead of trusting an alleged normalized cap", (t) => {
-    const root = mkdtempSync(join(tmpdir(), "rdas-config-"));
-    t.after(() => rmSync(root, { recursive: true, force: true }));
-    assert.throws(() => createBudget({ budgets: { ...LIVE_BUDGET_CAPS, maxCostCny: NaN }, outDir: root }), /live\.budgets/);
+test("budget: smaller actual usage and failed unknown usage do not release the reservation", (t) => {
+  const b = budget(t, { maxLlmTokens: 10_000 });
+  b.reserve(llm("small", 4000)); b.commit(llm("small", 20));
+  b.reserve(llm("failed", 6000)); b.commit({ ...llm("failed", 0), measured: false, status: "failed" });
+  assert.equal(b.summary().used.llmTokens, 10_000);
+  assert.equal(b.summary().actual.llmTokens, 20);
+  assert.equal(b.reserve(llm("next", 1)).allowed, false);
+});
+
+test("budget: actual overruns are recorded in full and block later calls", (t) => {
+  const b = budget(t, { maxLlmTokens: 10_000 });
+  b.reserve(llm("first", 6000));
+  assert.deepEqual(b.commit(llm("first", 13_000)).exceeded, ["llmTokens"]);
+  assert.equal(b.summary().used.llmTokens, 13_000);
+  assert.equal(b.reserve(llm("next", 1)).allowed, false);
+});
+
+test("budget: supplied actual cost above the cap cannot be hidden by a smaller estimate", (t) => {
+  const b = budget(t, { maxCostCny: 1 });
+  b.reserve(llm("first", 1000));
+  assert.deepEqual(b.commit({ ...llm("first", 1000), costCny: 2 }).exceeded, ["costCny"]);
+  assert.equal(b.summary().used.costCny, 2);
+  assert.equal(b.reserve(llm("next", 1)).allowed, false);
+});
+
+test("budget: image count, video clip count, duration and actual duration all stay accounted", (t) => {
+  const b = budget(t, { maxImages: 1, maxVideoClips: 1 });
+  assert.equal(b.reserve({ taskId: "image", kind: "image", units: 1 }).allowed, true);
+  b.commit({ taskId: "image", kind: "image", units: 2, measured: true });
+  assert.equal(b.summary().used.images, 2);
+  assert.equal(b.reserve({ taskId: "video", kind: "video", units: 12 }).allowed, false);
+  const v = budget(t, { maxVideoClips: 1 });
+  assert.equal(v.reserve({ taskId: "short", kind: "video", units: 9 }).allowed, false);
+  assert.equal(v.reserve({ taskId: "long", kind: "video", units: 16 }).allowed, false);
+  assert.equal(v.reserve({ taskId: "video", kind: "video", units: 12 }).allowed, true);
+  assert.ok(v.commit({ taskId: "video", kind: "video", units: 16, measured: true }).exceeded.includes("videoDuration"));
+  assert.equal(v.summary().used.videoSeconds, 16);
+  assert.equal(v.reserve({ taskId: "extra", kind: "video", units: 12 }).allowed, false);
+});
+
+test("budget: rejects negative, fractional, nonfinite, zero-token, missing and unknown inputs", (t) => {
+  const b = budget(t);
+  for (const [i, args] of [
+    { kind: "llm", tokens: -1 }, { kind: "llm", tokens: Infinity }, { kind: "llm", tokens: NaN },
+    { kind: "llm", tokens: 0 }, { kind: "llm", tokens: 1.5 }, { kind: "image", units: 0 },
+    { kind: "image", units: -1 }, { kind: "image", units: 1.2 }, { kind: "video", units: Infinity },
+    { kind: "unknown", units: 1 }, { kind: "llm", tokens: "1000" },
+  ].entries()) assert.equal(b.reserve({ taskId: `invalid-${i}`, ...args }).allowed, false);
+  assert.equal(b.reserve({ kind: "llm", tokens: 1000 }).allowed, false);
+  assert.equal(b.summary().used.llmCalls, 0);
+});
+
+test("budget: no matching reservation or malformed settlement cannot create usage or clear pending use", (t) => {
+  const b = budget(t);
+  assert.equal(b.commit(llm("missing", 1000)).committed, false);
+  b.reserve(llm("first", 1000));
+  assert.equal(b.commit(llm("first", -1)).committed, false);
+  assert.equal(b.commit({ ...llm("first", 1), costCny: Infinity }).committed, false);
+  assert.equal(b.summary().pending.llmTokens, 1000);
+  assert.equal(b.summary().actual.llmTokens, 0);
+});
+
+test("budget: restart and two handles replay the same journal without truncating it", (t) => {
+  const outDir = directory(t);
+  const options = { outDir, budgets: normalizeBudgets({ maxLlmTokens: 10_000 }).budgets, environmentKind: "synthetic" };
+  const first = createBudget(options); first.reserve(llm("first", 8000));
+  const original = readFileSync(first.ledgerPath, "utf8");
+  const resumed = createBudget(options);
+  assert.equal(readFileSync(first.ledgerPath, "utf8"), original);
+  assert.equal(resumed.reserve(llm("second", 8000)).allowed, false);
+  resumed.commit(llm("first", 9000));
+  assert.equal(first.summary().used.llmTokens, 9000);
+  assert.throws(() => createBudget({ ...options, environmentKind: "deployed" }), /不一致/);
+});
+
+test("budget: separate explicit run IDs preserve both journals and have independent caps", (t) => {
+  const outDir = directory(t);
+  const options = { outDir, budgets: normalizeBudgets({ maxLlmTokens: 1000 }).budgets };
+  const first = createBudget({ ...options, runId: "run-first" }); first.reserve(llm("task", 1000));
+  const second = createBudget({ ...options, runId: "run-second" }); second.reserve(llm("task", 1000));
+  assert.equal(first.summary().used.llmTokens, 1000);
+  assert.equal(second.summary().used.llmTokens, 1000);
+  assert.equal(readFileSync(first.ledgerPath, "utf8").trim().split("\n").length, 4);
+});
+
+test("budget: parallel asynchronous admission cannot over-reserve", async (t) => {
+  const b = budget(t, { maxLlmTokens: 10_000 });
+  const results = await Promise.all(Array.from({ length: 32 }, (_, i) => Promise.resolve().then(() => b.reserve(llm(`task-${i}`, 1000)))));
+  assert.equal(results.filter((x) => x.allowed).length, 10);
+  assert.equal(b.summary().used.llmTokens, 10_000);
+});
+
+test("budget: concurrent processes share one atomic token reservation and do not lose settlements", async (t) => {
+  const outDir = directory(t);
+  const moduleUrl = new URL("./budget.mjs", import.meta.url).href;
+  const code = `import {createBudget,normalizeBudgets} from ${JSON.stringify(moduleUrl)};
+const [id,outDir]=process.argv.slice(1);const b=createBudget({outDir,budgets:normalizeBudgets({maxLlmTokens:10000}).budgets,environmentKind:'synthetic'});
+const args={taskId:id,kind:'llm',tokens:4000};const gate=b.reserve(args);if(gate.allowed)b.commit({...args,tokens:5000,measured:true});console.log(JSON.stringify({allowed:gate.allowed}));`;
+  const run = (i) => new Promise((resolve, reject) => {
+    const p = spawn(process.execPath, ["--input-type=module", "-e", code, `worker-${i}`, outDir], { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = ""; let stderr = "";
+    p.stdout.on("data", (bytes) => { stdout += bytes; }); p.stderr.on("data", (bytes) => { stderr += bytes; });
+    p.on("error", reject); p.on("close", (status) => status === 0 ? resolve(JSON.parse(stdout)) : reject(new Error(stderr)));
   });
+  const results = await Promise.all(Array.from({ length: 16 }, (_, i) => run(i)));
+  assert.equal(results.filter((x) => x.allowed).length, 2);
+  const shared = createBudget({ outDir, budgets: normalizeBudgets({ maxLlmTokens: 10_000 }).budgets, environmentKind: "synthetic" });
+  assert.equal(shared.summary().used.llmTokens, 10_000);
+  assert.equal(shared.summary().actual.llmTokens, 10_000);
+  assert.equal(shared.summary().pending.llmTokens, 0);
+});
+
+test("budget: unreadable and corrupted journals fail before paid-call permission", (t) => {
+  const outDir = directory(t); mkdirSync(join(outDir, "budget-ledger.jsonl"));
+  assert.throws(() => createBudget({ outDir, budgets: normalizeBudgets({}).budgets }));
+  const b = budget(t); appendFileSync(b.ledgerPath, "{truncated\n");
+  assert.throws(() => b.reserve(llm("first", 1000)));
+});
+
+test("budget: wall-clock zero disables admission and invalid caps cannot widen limits", (t) => {
+  assert.equal(budget(t, { maxWallClockMin: 0 }).reserve(llm("first", 1)).allowed, false);
+  const normalized = normalizeBudgets({ maxLlmTokens: Infinity, maxImages: -1, maxLlmCalls: 1.5, maxCostCny: NaN, pricing: { imageCny: -1 } });
+  assert.equal(normalized.budgets.maxLlmTokens, LIVE_BUDGET_CAPS.maxLlmTokens);
+  assert.equal(normalized.budgets.maxImages, LIVE_BUDGET_CAPS.maxImages);
+  assert.equal(normalized.budgets.maxLlmCalls, LIVE_BUDGET_CAPS.maxLlmCalls);
+  assert.ok(normalized.warnings.length >= 5);
+});
+
+test("budget: a single actual video-duration overrun is reported and blocks other modalities", (t) => {
+  const b = budget(t);
+  b.reserve({ taskId: "video", kind: "video", units: 12 });
+  b.commit({ taskId: "video", kind: "video", units: 16, measured: true });
+  assert.ok(b.summary().exceeded.includes("videoDuration"));
+  assert.equal(b.reserve(llm("later", 1)).allowed, false);
+});
+
+test("budget: permission failure and symlink substitution block admission before usage", (t) => {
+  const b = budget(t);
+  chmodSync(b.ledgerPath, 0o400);
+  assert.throws(() => b.reserve(llm("first", 1000)), /权限/);
+  chmodSync(b.ledgerPath, 0o600);
+  const target = join(directory(t), "outside.jsonl"); writeFileSync(target, readFileSync(b.ledgerPath));
+  rmSync(b.ledgerPath); symlinkSync(target, b.ledgerPath);
+  assert.throws(() => b.reserve(llm("first", 1000)), /普通文件/);
+  assert.equal(readFileSync(target, "utf8").trim().split("\n").length, 1);
+});
+
+test("budget: journal quantities and settlement identity cannot be tampered into lower usage", (t) => {
+  for (const corrupt of [
+    (rows) => { rows[1].tokens = -100; },
+    (rows) => { rows[1].estimateCny = 0; },
+    (rows) => { rows[2].taskId = "other"; },
+    (rows) => { rows[0].startedAt = Date.now() + 60_000; },
+  ]) {
+    const b = budget(t); b.reserve(llm("first", 1000)); b.commit(llm("first", 1000));
+    const rows = readFileSync(b.ledgerPath, "utf8").trim().split("\n").map(JSON.parse); corrupt(rows);
+    writeFileSync(b.ledgerPath, `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
+    assert.throws(() => b.reserve(llm("later", 1000)));
+  }
+});
+
+test("budget: unmeasured settlements preserve estimates, disclose uncertainty and freeze all later paid admission", (t) => {
+  const b = budget(t); b.reserve(llm("unknown", 8000));
+  const settled = b.commit({ ...llm("unknown", 0), measured: false, status: "blocked", detail: "synthetic provider omitted usage" });
+  assert.equal(settled.committed, true); assert.equal(b.summary().used.llmTokens, 8000); assert.equal(b.summary().actual.llmTokens, 0);
+  assert.equal(b.summary().unmeasured.llmTokens, 8000); assert.equal(b.summary().measurementComplete, false);
+  assert.equal(b.reserve(llm("later", 1)).allowed, false); assert.equal(b.reserve({ taskId: "image", kind: "image", units: 1 }).allowed, false);
+  assert.match(b.summary().frozenBy[0].reason, /omitted usage/);
+});
+
+test("budget: unknown measurement cannot be relabelled as a measured zero on retry", (t) => {
+  const b = budget(t); b.reserve(llm("unknown", 8000));
+  b.commit({ ...llm("unknown", 0), measured: false, status: "blocked" });
+  assert.equal(b.commit({ ...llm("unknown", 0), measured: true, status: "blocked" }).committed, false);
+  assert.equal(b.summary().measurementComplete, false);
+});
+
+test("budget: omitted measurement is conservative for every modality and cannot admit the next paid call", (t) => {
+  for (const reservation of [{ taskId: "unknown", kind: "llm", tokens: 100 }, { taskId: "unknown", kind: "image", units: 2 }, { taskId: "unknown", kind: "video", units: 12 }]) {
+    const b = budget(t); assert.equal(b.reserve(reservation).allowed, true);
+    assert.equal(b.commit({ taskId: reservation.taskId, kind: reservation.kind, status: "failed" }).committed, true);
+    assert.equal(b.summary().reservations[0].settlement.measured, false);
+    assert.equal(b.summary().measurementComplete, false); assert.equal(b.summary().frozenBy.length, 1);
+    const quantity = reservation.kind === "llm" ? "llmTokens" : reservation.kind === "image" ? "images" : "videoSeconds";
+    assert.equal(b.summary().actual[quantity], 0); assert.equal(b.summary().unmeasured[quantity], reservation.tokens ?? reservation.units);
+    for (const later of [llm("later-llm", 1), { taskId: "later-image", kind: "image", units: 1 }, { taskId: "later-video", kind: "video", units: 12 }]) assert.equal(b.reserve(later).allowed, false);
+  }
 });
