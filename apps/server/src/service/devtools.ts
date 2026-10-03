@@ -16,6 +16,7 @@ import { execFile } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { svcQuery, serviceTx, appendEventOn } from "./events.js";
+import { requireServiceScope, runWithServiceScope } from "./scope.js";
 import { llmCall } from "./llm.js";
 import { runExam } from "./eval.js";
 import {
@@ -273,6 +274,8 @@ async function pickTool(workspaceId: string, assigned: string | null): Promise<{
 
 /** 派发任务（异步执行：函数立即返回，会话在后台跑，前端轮询） */
 export async function dispatchTask(workspaceId: string, taskId: string, actor: Actor) {
+  // External adapters may emit outside this request's async ancestry.
+  const sessionScope = requireServiceScope(workspaceId);
   if (running.has(taskId)) throw new Error("任务已有会话在跑");
   const tasks = await svcQuery<TaskRow>(workspaceId, `SELECT * FROM dev_tasks WHERE id=$1`, [taskId]);
   const task = tasks[0];
@@ -323,53 +326,124 @@ export async function dispatchTask(workspaceId: string, taskId: string, actor: A
       `INSERT INTO dev_events (workspace_id, session_id, seq, type, payload) VALUES ($1,$2,$3,$4,$5)`,
       [workspaceId, sessionId, seq, type, JSON.stringify(redact(payload))]).catch(() => undefined);
   };
+  let pendingStarted = Promise.resolve();
+  let startedFailure: { message: string; sqlState?: string } | undefined;
+  const errorDetail = (error: unknown) => ({
+    message: redact((error instanceof Error ? error.message : String(error)).slice(0, 300)),
+    sqlState: error && typeof error === "object" && "code" in error && typeof error.code === "string"
+      ? error.code : undefined,
+  });
+  const failStarted = async (error: unknown) => {
+    const detail = errorDetail(error);
+    startedFailure = {
+      sqlState: detail.sqlState,
+      message: `机床会话启动信息保存失败${detail.sqlState ? ` [${detail.sqlState}]` : ""}：${detail.message}`,
+    };
+    console.error("开发会话启动信息保存失败", { workspaceId, taskId, sessionId, ...startedFailure });
+    running.get(taskId)?.cancel();
+    try {
+      seq += 1;
+      await svcQuery(workspaceId,
+        `INSERT INTO dev_events (workspace_id, session_id, seq, type, payload) VALUES ($1,$2,$3,'error',$4)`,
+        [workspaceId, sessionId, seq, JSON.stringify({ type: "error", phase: "started", ...startedFailure })]);
+    } catch (reportError) {
+      console.error("开发会话启动错误事件写入失败", {
+        workspaceId, taskId, sessionId, originalSqlState: startedFailure.sqlState, ...errorDetail(reportError),
+      });
+    }
+    try {
+      await svcQuery(workspaceId,
+        `UPDATE dev_tasks SET status='failed', review_note=$3, updated_at=now() WHERE workspace_id=$1 AND id=$2`,
+        [workspaceId, taskId, startedFailure.message]);
+    } catch (reportError) {
+      console.error("开发会话启动失败状态写入失败", {
+        workspaceId, taskId, sessionId, originalSqlState: startedFailure.sqlState, ...errorDetail(reportError),
+      });
+    }
+  };
   const session = startSession(adapter, binPath, {
     taskId, prompt: task.task_prompt + repairNote, worktreePath,
     timeoutMs: SESSION_TIMEOUT_MS, maxFenceDenials: MAX_FENCE_DENIALS, resumeId, extraEnv,
   }, {
-    onEvent: async (ev: DevEvent) => {
+    onEvent: (ev: DevEvent) => runWithServiceScope(sessionScope, async () => {
       if (ev.type === "started") {
-        await svcQuery(workspaceId, `UPDATE dev_sessions SET thread_id=$3 WHERE workspace_id=$1 AND id=$2 AND $3 IS NOT NULL`,
-          [workspaceId, sessionId, ev.threadId ?? null]).catch(() => undefined);
+        // Serialize repeated starts, and commit the external identity with its success event.
+        pendingStarted = pendingStarted.then(async () => {
+          if (startedFailure) return;
+          try {
+            await serviceTx(workspaceId, async (client) => {
+              const updated = await client.query(
+                `UPDATE dev_sessions SET thread_id=$3::text WHERE workspace_id=$1 AND id=$2 AND $3::text IS NOT NULL RETURNING id`,
+                [workspaceId, sessionId, ev.threadId ?? null]);
+              if (ev.threadId != null && updated.rowCount !== 1) {
+                throw new Error("开发会话记录不可见或已移除，线程身份未保存");
+              }
+              seq += 1;
+              await client.query(
+                `INSERT INTO dev_events (workspace_id, session_id, seq, type, payload) VALUES ($1,$2,$3,$4,$5)`,
+                [workspaceId, sessionId, seq, ev.type, JSON.stringify(redact(ev))]);
+            });
+          } catch (error) {
+            // Native stdout emits without awaiting this hook; throwing would leak a rejection.
+            await failStarted(error);
+          }
+        });
+        await pendingStarted;
+        return;
       }
+      if (startedFailure) return;
       await persistEvent(ev.type, ev as unknown as Record<string, unknown>);
-    },
-    onFenceVerdict: async (cmd, verdict, ruleId, note) => {
+    }),
+    onFenceVerdict: (cmd, verdict, ruleId, note) => runWithServiceScope(sessionScope, async () => {
       await svcQuery(workspaceId,
         `INSERT INTO dev_fences_audit (workspace_id, session_id, cmd, verdict, rule_id, note) VALUES ($1,$2,$3,$4,$5,$6)`,
         [workspaceId, sessionId, redact(cmd), verdict, ruleId ?? null, note ?? null]).catch(() => undefined);
       await persistEvent("fence_verdict", { cmd, verdict, ruleId, note });
-    },
+    }),
   });
   running.set(taskId, session);
 
   // 会话终点 → S4 审计（后台接续，不阻塞派发响应）
-  void session.result.then(async (result) => {
+  void session.result.then((result) => runWithServiceScope(sessionScope, async () => {
+    // A fast child exit can precede its asynchronous started write.
+    await pendingStarted;
     running.delete(taskId);
+    const failedStart = startedFailure;
+    const outcome = failedStart
+      ? { ...result, exitReason: "error" as const, lastMessage: failedStart.message, threadId: undefined }
+      : result;
     try {
       await svcQuery(workspaceId,
         `UPDATE dev_sessions SET ended_at=now(), exit_reason=$3, last_message=$4, usage=$5, thread_id=COALESCE($6, thread_id)
          WHERE workspace_id=$1 AND id=$2`,
-        [workspaceId, sessionId, result.exitReason, redact(result.lastMessage),
-         JSON.stringify(result.usage ?? {}), result.threadId ?? null]);
+        [workspaceId, sessionId, outcome.exitReason, redact(outcome.lastMessage),
+         JSON.stringify(outcome.usage ?? {}), outcome.threadId ?? null]);
       await serviceTx(workspaceId, async (client, sc) => {
         await appendEventOn(client, sc, { id: "dev-orchestrator", type: "agent" }, {
           objectType: "dev_task", objectId: taskId, action: "dev.session.end",
-          after: { sessionId, exitReason: result.exitReason, usage: result.usage },
+          after: { sessionId, exitReason: outcome.exitReason, usage: outcome.usage },
         });
       });
-      if (result.exitReason === "done") {
+      if (failedStart) {
+        await svcQuery(workspaceId,
+          `UPDATE dev_tasks SET status='failed', review_note=$3, updated_at=now() WHERE workspace_id=$1 AND id=$2`,
+          [workspaceId, taskId, failedStart.message]);
+      } else if (outcome.exitReason === "done") {
         await harvest(workspaceId, taskId, sessionId, repo, actor);
       } else {
         await handleFailure(workspaceId, taskId, repo, worktreePath, branch,
-          `机床会话异常结束：${result.exitReason}（${result.lastMessage.slice(0, 200)}）`, actor);
+          `机床会话异常结束：${outcome.exitReason}（${outcome.lastMessage.slice(0, 200)}）`, actor);
       }
     } catch (e) {
       await svcQuery(workspaceId,
         `UPDATE dev_tasks SET status='failed', review_note=$3, updated_at=now() WHERE workspace_id=$1 AND id=$2`,
-        [workspaceId, taskId, `审计管线异常：${(e as Error).message.slice(0, 300)}`]).catch(() => undefined);
+        [workspaceId, taskId, `审计管线异常：${errorDetail(e).message}`]).catch((reportError: unknown) => {
+          console.error("开发会话终态失败状态写入失败", {
+            workspaceId, taskId, sessionId, original: errorDetail(e), ...errorDetail(reportError),
+          });
+        });
     }
-  });
+  }));
 
   return { sessionId, tool: adapter.toolKey, branch };
 }
@@ -523,15 +597,38 @@ export async function rejectTask(workspaceId: string, taskId: string, note: stri
 }
 
 export async function cancelTask(workspaceId: string, taskId: string, actor: Actor) {
-  running.get(taskId)?.cancel();
-  const sessions = await svcQuery<{ worktree_path: string; branch: string }>(workspaceId,
-    `SELECT worktree_path, branch FROM dev_sessions WHERE task_id=$1 ORDER BY started_at DESC LIMIT 1`, [taskId]);
-  const tasks = await svcQuery<{ repo_id: string }>(workspaceId, `SELECT repo_id FROM dev_tasks WHERE id=$1`, [taskId]);
-  const repos = await svcQuery<RepoRow>(workspaceId, `SELECT * FROM dev_repos WHERE id=$1`, [tasks[0]?.repo_id ?? ""]);
-  if (sessions[0] && repos[0]) {
-    await worktreeDiscard(repos[0].path, sessions[0].worktree_path, sessions[0].branch).catch(() => undefined);
+  const scope = requireServiceScope(workspaceId);
+  const allowed = ["draft", "confirmed", "running", "auditing", "rejected", "failed"];
+  // Validate ownership/state and commit the cancellation before touching a native child or Git.
+  const authorized = await serviceTx(workspaceId, async (client, sc) => {
+    const tasks = await client.query<TaskRow>(
+      `SELECT * FROM dev_tasks WHERE workspace_id=$1 AND id=$2 FOR UPDATE`, [workspaceId, taskId]);
+    const task = tasks.rows[0];
+    if (!task) throw new Error(`任务单不存在：${taskId}`);
+    if (!allowed.includes(task.status)) {
+      throw new Error(`任务单状态 ${task.status} 不允许此操作（需 ${allowed.join("/")}）`);
+    }
+    const repos = await client.query<RepoRow>(
+      `SELECT * FROM dev_repos WHERE workspace_id=$1 AND id=$2`, [workspaceId, task.repo_id]);
+    const repo = repos.rows[0];
+    if (!repo) throw new Error("任务仓库不存在或不属于当前工作区，取消未执行");
+    const sessions = await client.query<{ worktree_path: string; branch: string }>(
+      `SELECT worktree_path, branch FROM dev_sessions WHERE workspace_id=$1 AND task_id=$2 ORDER BY started_at DESC LIMIT 1`,
+      [workspaceId, taskId]);
+    const updated = await client.query(
+      `UPDATE dev_tasks SET status='canceled', updated_at=now() WHERE workspace_id=$1 AND id=$2 RETURNING id`,
+      [workspaceId, taskId]);
+    if (updated.rowCount !== 1) throw new Error("任务取消状态未保存，取消未执行");
+    await appendEventOn(client, sc, actor, {
+      objectType: "dev_task", objectId: taskId, action: "dev.task.cancel", after: { to: "canceled" },
+    });
+    return { live: running.get(task.id), session: sessions.rows[0], repo };
+  }, scope);
+  authorized.live?.cancel();
+  if (authorized.session) {
+    await worktreeDiscard(authorized.repo.path, authorized.session.worktree_path, authorized.session.branch).catch(() => undefined);
   }
-  return transit(workspaceId, taskId, ["draft", "confirmed", "running", "auditing", "rejected", "failed"], "canceled", actor, "dev.task.cancel");
+  return { ok: true, status: "canceled" };
 }
 
 /** 批准发布（S5 人审 → S6 版本台账：合并→semver→tag→changelog→releases） */

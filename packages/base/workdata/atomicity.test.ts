@@ -53,6 +53,7 @@ d("D16 业务+事件原子性（app 池单事务）", () => {
     const cc = await app.connect();
     try {
       await cc.query("BEGIN");
+      await cc.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
       await cc.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
       await cc.query(`DELETE FROM approvals WHERE approval_id=$1`, [`apr-${tag}`]);
       await cc.query("COMMIT");
@@ -95,6 +96,7 @@ d("D16 业务+事件原子性（app 池单事务）", () => {
     const cc = await app.connect();
     try {
       await cc.query("BEGIN");
+      await cc.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
       await cc.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
       const biz = await cc.query(`SELECT count(*) AS c FROM approvals WHERE approval_id=$1`, [`apr-${tag}`]);
       await cc.query("COMMIT");
@@ -111,7 +113,7 @@ d("D16 业务+事件原子性（app 池单事务）", () => {
       await expect(
         c.query(`SELECT * FROM append_event_insert($1,$2,$3,$4,$5,$6,$7,$8)`, [
           "E-d16-forge", scope.tenantId, scope.workspaceId, null,
-          JSON.stringify({ marker: "forge" }), "forged-prev-hash", "forged-hash", new Date().toISOString(),
+          JSON.stringify({ ...draft("suite.d16.forge", "d16-forge"), marker: "forge" }), "forged-prev-hash", "forged-hash", new Date().toISOString(),
         ]),
       ).rejects.toThrow(/断链拒写/);
       await c.query("ROLLBACK");
@@ -127,7 +129,7 @@ d("D16 业务+事件原子性（app 池单事务）", () => {
       await expect(
         c.query(`SELECT * FROM append_event_insert($1,$2,$3,$4,$5,$6,$7,$8)`, [
           "E-d16-spoof", scope.tenantId, scope.workspaceId, null,
-          JSON.stringify({ marker: "spoof" }), "GENESIS", "h", new Date().toISOString(),
+          JSON.stringify({ ...draft("suite.d16.spoof", "d16-spoof"), marker: "spoof" }), "GENESIS", "h", new Date().toISOString(),
         ]),
       ).rejects.toThrow(/上下文与事件归属不一致/);
       await c.query("ROLLBACK");

@@ -7,7 +7,7 @@
  * 全部写路径：app 池单事务 + 事务级双 GUC（D16 同构）；事件均带 basis（治理 §九.3 依据链强制）。
  */
 import type pg from "pg";
-import { gatewayAppendOnClient } from "@workloom/base/workdata";
+import { gatewayAppendOnClient, registerWriteActions, type ActorInfo } from "@workloom/base/workdata";
 import {
   parseCharter, transition, canExecute, isShadow, isExpired,
   evalCircuitBreaker, tightenAutonomy, effectiveAutonomy, type Charter,
@@ -20,26 +20,58 @@ import { generateBriefing, buildMemo, type BriefingKind } from "./briefing.js";
 
 export interface Scope { tenantId: string; workspaceId: string }
 
-const CEO_ACTOR = { id: "company-ceo", type: "agent" as const };
+const CEO_PRESET_KEY = "company-ceo";
+
+// 公共节拍自身的写动作也须登记：不能依赖行业岗位恰好声明同名工具，
+// 否则未分类事件会跳过 gateway 的只读/未绑定/高危授权复查位。
+registerWriteActions([
+  "captain.mode_change", "ceo.briefing", "ceo.decision", "initiative.launch",
+  "ceo.circuit_breaker", "decision.outcome", "hr.review", "hr.replacement_proposal",
+  "hr.replacement_applied", "ceo.board_pack", "org.hiring_proposal",
+]);
+
+/** 当前事务内解析在编 CEO；权限只取本工作区岗位声明，不预置任何围栏 ID。
+ * FOR SHARE 使岗位停用/权限变更与该事务的事件写入串行；调用方须先设置双 GUC。
+ * 缺岗、停用、无效或重复在编均留空绑定，由现有 gateway 失败关闭。
+ */
+export async function ceoActor(client: pg.PoolClient, scope: Scope): Promise<ActorInfo> {
+  const result = await client.query<{
+    readonly: boolean; fence_bindings: unknown; meta: { high_risk?: boolean } | null;
+  }>(
+    `SELECT readonly, fence_bindings, meta FROM agents
+     WHERE workspace_id=$1 AND preset_key=$2 AND status='ready' FOR SHARE`,
+    [scope.workspaceId, CEO_PRESET_KEY],
+  );
+  const row = result.rows.length === 1 ? result.rows[0] : undefined;
+  const declared = row?.fence_bindings;
+  return {
+    id: CEO_PRESET_KEY, type: "agent",
+    readonly: row ? row.readonly !== false : false,
+    fenceBindings: Array.isArray(declared) && declared.every((value): value is string =>
+      typeof value === "string" && value.trim().length > 0) ? [...declared] : [],
+    ...(row?.meta?.high_risk === true ? { highRisk: true } : {}),
+  };
+}
 
 /* ================= 宪章读写 ================= */
 
+interface CharterState { charter: Charter; snapshot: string | null }
+
+async function readCharterInTx(client: pg.PoolClient, scope: Scope, lock: "share" | "update" | null = null): Promise<CharterState> {
+  const r = await client.query<{ archive: Record<string, unknown>; charter_snapshot: string | null }>(
+    `SELECT archive, (archive->'charter')::text AS charter_snapshot FROM profiles
+     WHERE workspace_id=$1 AND tenant_id=$2${lock === "share" ? " FOR SHARE" : lock === "update" ? " FOR UPDATE" : ""}`,
+    [scope.workspaceId, scope.tenantId],
+  );
+  return { charter: parseCharter(r.rows[0]?.archive?.charter), snapshot: r.rows[0]?.charter_snapshot ?? null };
+}
+
+async function loadCharterState(app: pg.Pool, scope: Scope): Promise<CharterState> {
+  return inTx(app, scope, (c) => readCharterInTx(c, scope));
+}
+
 export async function loadCharter(app: pg.Pool, scope: Scope): Promise<Charter> {
-  const client = await app.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-    const r = await client.query<{ archive: Record<string, unknown> }>(
-      `SELECT archive FROM profiles WHERE workspace_id=$1`, [scope.workspaceId],
-    );
-    await client.query("COMMIT");
-    return parseCharter(r.rows[0]?.archive?.charter);
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally {
-    client.release();
-  }
+  return (await loadCharterState(app, scope)).charter;
 }
 
 async function saveCharterInTx(client: pg.PoolClient, scope: Scope, charter: Charter): Promise<void> {
@@ -71,10 +103,11 @@ async function emitCeoEvent(
   decision: { params?: Record<string, unknown>; after?: Record<string, unknown>; basis: string[] },
   opts?: { dryRun?: boolean },
 ): Promise<string> {
+  const actor = await ceoActor(client, scope);
   const res = await gatewayAppendOnClient(client, {
-    ...scope, actor: CEO_ACTOR, sessionId: `ceo-${scope.workspaceId}`,
+    ...scope, actor, sessionId: `ceo-${scope.workspaceId}`,
   }, {
-    who: { type: "agent", id: CEO_ACTOR.id },
+    who: { type: actor.type, id: actor.id },
     context: { tenant_id: scope.tenantId, workspace_id: scope.workspaceId, time: new Date().toISOString() },
     object: { type: "company_ceo", id: scope.workspaceId },
     decision: {
@@ -89,19 +122,73 @@ async function emitCeoEvent(
   return res.eventId;
 }
 
+/* ================= 同事务授权线性化（MC-021） ================= */
+
+type CharterTxResult<T> = { applied: true; value: T } | { applied: false; skipped: string };
+class ExpiredBeatAuthorization extends Error {}
+
+function authorizationDeadline(charter: Charter): string | null {
+  if (charter.mode === "trial") return charter.grant?.trial_ends_at ?? null;
+  if (charter.mode === "active") return charter.grant?.retain_until ?? null;
+  return null;
+}
+
+async function assertDeadlineInTx(client: pg.PoolClient, charter: Charter): Promise<void> {
+  const deadline = authorizationDeadline(charter);
+  if (!deadline) return;
+  // 不用事务开始时间 now()：等待业务行锁/审计链锁后仍按实际墙钟验权。
+  const r = await client.query<{ valid: boolean }>(`SELECT clock_timestamp() < $1::timestamptz AS valid`, [deadline]);
+  if (!r.rows[0]?.valid) throw new ExpiredBeatAuthorization("宪章授权期限已到，旧节拍结果失效");
+}
+
+/** profile 锁与所有业务/审计效果属于同一 COMMIT。模型与取数不持此锁。
+ * 已提交的任何章程变更（含模式、边界、版本与重新授权）都令旧推理失效；
+ * 相同影子授权仍逐拍追加独立 dry_run。写章程的节拍直接取 FOR UPDATE，避免共享锁升级死锁。
+ */
+async function inCharterTx<T, Facts = undefined>(
+  app: pg.Pool, scope: Scope, observed: CharterState, permission: "report" | "execute",
+  fn: (c: pg.PoolClient, facts: Facts | undefined) => Promise<T>, writesCharter = false,
+  gather?: (c: pg.PoolClient) => Promise<Facts>,
+): Promise<CharterTxResult<T>> {
+  try {
+    return await inTx(app, scope, async (c): Promise<CharterTxResult<T>> => {
+      // 回测的 advisory 占位与事实读取仍在同一事务，但发生在章程授权锁之前。
+      const facts = await gather?.(c);
+      const current = await readCharterInTx(c, scope, writesCharter ? "update" : "share");
+      if (current.snapshot === null || current.snapshot !== observed.snapshot) {
+        return { applied: false, skipped: "宪章已变更，旧节拍结果失效；下拍按新授权重试" };
+      }
+      if (current.charter.mode === "disabled" || (permission === "execute" && !canExecute(current.charter.mode) && !isShadow(current.charter.mode))) {
+        return { applied: false, skipped: `${current.charter.mode}：无本节拍执行权` };
+      }
+      await assertDeadlineInTx(c, current.charter);
+      const value = await fn(c, facts);
+      // 截止时间也覆盖审计/业务锁等待。抛错让此前待提交的业务、通知与审计一起回滚。
+      await assertDeadlineInTx(c, current.charter);
+      return { applied: true, value };
+    });
+  } catch (error) {
+    if (error instanceof ExpiredBeatAuthorization) return { applied: false, skipped: error.message };
+    throw error;
+  }
+}
+
 /* ================= 到期自动降级（所有节拍前置） ================= */
 
-async function applyExpiryIfDue(app: pg.Pool, scope: Scope, charter: Charter): Promise<Charter> {
-  if (!isExpired(charter)) return charter;
-  const next = transition(charter, { kind: "expire" });
-  await inTx(app, scope, async (c) => {
+async function applyExpiryIfDue(app: pg.Pool, scope: Scope, observed: CharterState): Promise<CharterState> {
+  if (!isExpired(observed.charter)) return observed;
+  return inTx(app, scope, async (c) => {
+    const current = await readCharterInTx(c, scope, "update");
+    // 到期检查之后的新撤权/授权不得被旧章程覆盖。
+    if (current.snapshot !== observed.snapshot || !isExpired(current.charter)) return current;
+    const next = transition(current.charter, { kind: "expire" });
     await saveCharterInTx(c, scope, next);
     await emitCeoEvent(c, scope, "captain.mode_change", {
-      params: { from: charter.mode, to: "suspended", reason: "试用/保留期到期自动降级（绝不自动续期，§12 铁律）" },
-      basis: [`试用截止 ${charter.grant?.trial_ends_at ?? charter.grant?.retain_until}`],
+      params: { from: current.charter.mode, to: "suspended", reason: "试用/保留期到期自动降级（绝不自动续期，§12 铁律）" },
+      basis: [`试用截止 ${current.charter.grant?.trial_ends_at ?? current.charter.grant?.retain_until}`],
     });
+    return readCharterInTx(c, scope);
   });
-  return next;
 }
 
 /* ================= 节拍①：简报（晨报/周会/月报/集团晨报） ================= */
@@ -110,18 +197,19 @@ export async function runBriefingBeat(
   app: pg.Pool, scope: Scope, kind: BriefingKind,
   opts: { llmCall?: (prompt: string) => Promise<string> } = {},
 ): Promise<{ eventId: string; via: string; skipped?: string }> {
-  let charter = await loadCharter(app, scope);
-  charter = await applyExpiryIfDue(app, scope, charter);
+  let observed = await loadCharterState(app, scope);
+  observed = await applyExpiryIfDue(app, scope, observed);
+  const charter = observed.charter;
   if (charter.mode === "disabled") return { eventId: "", via: "rule", skipped: "disabled：未授权，全静默（§12 默认关闭）" };
   const dryRun = isShadow(charter.mode);
   const b = await generateBriefing(app, scope, kind, { name: charter.identity.name, llmCall: opts.llmCall });
-  const eventId = await inTx(app, scope, (c) =>
+  const emitted = await inCharterTx(app, scope, observed, "report", (c) =>
     emitCeoEvent(c, scope, "ceo.briefing", {
       params: { kind, via: b.via, mode: charter.mode },
       after: { text: b.text },
       basis: [`事实取数：${b.facts.actionsTop.length} 类动作/待审分层/断点统计`, `合成通道：${b.via}`],
     }, { dryRun }));
-  return { eventId, via: b.via };
+  return emitted.applied ? { eventId: emitted.value, via: b.via } : { eventId: "", via: b.via, skipped: emitted.skipped };
 }
 
 /* ================= 节拍②：L2 队列裁决（公司CEO 自主闭环） ================= */
@@ -130,8 +218,9 @@ export async function runQueueBeat(
   app: pg.Pool, scope: Scope,
   opts: { llmCall?: (prompt: string) => Promise<string> } = {},
 ): Promise<{ decided: number; escalated: number; skipped?: string; tiers?: Record<string, number> }> {
-  let charter = await loadCharter(app, scope);
-  charter = await applyExpiryIfDue(app, scope, charter);
+  let observed = await loadCharterState(app, scope);
+  observed = await applyExpiryIfDue(app, scope, observed);
+  const charter = observed.charter;
   const dryRun = isShadow(charter.mode);
   if (!canExecute(charter.mode) && !dryRun) {
     return { decided: 0, escalated: 0, skipped: `${charter.mode}：无执行权（suspended 仅汇报 / disabled 静默）` };
@@ -151,6 +240,8 @@ export async function runQueueBeat(
     return r.rows;
   });
   let decided = 0, escalated = 0;
+  let skipped: string | undefined;
+  const deadline = authorizationDeadline(charter);
   const tiers: Record<string, number> = { micro: 0, standard: 0, major: 0 };
   for (const row of rows) {
     const snap = (row.snapshot ?? {}) as Record<string, unknown>;
@@ -207,31 +298,50 @@ ${item.action} ${JSON.stringify(item.params)}
     } else {
       verdict = decideForCaptain(charter, item);
     }
-    await inTx(app, scope, async (c) => {
-      // P0-4 裁决守卫：UPDATE 必须命中仍 pending 的行（并发下他处已裁决/上浮则 rowCount=0），
-      // 未命中即跳过事件写入——杜绝「状态未变但 ceo.decision 留痕已落」的双写失真
+    const appliedTx = await inCharterTx(app, scope, observed, "execute", async (c) => {
+      // shadow 仅预演计数与追加标记审计，不写审批层级、快照或裁决状态。
+      // MC-018 / P0-4：正式裁决仅命中仍有效的同一 pending/L2 审批和推理快照。
+      // 上浮后虽仍 pending，但已属 L4；旧 L2 推理不得重复上浮或代替董事长批准。
+      // 单行来源先取锁；LIMIT 1 保留子查询边界，避免有效期条件被提前到等待行锁之前求值。
+      // 未命中即跳过计数和审计；审批转换与成功事件仍由同一事务提交。
       let applied = true;
-      if (verdict.kind === "escalate") {
+      if (!dryRun && verdict.kind === "escalate") {
         const u = await c.query(
-          `UPDATE approvals SET tier='l4_chairman', snapshot = snapshot || $3::jsonb
-           WHERE approval_id=$1 AND workspace_id=$2 AND status='pending'`,
-          [row.approval_id, scope.workspaceId, JSON.stringify({ ceo_escalated: true, ceo_rationale: verdict.rationale })],
+          `UPDATE approvals SET tier='l4_chairman', snapshot = locked.snapshot || $3::jsonb
+           FROM (
+             SELECT approval_id, status, tier, event_id, snapshot FROM approvals
+             WHERE approval_id=$1 AND workspace_id=$2 AND tenant_id=$4
+             LIMIT 1 FOR UPDATE
+           ) locked
+           WHERE approvals.approval_id=locked.approval_id
+             AND locked.status='pending' AND locked.tier='l2_captain'
+             AND locked.event_id=$5 AND locked.snapshot=$6::jsonb
+             AND (locked.snapshot->>'expires_at' IS NULL OR (locked.snapshot->>'expires_at')::timestamptz > clock_timestamp())
+             AND ($7::timestamptz IS NULL OR $7::timestamptz > clock_timestamp())`,
+          [row.approval_id, scope.workspaceId, JSON.stringify({ ceo_escalated: true, ceo_rationale: verdict.rationale }),
+           scope.tenantId, row.event_id, JSON.stringify(row.snapshot), deadline],
         );
         applied = (u.rowCount ?? 0) > 0;
-        if (applied) escalated++;
       } else if (!dryRun) {
         const u = await c.query(
           `UPDATE approvals SET status=$3, gesture=$4::jsonb, decided_by=$5, decided_at=now()
-           WHERE approval_id=$1 AND workspace_id=$2 AND status='pending'`,
+           FROM (
+             SELECT approval_id, status, tier, event_id, snapshot FROM approvals
+             WHERE approval_id=$1 AND workspace_id=$2 AND tenant_id=$6
+             LIMIT 1 FOR UPDATE
+           ) locked
+           WHERE approvals.approval_id=locked.approval_id
+             AND locked.status='pending' AND locked.tier='l2_captain'
+             AND locked.event_id=$7 AND locked.snapshot=$8::jsonb
+             AND (locked.snapshot->>'expires_at' IS NULL OR (locked.snapshot->>'expires_at')::timestamptz > clock_timestamp())
+             AND ($9::timestamptz IS NULL OR $9::timestamptz > clock_timestamp())`,
           [row.approval_id, scope.workspaceId, verdict.kind === "approve" ? "approved" : "rejected",
-           JSON.stringify({ type: verdict.kind, weight: 1, reason_text: verdict.rationale }), CEO_ACTOR.id],
+           JSON.stringify({ type: verdict.kind, weight: 1, reason_text: verdict.rationale }), CEO_PRESET_KEY,
+           scope.tenantId, row.event_id, JSON.stringify(row.snapshot), deadline],
         );
         applied = (u.rowCount ?? 0) > 0;
-        if (applied) decided++;
-      } else {
-        decided++; // shadow：完整推理但不落审批状态
       }
-      if (!applied) return; // 他处已裁决：本拍不再写 ceo.decision 事件（P0-4）
+      if (!applied) return false; // 已改派、改动、过期或裁决：旧推理不再写 ceo.decision。
       const expected: ExpectedOutcome = {
         metric: "occ_hold",
         target: 0.7, // 基线：决策后 OCC 不低于宪章下限（行业事实面注册后可细化）
@@ -259,9 +369,14 @@ ${item.action} ${JSON.stringify(item.params)}
         after: { memo, analysis: analysis ?? undefined },
         basis: memo.basis,
       }, { dryRun });
+      return true;
     });
+    if (appliedTx.applied && appliedTx.value) {
+      if (verdict.kind === "escalate") escalated++;
+      else decided++;
+    } else if (!appliedTx.applied) skipped = appliedTx.skipped;
   }
-  return { decided, escalated, tiers };
+  return { decided, escalated, tiers, ...(skipped ? { skipped } : {}) };
 }
 
 /* ================= 节拍③：目标偏差扫描（主动性源头） ================= */
@@ -269,8 +384,9 @@ ${item.action} ${JSON.stringify(item.params)}
 export async function runDeviationBeat(
   app: pg.Pool, scope: Scope,
 ): Promise<{ initiatives: number; skipped?: string }> {
-  let charter = await loadCharter(app, scope);
-  charter = await applyExpiryIfDue(app, scope, charter);
+  let observed = await loadCharterState(app, scope);
+  observed = await applyExpiryIfDue(app, scope, observed);
+  const charter = observed.charter;
   if (!canExecute(charter.mode) && !isShadow(charter.mode)) {
     return { initiatives: 0, skipped: `${charter.mode}：无执行权` };
   }
@@ -288,7 +404,7 @@ export async function runDeviationBeat(
   const threshold = 5;
   if (Math.abs(deviation) < threshold) return { initiatives: 0 };
   const dryRun = isShadow(charter.mode);
-  await inTx(app, scope, async (c) => {
+  const launched = await inCharterTx(app, scope, observed, "execute", async (c) => {
     await emitCeoEvent(c, scope, "initiative.launch", {
       params: { trigger: "goal_deviation", deviation_pt: deviation, threshold, mode: charter.mode },
       after: {
@@ -298,7 +414,7 @@ export async function runDeviationBeat(
       basis: [`goal.tracking 最新偏差 ${deviation}pt，阈值 ±${threshold}pt（方案 §五 偏差触发器）`],
     }, { dryRun });
   });
-  return { initiatives: 1 };
+  return launched.applied ? { initiatives: 1 } : { initiatives: 0, skipped: launched.skipped };
 }
 
 /* ================= 节拍④：自治熔断（方案 §六 Circuit Breaker） ================= */
@@ -306,8 +422,9 @@ export async function runDeviationBeat(
 export async function runBreakerBeat(
   app: pg.Pool, scope: Scope,
 ): Promise<{ tripped: boolean; tightened: boolean; skipped?: string }> {
-  let charter = await loadCharter(app, scope);
-  charter = await applyExpiryIfDue(app, scope, charter);
+  let observed = await loadCharterState(app, scope);
+  observed = await applyExpiryIfDue(app, scope, observed);
+  const charter = observed.charter;
   if (!canExecute(charter.mode)) return { tripped: false, tightened: false, skipped: `${charter.mode}：熔断器仅在执行态生效` };
   const kpi = await inTx(app, scope, async (c) => {
     const r = await c.query<{ payload: Record<string, unknown> }>(
@@ -323,7 +440,7 @@ export async function runBreakerBeat(
     return { tripped: verdict.tripped, tightened: verdict.alreadyTightened };
   }
   const tightened = tightenAutonomy(charter);
-  await inTx(app, scope, async (c) => {
+  const trippedTx = await inCharterTx(app, scope, observed, "execute", async (c) => {
     await saveCharterInTx(c, scope, tightened);
     await emitCeoEvent(c, scope, "ceo.circuit_breaker", {
       params: { metric: verdict.metric, actual: verdict.actual, floor: verdict.floor },
@@ -333,8 +450,8 @@ export async function runBreakerBeat(
         "自治边界自动收紧一档并通知老板（方案 §六：自治权是挣来的，也会被收回）",
       ],
     });
-  });
-  return { tripped: true, tightened: true };
+  }, true);
+  return trippedTx.applied ? { tripped: true, tightened: true } : { tripped: false, tightened: false, skipped: trippedTx.skipped };
 }
 
 /* ================= 节拍⑤：决策命中率回测（决策日记到期对账） ================= */
@@ -342,41 +459,23 @@ export async function runBreakerBeat(
 export async function runOutcomeReviewBeat(
   app: pg.Pool, scope: Scope,
 ): Promise<{ reviewed: number; hits: number; skipped?: string }> {
-  const charter = await loadCharter(app, scope);
+  const observed = await loadCharterState(app, scope);
+  const charter = observed.charter;
   if (!canExecute(charter.mode) && !isShadow(charter.mode)) {
     return { reviewed: 0, hits: 0, skipped: `${charter.mode}：回测不执行` };
   }
   const dryRun = isShadow(charter.mode);
+  type OutcomeFacts = {
+    due: Array<{ event_id: string; payload: Record<string, unknown> }>;
+    latest: { occ: number }; skipped?: string;
+  };
   // M1 防双写：整拍单事务 + 工作区级 advisory 占位锁（pg_try_advisory_xact_lock）——
   // 并发/重入的第二拍拿不到锁直接跳过；到期选取与 outcome 事件写入同一 COMMIT，
   // 不再存在「两拍各选同一批到期日记、decision.outcome 双写」的窗口
-  return inTx(app, scope, async (c) => {
-    const lock = await c.query<{ ok: boolean }>(
-      `SELECT pg_try_advisory_xact_lock(hashtext($1)) AS ok`,
-      [`ceo-outcome-review:${scope.workspaceId}`],
-    );
-    if (!lock.rows[0]?.ok) return { reviewed: 0, hits: 0, skipped: "回测节拍已在进行中（advisory 锁未获得，M1 防双写）" };
-    // 到期未回测的决策日记
-    const due = (await c.query<{ event_id: string; payload: Record<string, unknown> }>(
-      `SELECT event_id, payload FROM biz_events
-       WHERE workspace_id=$1 AND payload->'decision'->>'action'='ceo.decision'
-         AND (payload->'decision'->'params'->'expected'->>'review_at')::timestamptz < now()
-         AND event_id NOT IN (
-           SELECT payload->'decision'->'params'->>'ref_decision' FROM biz_events
-           WHERE workspace_id=$1 AND payload->'decision'->>'action'='decision.outcome'
-         )
-       ORDER BY seq LIMIT 10`,
-      [scope.workspaceId],
-    )).rows;
-    if (due.length === 0) return { reviewed: 0, hits: 0 };
-    // 最新 KPI
-    const kpi = await c.query<{ payload: Record<string, unknown> }>(
-      `SELECT payload FROM biz_events WHERE workspace_id=$1 AND payload->'decision'->>'action'='store.daily.summary'
-       ORDER BY seq DESC LIMIT 1`,
-      [scope.workspaceId],
-    );
-    const after = ((kpi.rows[0]?.payload?.decision as Record<string, unknown> | undefined)?.after ?? {}) as Record<string, unknown>;
-    const latest = { occ: Number(after.occ ?? 0) };
+  const reviewedTx = await inCharterTx<{ reviewed: number; hits: number; skipped?: string }, OutcomeFacts>(app, scope, observed, "execute", async (c, facts) => {
+    if (!facts) throw new Error("回测事实读取未完成");
+    const { due, latest, skipped } = facts;
+    if (skipped) return { reviewed: 0, hits: 0, skipped };
     let hits = 0;
     for (const row of due) {
       const params = ((row.payload.decision as Record<string, unknown>)?.params ?? {}) as Record<string, unknown>;
@@ -390,7 +489,36 @@ export async function runOutcomeReviewBeat(
       });
     }
     return { reviewed: due.length, hits };
+  }, false, async (c) => {
+    const lock = await c.query<{ ok: boolean }>(
+      `SELECT pg_try_advisory_xact_lock(hashtext($1)) AS ok`,
+      [`ceo-outcome-review:${scope.workspaceId}`],
+    );
+    if (!lock.rows[0]?.ok) return { due: [], latest: { occ: 0 }, skipped: "回测节拍已在进行中（advisory 锁未获得，M1 防双写）" };
+    // 到期未回测的决策日记
+    const due = (await c.query<{ event_id: string; payload: Record<string, unknown> }>(
+      `SELECT event_id, payload FROM biz_events
+       WHERE workspace_id=$1 AND payload->'decision'->>'action'='ceo.decision'
+         AND (payload->'decision'->'params'->'expected'->>'review_at')::timestamptz < now()
+         AND event_id NOT IN (
+           SELECT payload->'decision'->'params'->>'ref_decision' FROM biz_events
+           WHERE workspace_id=$1 AND payload->'decision'->>'action'='decision.outcome'
+         )
+       ORDER BY seq LIMIT 10`,
+      [scope.workspaceId],
+    )).rows;
+    if (due.length === 0) return { due, latest: { occ: 0 } };
+    // 最新 KPI
+    const kpi = await c.query<{ payload: Record<string, unknown> }>(
+      `SELECT payload FROM biz_events WHERE workspace_id=$1 AND payload->'decision'->>'action'='store.daily.summary'
+       ORDER BY seq DESC LIMIT 1`,
+      [scope.workspaceId],
+    );
+    const after = ((kpi.rows[0]?.payload?.decision as Record<string, unknown> | undefined)?.after ?? {}) as Record<string, unknown>;
+    const latest = { occ: Number(after.occ ?? 0) };
+    return { due, latest, skipped: undefined };
   });
+  return reviewedTx.applied ? reviewedTx.value : { reviewed: 0, hits: 0, skipped: reviewedTx.skipped };
 }
 
 /* ================= 节拍⑥：周度员工绩效评议（表扬/关注/辅导 → 汰换重生提案） ================= */
@@ -399,16 +527,17 @@ export async function runHrReviewBeat(
   app: pg.Pool, scope: Scope,
   opts: { llmCall?: (prompt: string) => Promise<string> } = {},
 ): Promise<{ reviewed: number; coaching: number; replacementProposals: number; skipped?: string }> {
-  let charter = await loadCharter(app, scope);
-  charter = await applyExpiryIfDue(app, scope, charter);
+  let observed = await loadCharterState(app, scope);
+  observed = await applyExpiryIfDue(app, scope, observed);
+  const charter = observed.charter;
   const dryRun = isShadow(charter.mode);
   if (!canExecute(charter.mode) && !dryRun) {
     return { reviewed: 0, coaching: 0, replacementProposals: 0, skipped: `${charter.mode}：评议不执行` };
   }
   const cards = await buildAgentScorecards(app, scope);
-  let coaching = 0, proposals = 0;
+  let reviewed = 0, coaching = 0, proposals = 0;
+  let skipped: string | undefined;
   for (const card of cards) {
-    if (card.grade === "辅导") coaching++;
     // 连续两周期辅导判定：上一期 hr.review 该 agent 也是辅导
     const prev = await inTx(app, scope, async (c) => {
       const r = await c.query<{ n: string }>(
@@ -424,9 +553,8 @@ export async function runHrReviewBeat(
     let replacement: Awaited<ReturnType<typeof designReplacement>> | null = null;
     if (consecutiveCoaching) {
       replacement = await designReplacement(card, opts.llmCall);
-      proposals++;
     }
-    await inTx(app, scope, async (c) => {
+    const reviewedTx = await inCharterTx(app, scope, observed, "execute", async (c) => {
       // 评议事件（全部留痕）
       await emitCeoEvent(c, scope, "hr.review", {
         params: { agent_id: card.agentId, grade: card.grade, consecutive_coaching: prev, mode: charter.mode, dry_run: dryRun },
@@ -453,8 +581,13 @@ export async function runHrReviewBeat(
         );
       }
     });
+    if (reviewedTx.applied) {
+      reviewed++;
+      if (card.grade === "辅导") coaching++;
+      if (replacement) proposals++;
+    } else skipped = reviewedTx.skipped;
   }
-  return { reviewed: cards.length, coaching, replacementProposals: proposals };
+  return { reviewed, coaching, replacementProposals: proposals, ...(skipped ? { skipped } : {}) };
 }
 
 /* ================= 汰换执行（董事长批准后）：旧停用 + 新员工上岗 ================= */
@@ -487,8 +620,9 @@ export async function runBoardPackBeat(
   app: pg.Pool, scope: Scope,
   opts: { llmCall?: (prompt: string) => Promise<string> } = {},
 ): Promise<{ eventId: string; skipped?: string }> {
-  let charter = await loadCharter(app, scope);
-  charter = await applyExpiryIfDue(app, scope, charter);
+  let observed = await loadCharterState(app, scope);
+  observed = await applyExpiryIfDue(app, scope, observed);
+  const charter = observed.charter;
   const dryRun = isShadow(charter.mode);
   if (charter.mode === "disabled") return { eventId: "", skipped: "disabled：未授权" };
   const { buildScorecard } = await import("./scorecard.js");
@@ -516,13 +650,13 @@ export async function runBoardPackBeat(
     `四、宪章修订提案：${pack.charterProposal.join("；")}`,
     `五、下月重点：${pack.nextMonthFocus}`,
   ].join("\n");
-  const eventId = await inTx(app, scope, (c) =>
+  const emitted = await inCharterTx(app, scope, observed, "report", (c) =>
     emitCeoEvent(c, scope, "ceo.board_pack", {
       params: { period: pack.period, mode: charter.mode, dry_run: dryRun },
       after: { text, pack },
       basis: ["月度董事会包：目标达成/决策质量/团队绩效/宪章修订提案（成绩单+绩效档案+上浮精准度聚合）"],
     }, { dryRun }));
-  return { eventId };
+  return emitted.applied ? { eventId: emitted.value } : { eventId: "", skipped: emitted.skipped };
 }
 
 /* ================= 节拍⑧：编制健康度扫描 → 招聘提案（L4） ================= */
@@ -530,14 +664,15 @@ export async function runBoardPackBeat(
 export async function runOrgScanBeat(
   app: pg.Pool, scope: Scope,
 ): Promise<{ proposal: boolean; reason?: string; skipped?: string }> {
-  let charter = await loadCharter(app, scope);
-  charter = await applyExpiryIfDue(app, scope, charter);
+  let observed = await loadCharterState(app, scope);
+  observed = await applyExpiryIfDue(app, scope, observed);
+  const charter = observed.charter;
   const dryRun = isShadow(charter.mode);
   if (!canExecute(charter.mode) && !dryRun) return { proposal: false, skipped: `${charter.mode}：扫描不执行` };
   const health = await scanOrgHealth(app, scope);
   const proposal = proposeHiring(health);
   if (!proposal) return { proposal: false };
-  await inTx(app, scope, async (c) => {
+  const proposedTx = await inCharterTx(app, scope, observed, "execute", async (c) => {
     const evId = await emitCeoEvent(c, scope, "org.hiring_proposal", {
       params: { role: proposal.role, dry_run: dryRun },
       after: { proposal, health },
@@ -553,5 +688,5 @@ export async function runOrgScanBeat(
       );
     }
   });
-  return { proposal: true, reason: proposal.reason };
+  return proposedTx.applied ? { proposal: true, reason: proposal.reason } : { proposal: false, skipped: proposedTx.skipped };
 }

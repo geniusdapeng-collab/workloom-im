@@ -151,24 +151,26 @@ export async function scan(workspaceId: string, memberNo: string): Promise<{ add
   };
 
   // ① 审批台高风险卡（要你判断）
-  const approvals = await svcQuery<{ approval_id: string; action: string; tier: string; title: string }>(workspaceId,
-    `SELECT approval_id, payload->'decision'->>'action' AS action,
-            payload->'decision'->'after'->>'tier' AS tier,
-            COALESCE(payload->'decision'->'after'->>'title', payload->'decision'->>'action') AS title
-     FROM biz_events WHERE payload->'decision'->>'action' LIKE 'approval.%'
-       AND payload->'decision'->'after'->>'status'='pending'
-     ORDER BY seq DESC LIMIT 20`).catch(() => [] as never[]);
-  // 审批口径兼容：approvals 表为主
-  const apprRows = await svcQuery<{ id: string; action: string; tier: string; created_at: string }>(workspaceId,
-    `SELECT id, action, tier, created_at FROM approvals WHERE status='pending' ORDER BY created_at DESC LIMIT 10`).catch(() => [] as never[]);
+  // 当前状态与分级以 approvals 权威列为准；历史 pending 事件不能重新制造待办。
+  // 事件只补动作文案，且必须同时匹配 tenant/workspace/event。查询失败交由调用方回执。
+  const apprRows = await svcQuery<{ approval_id: string; action: string; tier: string }>(workspaceId,
+    `SELECT a.approval_id,
+            COALESCE(NULLIF(btrim(a.snapshot->>'action'), ''),
+                     NULLIF(btrim(a.snapshot->>'tool'), ''),
+                     NULLIF(btrim(e.payload->'decision'->>'action'), ''), '待审批操作') AS action,
+            a.tier
+     FROM approvals a
+     LEFT JOIN biz_events e ON e.tenant_id=a.tenant_id
+       AND e.workspace_id=a.workspace_id AND e.event_id=a.event_id
+     WHERE a.workspace_id=$1 AND a.status='pending'
+     ORDER BY a.created_at DESC, a.approval_id DESC LIMIT 10`, [workspaceId]);
   for (const a of apprRows) {
     await push({
-      sourceKey: `appr-${a.id}`, kind: "judge", level: "high",
+      sourceKey: `appr-${a.approval_id}`, kind: "judge", level: "high",
       title: "有张审批卡等您拍板", body: `${a.action}（${a.tier} 级）。要点我整理好了，您看一眼就能定。`,
       actions: [{ label: "去审批", link: "/p4" }], link: "/p4",
     });
   }
-  void approvals;
 
   // ② 开发任务待裁决 / ③ 转人工（开发场域）
   /**

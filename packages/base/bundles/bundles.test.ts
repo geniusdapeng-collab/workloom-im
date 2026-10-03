@@ -1,21 +1,21 @@
 /**
  * F11 行业装配测试（P7 舰船换装坞）：
  * 纯函数/文件：草稿骨架 scaffold（五要素 §2.3）/  slug 校验 / 草稿保护移除
- * PG 集成：hotel profile 六槽全装配 + 五项校验全绿（F2.10）/ 校验留痕（P7E3）/
+ * PG 集成：hotel 声明槽位与真实页面全装配 + 六项校验通过（F2.10）/ 校验留痕（P7E3）/
  *          激活幂等（bundle.activate 事件）/ 草稿校验失败拒绝激活（不静默 L9.2）
  */
-import { cpSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { createHash, generateKeyPairSync, sign as signValue } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import YAML from "yaml";
 import {
-  BundleError, REGISTERED_PAGES, computeAssembly, listProfileSlugs, scaffoldDraft, removeDraft,
+  BundleError, loadPcPageRegistry, registeredBundlePcPages, computeAssembly, listProfileSlugs, scaffoldDraft, removeDraft,
   listSelfServiceBundles, loadBundleUiProjection, loadVerifiedBundleManifest,
   loadVerifiedBundleWorkforcePresets, verifyBundleManifestDocument,
 } from "./assembly.js";
-import { canonicalBundleArtifactPayload, parseBundleManifest } from "@workloom/industry-contract";
+import { canonicalBundleArtifactPayload, parseBundleManifest, type BundleManifest } from "@workloom/industry-contract";
 
 describe("草稿骨架与校验（P7E5/§2.3，文件级）", () => {
   it("五要素向导产出草稿骨架：五槽目录 + bundle.json status=draft（不进分发）", () => {
@@ -52,9 +52,11 @@ describe("草稿骨架与校验（P7E5/§2.3，文件级）", () => {
     expect(() => removeDraft("hotel")).toThrowError(/仅草稿态/);
   });
 
-  it("页面注册表覆盖九大页（UI 用例同步校验基准）", () => {
-    expect(REGISTERED_PAGES).toContain("p7");
-    expect(REGISTERED_PAGES.length).toBe(9);
+  it("页面登记来自真实 PC 入口，公共页面包含装配与合作方并拒绝未知编号", () => {
+    const manifest = loadVerifiedBundleManifest("hotel");
+    const pages = registeredBundlePcPages(loadPcPageRegistry(), manifest);
+    expect(pages).toEqual(expect.arrayContaining(["p7", "p31", "/assembly", "/partners"]));
+    expect(pages).not.toContain("p999");
   });
 
   it("候选行业包篡改后完整性校验失败关闭", () => {
@@ -289,22 +291,26 @@ describe.runIf(RUN_DB)("行业装配 PG 集成（F2.10 铁律）", async () => {
   };
 
 
-  it("hotel profile：七槽 7/7 已装配 + 起飞前检查单六项全绿（F2.10 + v3.0 第⑦槽）", async () => {
+  it("hotel profile：声明资产与实例完整装配，真实公共和行业页面校验通过", async () => {
+    const manifest = loadVerifiedBundleManifest("hotel");
+    const presets = loadVerifiedBundleWorkforcePresets("hotel");
+    const uiPath = manifest.workloom.provides.ui.find((path) => path.endsWith("/cases.json"));
+    if (!uiPath) throw new Error("隔离 hotel 夹具缺少明确声明的界面用例");
+    const uiCases = JSON.parse(readFileSync(new URL(`../../../bundles/hotel/${uiPath}`, import.meta.url), "utf8")) as { cases: Array<{ page: string }> };
+    const pageCount = new Set(uiCases.cases.map((item) => item.page)).size;
     const p = await computeAssembly(app, scope, "hotel");
     expect(p.status).toBe("active");
-    expect(p.filledCount).toBe(7);
+    expect(p.filledCount).toBe(6 + (manifest.workloom.provides.modelPolicy ? 1 : 0));
     expect(p.checks.map((c) => c.ok)).toEqual([true, true, true, true, true, true]);
     expect(p.canActivate).toBe(true);
-    // 班组卡：7 preset 全注册且围栏绑定合法（P7E2）
-    expect(p.agents.length).toBe(7);
-    expect(p.agents.every((a) => a.fenceOk)).toBe(true);
-    // 槽摘要口径（2026-09-23 文案接地气批次）：客户档案 N 组字段 · 硬约束 M 条；
-    // 界面 N 个页面 · M 条界面状态用例；第⑦槽模型与成本策略
-    expect(p.slots[0]!.summary).toContain("组字段");
-    expect(p.slots[0]!.summary).toContain("硬约束");
-    expect(p.slots[5]!.summary).toBe("6 个页面 · 42 条界面状态用例");
+    expect(p.agents.map((agent) => agent.presetKey).sort())
+      .toEqual(presets.map((preset) => preset.preset_key).sort());
+    expect(p.agents.every((agent) => agent.fenceOk)).toBe(true);
+    expect(p.slots[0]!.summary).toContain("字段");
+    expect(p.slots[5]!.summary).toBe(`${pageCount} 个页面 · ${uiCases.cases.length} 条界面状态用例`);
     expect(p.slots[6]!.id).toBe("model-policy");
-    expect(p.slots[6]!.summary).toContain("个使用场景");
+    expect(p.slots[6]!.filled).toBe(Boolean(manifest.workloom.provides.modelPolicy));
+    expect(p.slots[6]!.summary).toContain(manifest.workloom.provides.modelPolicy ? "已配置" : "平台默认");
   });
 
   it("校验留痕：recheck 写 bundle.check_run 事件（P7E3 留痕可查）", async () => {
@@ -322,39 +328,76 @@ describe.runIf(RUN_DB)("行业装配 PG 集成（F2.10 铁律）", async () => {
     expect(ind.rows[0]!.industry).toBe("hotel");
   });
 
-  it("H-15 第三行业五要素填充即可运行：填满五槽 → 6/6 全绿 → 激活切换 → 底座代码零改动（§2.3/§2.4）", async () => {
-    const root = mkdtempSync(join(tmpdir(), "wl-bundles-h15-"));
-    // 五要素填充 = 复制 hotel 实物资产作为第三行业草稿内容（演示口径：资产由行业方提供，非底座代码）
-    // #25 修复：用 import.meta.url 定位仓库根（原 process.cwd() 相对路径仅在包目录下跑测试才成立）
-    const hotelDir = new URL("../../../bundles/hotel", import.meta.url).pathname;
-    cpSync(hotelDir, join(root, "copycat"), { recursive: true });
-    const bjPath = join(root, "copycat", "bundle.json");
-    const bj = JSON.parse(readFileSync(bjPath, "utf-8"));
-    bj.name = "@workloom/copycat"; bj.workloom.industry = "copycat"; bj.workloom.status = "draft";
-    delete bj.integrity;
-    writeFileSync(bjPath, `${JSON.stringify(bj, null, 2)}\n`, "utf-8");
+  /** 第三行业夹具只复用公共装配资产，不借用 hotel 路由、适配器或权限。 */
+  function publicDraftFixture(root: string, slug: string): { expectedFilled: number } {
+    const source = new URL("../../../bundles/hotel", import.meta.url).pathname;
+    cpSync(source, join(root, slug), { recursive: true });
+    const path = join(root, slug, "bundle.json");
+    const manifest = JSON.parse(readFileSync(path, "utf8")) as BundleManifest;
+    manifest.name = `@workloom/${slug}`;
+    manifest.workloom.industry = slug;
+    manifest.workloom.status = "draft";
+    manifest.workloom.ui.navigation.slots = [];
+    manifest.workloom.ui.permissions = [];
+    manifest.workloom.ui.serviceFront = { enabled: false, identityPolicy: "disabled", tabs: [], services: [] };
+    manifest.workloom.ui.inspection = { enabled: false };
+    delete manifest.integrity;
+    const allowed = new Set(registeredBundlePcPages(loadPcPageRegistry(), parseBundleManifest(manifest)));
+    const uiPath = manifest.workloom.provides.ui.find((asset) => asset.endsWith("/cases.json"));
+    if (!uiPath) throw new Error("第三行业夹具缺少界面用例声明");
+    const document = JSON.parse(readFileSync(join(root, slug, uiPath), "utf8")) as { pages: string[]; cases: Array<{ page: string }> };
+    document.cases = document.cases.filter((item) => allowed.has(item.page));
+    document.pages = [...new Set(document.cases.map((item) => item.page))];
+    writeFileSync(join(root, slug, uiPath), `${JSON.stringify(document, null, 2)}\n`);
+    writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
+    return { expectedFilled: 6 + (manifest.workloom.provides.modelPolicy ? 1 : 0) };
+  }
 
-    // finally 还原演示工作区（hotel）：断言中断也不残留 industry 污染（测试纪律：不跨用例污染）
+  it("H-15 第三行业公共装配：填充资产、公共页面和自有声明即可激活，无底座改动", async () => {
+    const root = mkdtempSync(join(tmpdir(), "wl-bundles-h15-"));
     try {
+      const fixture = publicDraftFixture(root, "copycat");
       const p0 = await computeAssembly(app, scope, "copycat", root);
       expect(p0.status).toBe("draft");
-      expect(p0.filledCount).toBe(7); // 五要素填满 + 第⑦槽 model-policy.yml（随 hotel 资产复制） → 七槽全装配
-      expect(p0.canActivate).toBe(true); // 检查单六项全绿
-
+      expect(p0.filledCount).toBe(fixture.expectedFilled);
+      expect(p0.checks.every((check) => check.ok)).toBe(true);
+      expect(p0.canActivate).toBe(true);
       const act = await activateBundle(app, gw, scope, "copycat", "MEM-001", root);
       expect(act.eventId).toMatch(/^E-\d+$/);
       const ind = await qApp(`SELECT industry FROM workspaces WHERE id=$1`, [scope.workspaceId]);
-      expect(ind.rows[0]!.industry).toBe("copycat"); // profile 切换生效（§2.3）
-
-      // 激活态复核：档案/阶段一致性校验同样全绿（isActive 分支）
+      expect(ind.rows[0]!.industry).toBe("copycat");
       const p1 = await computeAssembly(app, scope, "copycat", root);
       expect(p1.status).toBe("active");
-      expect(p1.checks.every((c) => c.ok)).toBe(true);
+      expect(p1.checks.every((check) => check.ok)).toBe(true);
     } finally {
-      await activateBundle(app, gw, scope, "hotel", "MEM-001"); // 还原演示工作区
+      try { await activateBundle(app, gw, scope, "hotel", "MEM-001"); }
+      finally { rmSync(root, { recursive: true, force: true }); }
     }
     const back = await qApp(`SELECT industry FROM workspaces WHERE id=$1`, [scope.workspaceId]);
     expect(back.rows[0]!.industry).toBe("hotel");
+  }, 20000);
+
+  it("未知页面即使列入 cases.pages 仍拒绝激活，工作区、profile 和事件均不发生激活变更", async () => {
+    const root = mkdtempSync(join(tmpdir(), "wl-bundles-unknown-page-"));
+    try {
+      publicDraftFixture(root, "copycat");
+      const manifest = JSON.parse(readFileSync(join(root, "copycat/bundle.json"), "utf8")) as BundleManifest;
+      const uiPath = manifest.workloom.provides.ui.find((asset) => asset.endsWith("/cases.json"))!;
+      writeFileSync(join(root, "copycat", uiPath), JSON.stringify({ pages: ["p999"], cases: [{ page: "p999", name: "伪造登记" }] }));
+      const before = await qApp(`SELECT industry FROM workspaces WHERE id=$1`, [scope.workspaceId]);
+      const beforeProfile = await qApp(`SELECT industry FROM profiles WHERE workspace_id=$1`, [scope.workspaceId]);
+      const beforeEvents = await qApp(`SELECT count(*)::int AS count FROM biz_events WHERE workspace_id=$1`, [scope.workspaceId]);
+      const profile = await computeAssembly(app, scope, "copycat", root);
+      expect(profile.checks.find((check) => check.key === "ui")).toMatchObject({ ok: false, detail: expect.stringContaining("p999") });
+      expect(profile.canActivate).toBe(false);
+      await expect(activateBundle(app, gw, scope, "copycat", "MEM-001", root))
+        .rejects.toMatchObject({ code: "ASSEMBLY_CHECK_FAILED" });
+      expect((await qApp(`SELECT industry FROM workspaces WHERE id=$1`, [scope.workspaceId])).rows).toEqual(before.rows);
+      expect((await qApp(`SELECT industry FROM profiles WHERE workspace_id=$1`, [scope.workspaceId])).rows).toEqual(beforeProfile.rows);
+      expect((await qApp(`SELECT count(*)::int AS count FROM biz_events WHERE workspace_id=$1`, [scope.workspaceId])).rows).toEqual(beforeEvents.rows);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   }, 20000);
 
   it("草稿 Bundle：六槽待填充 + 校验五项全红（第⑦槽骨架自带不阻断）+ 拒绝激活（F2.10 不静默 L9.2）", async () => {

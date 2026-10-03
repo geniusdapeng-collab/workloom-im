@@ -14,6 +14,8 @@ import { gatewayAppend, gatewayAppendOnClient } from "../workdata/gateway.js";
 import { maskText } from "../workdata/pii.js";
 import { scanSkillForPublish } from "../skills/publish.js";
 import { createHmac } from "node:crypto";
+import { getSkill } from "../skills/registry.js";
+import { setSkillScope, rollbackSkills, releaseSkillClient } from "../skills/scope.js";
 
 interface Scope { tenantId: string; workspaceId: string }
 
@@ -66,8 +68,7 @@ export async function computeSkillSignals(app: pg.Pool, scope: Scope, skillId: s
   const client = await app.connect();
   try {
     await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+    await setSkillScope(client, scope);
     const short = skillId.replace(/^skill-[ti]?-?/, "");
     // 绑定 Agent（与 skills.usage 同口径：短名/全 id 双形态）
     const agents = await client.query<{ preset_key: string }>(
@@ -140,9 +141,8 @@ export async function computeSkillSignals(app: pg.Pool, scope: Scope, skillId: s
     const samples = gAll + evTotal + tAll;
     return { adoption, completionRate, approvalRate, praiseRate, reworkRate, errorRate, samples, sparse: samples < 20 };
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally { client.release(); }
+    return await rollbackSkills(client, err);
+  } finally { releaseSkillClient(client); }
 }
 
 /* ---------- 回流包构造（预览即所发：preview 与 send 共用） ---------- */
@@ -159,10 +159,7 @@ export interface RefluxPayload {
 }
 
 export async function buildRefluxPayload(app: pg.Pool, scope: Scope, skillId: string): Promise<{ payload: RefluxPayload; maskHits: number }> {
-  const r = await app.query<{
-    id: string; name: string; version: string; description: string; body: string; dist_meta: Record<string, unknown>;
-  }>(`SELECT id, name, version, description, body, dist_meta FROM skills WHERE id=$1`, [skillId]);
-  const skill = r.rows[0];
+  const skill = await getSkill(app, skillId, scope);
   if (!skill) throw new RefluxError("NOT_FOUND", `技能 ${skillId} 不存在`);
   const body = maskText(skill.body);
   const desc = maskText(skill.description);
@@ -201,8 +198,7 @@ export async function setRefluxOptIn(
   const client = await app.connect();
   try {
     await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+    await setSkillScope(client, scope);
     await client.query(
       `INSERT INTO skill_dist_policy (workspace_id, reflux_opt_in, updated_by, updated_at)
        VALUES ($1,$2,$3,now())
@@ -224,9 +220,8 @@ export async function setRefluxOptIn(
     });
     await client.query("COMMIT");
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally { client.release(); }
+    return await rollbackSkills(client, err);
+  } finally { releaseSkillClient(client); }
   return { optIn: input.optIn };
 }
 
@@ -234,15 +229,14 @@ export async function getRefluxOptIn(app: pg.Pool, scope: Scope): Promise<boolea
   const client = await app.connect();
   try {
     await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+    await setSkillScope(client, scope);
     const r = await client.query<{ reflux_opt_in: boolean }>(
       `SELECT reflux_opt_in FROM skill_dist_policy WHERE workspace_id=$1`, [scope.workspaceId]);
     await client.query("COMMIT");
     return r.rows[0]?.reflux_opt_in ?? false;
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally { client.release(); }
+    return await rollbackSkills(client, err);
+  } finally { releaseSkillClient(client); }
 }
 
 /* ---------- 发送 ---------- */
@@ -291,8 +285,7 @@ export async function sendReflux(
   const client = await app.connect();
   try {
     await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+    await setSkillScope(client, scope);
     await client.query(
       `INSERT INTO skill_reflux_outbox (id, workspace_id, skill_id, payload, status, error, sent_at)
        VALUES ($1,$2,$3,$4,$5,$6, CASE WHEN $5='sent' THEN now() ELSE NULL END)`,
@@ -320,8 +313,7 @@ export async function sendReflux(
     });
     await client.query("COMMIT");
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally { client.release(); }
+    return await rollbackSkills(client, err);
+  } finally { releaseSkillClient(client); }
   return { outboxId, status: sendError ? "queued" : status, maskHits };
 }

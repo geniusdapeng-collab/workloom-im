@@ -248,7 +248,7 @@
 | `@react-three/drei` | 10.7.8（声明） | ^10.7.8 | 生产 | apps/web/package.json | 10.7.8 |
 | `@react-three/fiber` | 9.7.0（声明） | ^9.7.0 | 生产 | apps/web/package.json | 9.7.0 |
 | `@react-three/postprocessing` | 3.1.1（声明） | ^3.1.1 | 生产 | apps/web/package.json | 3.1.1 |
-| `@tailwindcss/vite` | 4.3.3（声明） | 4.3.3 | 开发/生产 | .workloom-runtime-deps/package.json、apps/web/package.json、apps/webc/package.json | 4.3.3 |
+| `@tailwindcss/vite` | 4.3.3（声明） | 4.3.3 | 开发 | apps/web/package.json、apps/webc/package.json | 4.3.3 |
 | `@tanstack/react-query` | 5.103.1（声明） | 5.103.1 | 生产 | apps/web/package.json | 5.103.1 |
 | `@trpc/client` | 11.19.0（声明） | 11.19.0 | 生产 | apps/web/package.json、apps/webb/package.json | 11.19.0 |
 | `@trpc/server` | 11.19.0（声明） | 11.19.0 | 生产 | .workloom-runtime-deps/package.json、apps/server/package.json | 11.19.0 |
@@ -259,7 +259,7 @@
 | `@types/react-dom` | 19.2.0（声明） | ^19.2.0 | 开发 | apps/web/package.json、apps/webb/package.json、apps/webc/package.json 等 4 处 | **19.3.0** ⬆ |
 | `@types/three` | 0.186.0（声明） | ^0.186.0 | 开发 | apps/web/package.json | 0.186.0 |
 | `@types/ws` | 8.18.1（声明） | 8.18.1 | 开发 | vendor/dsh/package.json | 8.18.1 |
-| `@vitejs/plugin-react` | 6.1.1（声明） | 6.1.1 | 开发/生产 | .workloom-runtime-deps/package.json、apps/web/package.json、apps/webb/package.json 等 4 处 | 6.1.1 |
+| `@vitejs/plugin-react` | 6.1.1（声明） | 6.1.1 | 开发 | apps/web/package.json、apps/webb/package.json、apps/webc/package.json | 6.1.1 |
 | `ajv` | 8.20.0（声明） | ^8.20.0 | 开发 | vendor/dsh/package.json | —（未扫描） |
 | `commander` | 15.0.0（声明） | ^15.0.0 | 生产 | vendor/dsh/package.json | 15.0.0 |
 | `concurrently` | 10.0.5 | ^10.0.5 | 开发 | package.json | 10.0.5 |
@@ -285,7 +285,7 @@
 | `tsx` | 4.23.13 | 4.23.13 / ^4.23.13 | 开发/生产 | .workloom-runtime-deps/package.json、apps/server/package.json、package.json 等 4 处 | 4.23.13 |
 | `typescript` | 5.9.0 / 7.0.2 | ^5.9.0 / ^7.0.2 | 开发 | apps/server/package.json、apps/web/package.json、apps/webb/package.json 等 11 处 | 7.0.2 |
 | `typescript-governance → npm:typescript` | 5.9.3 | npm:typescript@5.9.3 | 开发 | package.json | **7.0.2** ⬆ |
-| `vite` | 8.3.0（声明） | 8.3.0 | 开发/生产 | .workloom-runtime-deps/package.json、apps/web/package.json、apps/webb/package.json 等 4 处 | 8.3.0 |
+| `vite` | 8.3.0（声明） | 8.3.0 | 开发 | apps/web/package.json、apps/webb/package.json、apps/webc/package.json | 8.3.0 |
 | `vitest` | 5.0.1 | ^5.0.1 | 开发 | apps/webb/package.json、package.json、packages/base/package.json 等 7 处 | 5.0.1 |
 | `ws` | 8.21.0（声明） | 8.21.0 | 开发 | vendor/dsh/package.json | **8.21.3** ⬆ |
 | `yaml` | 2.9.0 | 2.9.0 | 开发/生产 | .workloom-runtime-deps/package.json、package.json、packages/base/package.json | **2.9.1** ⬆ |

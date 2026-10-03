@@ -103,9 +103,9 @@ test("基座物理存在 platform-ops 时依赖合成仍排除平台工程", () 
       hono: "1.0.0",
       pg: "8.0.0",
       tsx: "4.0.0",
-      vite: "7.0.0",
       zod: "4.0.0",
     });
+    assert.equal(Object.hasOwn(merged.dependencies, "vite"), false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

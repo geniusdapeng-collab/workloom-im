@@ -3,6 +3,7 @@
  * 装配内容：工具集 + 提示词段 + 围栏声明 + 档案上下文（bundles/hotel presets 装载形态）
  */
 import type pg from "pg";
+import { withSkillScope } from "@workloom/base/skills";
 
 export interface AssembleInput {
   workspaceId: string;
@@ -42,12 +43,8 @@ export async function assemblePreset(
   scope: { tenantId: string; workspaceId: string },
   input: AssembleInput,
 ): Promise<AssembledPreset> {
-  const client = await app.connect();
-  try {
-    // 事务级 RLS 上下文必须在显式事务内设置：autocommit 下 set_config(...,true) 语句结束即失效
-    await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+  if (input.workspaceId !== scope.workspaceId) throw new AssemblyReject(["工作区"], "装配工作区与认证作用域不一致");
+  return withSkillScope(app, scope, async (client) => {
 
     const ag = await client.query<{
       id: string; preset_key: string; version: string; fence_bindings: string[];
@@ -82,7 +79,8 @@ export async function assemblePreset(
     // 此前只读 agents.fence_bindings，resolveAgentFenceBindings 的并集从未接线——
     // 技能「安装即绑定」在网关段①复查位不生效（安装的技能绑定形同虚设）。
     const sk = await client.query<{ fence_bindings_snapshot: string[] }>(
-      `SELECT fence_bindings_snapshot FROM skill_installs WHERE workspace_id=$1`,
+      `SELECT i.fence_bindings_snapshot FROM skill_installs i JOIN skills s ON s.id=i.skill_id
+       WHERE i.workspace_id=$1 AND NOT EXISTS (SELECT 1 FROM skill_revocations r WHERE r.skill_id=i.skill_id)`,
       [scope.workspaceId],
     );
     const bindingsUnion = new Set<string>(agent.fence_bindings ?? []);
@@ -98,11 +96,5 @@ export async function assemblePreset(
       prompt: agent.meta.prompt ?? null,
       essentials: { archive: prof.rows[0]!.archive, stage: ws.rows[0]!.stage!, goal: input.goal! },
     };
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally {
-    await client.query("COMMIT").catch(() => undefined);
-    client.release();
-  }
+  });
 }

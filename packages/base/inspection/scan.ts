@@ -78,6 +78,7 @@ export async function assertReadonlyPreset(app: pg.Pool, scope: Scope, presetKey
     // 事务级 RLS 上下文必须在显式事务内设置：autocommit 下 set_config(...,true) 语句结束即失效
     await client.query("BEGIN");
     await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
     const r = await client.query<{ readonly: boolean; meta: { tools?: Array<{ name: string; access: string }> } }>(
       `SELECT readonly, meta FROM agents WHERE workspace_id=$1 AND preset_key=$2`,
       [scope.workspaceId, presetKey],
@@ -105,6 +106,7 @@ export async function loadSnapshot(app: pg.Pool, scope: Scope): Promise<Inspecti
     // 事务级 RLS 上下文必须在显式事务内设置：autocommit 下 set_config(...,true) 语句结束即失效
     await client.query("BEGIN");
     await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
     const r = await client.query<{ archive: Record<string, unknown> }>(
       `SELECT archive FROM profiles WHERE workspace_id=$1`,
       [scope.workspaceId],

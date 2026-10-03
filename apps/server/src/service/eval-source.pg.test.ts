@@ -4,6 +4,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
+import { runWithServiceScope } from "./scope.js";
 
 process.env.DATABASE_URL ??= "postgres://postgres:workloom@localhost:5432/workloom";
 process.env.DATABASE_APP_URL ??= "postgres://workloom_app:workloom_dev_app@localhost:5432/workloom";
@@ -57,7 +58,7 @@ describe.runIf(RUN_DB)("考试院题源 PG 契约", () => {
     await owner.end();
   });
 
-  it("显式服务端题集按工作区确定性装载且可幂等重跑", async () => {
+  it("显式服务端题集按工作区确定性装载且可幂等重跑", () => runWithServiceScope({ tenantId, workspaceId: activeWorkspaceId }, async () => {
     expect(await seedQuestionsIfEmpty(activeWorkspaceId, fixture)).toBe(fixture.questions.length);
     expect(await seedQuestionsIfEmpty(activeWorkspaceId, fixture)).toBe(0);
     const stored = await owner.query<{ count: string }>(
@@ -65,9 +66,9 @@ describe.runIf(RUN_DB)("考试院题源 PG 契约", () => {
       [activeWorkspaceId],
     );
     expect(Number(stored.rows[0]?.count)).toBe(fixture.questions.length);
-  });
+  }));
 
-  it("没有活动 Bundle 时失败关闭并保持业务表与事件账本零写入", async () => {
+  it("没有活动 Bundle 时失败关闭并保持业务表与事件账本零写入", () => runWithServiceScope({ tenantId, workspaceId: emptyWorkspaceId }, async () => {
     const before = await owner.query<{ questions: string; exams: string; users: string; events: string }>(
       `SELECT
          (SELECT count(*) FROM eval_questions WHERE workspace_id=$1)::text AS questions,
@@ -87,9 +88,9 @@ describe.runIf(RUN_DB)("考试院题源 PG 契约", () => {
     );
     expect(after.rows[0]).toEqual(before.rows[0]);
     expect(after.rows[0]).toEqual({ questions: "0", exams: "0", users: "0", events: "0" });
-  });
+  }));
 
-  it("考试列表、答卷、候选成绩和晋级门禁均使用显式工作区参数", async () => {
+  it("考试列表、答卷、候选成绩和晋级门禁均使用显式工作区参数", () => runWithServiceScope({ tenantId, workspaceId: activeWorkspaceId }, async () => {
     expect(await listExams(activeWorkspaceId, 5)).toEqual([]);
     expect(await listCandidateResults(activeWorkspaceId, `missing-${suffix}`)).toEqual([]);
     expect(await listAnswers(activeWorkspaceId, `missing-${suffix}`)).toEqual([]);
@@ -97,9 +98,9 @@ describe.runIf(RUN_DB)("考试院题源 PG 契约", () => {
     const initial = await getSettings(activeWorkspaceId) as { promotion_gate?: boolean };
     const changed = await setPromotionGate(activeWorkspaceId, !Boolean(initial.promotion_gate)) as { promotion_gate?: boolean };
     expect(changed.promotion_gate).toBe(!Boolean(initial.promotion_gate));
-  });
+  }));
 
-  it("晋升门禁与审计事件共用事务，事件失败时状态不会提前提交", async () => {
+  it("晋升门禁与审计事件共用事务，事件失败时状态不会提前提交", () => runWithServiceScope({ tenantId, workspaceId: activeWorkspaceId }, async () => {
     const { serviceTx } = await import("./events.js");
     const before = await getSettings(activeWorkspaceId) as { promotion_gate?: boolean };
     const target = !Boolean(before.promotion_gate);
@@ -111,5 +112,5 @@ describe.runIf(RUN_DB)("考试院题源 PG 契约", () => {
 
     const after = await getSettings(activeWorkspaceId) as { promotion_gate?: boolean };
     expect(Boolean(after.promotion_gate)).toBe(Boolean(before.promotion_gate));
-  });
+  }));
 });

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "pages:registry": "node ../../scripts/pc-page-registry-cli.mjs",
     "build": "vite build && node ../../scripts/verify-production-client-boundary.mjs dist",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",

@@ -12,6 +12,7 @@ import { gatewayAppendOnClient } from "../workdata/gateway.js";
 import { signPackage } from "./signature.js";
 import { DistMeta, type DistManifest, type SkillPackage } from "./types.js";
 import type { RefluxPayload } from "./reflux.js";
+import { setSkillScope, rollbackSkills, releaseSkillClient } from "../skills/scope.js";
 
 export class ConsoleError extends Error {
   constructor(
@@ -56,6 +57,12 @@ export function verifyRefluxSignature(key: string, payload: RefluxPayload, signa
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+/** 客户私有源 ID 仅用于归因；公共分发使用明确分隔的独立身份，不能占用客户 team 行。 */
+function publicRefluxSkillId(row: Pick<InboxDraft,"skill_id" | "from_tenant" | "from_workspace">): string {
+  if (!row.skill_id.startsWith("skill-t-")) return row.skill_id;
+  return `skill-reflux.${Buffer.from(JSON.stringify([row.from_tenant,row.from_workspace,row.skill_id]),"utf8").toString("hex")}`;
+}
+
 /* ---------- ① 接收 ---------- */
 
 export async function receiveReflux(
@@ -70,8 +77,7 @@ export async function receiveReflux(
   const client = await app.connect();
   try {
     await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+    await setSkillScope(client, scope);
     // 幂等：同来源同技能同版本的 inbox 草案不重复收
     const dup = await client.query<{ id: string }>(
       `SELECT id FROM skill_reflux_inbox
@@ -96,9 +102,8 @@ export async function receiveReflux(
     await client.query("COMMIT");
     return { draftId, deduped: false };
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally { client.release(); }
+    return await rollbackSkills(client, err);
+  } finally { releaseSkillClient(client); }
 }
 
 /* ---------- ② 入池排序（聚类 + 评分榜） ---------- */
@@ -139,8 +144,7 @@ export async function reviewRefluxDraft(
   const client = await app.connect();
   try {
     await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+    await setSkillScope(client, scope);
     const cur = await client.query<InboxDraft & { reviews: Array<{ member: string; gesture: string; at: string }> }>(
       `SELECT * FROM skill_reflux_inbox WHERE id=$1 FOR UPDATE`, [input.draftId]);
     const row = cur.rows[0];
@@ -167,9 +171,8 @@ export async function reviewRefluxDraft(
     await client.query("COMMIT");
     return { status, approves };
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally { client.release(); }
+    return await rollbackSkills(client, err);
+  } finally { releaseSkillClient(client); }
 }
 
 /* ---------- ④ 官方化（抽象完善 → 官方技能库） ---------- */
@@ -186,8 +189,7 @@ export async function officializeDraft(
   const client = await app.connect();
   try {
     await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+    await setSkillScope(client, scope);
     const cur = await client.query<InboxDraft & { body: string; meta: Record<string, unknown> }>(
       `SELECT * FROM skill_reflux_inbox WHERE id=$1 FOR UPDATE`, [input.draftId]);
     const row = cur.rows[0];
@@ -205,28 +207,31 @@ export async function officializeDraft(
     const finalDesc = input.final?.description ?? row.description;
     const finalBody = input.final?.body ?? row.body;
     const meta = DistMeta.parse({ ...(row.meta ?? {}), origin: "customer-reflux" });
-    await client.query(
+    const publicId = publicRefluxSkillId(row);
+    const officialized = await client.query(
       `INSERT INTO skills (id, level, bundle, name, version, description, fence_bindings, body, desensitized, dist_meta)
        VALUES ($1,'official',NULL,$2,$3,$4,'[]',$5,true,$6)
-       ON CONFLICT (id) DO UPDATE SET name=$2, version=$3, description=$4, body=$5, desensitized=true, dist_meta=$6`,
-      [row.skill_id, finalName, row.version, finalDesc, finalBody, JSON.stringify(meta)]);
+       ON CONFLICT (id) DO UPDATE SET name=$2, version=$3, description=$4, body=$5, desensitized=true, dist_meta=$6
+         WHERE skills.level='official' AND skills.ownership_state='shared'
+           AND skills.owner_tenant_id IS NULL AND skills.owner_workspace_id IS NULL`,
+      [publicId, finalName, row.version, finalDesc, finalBody, JSON.stringify(meta)]);
+    if (officialized.rowCount !== 1) throw new ConsoleError("BAD_STATE", "官方化目标不能覆盖私有、隔离或保留属主的资产");
     await client.query(
       `UPDATE skill_reflux_inbox SET status='officialized', decided_by=$2, decided_at=now() WHERE id=$1`,
       [input.draftId, input.by]);
     await emitOps(client, scope, {
       action: "skill.reflux.officialize",
-      after: { draftId: input.draftId, skillId: row.skill_id, name: finalName, edited: !!input.final },
+      after: { draftId: input.draftId, skillId: publicId, sourceSkillId: row.skill_id, name: finalName, edited: !!input.final },
       basis: [
         `双人复核通过（${[...approves].join("、")}），官方化进官方技能库（origin=customer-reflux）`,
         "客户最佳实践脱敏抽象后成为全网能力——保鲜环闭环合拢（方案 v0.2 §4.3）",
       ],
     });
     await client.query("COMMIT");
-    return { skillId: row.skill_id };
+    return { skillId: publicId };
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally { client.release(); }
+    return await rollbackSkills(client, err);
+  } finally { releaseSkillClient(client); }
 }
 
 /* ---------- ⑤ 分发 manifest 构建（官方技能库 → 签名分发包） ---------- */

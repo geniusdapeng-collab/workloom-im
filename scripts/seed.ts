@@ -695,13 +695,15 @@ async function main(): Promise<void> {
 
   // 团队技能 + 行业共享技能（P6 装备库三区演示数据；F8.1 三级体系；幂等 ON CONFLICT）
   await q(
-    `INSERT INTO skills (id, level, bundle, name, version, description, fence_bindings, body, desensitized)
+    `INSERT INTO skills (id, level, bundle, name, version, description, fence_bindings, body, desensitized,
+                       owner_tenant_id, owner_workspace_id, ownership_state, ownership_reason)
      VALUES ('skill-t-ws-yunqi-weekly-ops-review','team','hotel','周一经营复盘','1.2.0',
              '每周一 08:00 自动汇总上周经营：入住率/RevPAR/差评闭环/调价采纳率，产出复盘报告草稿（本工作区自建，F8.3 三要素零代码锻造）。',
              '[]',
              '# 周一经营复盘\n\n## 触发（何时用）\n每周一 08:00 定时触发。\n\n## 步骤（怎么做）\n1. 汇总上周入住率与 RevPAR 曲线（只读）。\n2. 汇总差评闭环与调价采纳率。\n3. 产出复盘报告草稿进 P4 待审。\n\n## 边界（什么不做）\n不直接改价、不直接回评价。',
-             false)
+             false, $1, $2, 'owned', 'explicit_demo_fixture')
      ON CONFLICT (id) DO NOTHING`,
+    [TENANT_ID, WS_ID],
   );
   // 团队技能安装行同样补快照/版本（与运行时 installSkill 同口径）
   await q(

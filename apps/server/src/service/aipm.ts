@@ -8,6 +8,7 @@
 import { createHash } from "node:crypto";
 import { svcQuery, serviceTx } from "./events.js";
 import { llmCall } from "./llm.js";
+import { requireServiceScope, type ServiceScope } from "./scope.js";
 
 const UA = { "User-Agent": "WorkLoom-AIPM/1.0 (+https://github.com/workloom-ai/workloom-im)" };
 
@@ -23,19 +24,66 @@ async function readCredential(workspaceId: string, provider: string): Promise<st
 /**
  * API base 回退链：直连 api.github.com 优先；不可达时走公共镜像（gh-proxy.com）。
  * 可用 GITHUB_API_BASE 环境变量覆盖整条链（逗号分隔多个 base 按序尝试）。
+ * 数据源不等于凭据目的地：默认只授权 https://api.github.com；企业 API 须另列
+ * GITHUB_TRUSTED_API_ORIGINS（HTTPS origin，不能含路径/用户信息/查询/片段）。
+ * 每条重定向链最多 5 跳，跨 origin 后持续匿名；禁止 HTTPS 降级和 URL 用户信息。
  * 纪律：无论走哪个 base 都是真实 GitHub 数据；全部失败才落 mock（D4 绝不假装真实）。
  */
 const GITHUB_API_BASES = (process.env.GITHUB_API_BASE ??
   "https://api.github.com,https://gh-proxy.com/https://api.github.com"
 ).split(",").map((s) => s.trim().replace(/\/$/, "")).filter(Boolean);
 
-async function ghFetch(path: string, headers: Record<string, string>): Promise<unknown> {
+const GITHUB_TRUSTED_API_ORIGINS = new Set(["https://api.github.com"]);
+for (const value of (process.env.GITHUB_TRUSTED_API_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean)) {
+  try {
+    const url = new URL(value);
+    if (/^https:\/\/[^/?#\\]+\/?$/i.test(value)
+        && url.protocol === "https:" && !url.username && !url.password && url.href === `${url.origin}/`) {
+      GITHUB_TRUSTED_API_ORIGINS.add(url.origin);
+    }
+  } catch {
+    // 无效声明不能授予凭据；继续使用默认 origin 与其他有效声明。
+    continue;
+  }
+}
+
+const GITHUB_REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const GITHUB_MAX_REDIRECTS = 5;
+
+function githubRequestUrl(value: string, previous?: URL): URL {
+  const url = new URL(value, previous);
+  if ((url.protocol !== "https:" && url.protocol !== "http:") || url.username || url.password
+      || previous?.protocol === "https:" && url.protocol !== "https:") {
+    throw new Error("GitHub API destination rejected");
+  }
+  return url;
+}
+
+async function ghFetch(path: string, token: string | null): Promise<unknown> {
   let lastErr: unknown = null;
   for (const base of GITHUB_API_BASES) {
     try {
-      const res = await fetch(`${base}${path}`, { headers, signal: AbortSignal.timeout(12_000) });
-      if (res.ok) return await res.json();
-      lastErr = new Error(`${base} -> HTTP ${res.status}`);
+      let url = githubRequestUrl(`${base}${path}`);
+      // 每个数据源单独构造 headers，不能把上一来源的凭据带入回退请求。
+      const headers: Record<string, string> = { ...UA, Accept: "application/vnd.github+json" };
+      if (token && GITHUB_TRUSTED_API_ORIGINS.has(url.origin)) headers.Authorization = `Bearer ${token}`;
+      const signal = AbortSignal.timeout(12_000);
+      for (let redirects = 0; ; redirects += 1) {
+        const res = await fetch(url, { headers, signal, redirect: "manual" });
+        if (GITHUB_REDIRECT_STATUSES.has(res.status)) {
+          const location = res.headers.get("location");
+          await res.body?.cancel();
+          if (!location || redirects >= GITHUB_MAX_REDIRECTS) throw new Error("GitHub API redirect rejected");
+          const next = githubRequestUrl(location, url);
+          // 去授权对整条链生效；即使后续回到受信任 origin，也不重新附加。
+          if (next.origin !== url.origin) delete headers.Authorization;
+          url = next;
+          continue;
+        }
+        if (res.ok) return await res.json();
+        await res.body?.cancel();
+        throw new Error(`GitHub API HTTP ${res.status}`);
+      }
     } catch (e) { lastErr = e; }
   }
   throw lastErr ?? new Error("all GitHub API bases failed");
@@ -52,8 +100,6 @@ export interface RepoPulse {
 
 export async function githubPulse(workspaceId: string, repos: string[]): Promise<{ pulses: RepoPulse[]; mock: boolean }> {
   const token = await readCredential(workspaceId, "github");
-  const headers: Record<string, string> = { ...UA, Accept: "application/vnd.github+json" };
-  if (token) headers.Authorization = `Bearer ${token}`;
 
   const pulses: RepoPulse[] = [];
   let anyMock = false;
@@ -61,9 +107,9 @@ export async function githubPulse(workspaceId: string, repos: string[]): Promise
     try {
       const since = new Date(Date.now() - 7 * 86400_000).toISOString();
       const [commits, issues, prs] = await Promise.all([
-        ghFetch(`/repos/${repo}/commits?since=${since}&per_page=100`, headers),
-        ghFetch(`/repos/${repo}/issues?state=open&per_page=100`, headers),
-        ghFetch(`/repos/${repo}/pulls?state=open&per_page=100`, headers),
+        ghFetch(`/repos/${repo}/commits?since=${since}&per_page=100`, token),
+        ghFetch(`/repos/${repo}/issues?state=open&per_page=100`, token),
+        ghFetch(`/repos/${repo}/pulls?state=open&per_page=100`, token),
       ]);
       const issueCount = (issues as unknown[]).filter((i) => !(i as { pull_request?: unknown }).pull_request).length;
       pulses.push({
@@ -168,26 +214,122 @@ export async function industryRadar(workspaceId: string, feeds?: string[]): Prom
 }
 
 /* ---------------- competitor-scan：竞品页面抓取对比（真实 fetch） ---------------- */
-export async function competitorScan(workspaceId: string, targets: Array<{ name: string; url: string }>): Promise<{ reports: Array<{ name: string; url: string; changed: boolean; snippet: string; mock: boolean }> }> {
-  const reports = [];
-  for (const t of targets.slice(0, 6)) {
+const COMPETITOR_SNAPSHOT_SCHEMA = "workloom.aipm/competitor-snapshot@1";
+
+export interface CompetitorReport {
+  name: string;
+  url: string;
+  changed: boolean;
+  snippet: string;
+  mock: boolean;
+  error?: "scope" | "fetch" | "snapshot";
+}
+
+interface CompetitorSnapshotRow {
+  tenant_id: string;
+  workspace_id: string;
+  scope: string;
+  kind: string;
+  status: string;
+  content: string;
+}
+
+/** 保留其他记忆及召回状态；命名空间内的损坏或归属冲突也必须拒写。 */
+function competitorSnapshotHash(row: CompetitorSnapshotRow, scope: ServiceScope, url: string): string {
+  if (row.tenant_id !== scope.tenantId || row.workspace_id !== scope.workspaceId
+      || row.scope !== "workspace" || row.kind !== "pattern" || row.status !== "active") {
+    throw new Error("Competitor snapshot attribution rejected");
+  }
+  const value: unknown = JSON.parse(row.content);
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("Competitor snapshot content rejected");
+  }
+  const snapshot = value as Record<string, unknown>;
+  if (Object.keys(snapshot).length !== 5 || snapshot.schema !== COMPETITOR_SNAPSHOT_SCHEMA
+      || snapshot.tenantId !== scope.tenantId || snapshot.workspaceId !== scope.workspaceId
+      || snapshot.url !== url || typeof snapshot.hash !== "string" || !/^[a-f0-9]{64}$/.test(snapshot.hash)) {
+    throw new Error("Competitor snapshot identity rejected");
+  }
+  return snapshot.hash;
+}
+
+function competitorFailure(target: { name: string; url: string }, error: NonNullable<CompetitorReport["error"]>): CompetitorReport {
+  const snippets = {
+    scope: "（竞品扫描不可用——工作区作用域未授权或验证失败）",
+    fetch: "（抓取失败——网络、HTTP 或页面内容不可用）",
+    snapshot: "（竞品快照保存失败——请稍后重试）",
+  };
+  // 不输出 URL、页面、数据库异常或上游响应体；阶段足以判断是否需要重试。
+  console.warn(`[aipm] competitor-scan failed: ${error}`);
+  return { ...target, changed: false, snippet: snippets[error], mock: true, error };
+}
+
+export async function competitorScan(workspaceId: string, targets: Array<{ name: string; url: string }>): Promise<{ reports: CompetitorReport[] }> {
+  const selected = targets.slice(0, 6);
+  if (selected.length === 0) return { reports: [] };
+  let scope: Readonly<ServiceScope>;
+  try {
+    scope = requireServiceScope(workspaceId);
+    // 只验证调用链已有的双作用域，不反查/推导 tenant。HTTP 前要求真实注册锚点。
+    const allowed = await svcQuery<{ id: string }>(workspaceId,
+      "SELECT id FROM workspaces WHERE id=$1 AND tenant_id=$2", [scope.workspaceId, scope.tenantId], scope);
+    if (allowed.length !== 1) throw new Error("Competitor workspace scope rejected");
+  } catch {
+    return { reports: selected.map(target => competitorFailure(target, "scope")) };
+  }
+
+  const reports: CompetitorReport[] = [];
+  for (const t of selected) {
+    let stage: NonNullable<CompetitorReport["error"]> = "fetch";
     try {
-      const res = await fetch(t.url, { headers: UA, signal: AbortSignal.timeout(12_000) });
-      const html = res.ok ? await res.text() : "";
-      const text = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 4000);
-      const hash = createHash("sha1").update(text).digest("hex");
-      // 与上次快照比对（org_memory 存快照哈希）
-      const prev = await svcQuery<{ content: string }>(workspaceId,
-        `SELECT content FROM org_memory WHERE kind='competitor-snapshot' AND content LIKE $1 LIMIT 1`, [`%${t.url}%`]);
-      const changed = prev.length > 0 && !prev[0]!.content.includes(hash);
-      await svcQuery(workspaceId,
-        `INSERT INTO org_memory (memory_id, tenant_id, workspace_id, scope, kind, content, source_events)
-         VALUES ($1, 'demo', current_setting('app.workspace_id', true), 'workspace', 'competitor-snapshot', $2, '{}')
-         ON CONFLICT (memory_id) DO UPDATE SET content=EXCLUDED.content`,
-        [`mem-comp-${createHash("sha1").update(t.url).digest("hex").slice(0, 10)}`, `${t.name}（${t.url}）页面快照哈希：${hash}`]).catch(() => undefined);
+      const url = new URL(t.url);
+      if ((url.protocol !== "http:" && url.protocol !== "https:") || url.username || url.password) {
+        throw new Error("Competitor URL rejected");
+      }
+      const res = await fetch(url, { headers: UA, signal: AbortSignal.timeout(12_000) });
+      if (!res.ok) {
+        await res.body?.cancel();
+        throw new Error("Competitor HTTP response unavailable");
+      }
+      const html = await res.text();
+      const text = html.replace(/<script\b[\s\S]*?<\/script\s*>|<style\b[\s\S]*?<\/style\s*>/gi, " ")
+        .replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (!text) throw new Error("Competitor page content unavailable");
+      const hash = createHash("sha256").update(text).digest("hex");
+      const memoryId = "mem-comp-v1-" + createHash("sha256")
+        .update(JSON.stringify([COMPETITOR_SNAPSHOT_SCHEMA, scope.tenantId, scope.workspaceId, t.url])).digest("hex");
+      const content = JSON.stringify({ schema: COMPETITOR_SNAPSHOT_SCHEMA, tenantId: scope.tenantId,
+        workspaceId: scope.workspaceId, url: t.url, hash });
+      stage = "snapshot";
+      // HTTP 已结束；同一身份的读/比较/写在一笔短事务内串行，提交失败不发成功回执。
+      const changed = await serviceTx(workspaceId, async (client, current) => {
+        await client.query("SET LOCAL lock_timeout = '5s'");
+        await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [memoryId]);
+        const previous = (await client.query<CompetitorSnapshotRow>(
+          `SELECT tenant_id,workspace_id,scope,kind,status,content FROM org_memory
+           WHERE memory_id=$1 AND tenant_id=$2 AND workspace_id=$3 FOR UPDATE`,
+          [memoryId, current.tenantId, current.workspaceId],
+        )).rows[0];
+        const previousHash = previous ? competitorSnapshotHash(previous, current, t.url) : null;
+        const saved = await client.query<CompetitorSnapshotRow>(
+          `INSERT INTO org_memory (memory_id, tenant_id, workspace_id, scope, kind, content, source_events)
+           VALUES ($1,$2,$3,'workspace','pattern',$4,'{}')
+           ON CONFLICT (memory_id) DO UPDATE SET content=EXCLUDED.content
+             WHERE org_memory.tenant_id=EXCLUDED.tenant_id AND org_memory.workspace_id=EXCLUDED.workspace_id
+               AND org_memory.scope='workspace' AND org_memory.kind='pattern' AND org_memory.status='active'
+               AND org_memory.content IS NOT DISTINCT FROM $5::text
+           RETURNING tenant_id,workspace_id,scope,kind,status,content`,
+          [memoryId, current.tenantId, current.workspaceId, content, previous?.content ?? null],
+        );
+        if (saved.rowCount !== 1 || !saved.rows[0]
+            || competitorSnapshotHash(saved.rows[0], current, t.url) !== hash) {
+          throw new Error("Competitor snapshot write rejected");
+        }
+        return previousHash !== null && previousHash !== hash;
+      }, scope);
       reports.push({ name: t.name, url: t.url, changed, snippet: text.slice(0, 300), mock: false });
     } catch {
-      reports.push({ name: t.name, url: t.url, changed: false, snippet: "（抓取失败——网络或反爬）", mock: true });
+      reports.push(competitorFailure(t, stage));
     }
   }
   return { reports };

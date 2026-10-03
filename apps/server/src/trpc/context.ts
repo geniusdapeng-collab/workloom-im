@@ -24,6 +24,7 @@ import {
   resolveAuthoritativeClientAccess,
   type BaseActionPermission,
 } from "../service/access-authority.js";
+import { runWithServiceScope } from "../service/scope.js";
 
 export interface TrpcContext {
   /** 已验签会话；伙伴与成员严格分域。 */
@@ -106,14 +107,14 @@ export const protectedProcedure = t.procedure.use(async ({ ctx, next }) => {
   try {
     // JWT 只证明会话来源；角色、套餐、成员/租户状态每次从当前服务端事实刷新。
     const current = await currentMemberAuthority(ctx.identity);
-    return next({
+    return runWithServiceScope(current.identity, () => next({
       ctx: {
         ...ctx,
         identity: current.identity,
         session: current.identity,
         memberPermissions: current.permissions,
       },
-    });
+    }));
   } catch (error) {
     if (error instanceof AccessAuthorityError) {
       throw new TRPCError({ code: "UNAUTHORIZED", message: error.message });

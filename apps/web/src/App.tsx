@@ -75,6 +75,69 @@ function UiDiagnosticsRoute() {
   return enabled ? <Bridge><DevMatrix /></Bridge> : <NotFound />;
 }
 
+function OnboardingRoute() {
+  // F-GUEST1：游客可完整体验系统，进入配置引导（正式开通）才要求登录。
+  return isGuest() ? <Navigate to="/login?next=/onboarding" replace /> : <Onboarding />;
+}
+
+/** 公共路由只在这里声明；实际 Routes 与构建页面登记共同消费此表。 */
+export const BASE_ROUTE_REGISTRY = [
+  { path: "/", element: <P0 /> },
+  { path: "/p1", element: <Navigate to="/tasks" replace /> },
+  { path: "/p2/:threadId", element: <LegacyTaskRedirect /> },
+  { path: "/p9", element: <Navigate to="/night" replace /> },
+  { path: "/p21", element: <Navigate to="/executive" replace /> },
+  { path: "/p22", element: <Navigate to="/service" replace /> },
+  { path: "/p3", element: <Navigate to="/reports" replace /> },
+  { path: "/p4", element: <Navigate to="/approvals" replace /> },
+  { path: "/p5", element: <Navigate to="/guardrails" replace /> },
+  { path: "/p6", element: <Navigate to="/skills" replace /> },
+  { path: "/p6/create", element: <Navigate to="/skills/create" replace /> },
+  { path: "/p7", element: <Navigate to="/assembly" replace /> },
+  { path: "/p8", element: <Navigate to="/agents" replace /> },
+  { path: "/p8/agent/:agentId", element: <LegacyAgentRedirect /> },
+  { path: "/p23", element: <Navigate to="/memory" replace /> },
+  { path: "/p24", element: <Navigate to="/exams" replace /> },
+  { path: "/p26", element: <Navigate to="/customize" replace /> },
+  { path: "/p27", element: <Navigate to="/configuration" replace /> },
+  { path: "/p28", element: <Navigate to="/inbox" replace /> },
+  { path: "/p29", element: <Navigate to="/account" replace /> },
+  { path: "/p30", element: <Navigate to="/members" replace /> },
+  { path: "/p31", element: <Navigate to="/partners" replace /> },
+  { path: "/p0", element: <Navigate to="/" replace /> },
+  { path: "/inbox", element: <P28 /> },
+  { path: "/tasks", element: <P1 /> },
+  { path: "/tasks/:threadId", element: <P2 /> },
+  { path: "/approvals", element: <P4 /> },
+  { path: "/reports", element: <P3 /> },
+  { path: "/service", element: <P22 /> },
+  { path: "/executive", element: <P21 /> },
+  { path: "/guardrails", element: <P5 /> },
+  { path: "/exams", element: <P24 /> },
+  { path: "/memory", element: <P23 /> },
+  { path: "/night", element: <P9 /> },
+  { path: "/skills", element: <P6 /> },
+  { path: "/skills/create", element: <P6 /> },
+  { path: "/members", element: <P30 /> },
+  { path: "/partners", element: <P31 /> },
+  { path: "/account", element: <P29 /> },
+  { path: "/workspaces", element: <Workspaces /> },
+  { path: "/customize", element: <P26 /> },
+  { path: "/configuration", element: <P27 /> },
+  { path: "/assembly", element: <P7 /> },
+  { path: "/agents", element: <P8 /> },
+  { path: "/agents/:agentId", element: <P8 /> },
+  { path: "/events", element: <Observability view="events" /> },
+  { path: "/event-ledger", element: <Navigate to="/events" replace /> },
+  { path: "/models", element: <Observability view="models" /> },
+  { path: "/model-routing", element: <Navigate to="/models" replace /> },
+  { path: "/login", element: <Login /> },
+  { path: "/activate", element: <Activate /> },
+  { path: "/invite", element: <InviteAccept /> },
+  { path: "/onboarding", element: <OnboardingRoute /> },
+  { path: "/dev", element: <UiDiagnosticsRoute /> },
+] as const;
+
 /** 阶段三路由：页面自包 Bridge（注入真实左右栏）；/dev 矩阵保持壳内平铺 */
 function Shell() {
   const { pathname } = useLocation();
@@ -110,63 +173,9 @@ function Shell() {
         {!bare && <StarRing />}
         <NavigationAccessBoundary pathname={pathname}>
           <Routes>
-      <Route path="/" element={<P0 />} />
-      <Route path="/p1" element={<Navigate to="/tasks" replace />} />
-      <Route path="/p2/:threadId" element={<LegacyTaskRedirect />} />
-      <Route path="/p9" element={<Navigate to="/night" replace />} />
-      <Route path="/p21" element={<Navigate to="/executive" replace />} />
-      <Route path="/p22" element={<Navigate to="/service" replace />} />
-      <Route path="/p3" element={<Navigate to="/reports" replace />} />
-      <Route path="/p4" element={<Navigate to="/approvals" replace />} />
-      <Route path="/p5" element={<Navigate to="/guardrails" replace />} />
-      <Route path="/p6" element={<Navigate to="/skills" replace />} />
-      <Route path="/p6/create" element={<Navigate to="/skills/create" replace />} />
-      <Route path="/p7" element={<Navigate to="/assembly" replace />} />
-      <Route path="/p8" element={<Navigate to="/agents" replace />} />
-      <Route path="/p8/agent/:agentId" element={<LegacyAgentRedirect />} />
-      <Route path="/p23" element={<Navigate to="/memory" replace />} />
-      <Route path="/p24" element={<Navigate to="/exams" replace />} />
-      <Route path="/p26" element={<Navigate to="/customize" replace />} />
-      <Route path="/p27" element={<Navigate to="/configuration" replace />} />
-      <Route path="/p28" element={<Navigate to="/inbox" replace />} />
-      <Route path="/p29" element={<Navigate to="/account" replace />} />
-      <Route path="/p30" element={<Navigate to="/members" replace />} />
-      <Route path="/p31" element={<Navigate to="/partners" replace />} />
-      <Route path="/p0" element={<Navigate to="/" replace />} />
-      <Route path="/inbox" element={<P28 />} />
-      <Route path="/tasks" element={<P1 />} />
-      <Route path="/tasks/:threadId" element={<P2 />} />
-      <Route path="/approvals" element={<P4 />} />
-      <Route path="/reports" element={<P3 />} />
-      <Route path="/service" element={<P22 />} />
-      <Route path="/executive" element={<P21 />} />
-      <Route path="/guardrails" element={<P5 />} />
-      <Route path="/exams" element={<P24 />} />
-      <Route path="/memory" element={<P23 />} />
-      <Route path="/night" element={<P9 />} />
-      <Route path="/skills" element={<P6 />} />
-      <Route path="/skills/create" element={<P6 />} />
-      <Route path="/members" element={<P30 />} />
-      <Route path="/partners" element={<P31 />} />
-      <Route path="/account" element={<P29 />} />
-      <Route path="/workspaces" element={<Workspaces />} />
-      <Route path="/customize" element={<P26 />} />
-      <Route path="/configuration" element={<P27 />} />
-      <Route path="/assembly" element={<P7 />} />
-      <Route path="/agents" element={<P8 />} />
-      <Route path="/agents/:agentId" element={<P8 />} />
-      <Route path="/events" element={<Observability view="events" />} />
-      <Route path="/event-ledger" element={<Navigate to="/events" replace />} />
-      <Route path="/models" element={<Observability view="models" />} />
-      <Route path="/model-routing" element={<Navigate to="/models" replace />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/activate" element={<Activate />} />
-      <Route path="/invite" element={<InviteAccept />} />
-      <Route path="/onboarding" element={
-        // F-GUEST1：游客可完整体验系统，进入配置引导（正式开通）才要求登录
-        isGuest() ? <Navigate to="/login?next=/onboarding" replace /> : <Onboarding />
-      } />
-      <Route path="/dev" element={<UiDiagnosticsRoute />} />
+            {BASE_ROUTE_REGISTRY.map((definition) => (
+              <Route key={definition.path} path={definition.path} element={definition.element} />
+            ))}
             {INDUSTRY_ROUTE_REGISTRY.routes.map((definition) => (
               <Route
                 key={definition.path}

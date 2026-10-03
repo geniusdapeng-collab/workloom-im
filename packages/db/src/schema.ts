@@ -317,6 +317,12 @@ export const skills = pgTable("skills", {
   body: text("body").notNull().default(""),
   /** 行业共享上架前必须脱敏（L8.1/E8.4） */
   desensitized: boolean("desensitized").notNull().default(false),
+  /** MC-022：私有技能显式归属；字符串 ID 不参与权限判断。 */
+  ownerTenantId: text("owner_tenant_id").references(() => tenants.id),
+  ownerWorkspaceId: text("owner_workspace_id").references(() => workspaces.id),
+  /** owned / shared / quarantined；历史不确定归属行保留并隔离。 */
+  ownershipState: text("ownership_state").notNull().default("shared"),
+  ownershipReason: text("ownership_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

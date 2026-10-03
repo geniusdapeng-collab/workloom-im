@@ -5,6 +5,7 @@
  * 纪律：集成用例自备数据（唯一后缀隔离），不依赖种子状态、不跨用例污染——可重跑
  */
 import { describe, expect, it } from "vitest";
+import type { PoolClient } from "pg";
 import {
   CHANNEL_REGISTRY,
   APPROVAL_CHANNEL_ENUM,
@@ -61,7 +62,7 @@ describe("审批卡片组装（M5/F5.1 同源投影）", () => {
       payload: {
         decision: { action: "price.adjust", before: { price: 400 }, after: { price: 432 } },
         object: { type: "room_price", id: "rt-1", label: "大床房" },
-        rule_impact: [{ rule_id: "R1", version: "v1", result: "review" }],
+        rule_impact: [{ rule_id: "R1", result: "review" }],
       },
       snapshot: { expires_at: "2026-08-18T08:30:00+08:00" },
     });
@@ -102,7 +103,7 @@ d("PG 集成（G8/L1.4/L5.3/E5.2/L5.1）", async () => {
   const sfx = `im${Date.now().toString(36)}`;
   const openId = `ou_${sfx}`;
 
-  const setScoped = async (c: pg.PoolClient) => {
+  const setScoped = async (c: PoolClient) => {
     await c.query("SELECT set_config('app.workspace_id', $1, false)", [scope.workspaceId]);
     await c.query("SELECT set_config('app.tenant_id', $1, false)", [scope.tenantId]);
   };

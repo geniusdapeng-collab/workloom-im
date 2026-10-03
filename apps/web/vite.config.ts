@@ -3,18 +3,19 @@ import react from "@vitejs/plugin-react";
 // vitest/config 复用 Vite 的 defineConfig 并额外接受 test 段；生产构建行为不变。
 import { defineConfig } from "vitest/config";
 import { workloomProductVite } from "../../scripts/vite-product.mjs";
+import { workloomPcPageRegistry } from "../../scripts/vite-pc-page-registry.mjs";
 
 const product = workloomProductVite("B 端工作台");
 
 // A6：vite proxy 转发 /trpc → server（总纲 §2.4 前后端交互）
-// W2：preview 同口径代理（桌面发行版以 vite preview 静态服务 dist）
+// W2：preview 同口径代理供本地预览；桌面发行版由 scripts/desktop-web.mjs 服务 dist。
 const trpcProxy = {
   target: `http://localhost:${Number(process.env.SERVER_PORT ?? 8787)}`,
   changeOrigin: true,
 };
 export default defineConfig({
   define: product.define,
-  plugins: [product.plugin, react(), tailwindcss()],
+  plugins: [product.plugin, react(), tailwindcss(), workloomPcPageRegistry()],
   server: {
     port: Number(process.env.WEB_PORT ?? 5173),
     // /health 同代理：前端「环境守门员」（BackendGate）经此探测后端就绪态，

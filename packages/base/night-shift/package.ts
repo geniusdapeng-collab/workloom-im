@@ -86,6 +86,66 @@ export function projectNightPackage(events: BusinessEvent[]): NightPackage {
 
 /* ---------- PG 装配：取夜间窗口事件 → 投影 → 落库留痕 ---------- */
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isPackageItem(value: unknown, severity: PackageItem["severity"]): value is PackageItem {
+  return isRecord(value)
+    && typeof value.eventId === "string" && value.eventId.length > 0
+    && typeof value.summary === "string"
+    && value.severity === severity
+    && Array.isArray(value.fenceVersions) && value.fenceVersions.every((version) => typeof version === "string")
+    && (value.snapshotUri === undefined || typeof value.snapshotUri === "string");
+}
+
+function isPackageStats(value: unknown): value is NightPackage["stats"] {
+  return isRecord(value)
+    && [value.done, value.pending, value.need_human].every((count) =>
+      typeof count === "number" && Number.isSafeInteger(count) && count >= 0)
+    && typeof value.credits_used === "number" && Number.isFinite(value.credits_used);
+}
+
+function samePackageStats(value: unknown, expected: NightPackage["stats"]): boolean {
+  return isPackageStats(value)
+    && value.done === expected.done && value.pending === expected.pending
+    && value.need_human === expected.need_human && value.credits_used === expected.credits_used;
+}
+
+function isNightPackage(value: unknown): value is NightPackage {
+  if (!isRecord(value) || !isPackageStats(value.stats)
+    || typeof value.truncated !== "number" || !Number.isSafeInteger(value.truncated) || value.truncated < 0
+    || !Array.isArray(value.done) || !value.done.every((item) => isPackageItem(item, 1))
+    || !Array.isArray(value.pending) || !value.pending.every((item) => isPackageItem(item, 2))
+    || !Array.isArray(value.needHuman) || !value.needHuman.every((item) => isPackageItem(item, 3))) return false;
+  return value.done.length + value.pending.length + value.needHuman.length <= APPROVAL_LIMITS.packageMaxItems
+    && value.stats.done === value.done.length && value.stats.pending === value.pending.length
+    && value.stats.need_human === value.needHuman.length;
+}
+
+/** 首次只增快照是交付结果；损坏旧记录不能用现场重算冒充已交付包。 */
+function storedPackage(
+  payload: unknown,
+  scope: { tenantId: string; workspaceId: string },
+  runId: string,
+  runStats: unknown,
+): NightPackage {
+  if (!isRecord(payload) || !isRecord(payload.who) || !isRecord(payload.context)
+    || !isRecord(payload.object) || !isRecord(payload.decision) || !isRecord(payload.decision.after)) {
+    throw new Error(`夜班「${runId}」缺少有效首次交付快照`);
+  }
+  const after = payload.decision.after;
+  if (payload.who.type !== "system" || payload.who.id !== "night-shift"
+    || payload.context.tenant_id !== scope.tenantId || payload.context.workspace_id !== scope.workspaceId
+    || payload.object.type !== "store" || payload.object.id !== scope.workspaceId
+    || payload.decision.action !== "night.package.deliver" || after.runId !== runId
+    || !isNightPackage(after.package) || !samePackageStats(after.stats, after.package.stats)
+    || after.truncated !== after.package.truncated || !samePackageStats(runStats, after.package.stats)) {
+    throw new Error(`夜班「${runId}」首次交付快照或统计不一致`);
+  }
+  return after.package;
+}
+
 export async function deliverPackage(
   app: pg.Pool,
   gateway: pg.Pool,
@@ -94,46 +154,55 @@ export async function deliverPackage(
   window: { from: string; to: string },
 ): Promise<NightPackage> {
   const client = await app.connect();
-  let events: BusinessEvent[];
+  let discardClient = false;
   try {
     // 事务级 RLS 上下文必须在显式事务内设置：autocommit 下 set_config(...,true) 语句结束即失效
     await client.query("BEGIN");
     await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
     await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+
+    // 同 run 的首次交付与重试在一把行锁内串行；工作区须真正属于调用租户。
+    const run = (await client.query<{ status: string; stats: unknown }>(
+      `SELECT nr.status, nr.stats FROM night_runs nr
+       JOIN workspaces w ON w.id=nr.workspace_id AND w.tenant_id=$3
+       WHERE nr.id=$1 AND nr.workspace_id=$2 FOR UPDATE OF nr`,
+      [runId, scope.workspaceId, scope.tenantId],
+    )).rows[0];
+    if (!run) throw new Error(`夜班「${runId}」在本工作区不存在`);
+
+    const firstDelivery = (await client.query<{ payload: unknown }>(
+      `SELECT payload FROM biz_events
+       WHERE tenant_id=$1 AND workspace_id=$2
+         AND payload->'decision'->>'action'='night.package.deliver'
+         AND payload->'decision'->'after'->>'runId'=$3
+       ORDER BY seq LIMIT 1`,
+      [scope.tenantId, scope.workspaceId, runId],
+    )).rows[0];
+    if (run.status === "package_generated") {
+      const pkg = storedPackage(firstDelivery?.payload, scope, runId, run.stats);
+      await client.query("COMMIT");
+      return pkg;
+    }
+    if (!["running", "paused", "ready"].includes(run.status) || firstDelivery) {
+      throw new Error(`夜班「${runId}」状态 ${run.status} 与交付记录不一致`);
+    }
+
     const r = await client.query<{ payload: BusinessEvent }>(
       `SELECT payload FROM biz_events
        WHERE tenant_id=$1 AND workspace_id=$2 AND created_at >= $3::timestamptz AND created_at <= $4::timestamptz
        ORDER BY seq`,
       [scope.tenantId, scope.workspaceId, window.from, window.to],
     );
-    events = r.rows.map((x) => x.payload);
-    await client.query("COMMIT");
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally {
-    client.release();
-  }
+    const pkg = projectNightPackage(r.rows.map((x) => x.payload));
 
-  const pkg = projectNightPackage(events);
-
-  // 状态机 → package_generated + 统计回写（F4.4/F4.8）
-  const c2 = await app.connect();
-  try {
-    await c2.query("BEGIN");
-    await c2.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-    await c2.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
-    const upd = await c2.query(
+    // 状态、统计与唯一投递事件在同一个事务中写入（D16/G8）。
+    const upd = await client.query(
       `UPDATE night_runs SET status='package_generated', stats=$3 WHERE id=$1 AND workspace_id=$2 AND status IN ('running','paused','ready')`,
       [runId, scope.workspaceId, JSON.stringify(pkg.stats)],
     );
-    // 幂等：已 package_generated（或班次不存在）→ rowCount=0，直接返回不重写投递事件（G8 留痕唯一）
-    if (upd.rowCount === 0) {
-      await c2.query("COMMIT");
-      return pkg;
-    }
-    // D16（#1/A）：状态回写与投递事件同一事务同一 COMMIT（G8）
-    await gatewayAppendOnClient(c2, {
+    if (upd.rowCount !== 1) throw new Error(`夜班「${runId}」交付状态更新失败`);
+    // 保留 gateway 参数的公开签名；实际追加必须复用持锁 app client。
+    const appended = await gatewayAppendOnClient(client, {
       tenantId: scope.tenantId, workspaceId: scope.workspaceId,
       actor: { id: "night-shift", type: "system" },
     }, {
@@ -146,13 +215,23 @@ export async function deliverPackage(
       },
       rule_impact: [],
     } as never);
-    await c2.query("COMMIT");
+    // 读取网关脱敏和 JSON 持久化后的真实结果，使首返与所有重试逐字段一致。
+    const persisted = (await client.query<{ payload: unknown }>(
+      `SELECT payload FROM biz_events WHERE tenant_id=$1 AND workspace_id=$2 AND event_id=$3`,
+      [scope.tenantId, scope.workspaceId, appended.eventId],
+    )).rows[0];
+    const result = storedPackage(persisted?.payload, scope, runId, pkg.stats);
+    await client.query("COMMIT");
+    return result;
   } catch (err) {
-    await c2.query("ROLLBACK").catch(() => undefined);
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackError) {
+      discardClient = true;
+      throw new AggregateError([err, rollbackError], "夜班交付失败且回滚确认失败");
+    }
     throw err;
   } finally {
-    c2.release();
+    client.release(discardClient);
   }
-
-  return pkg;
 }

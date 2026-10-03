@@ -172,6 +172,17 @@ export interface DecideResult {
   gestureEventId?: string;
 }
 
+export interface DecideOptions {
+  /** 外部副作用仍在 COMMIT 后触发；deduped 不重复调用。 */
+  onApproved?: (approvalId: string, snapshot: unknown) => Promise<void> | void;
+  /**
+   * MC-012：业务状态投影必须与裁决同一事务提交。钩子失败则整个裁决回滚。
+   * 终态重复回调也调用，供旧半状态幂等修复；不会重写手势或重置 consumed_at。
+   * 在手势事件拿事件链锁之前调用，保持审批 → 业务对象 → 事件链的锁顺序。
+   */
+  onDecidedInTx?: (client: pg.PoolClient, approvalId: string) => Promise<unknown> | unknown;
+}
+
 export async function decide(
   app: pg.Pool,
   gateway: pg.Pool,
@@ -181,7 +192,7 @@ export async function decide(
   gesture: GestureInput,
   embedder: Embedder = new MockEmbedder(),
   /** B-05：批准后副作用钩子（事务提交后调用，deduped 不触发；Quest 续跑/围栏激活/HR 汰换等由调用方注入） */
-  opts?: { onApproved?: (approvalId: string, snapshot: unknown) => Promise<void> | void },
+  opts?: DecideOptions,
 ): Promise<DecideResult> {
   // L5.1/L5.5 角色校验 + L5.2 手势校验（先校验，不碰库）
   assertApproverRole(actor.role);
@@ -204,6 +215,7 @@ export async function decide(
 
     // L5.3：非 pending 一律视为重复回调，只处理首次
     if (row.status !== "pending") {
+      await opts?.onDecidedInTx?.(c, approvalId);
       return { kind: "deduped" as const, row };
     }
 
@@ -216,6 +228,7 @@ export async function decide(
     );
     const decidedElsewhere = siblings.rows.find((x) => x.status !== "pending");
     if (decidedElsewhere) {
+      await opts?.onDecidedInTx?.(c, decidedElsewhere.approval_id);
       return { kind: "deduped" as const, row: { ...row, status: decidedElsewhere.status } };
     }
 
@@ -249,6 +262,9 @@ export async function decide(
         actor.memberNo,
       ],
     );
+
+    // 业务状态与审批、手势留痕同生同灭；禁止在提交后 catch 掉状态投影失败。
+    await opts?.onDecidedInTx?.(c, approvalId);
 
     /**
      * MC-101 / MC-104（同事务前置查询）：被审事件的归属线程与会话必须先取到——
@@ -381,7 +397,7 @@ export async function batchApprove(
   actor: { memberNo: string; role: MemberRole },
   approvalIds: string[],
   /** B-05：透传给 decide 的批准后副作用钩子（批量批准同样触发 Quest 续跑等联动） */
-  opts?: { onApproved?: (approvalId: string, snapshot: unknown) => Promise<void> | void },
+  opts?: DecideOptions,
 ): Promise<{ approved: string[]; skipped: Array<{ id: string; reason: string }> }> {
   assertApproverRole(actor.role);
   const approved: string[] = [];

@@ -4,8 +4,9 @@
  * 覆盖：session 形状与渠道门控/限流、cards 行业无关展示投影、statusText 中文枚举、
  *      /member /orders /notifications 形状、建单幂等重放、rate 409、404 requestId、低置信拒答 ticketDraft。
  */
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Hono } from "hono";
+import { createServiceBusinessFixture, type ServiceBusinessFixture } from "./business.pg-fixture.js";
 
 process.env.DATABASE_URL ??= "postgres://postgres:workloom@localhost:5432/workloom";
 process.env.DATABASE_APP_URL ??= "postgres://workloom_app:workloom_dev_app@localhost:5432/workloom";
@@ -25,6 +26,7 @@ if (FIXTURE_WORKSPACE_ID) process.env.SERVICE_C_WORKSPACE_ID = FIXTURE_WORKSPACE
 const fixtureDescribe = FIXTURE_WORKSPACE_ID ? describe : describe.skip;
 
 let app: Hono;
+let businessFixture: ServiceBusinessFixture | undefined;
 const RUN = `contract-${Date.now().toString(36)}`;
 const IP = "198.51.100.77"; // TEST-NET-2，与其它用例隔离限流桶
 
@@ -48,7 +50,18 @@ async function makeSession(openid: string): Promise<{ token: string; user: Recor
 
 beforeAll(async () => {
   if (!FIXTURE_WORKSPACE_ID) return;
+  businessFixture = await createServiceBusinessFixture(FIXTURE_WORKSPACE_ID);
   ({ serviceGateway: app } = await import("./gateway.js"));
+});
+
+afterAll(async () => {
+  if (!FIXTURE_WORKSPACE_ID) return;
+  try {
+    await businessFixture?.dispose();
+  } finally {
+    const { closeAllPools } = await import("@workloom/db");
+    await closeAllPools();
+  }
 });
 
 fixtureDescribe("契约 · session（S2）", () => {
@@ -222,7 +235,7 @@ fixtureDescribe("契约 · 身份绑定信任链", () => {
     const { token } = await makeSession(`${RUN}-identity`);
     const codeRes = await req("/identity/code", {
       method: "POST",
-      body: JSON.stringify({ phone: "13800000001" }),
+      body: JSON.stringify({ phone: businessFixture!.gold.phone }),
     }, token);
     expect(codeRes.status).toBe(200);
     const code = (await codeRes.json()) as Record<string, unknown>;
@@ -231,7 +244,7 @@ fixtureDescribe("契约 · 身份绑定信任链", () => {
 
     const bindRes = await req("/identity/bind", {
       method: "POST",
-      body: JSON.stringify({ phone: "13800000001", code: "123456" }),
+      body: JSON.stringify({ phone: businessFixture!.gold.phone, code: "123456" }),
     }, token);
     expect(bindRes.status).toBe(200);
     const bound = (await bindRes.json()) as {
@@ -239,9 +252,9 @@ fixtureDescribe("契约 · 身份绑定信任链", () => {
       receipt: { requestId: string; eventId: string; state: string; resourceId: string; demo: boolean };
     };
     expect(bound.user).toMatchObject({
-      memberId: "M-1001", verified: true, authMode: "demo", identityMode: "demo",
+      memberId: businessFixture!.gold.memberId, verified: true, authMode: "demo", identityMode: "demo",
     });
-    expect(bound.receipt).toMatchObject({ state: "bound", resourceId: "M-1001", demo: true });
+    expect(bound.receipt).toMatchObject({ state: "bound", resourceId: businessFixture!.gold.memberId, demo: true });
     expect(typeof bound.receipt.requestId).toBe("string");
     expect(typeof bound.receipt.eventId).toBe("string");
   });
@@ -250,7 +263,7 @@ fixtureDescribe("契约 · 身份绑定信任链", () => {
     const { token } = await makeSession(`${RUN}-identity-fail`);
     const res = await req("/identity/bind", {
       method: "POST",
-      body: JSON.stringify({ phone: "13800000001", code: "000000" }),
+      body: JSON.stringify({ phone: businessFixture!.gold.phone, code: "000000" }),
     }, token);
     expect(res.status).toBe(400);
     const body = (await res.json()) as Record<string, unknown>;

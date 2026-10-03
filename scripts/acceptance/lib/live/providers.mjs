@@ -19,6 +19,7 @@ import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { maskSecret } from "../target.mjs";
+import { LIVE_BUDGET_CAPS } from "./budget.mjs";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -184,7 +185,13 @@ export async function runDshTask({
   timeoutMs = 8 * 60_000,
   home = null,
   imagePath = null,
+  selftest = false,
 }) {
+  // dsh 可循环调用 provider；当前适配器没有每个子调用的用量与硬上界。
+  if (!selftest) return { status: "blocked", reason: "dsh-harness 缺少有界调用/token 计量，生产配额无法约束；禁止派发", usageVerified: false, accounting: "estimated" };
+  if (!isLoopbackEndpoint(env.DEEPSEEK_BASE_URL ?? env.LLM_BASE_URL)) {
+    return { status: "blocked", reason: "dsh 自检仅允许显式本地替身端点", usageVerified: false, accounting: "estimated" };
+  }
   const { gate, bin, patchTemplate } = dshPaths(repoRoot);
   if (!existsSync(bin)) {
     return { status: "blocked", reason: `dsh 可执行文件缺失：${bin}（先跑 packages/runtime/dsh-gate 的 pnpm install）` };
@@ -246,6 +253,9 @@ export async function runDshTask({
   }
   return {
     status: ok ? "ok" : "failed",
+    usageVerified: false,
+    accounting: "estimated",
+    tokens: null,
     answer,
     exitCode: res.code,
     ms,
@@ -298,7 +308,34 @@ function runProcess(cmd, args, { cwd, env, timeoutMs }) {
 /* 通道二：model-gateway（OpenAI 兼容网关，文本 + 多模态理解）              */
 /* ------------------------------------------------------------------ */
 
-export async function runChatTask({ resolved, prompt, timeoutMs = 180_000, env = process.env, image = null }) {
+function isLoopbackEndpoint(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) && !url.username && !url.password;
+  } catch { return false; }
+}
+
+/** 只接受可核验的每次调用计量；缺失/零/格式错误不捏造实际 token。 */
+function tokenUsage(usage) {
+  const valid = (n) => Number.isSafeInteger(n) && n >= 0;
+  const total = usage?.total_tokens;
+  const prompt = usage?.prompt_tokens;
+  const completion = usage?.completion_tokens;
+  const partsValid = valid(prompt) && valid(completion) && valid(prompt + completion);
+  const knownParts = (valid(prompt) ? prompt : 0) + (valid(completion) ? completion : 0);
+  const lowerBound = Number.isSafeInteger(knownParts) && knownParts > 0 ? knownParts : null;
+  const hasParts = prompt !== undefined || completion !== undefined;
+  if (total !== undefined) {
+    if (!valid(total) || total === 0) return { tokens: lowerBound, usageVerified: false };
+    return { tokens: Math.max(total, lowerBound ?? 0), usageVerified: !hasParts || (partsValid && total === knownParts) };
+  }
+  return { tokens: lowerBound, usageVerified: partsValid && knownParts > 0 };
+}
+
+export async function runChatTask({ resolved, prompt, timeoutMs = 180_000, env = process.env, image = null, maxTokens = 8000 }) {
+  if (!Number.isSafeInteger(maxTokens) || maxTokens < 1 || maxTokens > LIVE_BUDGET_CAPS.maxLlmTokens) {
+    return { status: "blocked", reason: "LLM completion 上界必须是额度内的正整数", usageVerified: false };
+  }
   if (!resolved.ready) return { status: "blocked", reason: resolved.missing.join("；") };
   const apiKey = pickEnv([resolved.credentialEnv, DSH_DEEPSEEK_DEFAULTS.apiKeyEnv, "LLM_API_KEY"], env).value;
   /** 兜底再归一一次：即使 profile 直接把 Anthropic 根声明给 model-gateway，也不至于打出 /anthropic/chat/completions（404） */
@@ -316,32 +353,32 @@ export async function runChatTask({ resolved, prompt, timeoutMs = 180_000, env =
     res = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: resolved.model, messages: [{ role: "user", content }], temperature: 0.2, stream: false }),
+      body: JSON.stringify({ model: resolved.model, messages: [{ role: "user", content }], temperature: 0.2, stream: false, max_tokens: maxTokens }),
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (err) {
-    return { status: "failed", reason: `模型调用失败：${String(err?.message ?? err).slice(0, 200)}`, ms: Date.now() - started };
+    return { status: "failed", reason: `模型调用失败：${String(err?.message ?? err).slice(0, 200)}`, ms: Date.now() - started, usageVerified: false };
   }
   const text = await res.text().catch(() => "");
   let json = null;
   try { json = JSON.parse(text); } catch { /* 非 JSON 错误体 */ }
+  const metering = tokenUsage(json?.usage);
   if (!res.ok) {
-    return { status: "failed", reason: `HTTP ${res.status}：${text.slice(0, 300)}`, ms: Date.now() - started, model: resolved.model };
+    return { status: "failed", reason: `HTTP ${res.status}：${text.slice(0, 300)}`, ms: Date.now() - started, model: resolved.model, ...metering };
   }
   const answer = json?.choices?.[0]?.message?.content ?? "";
-  const usage = json?.usage ?? {};
   return {
     status: answer ? "ok" : "failed",
     answer,
     ms: Date.now() - started,
     model: json?.model ?? resolved.model,
-    tokens: Number(usage.total_tokens ?? 0) || (Number(usage.prompt_tokens ?? 0) + Number(usage.completion_tokens ?? 0)),
+    ...metering,
     receipt: {
       kind: "model-gateway",
       endpoint: url,
       model: json?.model ?? resolved.model,
       id: json?.id ?? null,
-      tokens: usage.total_tokens ?? null,
+      ...metering,
       synced: true,
       verified_at: new Date().toISOString(),
     },
@@ -369,11 +406,30 @@ function supportsSequentialImageGeneration(model) {
 }
 
 /** 生图（同步 API）：POST {base}/images/generations → data[].url */
+function invalidGenerationTask(task, kind) {
+  const units = kind === "image" ? task.images ?? 1 : task.durationSeconds ?? 12;
+  if (!Number.isSafeInteger(units) || units <= 0
+    || (kind === "image" ? units > LIVE_BUDGET_CAPS.maxImages : units < LIVE_BUDGET_CAPS.minVideoSeconds || units > LIVE_BUDGET_CAPS.maxVideoSeconds)) {
+    return "生成计量必须是硬上限内的正整数";
+  }
+  if (Object.hasOwn(task, "params")) {
+    const params = task.params;
+    if (params === null || typeof params !== "object" || Array.isArray(params)) return "生成 params 必须是对象";
+    const reserved = kind === "image"
+      ? ["model", "n", "num_images", "batch_size", "sequential_image_generation", "sequential_image_generation_options"]
+      : ["model", "duration"];
+    if (reserved.some((key) => Object.hasOwn(params, key))) return "params 不得覆盖已预留的模型或生成计量";
+  }
+  return null;
+}
+
 export async function runImageTask({ resolved, task, timeoutMs = 300_000, env = process.env, artifactsDir }) {
+  const invalid = invalidGenerationTask(task, "image");
+  if (invalid) return { status: "blocked", reason: invalid, usageVerified: false };
   if (!resolved.ready) return { status: "blocked", reason: resolved.missing.join("；") };
   const apiKey = pickEnv([resolved.credentialEnv, "SEEDREAM_API_KEY", "VOLCENGINE_ARK_API_KEY", "ARK_API_KEY"], env).value;
   const base = String(resolved.baseUrl).replace(/\/$/, "");
-  const count = Number(task.images ?? 1);
+  const count = task.images ?? 1;
   const started = Date.now();
   const groupable = count > 1 && supportsSequentialImageGeneration(resolved.model);
   /** 一次调用：组图模型一轮出 N 张；不支持组图的模型（如 5.0 pro）逐张调用 N 轮 */
@@ -401,7 +457,7 @@ export async function runImageTask({ resolved, task, timeoutMs = 300_000, env = 
     let json = null;
     try { json = JSON.parse(text); } catch { /* 非 JSON */ }
     if (!res.ok) return { error: `HTTP ${res.status}：${text.slice(0, 300)}` };
-    const urls = (json?.data ?? []).map((d) => d?.url).filter(Boolean);
+    const urls = (Array.isArray(json?.data) ? json.data : []).map((d) => d?.url).filter((url) => typeof url === "string" && /^https?:\/\//u.test(url));
     if (!urls.length) return { error: `生图未返回图片 URL：${text.slice(0, 200)}` };
     return { urls, json };
   }
@@ -413,7 +469,7 @@ export async function runImageTask({ resolved, task, timeoutMs = 300_000, env = 
     const r = await callOnce(groupable);
     if (r.error) {
       // 逐张调用中途失败：保留已落盘产物作证据，状态如实 failed（不伪造数量）
-      return { status: "failed", reason: r.error, ms: Date.now() - started, model: resolved.model, urls, calls: round + 1 };
+      return { status: "failed", reason: r.error, ms: Date.now() - started, model: resolved.model, urls, calls: round + 1, units: urls.length || null, usageVerified: false };
     }
     urls.push(...r.urls);
     lastJson = r.json;
@@ -429,6 +485,8 @@ export async function runImageTask({ resolved, task, timeoutMs = 300_000, env = 
     ms: Date.now() - started,
     model: resolved.model,
     artifacts: saved,
+    units: urls.length,
+    usageVerified: true,
     receipt: {
       kind: "gen-http.image",
       model: resolved.model,
@@ -438,6 +496,7 @@ export async function runImageTask({ resolved, task, timeoutMs = 300_000, env = 
       calls: rounds,
       requested: count,
       produced: urls.length,
+      usageVerified: true,
       synced: urls.length > 0,
       verified_at: new Date().toISOString(),
     },
@@ -446,10 +505,12 @@ export async function runImageTask({ resolved, task, timeoutMs = 300_000, env = 
 
 /** 生视频（异步任务制）：POST {base}/contents/generations/tasks → GET …/tasks/{id} */
 export async function runVideoTask({ resolved, task, timeoutMs = 20 * 60_000, env = process.env, artifactsDir, pollMs = 8000 }) {
+  const invalid = invalidGenerationTask(task, "video");
+  if (invalid) return { status: "blocked", reason: invalid, usageVerified: false };
   if (!resolved.ready) return { status: "blocked", reason: resolved.missing.join("；") };
   const apiKey = pickEnv([resolved.credentialEnv, "SEEDANCE_API_KEY", "VOLCENGINE_ARK_API_KEY", "ARK_API_KEY"], env).value;
   const base = String(resolved.baseUrl).replace(/\/$/, "");
-  const duration = Number(task.durationSeconds ?? 12);
+  const duration = task.durationSeconds ?? 12;
   const started = Date.now();
   let submit;
   try {
@@ -489,7 +550,9 @@ export async function runVideoTask({ resolved, task, timeoutMs = 20 * 60_000, en
     const status = last?.status ?? last?.data?.status;
     if (status === "succeeded" || status === "success") {
       const url = last?.content?.video_url ?? last?.data?.content?.video_url ?? last?.data?.video_url ?? null;
-      const durationSeconds = Number(last?.duration ?? last?.data?.duration ?? duration);
+      const reportedDuration = last?.duration ?? last?.data?.duration;
+      const usageVerified = Number.isSafeInteger(reportedDuration) && reportedDuration > 0;
+      const durationSeconds = usageVerified ? reportedDuration : null;
       const savedPath = url ? await downloadArtifact(url, artifactsDir, `${task.id}.mp4`) : null;
       return {
         status: url ? "ok" : "failed",
@@ -497,6 +560,8 @@ export async function runVideoTask({ resolved, task, timeoutMs = 20 * 60_000, en
         ms: Date.now() - started,
         model: resolved.model,
         taskId,
+        units: durationSeconds,
+        usageVerified,
         artifacts: [{ url, path: savedPath, bytes: savedPath ? readFileSync(savedPath).byteLength : null, durationSeconds }],
         receipt: {
           kind: "gen-http.video",
@@ -505,6 +570,7 @@ export async function runVideoTask({ resolved, task, timeoutMs = 20 * 60_000, en
           taskId,
           videoUrl: url,
           durationSeconds,
+          usageVerified,
           synced: Boolean(url),
           verified_at: new Date().toISOString(),
         },
@@ -551,90 +617,11 @@ export async function loginAsMember({ apiUrl, workspaceSlug, memberNo = "MEM-001
 }
 
 /**
- * 派单 + 轮询 + 状态断言。
- * 断言支持：
- *   - `http`：{ url, status, contains }
- *   - `sql` ：{ query, params, op, value }（需调用方提供 pg client；生产档位默认禁用）
+ * 产品任务可能触发多轮模型/工具与生成动作。目标运行时尚未提供每个子调用
+ * 的预算预留 seam，故此入口必须在任何 HTTP 写入前阻断，不能靠一次估计收费。
  */
-export async function runProductDispatchTask({
-  apiUrl,
-  token,
-  task,
-  timeoutMs = 8 * 60_000,
-  pollMs = 5000,
-  db = null,
-  allowDb = false,
-}) {
-  const headers = { "content-type": "application/json", authorization: `Bearer ${token}` };
-  const dispatch = await fetch(`${apiUrl}/trpc/threads.dispatch`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ title: task.input ?? task.title, ...(task.presetKey ? { presetKey: task.presetKey } : {}) }),
-    signal: AbortSignal.timeout(30_000),
-  });
-  const dispatchJson = await dispatch.json().catch(() => ({}));
-  const d = dispatchJson?.result?.data ?? {};
-  const threadId = d.threadId ?? null;
-  const started = Date.now();
-  let final = { status: null, calls: [] };
-  while (Date.now() - started < timeoutMs) {
-    await sleep(pollMs);
-    const r = await fetch(`${apiUrl}/trpc/threads.get?input=${encodeURIComponent(JSON.stringify({ id: threadId }))}`, {
-      headers: { authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(30_000),
-    }).catch(() => null);
-    if (!r) continue;
-    const j = await r.json().catch(() => ({}));
-    final = j?.result?.data ?? final;
-    if (["completed", "failed", "paused"].includes(final?.status)) break;
-  }
-  const asserts = [];
-  for (const a of task.state_asserts ?? []) {
-    if (a.http) {
-      const res = await fetch(a.http.url, { signal: AbortSignal.timeout(20_000) }).catch(() => null);
-      const body = res ? await res.text().catch(() => "") : "";
-      const ok = Boolean(res) && (a.http.status ? res.status === a.http.status : res.ok) && (!a.http.contains || body.includes(a.http.contains));
-      asserts.push({ type: "http", target: a.http.url, ok, detail: res ? `HTTP ${res.status}` : "不可达" });
-    } else if (a.sql && allowDb && db) {
-      const q = await db.query(a.query, a.params ?? []).catch((err) => ({ rows: [], error: String(err.message) }));
-      const value = q.rows?.[0] ? Object.values(q.rows[0])[0] : null;
-      const ok = q.error ? false : compareAssert(value, a.op ?? ">=", a.value);
-      asserts.push({ type: "sql", target: String(a.query).slice(0, 120), ok, detail: `value=${value}${q.error ? ` error=${q.error}` : ""}` });
-    }
-  }
-  const claimedDone = final?.status === "completed";
-  const assertsOk = asserts.length ? asserts.every((a) => a.ok) : null;
-  const falseSuccess = claimedDone && assertsOk === false;
-  return {
-    status: falseSuccess ? "failed" : assertsOk === false ? "failed" : claimedDone || asserts.length ? "ok" : "failed",
-    kind: d.kind ?? "unknown",
-    threadId,
-    finalStatus: final?.status ?? null,
-    asserts,
-    falseSuccess,
-    ms: Date.now() - started,
-    receipt: {
-      kind: "product-dispatch",
-      threadId,
-      finalStatus: final?.status ?? null,
-      responseKind: d.kind ?? null,
-      synced: Boolean(threadId) && final?.status === "completed",
-      verified_at: new Date().toISOString(),
-    },
-  };
-}
-
-function compareAssert(value, op, expected) {
-  const num = Number(value);
-  const exp = Number(expected);
-  switch (op) {
-    case ">=": return num >= exp;
-    case ">": return num > exp;
-    case "==": return value === expected || num === exp;
-    case "<=": return num <= exp;
-    case "contains": return String(value).includes(String(expected));
-    default: return false;
-  }
+export async function runProductDispatchTask() {
+  return { status: "blocked", reason: "product-dispatch 缺少对子调用的有界配额计量，禁止派发", usageVerified: false, accounting: "estimated" };
 }
 
 /** 选出最近的 UI 截图作为多模态夹具（无则返回 null） */

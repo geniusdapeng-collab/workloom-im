@@ -23,6 +23,7 @@ import {
   resolveWorkspaceActiveBundle,
   type ActiveBundleResolution,
 } from "./active-bundle.js";
+import { runWithServiceScope } from "./scope.js";
 
 export const ACCESS_SCHEMA_VERSION = "workloom.client-access/v1" as const;
 
@@ -399,7 +400,7 @@ export async function resolveAuthoritativeClientAccess(
     if (!facts) {
       throw new AccessAuthorityError("GRANT_INACTIVE", "该伙伴授权不存在、已到期、已吊销或不包含当前工作区");
     }
-    const bundle = await deps.resolveBundle(facts.workspaceId);
+    const bundle = await runWithServiceScope(facts, () => deps.resolveBundle(facts.workspaceId));
     const grants = partnerAccessGrants(facts.capabilities);
     return {
       schemaVersion: ACCESS_SCHEMA_VERSION,
@@ -421,7 +422,7 @@ export async function resolveAuthoritativeClientAccess(
     throw new AccessAuthorityError("SCOPE_MISMATCH", "当前会话不能读取其他租户或工作区的访问授权");
   }
   const current = await currentMemberAuthority(session, deps);
-  const bundle = await deps.resolveBundle(current.identity.workspaceId);
+  const bundle = await runWithServiceScope(current.identity, () => deps.resolveBundle(current.identity.workspaceId));
   const verifiedBundlePermissions = bundle.state === "ready" && bundle.projection
     ? bundle.projection.primaryBundleId !== undefined || bundle.projection.sources !== undefined
       // 组合投影缺少导航权限全集时失败关闭；不能回退到包含内部权限的旧 permissions。

@@ -231,7 +231,7 @@ describe("L1 意图 → 覆盖项", () => {
     expect(draft.items).toHaveLength(3);
     expect(draft.note).toContain("L1 自然语言录入");
     expect(draft.canary_scope).toEqual({ ratio: 0.1 });
-    expect(draft.status).toBe("draft");
+    expect(draft).toMatchObject({ status: "draft" });
   });
 
   it("越界意图与手工编辑同一道闸：阈值越界必拒", () => {
@@ -247,6 +247,8 @@ describe("L1 意图 → 覆盖项", () => {
 
   it("faq 条目带 l1-intake 溯源标记", () => {
     const items = intentToItems({ kind: "faq", question: "Q", answer: "A" });
-    expect((items[0] as { value: { source: string } }).value.source).toBe("l1-intake");
+    expect(items[0]).toMatchObject({
+      type: "kb", op: "append", path: "faq", value: { source: "l1-intake" },
+    });
   });
 });

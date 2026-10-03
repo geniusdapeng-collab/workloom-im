@@ -8,8 +8,9 @@
 import type pg from "pg";
 import { DRY_RUN_REPLAY_LIMIT, type BusinessEvent } from "@workloom/shared";
 import { replayRules, type RuntimeRule } from "../fence-engine/index.js";
-import { gatewayAppend, gatewayAppendOnClient } from "../workdata/gateway.js";
-import { getSkill, SkillError, type SkillRow } from "./registry.js";
+import { gatewayAppendOnClient } from "../workdata/gateway.js";
+import { SkillError, type SkillRow } from "./registry.js";
+import { withSkillScope } from "./scope.js";
 
 interface Scope { tenantId: string; workspaceId: string }
 
@@ -41,70 +42,85 @@ ${triplet.boundary}
 `;
 }
 
-/**
- * 名称 → 团队技能 ID（skill-t-<workspaceId>- 命名空间即 L8.2 白名单内「本工作区自建」标识）
- * 修复（#23）：ID 内嵌 workspaceId——skills 是无 RLS 的全局表，原纯名称派生 ID
- * 会让两个工作区的同名技能 ON CONFLICT 互相覆盖（跨工作区数据污染）
- */
+/** 兼容旧 ID；只用于候选标识，归属由数据库 owner 字段验证。 */
 export function teamSkillId(name: string, workspaceId: string): string {
-  const slug = name.trim().toLowerCase().replace(/[^a-z0-9一-鿿]+/g, "-").replace(/^-+|-+$/g, "");
-  return `skill-t-${workspaceId}-${slug || "unnamed"}`;
+  return `skill-t-${workspaceId}-${skillSlug(name)}`;
+}
+const skillSlug = (name: string): string => name.trim().toLowerCase()
+  .replace(/[^a-z0-9一-鿿]+/g, "-").replace(/^-+|-+$/g, "") || "unnamed";
+/** UTF-8 hex 段可逆且分隔明确；前缀后无连字符，不能与旧 workspace-slug 拼接 ID 相等。 */
+function fallbackSkillId(scope: Scope, name: string): string {
+  const hex = (value: string) => Buffer.from(value, "utf8").toString("hex");
+  return `skill-t-v2.${hex(scope.tenantId)}.${hex(scope.workspaceId)}.${hex(skillSlug(name))}`;
+}
+function nextVersion(version: string): string {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
+  return match ? `${match[1]}.${Number(match[2]) + 1}.0` : "1.0.0";
 }
 
-async function nextVersion(app: pg.Pool, id: string): Promise<string> {
-  const cur = await app.query<{ version: string }>(`SELECT version FROM skills WHERE id=$1`, [id]);
-  const v = cur.rows[0]?.version;
-  if (!v) return "1.0.0";
-  const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(v);
-  if (!m) return "1.0.0";
-  return `${m[1]}.${Number(m[2]) + 1}.0`; // 内容迭代 = minor 递增
-}
-
-/** 生成/迭代技能草稿（F8.3：生成物进版本管理） */
-export async function createSkillDraft(
-  app: pg.Pool,
-  gateway: pg.Pool,
-  scope: Scope,
+/** 创建/迭代只更新锁定的本区 team 行；未知主键占位只能跳过，绝不 UPSERT 覆写。 */
+export async function createSkillDraft(app: pg.Pool, gateway: pg.Pool, scope: Scope,
   input: { name: string; description: string; triplet: SkillTriplet; fenceBindings?: string[]; by: string },
 ): Promise<{ skillId: string; version: string }> {
-  const skillId = teamSkillId(input.name, scope.workspaceId);
-  const version = await nextVersion(app, skillId);
+  void gateway;
   const body = renderSkillMarkdown(input.name, input.description, input.triplet);
-  // D16（#1/A）：技能行与草稿事件同一事务同一 COMMIT
-  const client = await app.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
-    await client.query(
-      `INSERT INTO skills (id, level, bundle, name, version, description, fence_bindings, body, desensitized)
-       VALUES ($1,'team',NULL,$2,$3,$4,$5,$6,false)
-       ON CONFLICT (id) DO UPDATE SET version=EXCLUDED.version, description=EXCLUDED.description,
-         fence_bindings=EXCLUDED.fence_bindings, body=EXCLUDED.body`,
-      [skillId, input.name, version, input.description, JSON.stringify(input.fenceBindings ?? []), body],
-    );
-    await gatewayAppendOnClient(client, {
-      tenantId: scope.tenantId, workspaceId: scope.workspaceId,
-      actor: { id: input.by, type: "human" },
-    }, {
+  return withSkillScope(app, scope, async (client) => {
+    const logicalKey = JSON.stringify([scope.tenantId, scope.workspaceId, skillSlug(input.name)]);
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [logicalKey]);
+    const legacyId = teamSkillId(input.name, scope.workspaceId);
+    const fallbackId = fallbackSkillId(scope, input.name);
+    // 已在备用命名空间创建的草稿继续迭代，即使后来旧主键被删除也不另造第二份。
+    const existingFallback = await client.query<SkillRow>(
+      `SELECT * FROM skills WHERE level='team' AND ownership_state='owned'
+       AND owner_tenant_id=$1 AND owner_workspace_id=$2
+       AND (id=$3 OR starts_with(id,$3 || '.')) ORDER BY id FOR UPDATE`,
+      [scope.tenantId, scope.workspaceId, fallbackId]);
+    if (existingFallback.rows.length > 1) throw new SkillError("NOT_SIGNED", "团队草稿存在多份归属，拒绝猜测更新");
+    let current = existingFallback.rows[0];
+    if (!current) {
+      current = (await client.query<SkillRow>(
+        "SELECT * FROM skills WHERE id=$1 AND level='team' AND ownership_state='owned' FOR UPDATE", [legacyId])).rows[0];
+    }
+    let skillId = current?.id ?? legacyId;
+    let version = current ? nextVersion(current.version) : "1.0.0";
+    if (!current) {
+      let generation = 0;
+      while (true) {
+        // 无 UPDATE 子句：ON CONFLICT 对他区/隔离/共享行只作占位检查，正文不被读出或改写。
+        const inserted = await client.query(
+          `INSERT INTO skills (id,level,bundle,name,version,description,fence_bindings,body,desensitized,
+             owner_tenant_id,owner_workspace_id,ownership_state,ownership_reason)
+           VALUES ($1,'team',NULL,$2,$3,$4,$5,$6,false,$7,$8,'owned','explicit_scope')
+           ON CONFLICT (id) DO NOTHING RETURNING id`,
+          [skillId, input.name, version, input.description, JSON.stringify(input.fenceBindings ?? []), body,
+           scope.tenantId, scope.workspaceId]);
+        if (inserted.rowCount) break;
+        const own = (await client.query<SkillRow>(
+          "SELECT * FROM skills WHERE id=$1 AND level='team' AND ownership_state='owned' FOR UPDATE", [skillId])).rows[0];
+        if (own) { current = own; version = nextVersion(own.version); break; }
+        skillId = generation++ === 0 ? fallbackId : `${fallbackId}.${generation - 1}`;
+      }
+    }
+    if (current) {
+      const updated = await client.query(
+        `UPDATE skills SET name=$2,version=$3,description=$4,fence_bindings=$5,body=$6
+         WHERE id=$1 AND level='team' AND ownership_state='owned' AND owner_tenant_id=$7 AND owner_workspace_id=$8`,
+        [skillId, input.name, version, input.description, JSON.stringify(input.fenceBindings ?? []), body,
+         scope.tenantId, scope.workspaceId]);
+      if (updated.rowCount !== 1) throw new SkillError("NOT_SIGNED", "团队草稿归属在更新前发生变化");
+    }
+    await gatewayAppendOnClient(client, { ...scope, actor: { id: input.by, type: "human" } }, {
       who: { type: "human", id: input.by },
       context: { tenant_id: scope.tenantId, workspace_id: scope.workspaceId, time: new Date().toISOString(), channel: "inapp" },
       object: { type: "skill", id: skillId },
       decision: {
         action: "skill.draft.created",
         after: { skillId, name: input.name, version, triplet: input.triplet, fenceBindings: input.fenceBindings ?? [] },
-        basis: ["自然语言三要素引导式生成技能草稿（F8.3）", "生成物进版本管理（F8.3）"],
-      },
-      rule_impact: [],
+        basis: ["三要素生成团队技能（F8.3）；实际租户与工作区显式归属（MC-022）", "草稿版本与事件同一事务递增（D16）"],
+      }, rule_impact: [],
     } as never);
-    await client.query("COMMIT");
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally {
-    client.release();
-  }
-  return { skillId, version };
+    return { skillId, version };
+  });
 }
 
 export interface SkillDryRunReport {
@@ -115,81 +131,44 @@ export interface SkillDryRunReport {
 }
 
 /** dry-run 预览（F8.3 生效前）：对技能声明的绑定围栏逐条回放最近 10 条（F2.5 口径） */
-export async function dryRunSkill(
-  app: pg.Pool,
-  gateway: pg.Pool,
-  scope: Scope,
-  input: { skillId: string; by: string },
-): Promise<SkillDryRunReport> {
-  const skill: SkillRow | null = await getSkill(app, input.skillId);
-  if (!skill) throw new SkillError("NOT_FOUND", `技能 ${input.skillId} 不存在`);
-
-  const client = await app.connect();
-  let events: BusinessEvent[] = [];
-  let rules: RuntimeRule[] = [];
-  try {
-    // 事务级 RLS 上下文必须在显式事务内设置：autocommit 下 set_config(...,true) 语句结束即失效
-    await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
-    const ev = await client.query<{ payload: BusinessEvent }>(
-      `SELECT payload FROM biz_events WHERE workspace_id=$1 ORDER BY seq DESC LIMIT $2`,
-      [scope.workspaceId, DRY_RUN_REPLAY_LIMIT],
-    );
-    events = ev.rows.map((r) => r.payload);
+export async function dryRunSkill(app: pg.Pool, gateway: pg.Pool, scope: Scope,
+  input: { skillId: string; by: string }): Promise<SkillDryRunReport> {
+  void gateway;
+  return withSkillScope(app, scope, async (client) => {
+    const skill = (await client.query<SkillRow>("SELECT * FROM skills WHERE id=$1 FOR UPDATE", [input.skillId])).rows[0];
+    if (!skill) throw new SkillError("NOT_FOUND", "技能不存在或不属于本工作区");
+    const events = (await client.query<{ payload: BusinessEvent }>(
+      "SELECT payload FROM biz_events WHERE workspace_id=$1 ORDER BY seq DESC LIMIT $2",
+      [scope.workspaceId, DRY_RUN_REPLAY_LIMIT])).rows.map((row) => row.payload);
+    let rules: RuntimeRule[] = [];
     const bindings = skill.fence_bindings ?? [];
-    if (bindings.length > 0) {
-      const rr = await client.query<{
+    if (bindings.length) {
+      const r = await client.query<{
         rule_id: string; version: string; name: string; level: RuntimeRule["level"];
         is_baseline: boolean; match_spec: { object_types?: string[]; actions?: string[]; when?: string };
-      }>(
-        // HP-02：与运行时 deny 优先并集口径对齐——同一 rule_id 的多版本共存时取最严的一条，
-        // 避免技能考试/复核按"最新创建"拿到被基线压住的宽松版本。
-        `SELECT DISTINCT ON (rule_id) rule_id, version, name, level, is_baseline, match_spec
-         FROM fence_rules WHERE (workspace_id=$1 OR workspace_id='*') AND status='active' AND rule_id = ANY($2)
-         ORDER BY rule_id,
-                  CASE level WHEN 'block' THEN 2 WHEN 'review' THEN 1 ELSE 0 END DESC,
-                  is_baseline DESC, created_at DESC`,
-        [scope.workspaceId, bindings],
-      );
-      rules = rr.rows.map((r) => ({
-        rule_id: r.rule_id, version: r.version, name: r.name, level: r.level, is_baseline: r.is_baseline,
-        objectTypes: r.match_spec.object_types ?? [], actions: r.match_spec.actions ?? [], when: r.match_spec.when ?? "true",
-      }));
+      }>(`SELECT DISTINCT ON (rule_id) rule_id,version,name,level,is_baseline,match_spec
+          FROM fence_rules WHERE (workspace_id=$1 OR workspace_id='*') AND status='active' AND rule_id=ANY($2)
+          ORDER BY rule_id, CASE level WHEN 'block' THEN 2 WHEN 'review' THEN 1 ELSE 0 END DESC,
+                   is_baseline DESC,created_at DESC`, [scope.workspaceId, bindings]);
+      rules = r.rows.map((row) => ({ rule_id: row.rule_id,version: row.version,name: row.name,
+        level: row.level,is_baseline: row.is_baseline,objectTypes: row.match_spec.object_types ?? [],
+        actions: row.match_spec.actions ?? [],when: row.match_spec.when ?? "true" }));
     }
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally {
-    await client.query("COMMIT").catch(() => undefined);
-    client.release();
-  }
-
-  const perRule = rules.map((rule) => {
-    const { verdicts } = replayRules(events, [rule], "auto");
-    return {
-      ruleId: rule.rule_id,
-      version: rule.version,
-      wouldBlock: verdicts.filter((v) => v.verdict.level === "block").length,
-      wouldReview: verdicts.filter((v) => v.verdict.level === "review").length,
-      pass: verdicts.filter((v) => v.verdict.level === "auto").length,
-    };
+    const perRule = rules.map((rule) => {
+      const { verdicts } = replayRules(events, [rule], "auto");
+      return { ruleId: rule.rule_id,version: rule.version,
+        wouldBlock: verdicts.filter((v) => v.verdict.level === "block").length,
+        wouldReview: verdicts.filter((v) => v.verdict.level === "review").length,
+        pass: verdicts.filter((v) => v.verdict.level === "auto").length };
+    });
+    const report: SkillDryRunReport = { skillId: skill.id,replayed: events.length,perRule };
+    await gatewayAppendOnClient(client, { ...scope, actor: { id: input.by, type: "human" } }, {
+      who: { type: "human", id: input.by },
+      context: { tenant_id: scope.tenantId,workspace_id: scope.workspaceId,time: new Date().toISOString(),channel: "inapp" },
+      object: { type: "skill",id: skill.id },
+      decision: { action: "skill.dry_run",after: { ...report,name: skill.name,version: skill.version },
+        basis: ["当前归属与版本下预览，预览凭证与读取正文同一事务（F8.3/MC-022）"] },rule_impact: [],
+    } as never);
+    return report;
   });
-  const report: SkillDryRunReport = { skillId: skill.id, replayed: events.length, perRule };
-
-  await gatewayAppend(gateway, {
-    tenantId: scope.tenantId, workspaceId: scope.workspaceId,
-    actor: { id: input.by, type: "human" },
-  }, {
-    who: { type: "human", id: input.by },
-    context: { tenant_id: scope.tenantId, workspace_id: scope.workspaceId, time: new Date().toISOString(), channel: "inapp" },
-    object: { type: "skill", id: skill.id },
-    decision: {
-      action: "skill.dry_run",
-      after: { ...report, name: skill.name, version: skill.version },
-      basis: ["生效前 dry-run 预览（F8.3）；回放窗口=最近 10 条（F2.5 同口径）"],
-    },
-    rule_impact: [],
-  } as never);
-  return report;
 }

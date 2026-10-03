@@ -5,8 +5,9 @@
  *  ① 哈希链接龙：prev_hash 严格接龙（首条 = GENESIS），hash 与 canonicalJson 重算一致
  *     —— canonicalJson 为本文件独立实现用于交叉验证（不复用写入方
  *     @workloom/base/workdata 模块：写入方算法漂移时，本验证器按冻结口径独立复算仍能暴露）
- *  ② seq 连续性：按 workspace 分段检查空洞——ON CONFLICT 消耗的 nextval 小空洞容忍计数，
- *     连续空洞 >500 视为异常（疑似恶意删段/删尾）；≤500 计入容忍（ON CONFLICT 与测试烧号）
+ *  ② seq 顺序：每段为正整数且严格递增；全库 BIGSERIAL 可被 ON CONFLICT/ROLLBACK/
+ *     序列缓存/其他 scope 消耗，任意大小的空洞只作精确统计，不作为密码学异常。
+ *     留存首条须接 GENESIS，中间删除由前驱哈希发现；无外部可信锚时不能证明未删尾/未删整链。
  *  ③ event_id 派生一致性（P0-3 命名空间）：E-<n> 必须落在全局序列 biz_events_eid_seq
  *     已分配区间 [start_value, last_value] 内，且同 workspace 内 n 随行 seq 单调递增
  *     （写入方持 workspace 链锁后才 nextval，分配序与链序一致）；
@@ -25,12 +26,10 @@ import pg from "pg";
 import { createHash } from "node:crypto";
 import { safeParseBusinessEvent } from "@workloom/shared";
 import { isReplayEventId, safeParseReplayAwareEvent } from "@workloom/base/workdata";
+import { createSequenceObservation, observeStorageSequence, exactSequenceCount } from "./chain-sequence.js";
 
 const DATABASE_URL =
   process.env.DATABASE_URL ?? "postgres://postgres:workloom@localhost:5432/workloom";
-
-/** seq 连续空洞容忍阈值：超过即视为异常（ON CONFLICT 消耗的 nextval 空洞通常零星出现） */
-const SEQ_GAP_ANOMALY_THRESHOLD = 500; // ON CONFLICT nextval 消耗与测试烧号可达数百，>500 连续空洞才疑似恶意删段
 
 /**
  * MC-210：摘要口径（`--summary` / `CHAIN_REPORT=summary`）——stdout 体积与账本规模解耦。
@@ -64,8 +63,9 @@ function canonicalJsonIndependent(value: unknown): string {
 
 interface Issue {
   kind:
-    | "CHAIN_BREAK" | "HASH_MISMATCH" | "SEQ_GAP_ANOMALY"
-    | "EVENT_ID_SEQ_MISMATCH" | "EVENT_ID_NAMESPACE" | "PAYLOAD_SCHEMA" | "CREATED_AT_REGRESSION";
+    | "CHAIN_BREAK" | "HASH_MISMATCH" | "SEQ_ORDER"
+    | "EVENT_ID_SEQ_MISMATCH" | "EVENT_ID_NAMESPACE" | "EVENT_ID_PAYLOAD_MISMATCH"
+    | "PAYLOAD_SCHEMA" | "CREATED_AT_REGRESSION";
   event_id?: string;
   detail: string;
 }
@@ -78,8 +78,10 @@ interface WsReport {
   issues_total: number;
   /** 本段异常类型精确计数（摘要口径下 issues 只有样本，直方图仍全量） */
   issue_kinds?: Array<{ kind: string; count: number }>;
-  /** ON CONFLICT 消耗的 nextval 小空洞（容忍，仅计数） */
-  tolerated_seq_gaps: number;
+  /** 各段相邻保留行之间的全局号缺口，仅观测，不推断原因；超出安全整数时用十进制字符串 */
+  tolerated_seq_gaps: number | string;
+  seq_gap_intervals: number;
+  max_seq_gap: number | string;
   legacy_event_ids: number;
   tolerated_backfills: number;
   issues: Issue[];
@@ -134,15 +136,12 @@ async function main(): Promise<void> {
         if (!SUMMARY_MODE || issues.length < ISSUE_SAMPLE_LIMIT) issues.push(issue);
       };
       let prevHash = "GENESIS";
-      let prevSeq: bigint | null = null;
+      const sequence = createSequenceObservation();
       let prevEidN: bigint | null = null;
-        let legacyCount = 0;
-        let toleratedBackfills = 0;
+      let legacyCount = 0;
+      let toleratedBackfills = 0;
       let prevCreatedAt: Date | null = null;
-      let toleratedGaps = 0;
-
       for (const row of r.rows) {
-        const seq = BigInt(row.seq);
 
         // ① 哈希链接龙 + 独立实现重算（M4-⑤ 交叉验证）
         if (row.prev_hash !== prevHash) {
@@ -156,28 +155,11 @@ async function main(): Promise<void> {
         }
         prevHash = row.hash;
 
-        // ② seq 连续性：空洞容忍（ON CONFLICT 消耗 nextval / 测试烧号），>500 连续空洞异常
-        if (prevSeq !== null) {
-          const gap = seq - prevSeq - 1n;
-          if (gap > 0n) {
-            if (gap > BigInt(SEQ_GAP_ANOMALY_THRESHOLD)) {
-              // 跨工作区共享序列消耗甄别（D31：填充率 ≥50% 即他区正常消耗+ON CONFLICT 烧号，不足半数才疑似删段）
-              const elsewhere = await client.query<{ n: string }>(
-                `SELECT count(*) AS n FROM biz_events WHERE seq > $1 AND seq < $2`,
-                [prevSeq.toString(), seq.toString()],
-              );
-              if (Number(elsewhere.rows[0]?.n ?? 0) >= Number(gap) * 0.5) {
-                toleratedGaps += Number(gap);
-              } else {
-                pushIssue({ kind: "SEQ_GAP_ANOMALY", event_id: row.event_id,
-                  detail: `seq ${prevSeq} → ${seq} 连续空洞 ${gap} 条（>${SEQ_GAP_ANOMALY_THRESHOLD}，疑似恶意删段）` });
-              }
-            } else {
-              toleratedGaps += Number(gap);
-            }
-          }
+        // ② 真正的存储顺序错误仍失败；全局分配空洞不具备密码学完整性含义。
+        const sequenceIssue = observeStorageSequence(sequence, row.seq);
+        if (sequenceIssue) {
+          pushIssue({ kind: "SEQ_ORDER", event_id: row.event_id, detail: sequenceIssue });
         }
-        prevSeq = seq;
 
         // ③ event_id 派生一致性 / 命名空间白名单（P0-3）：
         // E-<n> 由全局序列 biz_events_eid_seq 分配（与行 seq 表自增列不同源）——
@@ -214,6 +196,10 @@ async function main(): Promise<void> {
         if (!checked.success) {
           pushIssue({ kind: "PAYLOAD_SCHEMA", event_id: row.event_id,
             detail: `附录 E 校验失败：${checked.error.issues[0]?.message ?? "unknown"}` });
+        } else if (checked.data.event_id !== row.event_id) {
+          // row.event_id 也必须绑定到已哈希的 payload，防止在合法前缀内单独改名。
+          pushIssue({ kind: "EVENT_ID_PAYLOAD_MISMATCH", event_id: row.event_id,
+            detail: "行 event_id 与签名 payload.event_id 不一致" });
         }
 
         // ⑤ created_at 单调性（同 workspace 分段内按 seq 非递减）：
@@ -241,13 +227,15 @@ async function main(): Promise<void> {
         chain_ok: issueTotal === 0,
         issues_total: issueTotal,
         issue_kinds: [...issueKinds.entries()].sort((a, b) => b[1] - a[1]).map(([kind, count]) => ({ kind, count })),
-        tolerated_seq_gaps: toleratedGaps,
+        tolerated_seq_gaps: exactSequenceCount(sequence.gaps),
+        seq_gap_intervals: sequence.intervals,
+        max_seq_gap: exactSequenceCount(sequence.maximumGap),
         legacy_event_ids: legacyCount, // 全局序列上线前的旧分配方案存量（赦免，仅计数）
         tolerated_backfills: toleratedBackfills, // 种子/回放诚实历史补录（仅计数）
         issues,
       });
       const mark = issueTotal === 0 ? "✓" : "✗";
-      const gapNote = toleratedGaps > 0 ? ` · 容忍 seq 小空洞 ${toleratedGaps}（ON CONFLICT 消耗）` : "";
+      const gapNote = sequence.gaps > 0n ? ` · 全局 seq 空洞 ${sequence.gaps}（${sequence.intervals} 段，仅观测）` : "";
       console.log(`${mark} [${tenant_id}/${workspace_id}] ${r.rows.length} 条${issueTotal === 0 ? "，六项检查全过" : `（${issueTotal} 处异常）`}${gapNote}`);
       for (const iss of issues) {
         console.error(`  ✗ ${iss.kind}${iss.event_id ? ` ${iss.event_id}` : ""}: ${iss.detail}`);
@@ -264,6 +252,10 @@ async function main(): Promise<void> {
   //   摘要口径（MC-210）只输出直方图与样本，报告体积与异常条数解耦
   const totalEvents = report.reduce((n, w) => n + w.events, 0);
   const totalIssues = report.reduce((n, w) => n + w.issues_total, 0);
+  // 每段相邻保留行的空洞总和；相同全局号区间可能在不同 scope 各计一次。
+  // 这不是全库唯一缺失行数，也不能推断这些号是否曾对应已提交事件。
+  const totalSeqGaps = exactSequenceCount(report.reduce((n, w) => n + BigInt(w.tolerated_seq_gaps), 0n));
+  const totalSeqGapIntervals = report.reduce((n, w) => n + w.seq_gap_intervals, 0);
   const kindTotals = new Map<string, number>();
   for (const segment of report) {
     // 直方图用分段精确计数（摘要口径下 issues 只是样本，不能拿样本当分布）
@@ -285,6 +277,8 @@ async function main(): Promise<void> {
       workspaces: report.length,
       total_events: totalEvents,
       total_issues: totalIssues,
+      total_tolerated_seq_gaps: totalSeqGaps,
+      total_seq_gap_intervals: totalSeqGapIntervals,
       issue_kinds: issueKinds,
       segments: report.map((segment) => ({
         workspace_id: segment.workspace_id,
@@ -292,6 +286,9 @@ async function main(): Promise<void> {
         events: segment.events,
         chain_ok: segment.chain_ok,
         issues_total: segment.issues_total,
+        tolerated_seq_gaps: segment.tolerated_seq_gaps,
+        seq_gap_intervals: segment.seq_gap_intervals,
+        max_seq_gap: segment.max_seq_gap,
         issue_kinds: segment.issue_kinds,
         issues_sample: segment.issues.slice(0, ISSUE_SAMPLE_LIMIT),
       })),
@@ -301,6 +298,8 @@ async function main(): Promise<void> {
       workspaces: report.length,
       total_events: totalEvents,
       total_issues: totalIssues,
+      total_tolerated_seq_gaps: totalSeqGaps,
+      total_seq_gap_intervals: totalSeqGapIntervals,
       issue_kinds: issueKinds,
       segments: report,
     };
@@ -310,7 +309,9 @@ async function main(): Promise<void> {
 
   if (totalIssues > 0) {
     console.error(`\n❌ 验证失败：共 ${totalIssues} 处异常（${report.length} 段 / ${totalEvents} 条事件）`);
-    process.exit(1);
+    // 让 stdout/stderr 自然排空，保留失败报告完整 JSON，退出码仍严格为 1。
+    process.exitCode = 1;
+    return;
   }
   console.log(`\n✅ 全库验证通过：${report.length} 个 workspace 段 / ${totalEvents} 条事件，六项检查全绿`);
 }

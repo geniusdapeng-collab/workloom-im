@@ -9,6 +9,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { SignJWT } from "jose";
 import pg from "pg";
+import { createServiceBusinessFixture, type ServiceBusinessFixture } from "./business.pg-fixture.js";
 
 /**
  * MC-204：E2E 端口必须可注入，且探活必须校验实例归属（不能只信 /health 200）：
@@ -51,6 +52,7 @@ let db: pg.Client;
 let bToken = "";   // MEM-001 owner
 let roToken = "";  // MEM-003 readonly
 let fixtureWorkspaceSlug = "";
+let businessFixture: ServiceBusinessFixture | undefined;
 
 /* ---------------- 基础工具 ---------------- */
 
@@ -137,6 +139,7 @@ beforeAll(async () => {
   const workspaceId = FIXTURE_WORKSPACE_ID;
   process.env.SERVICE_C_WORKSPACE_ID = workspaceId;
   fixtureWorkspaceSlug = await resolveWorkspaceSlug();
+  businessFixture = await createServiceBusinessFixture(workspaceId);
   const instanceId = `e2e-${process.pid}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   let childOutput = "";
   server = spawn(process.execPath, ["node_modules/tsx/dist/cli.mjs", "--env-file=.env", "apps/server/src/index.ts"], {
@@ -189,20 +192,29 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (!FIXTURE_WORKSPACE_ID) return;
-  // 清理本套件写入的知识库文档（防评测/演示环境污染——基线文档保留）
-  try {
-    const pg = (await import("pg")).default;
-    const pool = new pg.Pool({ connectionString: DB_URL });
-    // 仅清理本套件 upsert 产生的测试文档（标题带 RUN 前缀 e2e- 开头）；种子基线与预置库（FAQ/送物/报修）一律保留
-    await pool.query(`DELETE FROM kb_chunks WHERE document_id IN (SELECT id FROM kb_documents WHERE title LIKE 'e2e-%')`);
-    await pool.query(`DELETE FROM kb_documents WHERE title LIKE 'e2e-%'`);
-    await pool.end();
-  } catch { /* 清理失败不阻断 */ }
-
+  const cleanup = await Promise.allSettled([
+    businessFixture?.dispose(),
+    (async () => {
+      const pool = new pg.Pool({ connectionString: DB_URL });
+      try {
+        // 只清理本次 RUN、当前工作区的文档；其它运行与行业种子记录均不在清理范围内。
+        await pool.query(
+          `DELETE FROM kb_chunks WHERE workspace_id=$1 AND document_id IN
+           (SELECT id FROM kb_documents WHERE workspace_id=$1 AND title LIKE $2)`,
+          [FIXTURE_WORKSPACE_ID, `${RUN}-%`],
+        );
+        await pool.query("DELETE FROM kb_documents WHERE workspace_id=$1 AND title LIKE $2", [FIXTURE_WORKSPACE_ID, `${RUN}-%`]);
+      } finally {
+        await pool.end();
+      }
+    })(),
+  ]);
   if (server?.pid) {
     try { process.kill(-server.pid, "SIGKILL"); } catch { server.kill("SIGKILL"); }
   }
-  await db?.end().catch(() => undefined);
+  await db?.end();
+  const failures = cleanup.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+  if (failures.length) throw new AggregateError(failures.map((result) => result.reason), "服务 E2E 夹具清理失败");
 });
 
 /* ================= E. 渠道与安全 ================= */
@@ -437,10 +449,10 @@ fixtureDescribe("D 业务查询 · 绑定引导与卡片契约", () => {
 
   it("绑定身份后 /orders 返回本人记录的通用中文展示投影", async () => {
     const s = await cSession(`${RUN}-d3`, "h5", "203.0.113.53");
-    await bindMember(s.user.id, "M-1001");
+    await bindMember(s.user.id, businessFixture!.gold.memberId);
     const j = (await (await cReq("/orders", {}, s.token, "203.0.113.53")).json()) as { orders: Array<Record<string, unknown>>; demo: boolean; bindRequired?: boolean };
     expect(j.bindRequired).toBeUndefined();
-    expect(j.orders.length).toBeGreaterThan(0);
+    expect(j.orders.map((order) => order.id).sort()).toEqual([...businessFixture!.gold.orderIds].sort());
     const o = j.orders[0]!;
     for (const k of ["id", "cardTitle", "title", "statusText", "details", "amountText"]) expect(o, k).toHaveProperty(k);
     for (const leaked of ["status", "checkIn", "checkOut", "roomType", "amount", "priceYuan"]) {
@@ -455,15 +467,16 @@ fixtureDescribe("D 业务查询 · 绑定引导与卡片契约", () => {
 
   it("订单金额由行业适配器转换为展示文本（117600 分 → ¥1,176.00）", async () => {
     const s = await cSession(`${RUN}-d4`, "h5", "203.0.113.54");
-    await bindMember(s.user.id, "M-1001");
+    await bindMember(s.user.id, businessFixture!.gold.memberId);
     const j = (await (await cReq("/orders", {}, s.token, "203.0.113.54")).json()) as { orders: Array<{ id: string; amountText: string }> };
-    const target = j.orders.find((o) => o.id === "O-20260820-001")!;
+    const target = j.orders.find((o) => o.id === businessFixture!.gold.amountOrderId)!;
+    expect(target).toBeDefined();
     expect(target.amountText).toBe("¥1,176.00");
   });
 
   it("绑定身份后 /member 返回中文标题/展示指标/权益（demo 标注）", async () => {
     const s = await cSession(`${RUN}-d5`, "h5", "203.0.113.55");
-    await bindMember(s.user.id, "M-1001");
+    await bindMember(s.user.id, businessFixture!.gold.memberId);
     const j = (await (await cReq("/member", {}, s.token, "203.0.113.55")).json()) as Record<string, unknown>;
     expect(j).toMatchObject({
       title: "金卡会员",
@@ -475,17 +488,17 @@ fixtureDescribe("D 业务查询 · 绑定引导与卡片契约", () => {
     expect((j.benefits as unknown[]).length).toBeGreaterThan(0);
   });
 
-  it("会员隔离：M-1002 只见本人订单", async () => {
+  it("会员隔离：银卡会员只见本人订单", async () => {
     const s = await cSession(`${RUN}-d6`, "h5", "203.0.113.56");
-    await bindMember(s.user.id, "M-1002");
+    await bindMember(s.user.id, businessFixture!.silver.memberId);
     const j = (await (await cReq("/orders", {}, s.token, "203.0.113.56")).json()) as { orders: Array<{ id: string }> };
-    expect(j.orders.length).toBeGreaterThan(0);
-    expect(j.orders.every((o) => o.id === "O-20260822-003")).toBe(true);
+    expect(j.orders.map((order) => order.id)).toEqual(businessFixture!.silver.orderIds);
+    expect(j.orders.some((order) => businessFixture!.gold.orderIds.includes(order.id))).toBe(false);
   });
 
   it("chat 查订单（已绑定）→ biz_query + order 卡片", async () => {
     const s = await cSession(`${RUN}-d7`, "h5", "203.0.113.57");
-    await bindMember(s.user.id, "M-1001");
+    await bindMember(s.user.id, businessFixture!.gold.memberId);
     const r = await chat(s.token, "帮我查一下我的订单", {}, "203.0.113.57");
     expect(r.intent).toBe("biz_query");
     const cards = r.cards as Array<{ kind: string; data: Record<string, unknown> }>;
@@ -499,7 +512,7 @@ fixtureDescribe("D 业务查询 · 绑定引导与卡片契约", () => {
 
   it("chat 查会员（已绑定）→ member 卡片（中文展示摘要/权益）", async () => {
     const s = await cSession(`${RUN}-d8`, "h5", "203.0.113.58");
-    await bindMember(s.user.id, "M-1001");
+    await bindMember(s.user.id, businessFixture!.gold.memberId);
     const r = await chat(s.token, "我的会员积分还有多少", {}, "203.0.113.58");
     const cards = r.cards as Array<{ kind: string; data: Record<string, unknown> }>;
     expect(cards[0]!).toMatchObject({ kind: "member" });
@@ -531,7 +544,7 @@ fixtureDescribe("D 业务查询 · 绑定引导与卡片契约", () => {
 
   it("chat 查账单（已绑定）→ query_order 订单卡片", async () => {
     const s = await cSession(`${RUN}-d11`, "h5", "203.0.113.64");
-    await bindMember(s.user.id, "M-1001");
+    await bindMember(s.user.id, businessFixture!.gold.memberId);
     const r = await chat(s.token, "我的账单和房费", {}, "203.0.113.64");
     expect(r.intent).toBe("biz_query");
     expect((r.cards as Array<{ kind: string }>)[0]!.kind).toBe("order");
@@ -548,7 +561,7 @@ fixtureDescribe("D 业务查询 · 绑定引导与卡片契约", () => {
 
   it("/orders 与 /member 均带 demo 标注", async () => {
     const s = await cSession(`${RUN}-d13`, "h5", "203.0.113.66");
-    await bindMember(s.user.id, "M-1001");
+    await bindMember(s.user.id, businessFixture!.gold.memberId);
     const o = (await (await cReq("/orders", {}, s.token, "203.0.113.66")).json()) as { demo: boolean };
     const m = (await (await cReq("/member", {}, s.token, "203.0.113.66")).json()) as { demo: boolean };
     expect(o.demo).toBe(true);

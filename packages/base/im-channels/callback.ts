@@ -10,7 +10,7 @@
  */
 import type pg from "pg";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { decide, type GestureInput } from "../review-console/approvals.js";
+import { decide, type DecideOptions, type GestureInput } from "../review-console/approvals.js";
 import { ChannelError, getChannel, type ApprovalChannel } from "./registry.js";
 import { resolveMemberByOpenid } from "./inbound.js";
 import type { ChannelDriver } from "./cards.js";
@@ -113,7 +113,7 @@ export async function handleGestureCallback(
   cb: GestureCallback,
   driver?: ChannelDriver,
   /** B-05：透传给 decide 的批准后副作用钩子（IM 手势批准同样触发 Quest 续跑等联动） */
-  opts?: { onApproved?: (approvalId: string, snapshot: unknown) => Promise<void> | void },
+  opts?: DecideOptions,
 ): Promise<GestureCallbackResult> {
   getChannel(cb.channel);
   // E5.2/F5.6：操作人必须是本工作区成员（openid 映射），外部联系人无权审批

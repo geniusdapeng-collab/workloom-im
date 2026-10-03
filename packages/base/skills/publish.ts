@@ -10,6 +10,8 @@
 import type pg from "pg";
 import { gatewayAppendOnClient } from "../workdata/gateway.js";
 import { maskText } from "../workdata/pii.js";
+import type { SkillRow } from "./registry.js";
+import { withSkillScope } from "./scope.js";
 /** 本地 Scope（与 registry.Scope 同构；避免 registry↔publish 循环依赖） */
 export interface Scope { tenantId: string; workspaceId: string }
 
@@ -92,204 +94,143 @@ interface PublishReviewRow {
   status: "pending" | "approved" | "rejected" | "completed";
   approvals: Array<{ member_no: string; gesture: string; at: string }>;
   required_approvals: number; reason: string | null;
+  reviewed_version: string | null; reviewed_body: string | null; reviewed_description: string | null;
+  reviewed_name: string | null; reviewed_fence_bindings: string[] | null;
+}
+function sameSnapshot(review: PublishReviewRow, skill: SkillRow): boolean {
+  return review.reviewed_version === skill.version && review.reviewed_body === skill.body
+    && review.reviewed_description === skill.description && review.reviewed_name === skill.name
+    && JSON.stringify(review.reviewed_fence_bindings) === JSON.stringify(skill.fence_bindings);
+}
+/** 与提案共用 skill → review 锁顺序，草稿迭代/提案与审批完成并发时不反向占锁。 */
+async function lockReview(client: pg.PoolClient, id: string): Promise<PublishReviewRow> {
+  const initial = (await client.query<PublishReviewRow>("SELECT * FROM skill_publish_reviews WHERE id=$1", [id])).rows[0];
+  if (!initial) throw new PublishError("NOT_FOUND", "上架审核单不存在或不属于本工作区");
+  await client.query("SELECT id FROM skills WHERE id=$1 FOR UPDATE", [initial.skill_id]);
+  const review = (await client.query<PublishReviewRow>("SELECT * FROM skill_publish_reviews WHERE id=$1 FOR UPDATE", [id])).rows[0];
+  if (!review) throw new PublishError("NOT_FOUND", "上架审核单已发生变化");
+  return review;
+}
+async function privateSkill(client: pg.PoolClient, scope: Scope, id: string, lock = false): Promise<SkillRow> {
+  const r = await client.query<SkillRow>(
+    `SELECT * FROM skills WHERE id=$1 AND level='team' AND ownership_state='owned'
+     AND owner_tenant_id=$2 AND owner_workspace_id=$3 ${lock ? "FOR UPDATE" : ""}`,
+    [id,scope.tenantId,scope.workspaceId]);
+  if (!r.rows[0]) throw new PublishError("NOT_FOUND", "技能不存在或非本租户、本工作区私有草稿");
+  return r.rows[0];
+}
+async function publishEvent(client: pg.PoolClient, scope: Scope, by: string, object: { type: string; id: string },
+  action: string, after: Record<string, unknown>): Promise<void> {
+  await gatewayAppendOnClient(client, { ...scope, actor: { id: by, type: "human" } }, {
+    who: { type: "human",id: by },
+    context: { tenant_id: scope.tenantId,workspace_id: scope.workspaceId,time: new Date().toISOString() },
+    object,decision: { action,after },rule_impact: [],
+  });
 }
 
-/** 提案上架：写入审核单 + 事件留痕（幂等：同技能 pending 单复用） */
-export async function proposePublish(
-  app: pg.Pool, gateway: pg.Pool, scope: Scope,
+/** 审核单快照来自锁定的实际私有行；调用方不能用干净文本替不干净的数据库正文申请上架。 */
+export async function proposePublish(app: pg.Pool, gateway: pg.Pool, scope: Scope,
   input: { skillId: string; skillName: string; body: string; description: string; by: string },
 ): Promise<{ reviewId: string; deduped: boolean }> {
-  // ①+③ 上架门禁：扫描不过连提案都进不了
-  assertPublishable(input.body, input.description);
-  const client = await app.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
-    const dup = await client.query<PublishReviewRow>(
-      `SELECT * FROM skill_publish_reviews WHERE skill_id=$1 AND status='pending'`, [input.skillId]);
-    if (dup.rows[0]) {
-      await client.query("COMMIT");
-      return { reviewId: dup.rows[0].id, deduped: true };
+  void gateway;
+  return withSkillScope(app, scope, async (client) => {
+    const skill = await privateSkill(client,scope,input.skillId,true);
+    assertPublishable(skill.body,`${skill.description}\n${skill.name}`);
+    if (input.body !== skill.body || input.description !== skill.description || input.skillName !== skill.name) {
+      throw new PublishError("PUBLISH_SCAN_FAILED", "提案内容与当前技能不一致，请基于当前草稿重新预览并提案");
     }
-    const seq = await client.query<{ c: string }>(`SELECT count(*) AS c FROM skill_publish_reviews WHERE skill_id=$1`, [input.skillId]);
-    const reviewId = `pub-${input.skillId}-${Number(seq.rows[0]!.c) + 1}`;
+    const pending = (await client.query<PublishReviewRow>(
+      "SELECT * FROM skill_publish_reviews WHERE skill_id=$1 AND status='pending'", [skill.id])).rows;
+    const dup = pending.find((row) => sameSnapshot(row,skill));
+    if (dup) return { reviewId: dup.id,deduped: true };
+    for (const stale of pending) {
+      await client.query("UPDATE skill_publish_reviews SET status='rejected',reason='content_changed_before_review',decided_at=now() WHERE id=$1 AND status='pending'", [stale.id]);
+      await publishEvent(client,scope,input.by,{ type: "skill_publish_review",id: stale.id },
+        "skill.publish.supersede",{ reviewId: stale.id,skillId: skill.id,reason: "content_changed_before_review" });
+    }
+    const count = await client.query<{ c: string }>("SELECT count(*) AS c FROM skill_publish_reviews WHERE skill_id=$1", [skill.id]);
+    const reviewId = `pub-${skill.id}-${Number(count.rows[0]!.c) + 1}`;
     await client.query(
-      `INSERT INTO skill_publish_reviews (id, skill_id, from_workspace_id, proposed_by) VALUES ($1,$2,$3,$4)`,
-      [reviewId, input.skillId, scope.workspaceId, input.by]);
-    // D16（#1/A）：审核单行与提案事件同一事务同一 COMMIT
-    await gatewayAppendOnClient(client, { ...scope, actor: { id: input.by, type: "human" } }, {
-      who: { type: "human", id: input.by },
-      context: { tenant_id: scope.tenantId, workspace_id: scope.workspaceId, time: new Date().toISOString() },
-      object: { type: "skill", id: input.skillId },
-      decision: { action: "skill.publish.propose", after: { reviewId, skillName: input.skillName } },
-      rule_impact: [],
-    });
-    await client.query("COMMIT");
-    return { reviewId, deduped: false };
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally { client.release(); }
+      `INSERT INTO skill_publish_reviews (id,skill_id,from_workspace_id,proposed_by,reviewed_version,reviewed_body,reviewed_description,reviewed_name,reviewed_fence_bindings)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [reviewId,skill.id,scope.workspaceId,input.by,skill.version,skill.body,skill.description,skill.name,JSON.stringify(skill.fence_bindings)]);
+    await publishEvent(client,scope,input.by,{ type: "skill",id: skill.id },"skill.publish.propose",
+      { reviewId,skillName: skill.name,version: skill.version });
+    return { reviewId,deduped: false };
+  });
 }
 
-/** 复核手势：两名不同成员 approve 后单转 approved；提案人禁止自批（D15-②） */
-export async function reviewPublish(
-  app: pg.Pool, gateway: pg.Pool, scope: Scope,
+export async function reviewPublish(app: pg.Pool, gateway: pg.Pool, scope: Scope,
   input: { reviewId: string; by: string; gesture: "approve" | "reject"; reason?: string },
 ): Promise<{ status: string; deduped: boolean }> {
-  const client = await app.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
-    const cur = await client.query<PublishReviewRow>(
-      `SELECT * FROM skill_publish_reviews WHERE id=$1 FOR UPDATE`, [input.reviewId]);
-    const row = cur.rows[0];
-    if (!row) throw new PublishError("NOT_FOUND", `上架审核单 ${input.reviewId} 不存在`);
-    if (row.status !== "pending") {
-      await client.query("COMMIT");
-      return { status: row.status, deduped: true }; // 重复手势幂等（L5.3 同口径）
-    }
-    if (row.proposed_by === input.by) {
-      throw new PublishError("SELF_REVIEW_FORBIDDEN", `提案人 ${input.by} 禁止自批（D15-② 双人复核）`);
-    }
-    if (row.approvals.some((a) => a.member_no === input.by)) {
-      throw new PublishError("DUPLICATE_REVIEW", `成员 ${input.by} 已复核过本单`);
-    }
-    if (input.gesture === "reject" && (!input.reason || input.reason.trim() === "")) {
-      throw new PublishError("EMPTY_REASON", "驳回必须填写原因（L5.2 同口径）");
-    }
-    const approvals = [...row.approvals, { member_no: input.by, gesture: input.gesture, at: new Date().toISOString() }];
-    const approvedCount = approvals.filter((a) => a.gesture === "approve").length;
-    const status = input.gesture === "reject" ? "rejected"
-      : approvedCount >= row.required_approvals ? "approved" : "pending";
+  void gateway;
+  return withSkillScope(app,scope,async (client) => {
+    const row = await lockReview(client,input.reviewId);
+    if (row.status !== "pending") return { status: row.status,deduped: true };
+    const skill = await privateSkill(client,scope,row.skill_id);
+    if (!sameSnapshot(row,skill)) throw new PublishError("NOT_APPROVED", "技能内容已变化或历史审核单缺快照，须重新提案复核");
+    if (row.proposed_by === input.by) throw new PublishError("SELF_REVIEW_FORBIDDEN", `提案人 ${input.by} 禁止自批（D15-②）`);
+    if (row.approvals.some((a) => a.member_no === input.by)) throw new PublishError("DUPLICATE_REVIEW", `成员 ${input.by} 已复核过本单`);
+    if (input.gesture === "reject" && !input.reason?.trim()) throw new PublishError("EMPTY_REASON", "驳回必须填写原因");
+    const approvals = [...row.approvals,{ member_no: input.by,gesture: input.gesture,at: new Date().toISOString() }];
+    const approvedCount = new Set(approvals.filter((a) => a.gesture === "approve" && a.member_no !== row.proposed_by).map((a) => a.member_no)).size;
+    const status = input.gesture === "reject" ? "rejected" : approvedCount >= Math.max(2,row.required_approvals) ? "approved" : "pending";
     await client.query(
-      `UPDATE skill_publish_reviews SET approvals=$2, status=$3, reason=$4, decided_at=CASE WHEN $3 IN ('approved','rejected') THEN now() ELSE NULL END WHERE id=$1`,
-      [input.reviewId, JSON.stringify(approvals), status, input.reason ?? null]);
-    // D16（#1/A）：复核手势落库与事件同一事务同一 COMMIT
-    await gatewayAppendOnClient(client, { ...scope, actor: { id: input.by, type: "human" } }, {
-      who: { type: "human", id: input.by },
-      context: { tenant_id: scope.tenantId, workspace_id: scope.workspaceId, time: new Date().toISOString() },
-      object: { type: "skill_publish_review", id: input.reviewId },
-      decision: { action: `skill.publish.${input.gesture}`, after: { status, approvals: approvedCount, required: row.required_approvals, reason: input.reason ?? null } },
-      rule_impact: [],
-    });
-    await client.query("COMMIT");
-    return { status, deduped: false };
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally { client.release(); }
+      `UPDATE skill_publish_reviews SET approvals=$2,status=$3,reason=$4,
+         decided_at=CASE WHEN $3 IN ('approved','rejected') THEN now() ELSE NULL END WHERE id=$1`,
+      [row.id,JSON.stringify(approvals),status,input.reason ?? null]);
+    await publishEvent(client,scope,input.by,{ type: "skill_publish_review",id: row.id },
+      `skill.publish.${input.gesture}`,{ status,approvals: approvedCount,required: Math.max(2,row.required_approvals),reason: input.reason ?? null });
+    return { status,deduped: false };
+  });
 }
 
-/** 完成上架：approved 单 → 技能置 industry + desensitized（事件留痕） */
-export async function completePublish(
-  app: pg.Pool, gateway: pg.Pool, scope: Scope,
-  input: { reviewId: string; by: string },
-): Promise<{ skillId: string }> {
-  const client = await app.connect();
-  let skillId = "";
-  try {
-    await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
-    const cur = await client.query<PublishReviewRow>(`SELECT * FROM skill_publish_reviews WHERE id=$1 FOR UPDATE`, [input.reviewId]);
-    const row = cur.rows[0];
-    if (!row) throw new PublishError("NOT_FOUND", `上架审核单 ${input.reviewId} 不存在`);
-    if (row.status === "completed") {
-      await client.query("COMMIT");
-      return { skillId: row.skill_id };
+/** 上架时再次锁定和扫描实际行，只有完整双人快照审核通过的当前版本可改为共享。 */
+export async function completePublish(app: pg.Pool, gateway: pg.Pool, scope: Scope,
+  input: { reviewId: string; by: string }): Promise<{ skillId: string }> {
+  void gateway;
+  return withSkillScope(app,scope,async (client) => {
+    const row = await lockReview(client,input.reviewId);
+    if (row.status === "completed") return { skillId: row.skill_id };
+    const approves = new Set(row.approvals.filter((a) => a.gesture === "approve" && a.member_no !== row.proposed_by).map((a) => a.member_no));
+    if (row.status !== "approved" || approves.size < Math.max(2,row.required_approvals)) {
+      throw new PublishError("NOT_APPROVED", "上架须由两名不同的非提案成员复核通过");
     }
-    if (row.status !== "approved") {
-      throw new PublishError("NOT_APPROVED", `审核单状态 ${row.status}，仅 approved 可完成上架（D15-②）`);
-    }
-    skillId = row.skill_id;
-    await client.query(`UPDATE skills SET level='industry', desensitized=true WHERE id=$1`, [skillId]);
-    await client.query(`UPDATE skill_publish_reviews SET status='completed', decided_at=now() WHERE id=$1`, [input.reviewId]);
-    // D16（#1/A）：上架状态变更与完成事件同一事务同一 COMMIT
-    await gatewayAppendOnClient(client, { ...scope, actor: { id: input.by, type: "human" } }, {
-      who: { type: "human", id: input.by },
-      context: { tenant_id: scope.tenantId, workspace_id: scope.workspaceId, time: new Date().toISOString() },
-      object: { type: "skill", id: skillId },
-      decision: { action: "skill.publish.complete", after: { reviewId: input.reviewId, level: "industry", desensitized: true } },
-      rule_impact: [],
-    });
-    await client.query("COMMIT");
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally { client.release(); }
-  return { skillId };
+    const skill = await privateSkill(client,scope,row.skill_id,true);
+    if (!sameSnapshot(row,skill)) throw new PublishError("NOT_APPROVED", "审核后内容已变化或历史审核缺快照，当前正文不得共享");
+    assertPublishable(skill.body,`${skill.description}\n${skill.name}`);
+    const updated = await client.query(
+      "UPDATE skills SET level='industry',desensitized=true,ownership_state='shared' WHERE id=$1 AND level='team' AND ownership_state='owned'", [skill.id]);
+    if (updated.rowCount !== 1) throw new PublishError("NOT_APPROVED", "上架前技能归属或状态已变化");
+    await client.query("UPDATE skill_publish_reviews SET status='completed',decided_at=now() WHERE id=$1", [row.id]);
+    await publishEvent(client,scope,input.by,{ type: "skill",id: skill.id },"skill.publish.complete",
+      { reviewId: row.id,level: "industry",desensitized: true,version: skill.version });
+    return { skillId: skill.id };
+  });
 }
 
-/* ================= ④ 全局吊销（kill switch） ================= */
-
-/** 全局吊销：全租户生效，install 与装配双点排除（事件留痕；幂等） */
-export async function revokeSkill(
-  app: pg.Pool, gateway: pg.Pool, scope: Scope,
-  input: { skillId: string; reason: string; by: string },
-): Promise<{ deduped: boolean }> {
-  if (!input.reason || input.reason.trim() === "") {
-    throw new PublishError("EMPTY_REASON", "吊销必须填写原因");
-  }
-  // D16（#1/A）：吊销行与吊销事件同一事务同一 COMMIT
-  const client = await app.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
-    const r = await client.query<{ skill_revoke: boolean }>(
-      `SELECT public.skill_revoke($1, $2, $3)`, // D31：吊销收口 owner 通道（0013⑧ REVOKE app 写权后改 SECURITY DEFINER 函数）
-      [input.skillId, input.reason, input.by]);
-    if (r.rows[0]?.skill_revoke !== true) {
-      await client.query("COMMIT");
-      return { deduped: true };
-    }
-    await gatewayAppendOnClient(client, { ...scope, actor: { id: input.by, type: "human" } }, {
-      who: { type: "human", id: input.by },
-      context: { tenant_id: scope.tenantId, workspace_id: scope.workspaceId, time: new Date().toISOString() },
-      object: { type: "skill", id: input.skillId },
-      decision: { action: "skill.revoke", after: { reason: input.reason, scope: "global" } },
-      rule_impact: [],
-    });
-    await client.query("COMMIT");
+/** 特权函数也验证真实工作区与技能 owner；吊销行与事件仍同一事务。 */
+export async function revokeSkill(app: pg.Pool, gateway: pg.Pool, scope: Scope,
+  input: { skillId: string; reason: string; by: string }): Promise<{ deduped: boolean }> {
+  void gateway;
+  if (!input.reason?.trim()) throw new PublishError("EMPTY_REASON", "吊销必须填写原因");
+  return withSkillScope(app,scope,async (client) => {
+    const result = await client.query<{ skill_revoke: boolean }>("SELECT public.skill_revoke($1,$2,$3)", [input.skillId,input.reason,input.by]);
+    if (result.rows[0]?.skill_revoke !== true) return { deduped: true };
+    await publishEvent(client,scope,input.by,{ type: "skill",id: input.skillId },"skill.revoke",{ reason: input.reason,scope: "global" });
     return { deduped: false };
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally { client.release(); }
+  });
 }
-
-/** 吊销查询（installSkill / resolveAgentFenceBindings 消费） */
 export async function isSkillRevoked(app: pg.Pool, skillId: string): Promise<boolean> {
-  const r = await app.query(`SELECT 1 FROM skill_revocations WHERE skill_id=$1`, [skillId]);
-  return (r.rowCount ?? 0) > 0;
+  return (await app.query("SELECT 1 FROM skill_revocations WHERE skill_id=$1", [skillId])).rowCount !== 0;
 }
-
-/* ================= ⑤ 版本通道 ================= */
-
-export interface SkillUpdate {
-  skillId: string; name: string; installedVersion: string; currentVersion: string;
-}
-
-/** 本工作区已装技能的版本变更清单（installed_version ≠ skills.version 即有更新；不自动升级，变更进审批由人工确认） */
+export interface SkillUpdate { skillId: string; name: string; installedVersion: string; currentVersion: string }
 export async function listSkillUpdates(app: pg.Pool, scope: Scope): Promise<SkillUpdate[]> {
-  const client = await app.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
-    const r = await client.query<{ skill_id: string; name: string; installed_version: string; version: string }>(
-      `SELECT si.skill_id, s.name, si.installed_version, s.version
-       FROM skill_installs si JOIN skills s ON s.id = si.skill_id
-       WHERE si.workspace_id=$1 AND si.installed_version <> '' AND si.installed_version <> s.version
-       ORDER BY si.skill_id`,
-      [scope.workspaceId]);
-    await client.query("COMMIT");
-    return r.rows.map((x) => ({ skillId: x.skill_id, name: x.name, installedVersion: x.installed_version, currentVersion: x.version }));
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally { client.release(); }
+  return withSkillScope(app,scope,async (client) => {
+    const rows = (await client.query<{ skill_id: string; name: string; installed_version: string; version: string }>(
+      `SELECT si.skill_id,s.name,si.installed_version,s.version FROM skill_installs si JOIN skills s ON s.id=si.skill_id
+       WHERE si.workspace_id=$1 AND si.installed_version<>'' AND si.installed_version<>s.version
+       AND NOT EXISTS (SELECT 1 FROM skill_revocations r WHERE r.skill_id=si.skill_id) ORDER BY si.skill_id`, [scope.workspaceId])).rows;
+    return rows.map((row) => ({ skillId: row.skill_id,name: row.name,installedVersion: row.installed_version,currentVersion: row.version }));
+  });
 }

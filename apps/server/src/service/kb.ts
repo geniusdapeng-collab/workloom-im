@@ -79,10 +79,12 @@ export async function upsertDocumentOn(
   },
 ): Promise<{ documentId: string; version: number; chunks: number }> {
   await ensureServiceSchema();
+  // 同区同标题 / sourceUrl 的建版先串行，再锁实际文档行；版本号不能由并发旧快照重复计算。
+  await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`kb-upsert:${input.workspaceId}`]);
   const hash = createHash("sha256").update(input.contentMd).digest("hex");
   // 同内容指纹幂等（H8：UNIQUE(workspace_id,hash)）：已存在则直接复用，不建版不重切
   const sameHash = await client.query(
-    `SELECT id, version FROM kb_documents WHERE workspace_id=$1 AND hash=$2 LIMIT 1`,
+    `SELECT id, version FROM kb_documents WHERE workspace_id=$1 AND hash=$2 LIMIT 1 FOR UPDATE`,
     [input.workspaceId, hash],
   );
   if (sameHash.rows[0]) {
@@ -91,7 +93,7 @@ export async function upsertDocumentOn(
   }
   const exist = await client.query(
     `SELECT id, version FROM kb_documents
-     WHERE workspace_id=$1 AND (title=$2 OR ($3::text IS NOT NULL AND source_url=$3)) LIMIT 1`,
+     WHERE workspace_id=$1 AND (title=$2 OR ($3::text IS NOT NULL AND source_url=$3)) LIMIT 1 FOR UPDATE`,
     [input.workspaceId, input.title, input.sourceUrl ?? null],
   );
   let documentId: string;
@@ -100,7 +102,7 @@ export async function upsertDocumentOn(
     documentId = String(exist.rows[0].id);
     version = Number(exist.rows[0].version) + 1;
     await client.query(
-      `UPDATE kb_documents SET collection_id=$3, source_kind=$4, source_url=$5, content_md=$6, version=$7, hash=$8
+      `UPDATE kb_documents SET collection_id=$3, source_kind=$4, source_url=$5, content_md=$6, version=$7, hash=$8, status='pending_review'
        WHERE workspace_id=$1 AND id=$2`,
       [input.workspaceId, documentId, input.collectionId, input.sourceKind, input.sourceUrl ?? null, input.contentMd, version, hash],
     );
@@ -344,55 +346,83 @@ export async function searchKB(input: {
     .slice(0, input.limit ?? 5);
 }
 
+type KbDecisionApplication = { documentId: string; status: "active" | "pending_review"; changed: boolean } | null;
+
 /**
- * MC-110 接线：审批台对 `kb.publish` 审批的裁决 → 知识库状态联动（与
- * apps/server/src/trpc/router.ts#activateFenceRuleAfterApproval 同范式）。
- *
- * 覆盖两类行：
- *  ① 修复前遗留的幽灵 pending（动作已执行、审批仍在待办）与未来任何来源的 kb.publish 待审：
- *     approve/edit → 文档置 active（幂等）；reject → 文档退回 pending_review（驳回即退出客户问答检索范围）；
- *  ② 非 kb.publish 审批 → 返回 null，不触碰知识库（保持既有语义）。
- *
- * 幂等：重复回调（审批已终态、文档状态已一致）不重复写事件；非 pending/未知状态不动。
+ * MC-012：在 decide 持有的事务内应用旧 kb.publish 裁决。事件是不可变授权锚点：
+ * 租户、工作区、对象和版本必须全等；缺版本、内容哈希不符、已消费或较旧裁决不改当前文档。
+ * 先锁审批、再锁文档、最后写事件；故障直接抛出，让文档、审批、手势和 COMMIT 一起回滚。
  */
-export async function applyKbPublishAfterApproval(
-  scope: { workspaceId: string },
+export async function applyKbPublishAfterApprovalOn(
+  client: pg.PoolClient,
+  scope: { tenantId: string; workspaceId: string },
   approvalId: string,
-): Promise<{ documentId: string; status: "active" | "pending_review"; changed: boolean } | null> {
+): Promise<KbDecisionApplication> {
   await ensureServiceSchema();
-  return serviceTx(scope.workspaceId, async (client, sc) => {
-    const r = await client.query<{ status: string; action: string | null; document_id: string | null }>(
-      `SELECT a.status,
-              e.payload->'decision'->>'action' AS action,
-              COALESCE(e.payload->'decision'->'after'->>'documentId', e.payload->'object'->>'id') AS document_id
-         FROM approvals a
-         LEFT JOIN biz_events e ON e.event_id = a.event_id AND e.workspace_id = a.workspace_id
-        WHERE a.approval_id=$1 AND a.workspace_id=$2`,
-      [approvalId, scope.workspaceId],
-    );
-    const row = r.rows[0];
-    if (!row || row.action !== "kb.publish" || !row.document_id) return null;
-    const approved = row.status === "approved" || row.status === "edited";
-    const rejected = row.status === "rejected";
-    if (!approved && !rejected) return null; // pending/expired：等裁决，不动文档
-    const target: "active" | "pending_review" = approved ? "active" : "pending_review";
-    const upd = await client.query<{ id: string }>(
-      `UPDATE kb_documents SET status=$3
-        WHERE workspace_id=$1 AND id=$2 AND status <> $3
-        RETURNING id`,
-      [scope.workspaceId, row.document_id, target],
-    );
-    if (!upd.rows[0]) return { documentId: row.document_id, status: target, changed: false };
-    await appendEventOn(client, sc, { id: "review-console", type: "system" }, {
-      objectType: "kb_document", objectId: row.document_id,
-      action: approved ? "kb.publish" : "kb.publish.revoke",
-      after: { status: target, approvalId },
-      basis: [
-        approved
-          ? `审批 ${approvalId} 通过：文档进入客户问答检索范围`
-          : `审批 ${approvalId} 驳回：文档退回待审、即刻退出客户问答检索范围（MC-110）`,
-      ],
-    });
-    return { documentId: row.document_id, status: target, changed: true };
+  const result = await client.query<{
+    status: string; consumed_at: Date | null; decided_by: string | null; decided_at: Date | null;
+    action: string | null; object_type: string | null; document_id: string | null; event_seq: string;
+    after: Record<string, unknown> | null; snapshot: { after?: Record<string, unknown> } | null;
+  }>(
+    `SELECT a.status,a.consumed_at,a.decided_by,a.decided_at,a.snapshot,
+            e.payload->'decision'->>'action' AS action,e.payload->'object'->>'type' AS object_type,
+            e.payload->'object'->>'id' AS document_id,e.payload->'decision'->'after' AS after,e.seq::text AS event_seq
+       FROM approvals a
+       JOIN biz_events e ON e.event_id=a.event_id AND e.workspace_id=a.workspace_id AND e.tenant_id=a.tenant_id
+      WHERE a.approval_id=$1 AND a.workspace_id=$2 AND a.tenant_id=$3 FOR UPDATE OF a`,
+    [approvalId, scope.workspaceId, scope.tenantId],
+  );
+  const row = result.rows[0];
+  if (!row || row.action !== "kb.publish" || row.object_type !== "kb_document" || !row.document_id) return null;
+  if (row.consumed_at || !row.decided_by || !row.decided_at) return null;
+  const approved = row.status === "approved" || row.status === "edited";
+  if (!approved && row.status !== "rejected") return null;
+  const after = row.after ?? {};
+  const version = after.version;
+  if (typeof version !== "number" || !Number.isInteger(version) || version < 1) return null;
+  if (after.documentId !== undefined && after.documentId !== row.document_id) return null;
+  const snapshot = row.snapshot?.after ?? {};
+  if (snapshot.documentId !== undefined && snapshot.documentId !== row.document_id) return null;
+  if (snapshot.version !== undefined && snapshot.version !== version) return null;
+
+  const document = await client.query<{ version: number; hash: string | null; status: string }>(
+    `SELECT version,hash,status FROM kb_documents WHERE workspace_id=$1 AND id=$2 FOR UPDATE`,
+    [scope.workspaceId, row.document_id],
+  );
+  const current = document.rows[0];
+  if (!current || current.version !== version) return null;
+  if (after.hash !== undefined && after.hash !== current.hash) return null;
+  if (snapshot.hash !== undefined && snapshot.hash !== current.hash) return null;
+
+  // 修复前待办不能撤销较新的逐条批准，也不能经幂等重试复活后来被人停用的文档。
+  const newer = await client.query(
+    `SELECT 1 FROM biz_events e
+      WHERE e.tenant_id=$1 AND e.workspace_id=$2 AND e.seq>$3::bigint AND e.payload->'object'->>'id'=$4
+        AND (
+          (e.payload->'decision'->>'action'='kb.document.status' AND e.payload->'who'->>'type'='human')
+          OR (e.payload->'decision'->>'action'='kb.publish' AND e.payload->'decision'->'after'->>'version'=$5
+            AND EXISTS (SELECT 1 FROM approvals a WHERE a.event_id=e.event_id AND a.tenant_id=e.tenant_id
+              AND a.workspace_id=e.workspace_id AND a.status IN ('approved','edited') AND a.decided_by IS NOT NULL))
+        ) LIMIT 1`,
+    [scope.tenantId, scope.workspaceId, row.event_seq, row.document_id, String(version)],
+  );
+  if (newer.rows[0]) return null;
+  const target = approved ? "active" as const : "pending_review" as const;
+  if (current.status === target) return { documentId: row.document_id, status: target, changed: false };
+  await client.query(
+    `UPDATE kb_documents SET status=$3 WHERE workspace_id=$1 AND id=$2 AND version=$4 AND hash IS NOT DISTINCT FROM $5`,
+    [scope.workspaceId, row.document_id, target, version, current.hash],
+  );
+  await appendEventOn(client, scope, { id: "review-console", type: "system" }, {
+    objectType: "kb_document", objectId: row.document_id,
+    action: approved ? "kb.publish" : "kb.publish.revoke",
+    after: { documentId: row.document_id, version, hash: current.hash, status: target, approvalId },
+    basis: [approved ? `审批 ${approvalId} 通过：同一版本进入客户问答检索范围` : `审批 ${approvalId} 驳回：同一版本退回待审并退出客户问答检索范围`],
   });
+  return { documentId: row.document_id, status: target, changed: true };
+}
+
+/** 已裁决存量记录的独立幂等修复入口；正常裁决使用上面的事务内入口。 */
+export async function applyKbPublishAfterApproval(scope: { workspaceId: string }, approvalId: string): Promise<KbDecisionApplication> {
+  return serviceTx(scope.workspaceId, (client, parsedScope) => applyKbPublishAfterApprovalOn(client, parsedScope, approvalId));
 }

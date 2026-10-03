@@ -8,6 +8,7 @@
 import type pg from "pg";
 import { gatewayAppendOnClient } from "../workdata/gateway.js";
 import type { SilentMode } from "./types.js";
+import { setSkillScope, rollbackSkills, releaseSkillClient } from "../skills/scope.js";
 
 interface Scope { tenantId: string; workspaceId: string }
 
@@ -15,30 +16,28 @@ export async function getSilentMode(app: pg.Pool, scope: Scope): Promise<SilentM
   const client = await app.connect();
   try {
     await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+    await setSkillScope(client, scope);
     const r = await client.query<{ silent_mode: SilentMode }>(
       `SELECT silent_mode FROM skill_dist_policy WHERE workspace_id=$1`, [scope.workspaceId]);
     await client.query("COMMIT");
     return r.rows[0]?.silent_mode ?? "silent"; // 默认静默（方案 §4.1 决策点①推荐口径）
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally { client.release(); }
+    return await rollbackSkills(client, err);
+  } finally { releaseSkillClient(client); }
 }
 
 export async function getAutoSync(app: pg.Pool, scope: Scope): Promise<boolean> {
   const client = await app.connect();
   try {
     await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+    await setSkillScope(client, scope);
     const r = await client.query<{ auto_sync: boolean }>(
       `SELECT auto_sync FROM skill_dist_policy WHERE workspace_id=$1`, [scope.workspaceId]);
     await client.query("COMMIT");
     return r.rows[0]?.auto_sync ?? true; // 默认自动同步（机制即自动；客户可关=治理主权）
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally { client.release(); }
+    return await rollbackSkills(client, err);
+  } finally { releaseSkillClient(client); }
 }
 
 /** 策略变更（D16：策略行与 skill.dist.policy 事件同一事务同一 COMMIT；upsert 幂等）
@@ -54,8 +53,7 @@ export async function setSilentMode(
   const client = await app.connect();
   try {
     await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+    await setSkillScope(client, scope);
     await client.query(
       `INSERT INTO skill_dist_policy (workspace_id, silent_mode, auto_sync, updated_by, updated_at)
        VALUES ($1, COALESCE($2, 'silent'), COALESCE($3, true), $4, now())
@@ -80,8 +78,7 @@ export async function setSilentMode(
     });
     await client.query("COMMIT");
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally { client.release(); }
+    return await rollbackSkills(client, err);
+  } finally { releaseSkillClient(client); }
   return { mode: input.mode, autoSync: input.autoSync };
 }

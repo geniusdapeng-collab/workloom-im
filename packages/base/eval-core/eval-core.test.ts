@@ -174,6 +174,6 @@ describe("分层抽样与考场执行", () => {
       };
     }, "evx-t1");
     expect(replies.length).toBe(2);
-    expect(calls[1].startsWith("CCV-1:")).toBe(true);   // 第二轮继承会话（上下文考题的前提）
+    expect(calls[1]?.startsWith("CCV-1:")).toBe(true);   // 第二轮继承会话（上下文考题的前提）
   });
 });

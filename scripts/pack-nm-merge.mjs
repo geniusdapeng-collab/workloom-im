@@ -3,7 +3,7 @@
 //      （pnpm 的 symlink 布局无法经受 Windows zip 打包-解压往返，见 v2.0.8 冒烟实证）
 // 规则：
 //   收集 root.dependencies + apps/server.dependencies + packages/{shared,db,base,runtime}.dependencies
-//   + 运行期工具：tsx（启动器执行 .ts）、vite（preview 静态服务）
+//   + 运行期工具：tsx（启动器执行 .ts）；静态工作台只使用随包 Node 的内置模块
 //   过滤：workspace:* 协议（内部包，源码随包）/ electron* / playwright*（运行期不需要）
 //   版本：只采用 pnpm-lock.yaml importer 已解析的精确版本，不把 ^/~ 范围带入发行包
 //   冲突：同名依赖若锁到不同版本立即失败，禁止按目录枚举顺序静默覆盖
@@ -177,9 +177,8 @@ export function runtimeDependencySources(root, policy) {
     ["package.json", ["dependencies"], null, "."],
     ["apps/server/package.json", ["dependencies"], null, "apps/server"],
     ...pkgSources,
-    // 运行期工具（来自 devDependencies，仅取这两个）
+    // 运行期工具：客户包不加载 Vite 配置、测试框架或构建插件。
     ["package.json", ["devDependencies"], ["tsx"], "."],
-    ["apps/web/package.json", ["devDependencies"], ["vite", "@tailwindcss/vite", "@vitejs/plugin-react"], "apps/web"],
   ];
 }
 

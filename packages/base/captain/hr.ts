@@ -29,6 +29,7 @@ async function q<T extends pg.QueryResultRow>(app: pg.Pool, scope: Scope, sql: s
   try {
     await c.query("BEGIN");
     await c.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+    await c.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
     const r = await c.query<T>(sql, params);
     await c.query("COMMIT");
     return r.rows;

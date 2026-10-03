@@ -14,7 +14,12 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { runWithServiceScope } from "../apps/server/src/service/scope.js";
+
 const WS = process.env.VERIFY_WS ?? "ws-aipm-demo";
+// The default fixture is declared by seed-aipm; custom fixtures must supply their tenant.
+const TENANT_ID = process.env.VERIFY_TENANT_ID ?? (WS === "ws-aipm-demo" ? "demo" : "");
+if (!TENANT_ID.trim()) throw new Error("自定义 VERIFY_WS 必须同时提供 VERIFY_TENANT_ID");
 const MEMBER = "verify-chairman";
 const ACTOR = { id: MEMBER, type: "human" as const };
 
@@ -106,4 +111,4 @@ async function main() {
   process.exit(0);
 }
 
-main().catch((e) => { console.error("验证失败：", e); process.exit(1); });
+runWithServiceScope({ tenantId: TENANT_ID, workspaceId: WS }, main).catch((e) => { console.error("验证失败：", e); process.exit(1); });

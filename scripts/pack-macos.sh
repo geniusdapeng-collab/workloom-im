@@ -77,7 +77,7 @@ for d in "${RUNTIME_SOURCE_DIRS[@]}"; do
   rsync -aR --exclude node_modules --exclude dist --exclude .dsh-home --exclude 'dsh-gate/out' "$d" "$R/"
 done
 mkdir -p "$R/scripts"
-cp scripts/migrate.ts scripts/desktop-bootstrap-db.mjs scripts/product-runtime.mjs scripts/vite-product.mjs "$R/scripts/"
+cp scripts/migrate.ts scripts/desktop-bootstrap-db.mjs scripts/product-runtime.mjs scripts/vite-product.mjs scripts/desktop-web.mjs "$R/scripts/"
 cp scripts/seed*.ts "$R/scripts/"  # 全部行业种子随包（按 .env.defaults DESKTOP_SEED_SCRIPT 选用）
 printf '%s\n' "$VERSION" > "$R/VERSION"
 
@@ -106,7 +106,7 @@ for pkgjson in "${INTERNAL_PACKAGE_MANIFESTS[@]}"; do
 done
 find "$R/node_modules" -mindepth 2 -maxdepth 4 -type d -name node_modules -prune -exec rm -rf {} + 2>/dev/null || true
 for f in node_modules/tsx/package.json node_modules/hono/package.json scripts/migrate.ts \
-         scripts/product-runtime.mjs scripts/vite-product.mjs product.manifest.json apps/web/vite.config.ts; do
+         scripts/product-runtime.mjs scripts/vite-product.mjs product.manifest.json scripts/desktop-web.mjs apps/web/dist/index.html; do
   [ -f "$R/$f" ] || { echo "❌ 应急载荷自检失败：runtime/$f 缺失"; exit 1; }
 done
 node scripts/payload-policy.mjs assert-runtime "$R"

@@ -16,6 +16,8 @@ import { runStagingChecks } from "./staging.js";
 import { matchesTargets, compareVersions } from "./targeting.js";
 import { getSilentMode } from "./policy.js";
 import { DistManifest, DistMeta, type InstanceProfile, type SkillPackage, type StagingCheck } from "./types.js";
+import { getSkill } from "../skills/registry.js";
+import { setSkillScope, withSkillScope, rollbackSkills, releaseSkillClient } from "../skills/scope.js";
 
 interface Scope { tenantId: string; workspaceId: string }
 
@@ -78,53 +80,50 @@ const defaultFetcher: ManifestFetcher = async (url) => {
 
 /* ---------- 装载（事务内：快照 → 技能库 upsert → 已装快照跟进 → 事件） ---------- */
 
-async function loadPackageInTx(
-  client: pg.PoolClient, scope: Scope, pkg: SkillPackage, tier: string, by: EventActor, checks: StagingCheck[],
-): Promise<{ upgraded: boolean; previousVersion: string | null }> {
-  // ① 快照（装载前必落：旧 skills 行 + 旧 install 行）
+/** 下行命名空间只允许无私有属主的 official 行；隔离、team 和上架后保留属主的行不可被分发覆盖。 */
+async function loadPackageInTx(client: pg.PoolClient, scope: Scope, pkg: SkillPackage, tier: string,
+  by: EventActor, checks: StagingCheck[]): Promise<{ upgraded: boolean; previousVersion: string | null }> {
+  if (pkg.skillId.startsWith("skill-t-")) throw new SkillOpsError("BAD_STATE", "团队技能命名空间禁止下行分发，须先抽象为公共技能 ID");
+  await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [`skill-dist:${pkg.skillId}`]);
   const cur = await client.query(
-    `SELECT s.*, i.installed_version, i.fence_bindings_snapshot
-     FROM skills s LEFT JOIN skill_installs i ON i.skill_id=s.id AND i.workspace_id=$2
-     WHERE s.id=$1`,
-    [pkg.skillId, scope.workspaceId]);
+    `SELECT s.*,i.installed_version,i.fence_bindings_snapshot FROM skills s
+     LEFT JOIN skill_installs i ON i.skill_id=s.id AND i.workspace_id=$2
+     WHERE s.id=$1 FOR UPDATE OF s`, [pkg.skillId,scope.workspaceId]);
   const prev = cur.rows[0] ?? null;
-  const snapId = `snap-${pkg.skillId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  if (prev && (prev.level !== "official" || prev.ownership_state !== "shared" || prev.owner_tenant_id !== null || prev.owner_workspace_id !== null)) {
+    throw new SkillOpsError("BAD_STATE", "下行包不能覆盖私有、隔离或保留私有属主的技能");
+  }
+  if (prev && compareVersions(prev.version,pkg.version) > 0) throw new SkillOpsError("BAD_STATE", "当前公共技能版本已推进，拒绝旧包覆盖");
+  const values = [pkg.skillId,pkg.name,pkg.version,pkg.description,JSON.stringify(pkg.fenceBindings),pkg.body,JSON.stringify(pkg.meta)];
+  if (!prev) {
+    const inserted = await client.query(
+      `INSERT INTO skills (id,level,bundle,name,version,description,fence_bindings,body,desensitized,dist_meta)
+       VALUES ($1,'official',NULL,$2,$3,$4,$5,$6,false,$7) ON CONFLICT (id) DO NOTHING RETURNING id`, values);
+    if (inserted.rowCount !== 1) throw new SkillOpsError("BAD_STATE", "分发目标已被不可消费的资产占用，拒绝覆盖");
+  }
+  const snapId = `snap-${pkg.skillId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,6)}`;
   await client.query(
-    `INSERT INTO skill_dist_snapshots (id, skill_id, workspace_id, skill_row, install_row, reason)
-     VALUES ($1,$2,$3,$4,$5,$6)`,
-    [
-      snapId, pkg.skillId, scope.workspaceId,
-      prev ? JSON.stringify({ ...prev, installed_version: undefined, fence_bindings_snapshot: undefined }) : null,
-      prev?.installed_version ? JSON.stringify({ installed_version: prev.installed_version, fence_bindings_snapshot: prev.fence_bindings_snapshot }) : null,
-      `装载 ${pkg.skillId}@${pkg.version}（${tier}）前自动快照`,
-    ]);
-
-  // ② 技能库 upsert（level=official：官方分发即官方套件；desensitized 对 official 无约束）
+    `INSERT INTO skill_dist_snapshots (id,skill_id,workspace_id,skill_row,install_row,reason,loaded_version)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+    [snapId,pkg.skillId,scope.workspaceId,
+     prev ? JSON.stringify({ ...prev,installed_version: undefined,fence_bindings_snapshot: undefined }) : null,
+     prev?.installed_version ? JSON.stringify({ installed_version: prev.installed_version,fence_bindings_snapshot: prev.fence_bindings_snapshot }) : null,
+     `装载 ${pkg.skillId}@${pkg.version}（${tier}）前自动快照`,pkg.version]);
+  if (prev) {
+    const updated = await client.query(
+      `UPDATE skills SET name=$2,version=$3,description=$4,fence_bindings=$5,body=$6,dist_meta=$7
+       WHERE id=$1 AND level='official' AND ownership_state='shared' AND owner_tenant_id IS NULL AND owner_workspace_id IS NULL`, values);
+    if (updated.rowCount !== 1) throw new SkillOpsError("BAD_STATE", "分发目标归属在装载前变化");
+  }
   await client.query(
-    `INSERT INTO skills (id, level, bundle, name, version, description, fence_bindings, body, desensitized, dist_meta)
-     VALUES ($1,'official',NULL,$2,$3,$4,$5,$6,false,$7)
-     ON CONFLICT (id) DO UPDATE SET
-       name=$2, version=$3, description=$4, fence_bindings=$5, body=$6, dist_meta=$7`,
-    [pkg.skillId, pkg.name, pkg.version, pkg.description, JSON.stringify(pkg.fenceBindings), pkg.body, JSON.stringify(pkg.meta)]);
-
-  // ③ 已装技能快照跟进（升级路径：版本与围栏快照同步推进；新装技能不落 install 行——安装仍走 installSkill）
-  await client.query(
-    `UPDATE skill_installs SET installed_version=$3, fence_bindings_snapshot=$4
-     WHERE skill_id=$1 AND workspace_id=$2`,
-    [pkg.skillId, scope.workspaceId, pkg.version, JSON.stringify(pkg.fenceBindings)]);
-
-  await emitInTx(client, scope, by, {
+    "UPDATE skill_installs SET installed_version=$3,fence_bindings_snapshot=$4 WHERE skill_id=$1 AND workspace_id=$2",
+    [pkg.skillId,scope.workspaceId,pkg.version,JSON.stringify(pkg.fenceBindings)]);
+  await emitInTx(client,scope,by,{
     action: tier === "L2" ? "skill.dist.approved_loaded" : "skill.dist.loaded",
-    after: {
-      skillId: pkg.skillId, name: pkg.name, version: pkg.version, tier,
-      upgraded: !!prev, previousVersion: prev?.version ?? null, snapshotId: snapId,
-    },
-    basis: [
-      `staging 五道预检全过（${checks.map((c) => c.gate).join("/")}）`,
-      prev ? "已装技能版本快照同步跟进（installed_version + fence_bindings_snapshot）" : "新技能装载入技能库；安装即绑定围栏仍走 installSkill 原流程（E8.1 不旁路）",
-    ],
+    after: { skillId: pkg.skillId,name: pkg.name,version: pkg.version,tier,upgraded: !!prev,previousVersion: prev?.version ?? null,snapshotId: snapId },
+    basis: [`staging 预检全过（${checks.map((c) => c.gate).join("/")}）`,"只装载公共 official 命名空间；新技能安装仍走 installSkill（MC-022/E8.1）"],
   });
-  return { upgraded: !!prev, previousVersion: prev?.version ?? null };
+  return { upgraded: !!prev,previousVersion: prev?.version ?? null };
 }
 
 /* ---------- 主流程：同步分发 ---------- */
@@ -170,9 +169,17 @@ export async function syncDistribution(
     result.matched++;
 
     // 幂等：本机版本已 ≥ 分发版本 → 跳过（同版本重推不重复装载）
-    const cur = await app.query<{ version: string; dist_meta: unknown; fence_bindings: string[] }>(
-      `SELECT version, dist_meta, fence_bindings FROM skills WHERE id=$1`, [pkg.skillId]);
-    const curRow = cur.rows[0] ?? null;
+    const stagingId = `stg-v2.${Buffer.from(JSON.stringify([scope.tenantId,scope.workspaceId,pkg.skillId,pkg.version]),"utf8").toString("hex")}`;
+    const curRow = await getSkill(app,pkg.skillId,scope);
+    if (pkg.skillId.startsWith("skill-t-") || (curRow && (curRow.level !== "official" || curRow.ownership_state !== "shared"
+        || curRow.owner_tenant_id !== null || curRow.owner_workspace_id !== null))) {
+      const reasons = ["下行分发禁止占用私有、隔离或已上架团队技能的命名空间（MC-022）"];
+      // 私有 ID 不进入 staging，避免旧下行缓存成为私有正文的读取旁路。
+      if (!pkg.skillId.startsWith("skill-t-")) await upsertStaging(app,scope,{ stagingId,pkg,tier: "L0",checks: [{ gate: "schema_deps",pass: false,detail: reasons[0]! }],status: "rejected" });
+      await emit(gateway,scope,actor,{ action: "skill.dist.rejected",after: { skillId: pkg.skillId,version: pkg.version,stagingId,reasons },basis: reasons });
+      result.rejected.push({ skillId: pkg.skillId,version: pkg.version,reasons });
+      continue;
+    }
     if (curRow && compareVersions(curRow.version, pkg.version) >= 0) {
       result.skipped.push({ skillId: pkg.skillId, reason: `本机版本 ${curRow.version} 已不落后于分发版本` });
       continue;
@@ -183,7 +190,6 @@ export async function syncDistribution(
 
     // staging 五道预检
     const staging = runStagingChecks({ pkg, signingKey: opts.signingKey, current: currentState, depsAvailable: opts.depsAvailable });
-    const stagingId = `stg-${pkg.skillId}-${pkg.version}`;
 
     if (!staging.pass) {
       const reasons = staging.checks.filter((c) => !c.pass).map((c) => c.detail);
@@ -200,8 +206,8 @@ export async function syncDistribution(
     // 定级分流
     if (staging.tier === "L2") {
       // L2 永不静默：入 staging + 审批提案（幂等：同 staging 已有 pending 审批则复用）
-      const existing = await app.query<{ approval_id: string | null }>(
-        `SELECT approval_id FROM skill_dist_staging WHERE id=$1 AND status='pending'`, [stagingId]);
+      const existing = await withSkillScope(app,scope,(client) => client.query<{ approval_id: string | null }>(
+        `SELECT approval_id FROM skill_dist_staging WHERE id=$1 AND status='pending'`, [stagingId]));
       let approvalId = existing.rows[0]?.approval_id ?? undefined;
       if (!approvalId) {
         const evId = await emit(gateway, scope, actor, {
@@ -213,7 +219,7 @@ export async function syncDistribution(
         const client = await app.connect();
         try {
           await client.query("BEGIN");
-          await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+          await setSkillScope(client, scope);
           await client.query(
             // tier='l4_chairman'：权限面扩张=董事长级人审（围栏放宽同层），
             // 必须显式指定——缺省 tier='l2_captain' 会被数字CEO队列节拍自动裁决，绕过 L2 永不静默红线
@@ -221,12 +227,11 @@ export async function syncDistribution(
              VALUES ($1,$2,$3,$4,'inapp','pending',$5,'l4_chairman')`,
             [approvalId, scope.tenantId, scope.workspaceId, evId,
              JSON.stringify({ kind: "skill_dist_install", stagingId, skillId: pkg.skillId, version: pkg.version, high_risk: true })]);
+          await client.query("COMMIT");
         } catch (err) {
-          await client.query("ROLLBACK").catch(() => undefined);
-          throw err;
+          return await rollbackSkills(client, err);
         } finally {
-          await client.query("COMMIT").catch(() => undefined);
-          client.release();
+          releaseSkillClient(client);
         }
       }
       await upsertStaging(app, scope, { stagingId, pkg, tier: "L2", checks: staging.checks, status: "pending", approvalId });
@@ -249,20 +254,18 @@ export async function syncDistribution(
     const client = await app.connect();
     try {
       await client.query("BEGIN");
-      await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-      await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+      await setSkillScope(client, scope);
       await loadPackageInTx(client, scope, pkg, staging.tier, actor, staging.checks);
       await client.query(
         `INSERT INTO skill_dist_staging (id, skill_id, workspace_id, tier, package, checks, status, decided_at)
          VALUES ($1,$2,$3,$4,$5,$6,'loaded',now())
          ON CONFLICT (id) DO UPDATE SET status='loaded', decided_at=now(), checks=$6, package=$5, tier=$4`,
         [stagingId, pkg.skillId, scope.workspaceId, staging.tier, JSON.stringify(pkg), JSON.stringify(staging.checks)]);
+      await client.query("COMMIT");
     } catch (err) {
-      await client.query("ROLLBACK").catch(() => undefined);
-      throw err;
+      return await rollbackSkills(client, err);
     } finally {
-      await client.query("COMMIT").catch(() => undefined);
-      client.release();
+      releaseSkillClient(client);
     }
     result.loaded.push({ skillId: pkg.skillId, version: pkg.version, tier: staging.tier });
   }
@@ -271,18 +274,17 @@ export async function syncDistribution(
   const client = await app.connect();
   try {
     await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+    await setSkillScope(client, scope);
     await client.query(
       `INSERT INTO skill_dist_state (workspace_id, last_manifest_version, last_sync_at)
        VALUES ($1,$2,now())
        ON CONFLICT (workspace_id) DO UPDATE SET last_manifest_version=$2, last_sync_at=now()`,
       [scope.workspaceId, manifest.registryVersion]);
+    await client.query("COMMIT");
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
+    return await rollbackSkills(client, err);
   } finally {
-    await client.query("COMMIT").catch(() => undefined);
-    client.release();
+    releaseSkillClient(client);
   }
   await emit(gateway, scope, actor, {
     action: "skill.dist.sync",
@@ -303,7 +305,7 @@ async function upsertStaging(
   const client = await app.connect();
   try {
     await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+    await setSkillScope(client, scope);
     await client.query(
       `INSERT INTO skill_dist_staging (id, skill_id, workspace_id, tier, package, checks, status, approval_id, decided_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8, CASE WHEN $7='rejected' THEN now() ELSE NULL END)
@@ -312,12 +314,11 @@ async function upsertStaging(
          decided_at=CASE WHEN $7='rejected' THEN now() ELSE skill_dist_staging.decided_at END`,
       [row.stagingId, row.pkg.skillId, scope.workspaceId, row.tier,
        JSON.stringify(row.pkg), JSON.stringify(row.checks), row.status, row.approvalId ?? null]);
+    await client.query("COMMIT");
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
+    return await rollbackSkills(client, err);
   } finally {
-    await client.query("COMMIT").catch(() => undefined);
-    client.release();
+    releaseSkillClient(client);
   }
 }
 
@@ -330,8 +331,7 @@ export async function loadStaging(
   const client = await app.connect();
   try {
     await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
+    await setSkillScope(client, scope);
     const r = await client.query<{
       id: string; skill_id: string; tier: string; package: SkillPackage;
       checks: StagingCheck[]; status: string; approval_id: string | null;
@@ -360,76 +360,69 @@ export async function loadStaging(
     await client.query("COMMIT");
     return { skillId: row.skill_id, version: pkg.version, tier: row.tier };
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally { client.release(); }
+    return await rollbackSkills(client, err);
+  } finally { releaseSkillClient(client); }
 }
 
 /* ---------- 回滚 ---------- */
 
-export async function rollbackSkill(
-  app: pg.Pool, gateway: pg.Pool, scope: Scope,
-  input: { skillId: string; by: string },
-): Promise<{ restoredVersion: string | null; snapshotId: string }> {
+export async function rollbackSkill(app: pg.Pool,gateway: pg.Pool,scope: Scope,
+  input: { skillId: string; by: string }): Promise<{ restoredVersion: string | null; snapshotId: string }> {
+  void gateway;
   interface SnapRow {
-    id: string;
-    skill_row: {
-      id: string; level: string; bundle: string | null; name: string; version: string;
-      description: string; fence_bindings: string[]; body: string; desensitized: boolean; dist_meta: unknown;
-    } | null;
-    install_row: { installed_version: string; fence_bindings_snapshot: string[] } | null;
+    id: string;loaded_version: string | null;
+    skill_row: { id: string;level: string;bundle: string | null;name: string;version: string;description: string;
+      fence_bindings: string[];body: string;desensitized: boolean;dist_meta: unknown;
+      ownership_state?: string;owner_tenant_id?: string | null;owner_workspace_id?: string | null } | null;
+    install_row: { installed_version: string;fence_bindings_snapshot: string[] } | null;
   }
-  const client = await app.connect();
-  let snap: SnapRow | undefined;
-  try {
-    await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
-    const r = await client.query<SnapRow>(
-      `SELECT id, skill_row, install_row FROM skill_dist_snapshots
-       WHERE skill_id=$1 ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, [input.skillId]);
-    snap = r.rows[0];
-    if (!snap) throw new SkillOpsError("NO_SNAPSHOT", `技能 ${input.skillId} 无可用快照，无法回滚`);
-
-    if (snap.skill_row) {
-      // 恢复旧 skills 行（dist_meta 等全字段恢复）
-      const s = snap.skill_row;
-      await client.query(
-        `UPDATE skills SET level=$2, bundle=$3, name=$4, version=$5, description=$6, fence_bindings=$7, body=$8, desensitized=$9, dist_meta=$10
-         WHERE id=$1`,
-        [s.id, s.level, s.bundle, s.name, s.version, s.description,
-         JSON.stringify(s.fence_bindings ?? []), s.body, s.desensitized, JSON.stringify(s.dist_meta ?? {})]);
-    } else {
-      // 首装回滚 = 从技能库移除
-      await client.query(`DELETE FROM skills WHERE id=$1`, [input.skillId]);
+  if (input.skillId.startsWith("skill-t-")) throw new SkillOpsError("BAD_STATE","私有技能命名空间不允许分发回滚");
+  return withSkillScope(app,scope,async (client) => {
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [`skill-dist:${input.skillId}`]);
+    const snap = (await client.query<SnapRow>(
+      `SELECT id,skill_row,install_row,loaded_version FROM skill_dist_snapshots WHERE skill_id=$1
+       ORDER BY created_at DESC,id DESC LIMIT 1 FOR UPDATE`, [input.skillId])).rows[0];
+    if (!snap) throw new SkillOpsError("NO_SNAPSHOT","技能无可用公共分发快照");
+    const current = (await client.query("SELECT * FROM skills WHERE id=$1 FOR UPDATE",[input.skillId])).rows[0];
+    const previous = snap.skill_row;
+    if (!current || current.level !== "official" || current.ownership_state !== "shared"
+        || current.owner_tenant_id !== null || current.owner_workspace_id !== null
+        || (previous && (previous.id !== input.skillId || previous.level !== "official"
+          || (previous.ownership_state ?? "shared") !== "shared" || previous.owner_tenant_id != null || previous.owner_workspace_id != null))) {
+      throw new SkillOpsError("BAD_STATE","回滚只恢复公共 official 资产，私有/隔离快照必须保留并由人工核对");
+    }
+    if (!snap.loaded_version || current.version !== snap.loaded_version) {
+      throw new SkillOpsError("BAD_STATE","公共技能已由另一装载推进或历史快照缺版本证据，拒绝陈旧回滚");
+    }
+    if (previous) {
+      const restored = await client.query(
+        `UPDATE skills SET bundle=$2,name=$3,version=$4,description=$5,fence_bindings=$6,body=$7,desensitized=$8,dist_meta=$9
+         WHERE id=$1 AND level='official' AND ownership_state='shared' AND owner_tenant_id IS NULL AND owner_workspace_id IS NULL`,
+        [previous.id,previous.bundle,previous.name,previous.version,previous.description,
+         JSON.stringify(previous.fence_bindings ?? []),previous.body,previous.desensitized,JSON.stringify(previous.dist_meta ?? {})]);
+      if (restored.rowCount !== 1) throw new SkillOpsError("BAD_STATE","回滚目标归属已经变化");
     }
     if (snap.install_row) {
-      await client.query(
-        `UPDATE skill_installs SET installed_version=$3, fence_bindings_snapshot=$4
-         WHERE skill_id=$1 AND workspace_id=$2`,
-        [input.skillId, scope.workspaceId, snap.install_row.installed_version, JSON.stringify(snap.install_row.fence_bindings_snapshot)]);
+      await client.query("UPDATE skill_installs SET installed_version=$3,fence_bindings_snapshot=$4 WHERE skill_id=$1 AND workspace_id=$2",
+        [input.skillId,scope.workspaceId,snap.install_row.installed_version,JSON.stringify(snap.install_row.fence_bindings_snapshot)]);
     } else {
-      await client.query(`DELETE FROM skill_installs WHERE skill_id=$1 AND workspace_id=$2`, [input.skillId, scope.workspaceId]);
+      await client.query("DELETE FROM skill_installs WHERE skill_id=$1 AND workspace_id=$2",[input.skillId,scope.workspaceId]);
     }
-    // 快照为栈语义：回滚即消费——恢复到该快照状态后，下一次回滚取更早一份
-    await client.query(`DELETE FROM skill_dist_snapshots WHERE id=$1`, [snap.id]);
-    await emitInTx(client, scope, human(input.by), {
-      action: "skill.dist.rollback",
-      after: {
-        skillId: input.skillId, snapshotId: snap.id,
-        restoredVersion: snap.skill_row?.version ?? null,
-      },
-      basis: ["回滚即恢复装载前快照（skills 行 + install 快照同事务恢复）；回滚本身留痕可审计"],
-    });
-    await client.query("COMMIT");
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally { client.release(); }
-  return {
-    restoredVersion: snap!.skill_row?.version ?? null,
-    snapshotId: snap!.id,
-  };
+    // 在目标仍可见时消费公共快照；随后若 FK 或事件失败，整笔事务会恢复该快照。
+    const consumed = await client.query("DELETE FROM skill_dist_snapshots WHERE id=$1",[snap.id]);
+    if (consumed.rowCount !== 1) throw new SkillOpsError("BAD_STATE","回滚快照归属已经变化");
+    if (!previous) {
+      try { await client.query("DELETE FROM skills WHERE id=$1",[input.skillId]); }
+      catch (error) {
+        if ((error as { code?: string }).code === "23503") throw new SkillOpsError("BAD_STATE","公共技能仍被其他安装或历史审核引用，拒绝移除并保留快照");
+        throw error;
+      }
+    }
+    await emitInTx(client,scope,human(input.by),{ action: "skill.dist.rollback",
+      after: { skillId: input.skillId,snapshotId: snap.id,restoredVersion: previous?.version ?? null },
+      basis: ["公共分发资产与本工作区安装快照同一事务恢复；旧私有资产和其他工作区状态保留（MC-022）"] });
+    return { restoredVersion: previous?.version ?? null,snapshotId: snap.id };
+  });
 }
 
 /* ---------- 状态查询（技能中心 + 通栏通知投影） ---------- */
@@ -438,7 +431,7 @@ export async function distStatus(app: pg.Pool, scope: Scope) {
   const client = await app.connect();
   try {
     await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+    await setSkillScope(client, scope);
     const staging = await client.query(
       `SELECT id, skill_id, tier, status, approval_id, created_at, decided_at,
               package->>'name' AS name, package->>'version' AS version
@@ -477,7 +470,6 @@ export async function distStatus(app: pg.Pool, scope: Scope) {
       pendingCount: Number(pending.rows[0]?.c ?? 0),
     };
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally { client.release(); }
+    return await rollbackSkills(client, err);
+  } finally { releaseSkillClient(client); }
 }

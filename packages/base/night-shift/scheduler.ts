@@ -95,6 +95,7 @@ export async function ensureReady(
     // 事务级 RLS 上下文必须在显式事务内设置：autocommit 下 set_config(...,true) 语句结束即失效
     await client.query("BEGIN");
     await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
     // 同工作区同日期唯一一班（复合 PK 幂等）；旧格式 id 存量行命中 PK 冲突即跳过
     await client.query(
       `INSERT INTO night_runs (id, workspace_id, run_date, status) VALUES ($1,$2,$3,'ready')

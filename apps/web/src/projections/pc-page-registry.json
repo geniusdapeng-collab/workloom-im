@@ -1,0 +1,422 @@
+{
+  "schemaVersion": "workloom.pc-pages/v1",
+  "routes": [
+    {
+      "path": "/",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/account",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/activate",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/agents",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/agents/:agentId",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/approvals",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/assembly",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/configuration",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/customize",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/dev",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/development",
+      "source": "industry",
+      "capabilityId": "ai-pm.development",
+      "legacyPaths": [
+        "/p25"
+      ]
+    },
+    {
+      "path": "/event-ledger",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/events",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/exams",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/executive",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/guardrails",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/inbox",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/invite",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/login",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/members",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/memory",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/model-routing",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/models",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/night",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/onboarding",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/p0",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/p1",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/p2/:threadId",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/p21",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/p22",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/p23",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/p24",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/p26",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/p27",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/p28",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/p29",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/p3",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/p30",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/p31",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/p4",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/p5",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/p6",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/p6/create",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/p7",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/p8",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/p8/agent/:agentId",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/p9",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/partners",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/reports",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/service",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/skills",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/skills/create",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/tasks",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/tasks/:threadId",
+      "source": "base",
+      "legacyPaths": []
+    },
+    {
+      "path": "/workspaces",
+      "source": "base",
+      "legacyPaths": []
+    }
+  ],
+  "sources": {
+    "apps/web/src/App.tsx": "b3eccde629ea78e80182b6acf8b346281f7919f91d2f99b79c17104588feb77d",
+    "apps/web/src/audio/AudioEngine.ts": "05713d66be1a78f2832c0dece19475baefd5f23fad288ee48f69b33d219501f1",
+    "apps/web/src/audio/ambience.ts": "7d1feed9b9f4bf3429c3ff562009a09946ca705278de2ceb6674a99e5e434326",
+    "apps/web/src/audio/sfx.ts": "004ec691284b20ed39f1f3284114a8ef184b8f9b365e77851a0b4c67a1e54408",
+    "apps/web/src/components/AIFeedback.tsx": "7d91a6899e812b0c02175d7ef9a20329005c3824ff7b0f4e4b96e39c911f7731",
+    "apps/web/src/components/AgentAvatar.tsx": "9f5bcdd6b6eb8855af280e949477d2174dbf1326c72e3910bc044c26c8086c14",
+    "apps/web/src/components/AudioSettings.tsx": "3dccc3ba0d0fb1ce377479880dd1d87f1568b49494af3f84f7068b886bd1b15f",
+    "apps/web/src/components/Avatar3D.tsx": "8f21118320959db5b40c99cf05e7facb69ef9517805df01f069697e15c37a28a",
+    "apps/web/src/components/BackendGate.tsx": "0afaf41d49b9dfe49803d90b5f6ecf51511575a16db5041db4ebc87cf46371f2",
+    "apps/web/src/components/BusinessAvatar3D.tsx": "6bf778c0f5091335b4d8709f9e5b9d9eb6df3f820b79319d46253b043f683c2d",
+    "apps/web/src/components/CeremonyStage.tsx": "b3e2bc1287367b23e1bb785a99b20f53bb042fb7e3bd5f0c455f923323c8f0bd",
+    "apps/web/src/components/CineDirector.tsx": "b72d38e0781af780afcb48796c9d3efa3029c98a9f63b927c2650feb5363f083",
+    "apps/web/src/components/CommandCard.tsx": "8de3a785a0c74806538056daabc829b4594902c0967a0d9e63b101df9a6e85a8",
+    "apps/web/src/components/CreditsPanel.tsx": "55c4c914f2d790775b38dd64bf4e5409386448af80e13891170d09acca4b2f70",
+    "apps/web/src/components/Floor3D.tsx": "aa26cc125e70125a4f08a7f41e735abf54fbfdae697d646e7b64e9ed66f03dfa",
+    "apps/web/src/components/GazeSystem.tsx": "6a62489c452e77594e1990df6cd530307416ef0390429eb1f607c4e14abfa424",
+    "apps/web/src/components/HoverBubble.tsx": "b033f53c2855118d742c351a1eff5fc638e58093df43a003615f19736384f366",
+    "apps/web/src/components/MateWelcome.tsx": "68b7879e88de36baf4cc263b3abceeae01ff0571c168d9a3097cbc85855ed5f1",
+    "apps/web/src/components/RejectDialog.tsx": "649adf5ce106359f0ae6a8bacf8a6b711d62c34565ba8778a8d494551cc008cb",
+    "apps/web/src/components/SimBanner.tsx": "068d845c135ee2f7cfd83fdc68d90b2940422559f09285a3eeddb57be477ede7",
+    "apps/web/src/components/SkillDistBanner.tsx": "2c72b9a5cf4a769c3aad4771aa89a624e935330aff3b8446f2ac933b7f206239",
+    "apps/web/src/components/Stage3D.tsx": "901ffda9cbc352d25d0df3fff07a97f7d23b896a5e7bd69a27b303c82dca3b2d",
+    "apps/web/src/components/UrlQrCode.test.ts": "a4448aa6b38472707678d21d9993c934bb1ddc52a16e4f20e3af91e791cd5dd3",
+    "apps/web/src/components/UrlQrCode.tsx": "596d259c54a3faad0833833fbc67d6eee9aa450d0c531d3c8859cf693f043ca9",
+    "apps/web/src/components/ValueCounters.tsx": "f44949f948429ea6ecf5efc0ac4b6164bfb02f3670b3c00fa288c7b338a5b9a9",
+    "apps/web/src/components/WelcomeCeremony.tsx": "3cb229eba5c1f959075e7759fce9ec21504e8c731c93bd36840b0bd1e2368a3f",
+    "apps/web/src/components/cinematic.tsx": "e9e9f5875654f6f700bdf39b3d3908b31105188580b10a612f7bb8e52d4f6fc2",
+    "apps/web/src/components/hud/DispatchBar.tsx": "9aaa1fa1dec5342c88aaf68b68896394e76cea10891f1adcd6531ff8fc87f7d9",
+    "apps/web/src/components/hud/EmergencyBrake.tsx": "b1c4c266dd0460b1005c9b2c93452b67767c81e2f9914527c1e56503e0ba76dd",
+    "apps/web/src/components/hud/EventIdChip.tsx": "373ddeed52b4aff39f74a69ffe8f20b2590191fbe0c669c36b3baf5a61ed3e45",
+    "apps/web/src/components/hud/FenceLight.tsx": "06f741ca2b86f0eccc2fa1856a4403c0083910500ed112da7cff94cd59b07556",
+    "apps/web/src/components/hud/HandoffCard.tsx": "4cb6d3794cb6421a733e276cb98f1e4505fa79e73391e372c9cbfb78362e0523",
+    "apps/web/src/components/hud/KpiGauge.tsx": "3369728bc2bec4e5963222e0ab0de5014a410373f6eea946b0582d764aa7a9a8",
+    "apps/web/src/components/hud/NightStatusPill.tsx": "13b5712fd5b0ebb116c04615483cce8caec9b36b6875c2794772fa4fccd1cf07",
+    "apps/web/src/components/hud/PlanCompareCard.tsx": "723888439c62dbbbde41bd211d99f6792a1ee47fe543f80050d4dc2d70452d6b",
+    "apps/web/src/components/hud/QuestCard.tsx": "9f9e1575a09b382af350bf3ac9500efb4cf826e7f083c25fef7ddd8ed6dd006f",
+    "apps/web/src/components/hud/RadarAlertCard.tsx": "174426c5aba1e544abddb8252e55191de2ea7c0bfd3af1e57229da125c3bddfc",
+    "apps/web/src/components/hud/TriGestureBar.tsx": "e1967cfde696684a6416d5fdc7104ded1dd57d70f501f35d49883f9fc7532a48",
+    "apps/web/src/components/hud/XpBar.tsx": "d05d92260e2987d6ae5f21baaffaeca0a0916fc3e2376bf7c76cf2527ae148d9",
+    "apps/web/src/components/hud/feedback.tsx": "4a2eb44a24da4a28d060bfc9b523025117818db432cda9e310328e57a8b1dd41",
+    "apps/web/src/components/hud/gamification.tsx": "17a2ae4a7d854d41a4152760c357f3e86aecc576a7c32088a1ec427a59cbe057",
+    "apps/web/src/components/hud/index.ts": "1071dac706b210e206ec6f43d0cf7d928cf2cd673911086c2c3e390602268352",
+    "apps/web/src/components/hud/messages.tsx": "4a8265396a1f7414665f7c3adbec3b27c26457902766702bdfa5feb1e04bd7c7",
+    "apps/web/src/components/loomball/LoomBall.disabled.test.tsx": "8b6d8273a45a9026d86933f1c019aa30aca34b0f135509df41cc1fc2df5977e8",
+    "apps/web/src/components/loomball/LoomBall.test.tsx": "66e92f3aa863990f96f579c2f38be0d12c3bd361c3ed6c920c06a7314b827241",
+    "apps/web/src/components/loomball/LoomBall.tsx": "9e561d754b0fced2caddd7a612ea23b55159755da6414e95d84a99caaf8c907a",
+    "apps/web/src/components/loomball/agent-emotion.test.ts": "2df87d0fdc850a72d6bb00956ef7d7ea365796b0eba562ea473e66d9763bdc08",
+    "apps/web/src/components/loomball/agent-emotion.ts": "54e070f8357f7aba6be02f0f9fa7d8576cce6064b89c08a9bb0e4b0d6a86b000",
+    "apps/web/src/components/loomball/emotions-workloom.ts": "9f704d077f54709b6bb56a5b071761d2d9e7d911feb07c29dd873b6d49868ad4",
+    "apps/web/src/components/loomball/engine.test.ts": "ab21ed8f246d1d219b69d87fdb77500d51e5af70e8b2809f6bcf3a4415e2f060",
+    "apps/web/src/components/loomball/engine.ts": "02e2c80f334feaa054612b61111eb400a67eac211112ab624938c533d751501a",
+    "apps/web/src/components/loomball/index.ts": "3e70cc914b61fb4e19b91c84bf30dfede0f64c55e8ed0a4ed78876bb221938b4",
+    "apps/web/src/components/loomball/provenance.test.ts": "f3f8fecf21c0997627dafc6f128099d942be51639ba7dd953a45539c38f62ada",
+    "apps/web/src/components/loomball/useStableEmotion.ts": "a00b08f9f35bb4b36ad368a0f225d84730ee16dd13a7a2d855fe24cf2a8599a4",
+    "apps/web/src/components/loommate/LoomMate.tsx": "7713f3c1332937d2781720bc67d1fc7a4acee4641f30d863ae15bd2b212218f1",
+    "apps/web/src/components/loommate/MateLive2D.test.tsx": "ff0c99417b9f7623549e14230e2bc16d72e724585a7968438c689030a269da04",
+    "apps/web/src/components/loommate/MateLive2D.tsx": "2c674876513be53e23962e1bbf6cb85ede21e20698f0a0dc06ce53652672cf56",
+    "apps/web/src/components/loommate/MateWebGLRenderer.ts": "e9a7c047800c839c09209c27ef4d18633ac6c2e435ef93f8e07fe9f4acd4cbeb",
+    "apps/web/src/components/loommate/speechText.test.ts": "90fbf47d1bf1fc24fb504300af0305c05f071622d037977fecdcb5a322d7ec64",
+    "apps/web/src/components/loommate/speechText.ts": "c5523c2efe80c6a500f4727809c43727ef194e6925638a0797ec271d90736193",
+    "apps/web/src/components/star-ring/StarRing.tsx": "08c7b91c784b166a2843547e89a3028264969ed50ef3f03f02d0c3e800eb8c18",
+    "apps/web/src/components/welcomeScripts.test.ts": "f4fdd6640a63f9a06d3934de0f057688e06c398d48355f90a2e7e83493b9105b",
+    "apps/web/src/components/welcomeScripts.ts": "f69e8884e29234bc3a7017f9c0966a96ff83cfcb5a9b4b021283be24764d8d8f",
+    "apps/web/src/extensions/ai-pm/P25.tsx": "1de1a036f75734b1a9c2876b834f810cbf9fae32f402bd0622207e9b53ac965a",
+    "apps/web/src/extensions/ai-pm/routes.tsx": "e1e022070ffcd46f2415c8aa110c00bad69cd0af9c131c59d372dc21a8cc65f6",
+    "apps/web/src/lib/clientText.test.ts": "5d2097dc6ee3671675ddbe0a6b466dbc00882ae608cbb593dfaec00d4ec3f573",
+    "apps/web/src/lib/clientText.ts": "1a58d3d07188219def4130c2a642aad97676ff56f92dd7a1858444174a8b42c4",
+    "apps/web/src/lib/display.test.ts": "1fe9f60678c52469c73aeeb96297b0b4fc5d6a3fe3558212d55eec22d137612d",
+    "apps/web/src/lib/display.ts": "c7059af3d73f7d868cd957c5c1ac73ccdef520d01eced2dd557f1ced1d8dc54f",
+    "apps/web/src/lib/naming.test.ts": "8ad4a05a19e8912ad2dc0078c459c9b2531a6e5d7e356073ca76b13e2963cad1",
+    "apps/web/src/lib/naming.ts": "8d05e0df3b163ab4186e577af1555d1b9e389ded97a0ad1faad3f3a993b946bd",
+    "apps/web/src/lib/product.ts": "ae02364359cae62af8ba8fb94d46aaaabcb0ffee29d6b59a0d2ba22d3b1ef879",
+    "apps/web/src/lib/theaterDiff.test.ts": "a83b9f832e32e530974dfcc1ad9836a6abcf392057352c3fb5e31605576309a1",
+    "apps/web/src/lib/theaterDiff.ts": "1d3965eed9f5e07cbe3de48aa4cb1e08d132685cf5fef1c38ba98d31f57dbcbb",
+    "apps/web/src/lib/trpc.test.ts": "10aadf8037c0864e9cfc9cad65ef5a56056ab96ffe3d9e0f161fd2ff6e6c167d",
+    "apps/web/src/lib/trpc.ts": "292cd48a997b79e71cccabc03ef002837aba21b432b261ec49c3b640cbee5812",
+    "apps/web/src/lib/ui-state.test.ts": "268cb35e015a0a60884892480880fad24b0a6737884e7240ef5c463096cdc7b0",
+    "apps/web/src/lib/ui-state.ts": "0134a2fa44a4393ca82c50dfd574a5717cf7dbfeeb3fa81b5acfa215d081db4f",
+    "apps/web/src/lib/useAskRail.ts": "caa3939e518033b08e7fe0962988a0d1fc00fd4c7b8241858fa1f9a9c356737c",
+    "apps/web/src/lib/useNightTime.ts": "ccf604d36908f893f183f97df9381f1c1d50ee3fbc5e92fdf85cd0eae3ef6a29",
+    "apps/web/src/main.tsx": "9ec9eea9ce0a5ae01330512e7ca202b07ee3d725fbb1ffeaed00f3a094e289ec",
+    "apps/web/src/pages/accounts/Activate.tsx": "a4e288745799a61a0996de0253942cb823ef2081f364cccf8ce6c149a1cdc9af",
+    "apps/web/src/pages/accounts/InviteAccept.tsx": "4254957c4a8c33ebbde5f5f36d2a47fe4c448bcad3adbc1803aebaac117f0ff3",
+    "apps/web/src/pages/accounts/Login.tsx": "89cd50eb82af91a4cfb5969c4a77f0e6c5e7bcb994c49f0eed417dede360f8ac",
+    "apps/web/src/pages/accounts/Workspaces.tsx": "329a9fb5a5c898b48539ae6e26dcc8d61d68ed50db1c9e38f9af07cc93ced683",
+    "apps/web/src/pages/accounts/bare-routes-exit.test.tsx": "82bf83c70ecd3a1f3e88ae88932d8cb2d5d7e99ff25b2467b5635be915b56379",
+    "apps/web/src/pages/accounts/systemText.test.ts": "e04b8fe491ee176c2b5a876f9bff06d5a9099a1ec932737427b2bd496be60564",
+    "apps/web/src/pages/accounts/systemText.ts": "bc8794f8661396488798d20e5fe7d1ec95e1430cbf6206235c7f50049266fb55",
+    "apps/web/src/pages/dev/DevMatrix.tsx": "c86f0aa428830b55cf50fb0768fab403d570388cff934903bcaeea929d99cab6",
+    "apps/web/src/pages/observability/Observability.tsx": "c7e8401230bc890514e81763947d14392e88bb4f73a353b8cd8e5056c039e3ed",
+    "apps/web/src/pages/onboarding/CustomizeWizard.tsx": "81b07dc82605f547796d325105114138fa111a54e2dfc21a4b4b0d04aaea9f12",
+    "apps/web/src/pages/onboarding/Onboarding.tsx": "b546b370419f42db8e014f3def1703e876ae91d7fec644d96e7383340ec638bd",
+    "apps/web/src/pages/onboarding/systemText.test.ts": "adfedfdb16c61659ea023593025ae099b1cf9a7de548dcae2857f8af3afaafa7",
+    "apps/web/src/pages/onboarding/systemText.ts": "e17b463157627b06082fcfff651e13c10723702f3a31160a2062759f273f3289",
+    "apps/web/src/pages/p0/Floor.tsx": "279ddf1995baba63bb8365f3c166b2fdf4e4ba64b85be80244d363b1699198b1",
+    "apps/web/src/pages/p0/P0.tsx": "4a961ba39f6c210aa0c18a8e4e6f8099e2d62f0e357014c5a9237b6d45282e3c",
+    "apps/web/src/pages/p1/P1.tsx": "ddd85271dbf7e6016b5a9c5b43336114f63d210fa685d47ea129e65791f845d5",
+    "apps/web/src/pages/p2/P2.tsx": "6e88605374bdc651f90a0d51c6fbe136aa42e332fff0a26e151f3fa07420250e",
+    "apps/web/src/pages/p21/P21.tsx": "cea43cd942cec90ea96cdc3ed2c6a3a4bb65888afeee064caebb897aa2046a9c",
+    "apps/web/src/pages/p22/P22.tsx": "acb7f9215a1dcb17bede05ba7c011b675de70a63ec4716a306017b8c3c1d2063",
+    "apps/web/src/pages/p23/P23.tsx": "b307f3170a21df9aefac6e90b80beafdfb28cc7a980708e58d0aa69d1f016057",
+    "apps/web/src/pages/p23/systemText.test.ts": "ce79c5ce23042b8d876ce6488605ac87d3164fab646cf9bf07121cdd29abc952",
+    "apps/web/src/pages/p23/systemText.ts": "ba4e87a84003510cb05ea4b42a13a6056a9c72d57d631f3761cf03141a990561",
+    "apps/web/src/pages/p24/P24.tsx": "547748b17624f8dbfbe2a98ca5c502814f2c3addf1ba18b3b804d988f09bbfa6",
+    "apps/web/src/pages/p26/P26.tsx": "896688b078901c898b8f9904c65ff86a048caa43af6bb9ed1552c6efca306e55",
+    "apps/web/src/pages/p27/P27.tsx": "811eec5a906889775f925d82d7474b09c6d4a00a9e33624d5c53186a4b75f8cd",
+    "apps/web/src/pages/p28/P28.tsx": "cb9cd6265cb73b38a8aba5ff6d0709c229c01f5483f0605ad9fbf255ff8d1e5d",
+    "apps/web/src/pages/p29/P29.tsx": "3d1c759add0de8b0bf4445c2137c7184c105f0a27166677b1a583e6e430a26be",
+    "apps/web/src/pages/p3/P3.tsx": "2c44a2b393ffd1d82f65534e10c897bfa248021dc7c58e0d282c28541ca47a74",
+    "apps/web/src/pages/p30/P30.tsx": "b483277dce2a153904246f0090b0743b673caf215e3c085bf1b532d5b8208d06",
+    "apps/web/src/pages/p31/P31.tsx": "cdf1be034364e44bde1404b2f82c5eee3e133e970e8bccda98361cfb0b1b7437",
+    "apps/web/src/pages/p4/P4.tsx": "8bca9512b07cc4016d0218568f9a80b48f6cb36a6b41456597b23ec71fe1ef07",
+    "apps/web/src/pages/p5/P5.tsx": "d405e76e8216a038b6df93386b852cabaadbef19dec6615ef906140f5b3a6468",
+    "apps/web/src/pages/p6/P6.tsx": "e13d40b9b0d6c08d8461d3965d7d81daa66bf6491c199fcd6b8e6a3fee9e8b08",
+    "apps/web/src/pages/p7/P7.tsx": "0ef1e5375674a95228ee77b7150f179328f111a50c55cb36bcc86d5bf14a59d8",
+    "apps/web/src/pages/p8/P8.tsx": "02cdc45b7b9d38c431de021fda35ec8293a9792a873df8219b39dc619efb43ff",
+    "apps/web/src/pages/p9/P9.tsx": "2a31e703fe4b00968ee47675b384dc8965a8820eae3d01cd15499916d5d8a54d",
+    "apps/web/src/shell/Bridge.tsx": "5dbc79edef4d488cfb826b5ced87029ce67febd1789d2f1b6ac175ca6ae8972e",
+    "apps/web/src/shell/IndustryRoutes.test.tsx": "a30c57624784ce7901e2ab21c51f3fb7806fc74841c947eb77f0301d66227064",
+    "apps/web/src/shell/IndustryRoutes.tsx": "92279df8864bb51175a5c114a3f73ac11a8d67b2d602c30abdea2f4365dca2f9",
+    "apps/web/src/shell/IndustrySlots.test.tsx": "1f831ab43d23f7ce058fc9e51ab747effcc31e5b53675e495d0e97f57655a02e",
+    "apps/web/src/shell/IndustrySlots.tsx": "96f5d73eedc584130e68841a7be89b791e7892fa5f947cb72153e765d78e822d",
+    "apps/web/src/shell/NavMenu.test.ts": "016abdbfa71951c8442cd92cdf0f7a1466e536f42c24f1946fc34a3896c83fd5",
+    "apps/web/src/shell/NavMenu.tsx": "a33ce1051af288f257d05cff60930e9dfcecee9aacdf19c6437d8af17310b311",
+    "apps/web/src/shell/NavigationAccess.tsx": "b77125a40da6af752f1da8e60112ce2752c7e19058f2271c954c5776d25d2757",
+    "apps/web/src/shell/PlanSwitcher.tsx": "8b694557ae66f62dd3fcc14529480740d4701a66b83ecc590c094c1c5358ce8b",
+    "apps/web/src/shell/SideNav.tsx": "5c0fcc2e61b9ee750b4822643e717503a12ec1c6f2b56cb1414dfc44c6dac0cc",
+    "apps/web/src/vendor/loomball/grok-ball.js": "d03f37f261da2e22e55e9b0fa40dcdab62f0a6c6dd419632a088a7c4c9bb79fa",
+    "apps/web/src/vendor/loomball/grok-ball.ts": "13f773427f7bd0617ee2bfabeed4e343ade94853820465c098f9311dc66fec98",
+    "apps/web/src/vendor/loomball/index.ts": "fa3f03f0c65c81fcd9b2b9aca3eaaf80c16f789f5c1d7d8a96a44f17bab9727c",
+    "apps/web/src/voice/SubtitleBar.test.tsx": "27bd5dda42d443cdf95981e2ce0e963e17d25441797c5ac442b9a323214a1b03",
+    "apps/web/src/voice/SubtitleBar.tsx": "20e01f55b394582426aadba672dea9e312c0171b7e656b5e398dcc85fe3717b8",
+    "apps/web/src/voice/VoiceEngine.test.ts": "87ce4618ccdc4cd0748f3d1dc7f2060c1f089caa97d23c4e5f64e990340673c2",
+    "apps/web/src/voice/VoiceEngine.ts": "f5de2ee7c9adffc3e0e8f4a6ab869789963d3a1618ced85c809d5b706f4764ff",
+    "apps/web/src/voice/neuralVoice.test.ts": "e82b0c4584e84a62c1a68f44023eb74b539801cbf0b109be8531f650d81dab69",
+    "apps/web/src/voice/neuralVoice.ts": "cb2992522c317fb1931e6bfaf296f5ad322a92c956fe74905ba5bb80f5ab0924"
+  },
+  "digest": "b44f43059904afc9bdbdd6ff2ae06d982256be35e64bbe5637d47e7714884a21"
+}

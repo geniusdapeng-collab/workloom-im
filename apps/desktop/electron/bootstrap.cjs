@@ -6,8 +6,8 @@
  *   ② PostgreSQL：initdb（首启）→ pg_ctl 起服 → 角色/建库/vector（desktop-bootstrap-db.mjs）
  *   ③ NATS JetStream：内嵌 nats-server 用户态拉起（缺失降级 memory，不阻断）
  *   ④ 配置：.env.defaults → .env（首启），JWT_SECRET 随机化
- *   ⑤ 引导：migrate + seed-aipm（幂等，.bootstrapped 哨兵）
- *   ⑥ 服务：server(8787) + web preview(5173)，健康检查 90s
+ *   ⑤ 引导：migrate（每版 .bootstrapped）+ 示例 seed（仅首次，.example-seeded 独立哨兵）
+ *   ⑥ 服务：server(8787) + 自包含静态工作台(5173)，健康检查 90s
  *
  * 本文件不依赖 electron——CI 冒烟直接以 Node 运行：
  *   node apps/desktop/electron/bootstrap.cjs --smoke --resources <payload目录> --support <可写目录>
@@ -656,6 +656,88 @@ function writeInstallCheckpoint(supportDir, state) {
   }, null, 2)}\n`, 0o600);
 }
 
+function readCompletionFlag(file, label) {
+  try {
+    if (fs.readFileSync(file, "utf8").trim() !== "done") {
+      throw new Error(`${label}状态损坏，拒绝重复装配示例数据`);
+    }
+    return true;
+  } catch (error) {
+    if (error?.code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+/**
+ * .bootstrapped 在旧版本中只会在迁移和所有种子成功后写入。先把这个历史成功事实
+ * 原子迁移到版本无关的哨兵，再允许 payload / 数据库认证引导清除 .bootstrapped。
+ * 此事实属于 supportDir 中的持久数据库，不随载荷替换或回滚而撤销。
+ */
+function preserveExampleSeedCompletion(supportDir) {
+  const seedFlag = path.join(supportDir, ".example-seeded");
+  if (readCompletionFlag(seedFlag, "示例种子成功")) return true;
+  if (!readCompletionFlag(path.join(supportDir, ".bootstrapped"), "首启完成")) return false;
+  atomicWrite(seedFlag, "done\n", 0o600);
+  return true;
+}
+
+function runDesktopDatabaseBootstrap({
+  supportDir,
+  runtimeDir,
+  nodeBin,
+  tsxCli,
+  env = process.env,
+  status = () => {},
+  checkpoint = () => {},
+  throwIfAborted = () => {},
+}) {
+  const seedCompleted = preserveExampleSeedCompletion(supportDir);
+  const bootFlag = path.join(supportDir, ".bootstrapped");
+  if (fs.existsSync(bootFlag)) return { migrated: false, seeded: false };
+  throwIfAborted();
+  checkpoint("database", seedCompleted
+    ? "正在执行数据库迁移，保留已有团队与经营数据"
+    : "正在执行数据库迁移与示例装配", { percent: 70, etaSeconds: 38 });
+  status("→ 正在升级数据结构…", { phase: "database-migrate", percent: 70, etaSeconds: 38 });
+  const mig = run(nodeBin, [tsxCli, "--env-file=.env", "scripts/migrate.ts"], {
+    cwd: runtimeDir, env,
+  });
+  if (mig.code !== 0) throw new Error(`数据库迁移失败：${(mig.err || mig.out).slice(-400)}`);
+  throwIfAborted();
+
+  if (!seedCompleted) {
+    // 种子仍由各产品自己的 .env.defaults 选择；行业数据和围栏定义不进入公共机制。
+    const defaultsText = fs.readFileSync(path.join(runtimeDir, ".env.defaults"), "utf8");
+    const seedScriptSpec = defaultsText.match(/^DESKTOP_SEED_SCRIPT=(.*)$/mu)?.[1].trim()
+      ?? "scripts/seed-aipm.ts";
+    const seedScripts = seedScriptSpec.split(",").map((script) => script.trim()).filter(Boolean);
+    if (seedScripts.length === 0) throw new Error("演示数据种子配置为空");
+    for (const [seedIndex, seedScript] of seedScripts.entries()) {
+      throwIfAborted();
+      status("→ 正在装配示例团队与起步数据…", {
+        phase: "example-seed",
+        percent: 78 + Math.floor((seedIndex / seedScripts.length) * 6),
+        etaSeconds: Math.max(18, 30 - seedIndex * 5),
+      });
+      if (!fs.existsSync(path.join(runtimeDir, seedScript))) {
+        throw new Error(`演示数据种子缺失（${seedScript}）`);
+      }
+      const seed = run(nodeBin, [tsxCli, "--env-file=.env", seedScript], {
+        cwd: runtimeDir, env,
+      });
+      if (seed.code !== 0) throw new Error(`演示数据种子失败（${seedScript}）：${(seed.err || seed.out).slice(-400)}`);
+      throwIfAborted();
+    }
+    // 全部真实种子命令成功后才记录；之后的启动失败也不能重放已成功的种子。
+    atomicWrite(path.join(supportDir, ".example-seeded"), "done\n", 0o600);
+    status("示例团队已装配", { phase: "example-ready", percent: 85, etaSeconds: 15 });
+  } else {
+    status("已有团队与经营数据已保留", { phase: "example-preserved", percent: 85, etaSeconds: 15 });
+  }
+  atomicWrite(bootFlag, "done", 0o600);
+  return { migrated: true, seeded: !seedCompleted };
+}
+
 /**
  * 在 supportDir 同一文件系统内完成“先装配、后换入”。任何换入阶段异常都会恢复
  * 原目录、VERSION 与首航哨兵。调用方必须在修改持久数据库认证前 commit：凭据轮换
@@ -673,6 +755,7 @@ function installPayloadAtomically({ sourceRoot, supportDir, payloadVer, previous
   const bootFlag = path.join(supportDir, ".bootstrapped");
   const oldVersion = fs.existsSync(versionFile) ? fs.readFileSync(versionFile) : null;
   const oldBootFlag = fs.existsSync(bootFlag) ? fs.readFileSync(bootFlag) : null;
+  preserveExampleSeedCompletion(supportDir);
   const movedNew = [];
   const movedOld = [];
   let closed = false;
@@ -904,11 +987,12 @@ async function bootstrap(opts) {
   const TSX_CLI = fs.existsSync(path.join(RUNTIME, "node_modules", "tsx", "dist", "cli.mjs"))
     ? path.join(RUNTIME, "node_modules", "tsx", "dist", "cli.mjs")
     : path.join(RUNTIME, "node_modules", ".bin", "tsx");
-  const VITE_JS = path.join(RUNTIME, "node_modules", "vite", "bin", "vite.js");
+  const WEB_SERVER = path.join(RUNTIME, "scripts", "desktop-web.mjs");
   const DB_HELPER = path.join(RUNTIME, "scripts", "desktop-bootstrap-db.mjs");
   if (!fs.existsSync(NODE_BIN)) throw new Error(`载荷不完整：Node 运行时缺失（${NODE_BIN}）`);
   if (!fs.existsSync(TSX_CLI)) throw new Error("载荷不完整：tsx 缺失");
-  if (!fs.existsSync(VITE_JS)) throw new Error("载荷不完整：vite 缺失");
+  if (!fs.existsSync(WEB_SERVER)) throw new Error("载荷不完整：桌面工作台服务脚本缺失");
+  if (!fs.existsSync(path.join(RUNTIME, "apps", "web", "dist", "index.html"))) throw new Error("载荷不完整：工作台构建产物缺失");
   if (!fs.existsSync(DB_HELPER)) throw new Error("载荷不完整：数据库安全引导 helper 缺失");
   for (const executable of ["postgres", "pg_ctl", "initdb"]) {
     if (!fs.existsSync(pgBin(executable))) throw new Error(`载荷不完整：PostgreSQL ${executable} 缺失`);
@@ -939,6 +1023,7 @@ async function bootstrap(opts) {
   });
   let databaseState = databaseStateRecord.state;
   const bootFlag = path.join(supportDir, ".bootstrapped");
+  preserveExampleSeedCompletion(supportDir);
   if (databaseStateRecord.created || !clusterExisted) fs.rmSync(bootFlag, { force: true });
   if (!clusterExisted && databaseState.cluster) {
     throw new Error("持久状态绑定的 PostgreSQL 实例已缺失，拒绝静默初始化为另一实例");
@@ -1113,53 +1198,23 @@ async function bootstrap(opts) {
     say("⚠ 内嵌 nats-server 未随包——事件总线降级 memory");
   }
 
-  /* ---------- 3. 首启引导：迁移 + 种子（幂等） ---------- */
-  if (!fs.existsSync(bootFlag)) {
-    throwIfAborted();
-    checkpoint("database", "正在执行数据库迁移与示例装配", { targetVersion: payloadVer, percent: 70, etaSeconds: 38 });
-    status("→ 正在升级数据结构…", { phase: "database-migrate", percent: 70, etaSeconds: 38 });
-    const mig = run(NODE_BIN, [TSX_CLI, "--env-file=.env", "scripts/migrate.ts"], {
-      cwd: RUNTIME, env: serverEnv,
-    });
-    if (mig.code !== 0) throw new Error(`数据库迁移失败：${(mig.err || mig.out).slice(-400)}`);
-    throwIfAborted();
-    // 种子脚本按仓配置（.env.defaults DESKTOP_SEED_SCRIPT；不在 base-sync 同步范围）——
-    // 基座出厂 AI 产品经理包；行业版子仓配自己行业种子（672cf7b 硬编码 hotel 根因）
-    let seedScriptSpec = "scripts/seed-aipm.ts";
-    try {
-      const m = fs.readFileSync(path.join(RUNTIME, ".env.defaults"), "utf-8").match(/^DESKTOP_SEED_SCRIPT=(.+)$/m);
-      if (m) seedScriptSpec = m[1].trim();
-    } catch { /* 缺省即可 */ }
-    const seedScripts = seedScriptSpec.split(",").map((s) => s.trim()).filter(Boolean);
-    if (seedScripts.length === 0) throw new Error("演示数据种子配置为空");
-    for (const [seedIndex, seedScript] of seedScripts.entries()) {
-      throwIfAborted();
-      status("→ 正在装配示例团队与起步数据…", {
-        phase: "example-seed",
-        percent: 78 + Math.floor((seedIndex / seedScripts.length) * 6),
-        etaSeconds: Math.max(18, 30 - seedIndex * 5),
-      });
-      if (!fs.existsSync(path.join(RUNTIME, seedScript))) {
-        throw new Error(`演示数据种子缺失（${seedScript}）`);
-      }
-      const seed = run(NODE_BIN, [TSX_CLI, "--env-file=.env", seedScript], {
-        cwd: RUNTIME, env: serverEnv,
-      });
-      if (seed.code !== 0) throw new Error(`演示数据种子失败（${seedScript}）：${(seed.err || seed.out).slice(-400)}`);
-      throwIfAborted();
-    }
-    fs.writeFileSync(bootFlag, "done");
-    status("示例团队已装配", { phase: "example-ready", percent: 85, etaSeconds: 15 });
-  }
+  /* ---------- 3. 数据结构按版升级；示例数据只完成一次 ---------- */
+  runDesktopDatabaseBootstrap({
+    supportDir, runtimeDir: RUNTIME, nodeBin: NODE_BIN, tsxCli: TSX_CLI,
+    env: serverEnv, status, throwIfAborted,
+    checkpoint: (phase, detail, progress) => checkpoint(phase, detail, {
+      targetVersion: payloadVer, ...progress,
+    }),
+  });
 
-  /* ---------- 4. 起服务：server(8787) + web preview(5173) ---------- */
+  /* ---------- 4. 起服务：server(8787) + 静态工作台(5173) ---------- */
   status("→ 启动 WorkLoom 服务…", { phase: "services-start", percent: 88, etaSeconds: 12 });
   checkpoint("services", "正在启动本机服务并执行健康检查", { targetVersion: payloadVer, percent: 88, etaSeconds: 12 });
   const serverProc = spawnLogged(NODE_BIN, [TSX_CLI, `--env-file=${envFile}`, "src/index.ts"],
     { cwd: path.join(RUNTIME, "apps", "server"), env: serverEnv }, path.join(logDir, "server.log"));
   children.push(serverProc);
-  const webProc = spawnLogged(NODE_BIN, [VITE_JS, "preview", "--host", "127.0.0.1", "--port", String(WEB_PORT), "--strictPort"],
-    { cwd: path.join(RUNTIME, "apps", "web"), env: serverEnv }, path.join(logDir, "web.log"));
+  const webProc = spawnLogged(NODE_BIN, [WEB_SERVER, "--dist", path.join(RUNTIME, "apps", "web", "dist"), "--port", String(WEB_PORT), "--server-port", String(SERVER_PORT)],
+    { cwd: RUNTIME, env: serverEnv }, path.join(logDir, "web.log"));
   children.push(webProc);
 
   status("→ 等待工作台与服务就绪…", { phase: "services-health", percent: 90, etaSeconds: 10 });
@@ -1267,6 +1322,8 @@ if (require.main === module) {
 module.exports = {
   bootstrap,
   installPayloadAtomically,
+  preserveExampleSeedCompletion,
+  runDesktopDatabaseBootstrap,
   writeInstallCheckpoint,
   parseDesktopPort,
   normalizeDataDirectory,

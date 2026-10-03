@@ -88,6 +88,7 @@ copy scripts/migrate.ts "$R/scripts/"
 copy scripts/desktop-bootstrap-db.mjs "$R/scripts/"
 copy scripts/product-runtime.mjs "$R/scripts/"
 copy scripts/vite-product.mjs "$R/scripts/"
+copy scripts/desktop-web.mjs "$R/scripts/"
 for sf in scripts/seed*.ts; do copy "$sf" "$R/scripts/"; done  # 全部行业种子随包（按 DESKTOP_SEED_SCRIPT 选用）
 printf '%s\n' "$VERSION" > "$R/VERSION"
 # 源码不携带 node_modules：各包自带 pnpm 链接版会抢占解析且缺嵌套依赖（v2.0.8 esbuild 缺失实证），
@@ -184,7 +185,7 @@ copy apps/desktop/windows/WorkLoom.bat "$PKG/WorkLoom.bat"
 copy apps/desktop/electron/bootstrap.cjs "$PKG/bootstrap.cjs"
 
 for f in node_modules/tsx/package.json node_modules/hono/package.json scripts/migrate.ts \
-         scripts/product-runtime.mjs scripts/vite-product.mjs product.manifest.json apps/web/vite.config.ts; do
+         scripts/product-runtime.mjs scripts/vite-product.mjs product.manifest.json scripts/desktop-web.mjs apps/web/dist/index.html; do
   [ -f "$R/$f" ] || { echo "❌ 应急载荷自检失败：runtime/$f 缺失"; exit 1; }
 done
 node scripts/payload-policy.mjs assert-runtime "$R"

@@ -84,7 +84,7 @@ for d in "${RUNTIME_SOURCE_DIRS[@]}"; do
   mkdir -p "$R/$(dirname "$d")"
   copy "$d" "$R/$(dirname "$d")/"
 done
-cp scripts/migrate.ts scripts/desktop-bootstrap-db.mjs scripts/product-runtime.mjs scripts/vite-product.mjs "$R/scripts/"
+cp scripts/migrate.ts scripts/desktop-bootstrap-db.mjs scripts/product-runtime.mjs scripts/vite-product.mjs scripts/desktop-web.mjs "$R/scripts/"
 cp scripts/seed*.ts "$R/scripts/"  # 全部行业种子随包（seed/seed-aipm/seed-geo/seed-video/seed-consulting/seed-boost/seed-platform…按仓配置选用）
 printf '%s\n' "$VERSION" > "$R/VERSION"
 # 源码不携带 node_modules：运行期统一由下方 npm 扁平化安装的根 node_modules 提供（v2.0.8 实证）
@@ -194,7 +194,7 @@ fi
 #      DMG 带着残缺载荷照出——装配脚本必须自证完整，防"静默半成品"） ----------
 for f in runtime/node_modules/tsx/package.json runtime/node_modules/hono/package.json \
          runtime/scripts/migrate.ts runtime/scripts/product-runtime.mjs runtime/scripts/vite-product.mjs \
-         runtime/product.manifest.json runtime/apps/web/vite.config.ts; do
+         runtime/product.manifest.json runtime/scripts/desktop-web.mjs runtime/apps/web/dist/index.html; do
   [ -f "$OUT/$f" ] || { echo "❌ 载荷自检失败：$f 缺失"; exit 1; }
 done
 # 种子脚本按仓各异（seed-aipm/seed-trading/seed-video…），存在其一即可

@@ -35,6 +35,7 @@ import {
 import {
   installSkill, uninstallSkill, createSkillDraft, dryRunSkill, listSkills, listInstalls,
   resolveAgentFenceBindings, isSignedSource, isAssetReusable, detectFenceConflicts, SkillError, teamSkillId,
+  withSkillScope,
 } from "@workloom/base/skills";
 import { runInspectionScan, dispatchFromAnomaly, resolveAnomaly } from "@workloom/base/inspection";
 import { hotelInspectionAdapter } from "../apps/server/src/industry/hotel/inspection-adapter.js";
@@ -1129,16 +1130,32 @@ g("夜班事件 who=system 归因", async () => {
 
 /* ================= H · 技能体系（20 条） ================= */
 const h = C("H");
+/** 越区夹具必须是数据库里真实存在且归属已核验的工作区，不能只拼一个 ID。 */
+async function ensureSuiteSkillWorkspace(workspaceId: string): Promise<void> {
+  const ownerUrl = process.env.DATABASE_URL;
+  assert(ownerUrl, "技能越区夹具需要显式 DATABASE_URL owner 连接");
+  const owner = new pg.Client({ connectionString: ownerUrl });
+  await owner.connect();
+  try {
+    await owner.query(`INSERT INTO workspaces (id,tenant_id,name,slug,industry)
+      SELECT $1,tenant_id,$2,$1,industry FROM workspaces WHERE id=$3 AND tenant_id=$4
+      ON CONFLICT (id) DO NOTHING`, [workspaceId, `技能套件 ${SFX}`, scope.workspaceId, scope.tenantId]);
+    const actual = await owner.query(`SELECT 1 FROM workspaces WHERE id=$1 AND tenant_id=$2`, [workspaceId, scope.tenantId]);
+    eq(actual.rowCount, 1, "技能夹具工作区真实存在且同租户");
+  } finally { await owner.end(); }
+}
 h("teamSkillId 内嵌 workspace（#23 口径）", () => {
   eq(teamSkillId("差评 SOP", "ws-yunqi"), "skill-t-ws-yunqi-差评-sop", "ID 隔离");
 });
 h("同名技能跨区不互覆盖", async () => {
   const scopeB = { tenantId: scope.tenantId, workspaceId: `ws-suite-b-${SFX}` };
+  await ensureSuiteSkillWorkspace(scopeB.workspaceId);
   const triplet = { trigger: "t", steps: ["s"], boundary: "b" };
   const x = await createSkillDraft(app, gw, scope, { name: `同名-${SFX}`, description: "A", triplet, by: "MEM-001" });
   const y = await createSkillDraft(app, gw, scopeB, { name: `同名-${SFX}`, description: "B", triplet, by: "MEM-001" });
   assert(x.skillId !== y.skillId, "ID 不同");
-  await qApp(`DELETE FROM skills WHERE id = ANY($1)`, [[x.skillId, y.skillId]]);
+  await qApp(`DELETE FROM skills WHERE id=$1`, [x.skillId]);
+  await withSkillScope(app, scopeB, (client) => client.query(`DELETE FROM skills WHERE id=$1`, [y.skillId]));
 });
 h("同名再生成版本递增", async () => {
   const triplet = { trigger: "t", steps: ["s"], boundary: "b" };
@@ -1187,11 +1204,12 @@ h("卸载即并集收缩", async () => {
 });
 h("他区技能安装拦截（#23）", async () => {
   const scopeB = { tenantId: scope.tenantId, workspaceId: `ws-suite-c-${SFX}` };
+  await ensureSuiteSkillWorkspace(scopeB.workspaceId);
   const d = await createSkillDraft(app, gw, scopeB, { name: `他区-${SFX}`, description: "d", triplet: { trigger: "t", steps: ["s"], boundary: "b" }, by: "MEM-001" });
   let threw = false;
   try { await installSkill(app, gw, scope, { skillId: d.skillId, by: "MEM-001" }); } catch (err) { threw = err instanceof SkillError && (err as SkillError).code === "NOT_SIGNED"; }
   assert(threw, "他区应拦");
-  await qApp(`DELETE FROM skills WHERE id=$1`, [d.skillId]);
+  await withSkillScope(app, scopeB, (client) => client.query(`DELETE FROM skills WHERE id=$1`, [d.skillId]));
 });
 h("industry 未脱敏拦截（L8.1）", async () => {
   await qApp(`INSERT INTO skills (id, level, name, version, description, fence_bindings, body, desensitized) VALUES ($1,'industry','x','1.0.0','', '[]','',false) ON CONFLICT (id) DO NOTHING`, [`skill-ind-${SFX}`]);
@@ -1225,7 +1243,9 @@ h("isAssetReusable 验证闸门", () => {
 h("技能列表 team 隔离", async () => {
   const d = await createSkillDraft(app, gw, scope, { name: `列表-${SFX}`, description: "d", triplet: { trigger: "t", steps: ["s"], boundary: "b" }, by: "MEM-001" });
   const mine = await listSkills(app, scope, { level: "team" });
-  const other = await listSkills(app, { tenantId: scope.tenantId, workspaceId: `ws-other-${SFX}` }, { level: "team" });
+  const otherScope = { tenantId: scope.tenantId, workspaceId: `ws-other-${SFX}` };
+  await ensureSuiteSkillWorkspace(otherScope.workspaceId);
+  const other = await listSkills(app, otherScope, { level: "team" });
   assert(mine.some((s) => s.id === d.skillId), "本区可见");
   assert(!other.some((s) => s.id === d.skillId), "他区不可见");
   await qApp(`DELETE FROM skills WHERE id=$1`, [d.skillId]);
@@ -1249,7 +1269,7 @@ h("技能安装事件留痕（skill.installed）", async () => {
 h("CHECK 约束：team 技能 ID 必须 skill-t- 前缀（#16）", async () => {
   let threw = false;
   try {
-    await app.query(`INSERT INTO skills (id, level, name, version, description, fence_bindings, body, desensitized) VALUES ('skill-fake-1','team','x','1.0.0','', '[]','',false)`);
+    await qApp(`INSERT INTO skills (id, level, name, version, description, fence_bindings, body, desensitized, owner_tenant_id, owner_workspace_id, ownership_state, ownership_reason) VALUES ('skill-fake-1','team','x','1.0.0','', '[]','',false,$1,$2,'owned','explicit_scope')`, [scope.tenantId, scope.workspaceId]);
   } catch { threw = true; }
   assert(threw, "DB 约束应拒伪造");
 });
@@ -1297,14 +1317,16 @@ h("D15-② 流水线：扫描不过连提案都进不了", async () => {
   const { proposePublish } = await import("@workloom/base/skills");
   let threw = false;
   try {
-    await proposePublish(app, gw, scope, { skillId: `skill-t-ws-yunqi-x-${SFX}`, skillName: "x", body: "联系 13812345678", description: "", by: "MEM-001" });
+    const skillId = `skill-t-ws-yunqi-x-${SFX}`;
+    await qApp(`INSERT INTO skills (id,level,name,version,description,body,owner_tenant_id,owner_workspace_id,ownership_state,ownership_reason) VALUES ($1,'team','x','1.0.0','','联系 13812345678',$2,$3,'owned','explicit_scope')`, [skillId, scope.tenantId, scope.workspaceId]);
+    await proposePublish(app, gw, scope, { skillId, skillName: "x", body: "联系 13812345678", description: "", by: "MEM-001" });
   } catch (err) { threw = String((err as Error).message).includes("上架扫描未通过"); }
   assert(threw, "PII 提案被门禁拦截");
 });
 h("D15-② 流水线：提案 → 双人复核 → 完成上架全链路", async () => {
   const { proposePublish, reviewPublish, completePublish } = await import("@workloom/base/skills");
   const skillId = `skill-t-ws-yunqi-pub-${SFX}`;
-  await qApp(`INSERT INTO skills (id, level, bundle, name, version, description, fence_bindings, body, desensitized) VALUES ($1,'team','workloom-hotel','上架测试','1.0.0','干净描述','[]','干净正文',false)`, [skillId]);
+  await qApp(`INSERT INTO skills (id, level, bundle, name, version, description, fence_bindings, body, desensitized, owner_tenant_id, owner_workspace_id, ownership_state, ownership_reason) VALUES ($1,'team','workloom-hotel','上架测试','1.0.0','干净描述','[]','干净正文',false,$2,$3,'owned','explicit_scope')`, [skillId, scope.tenantId, scope.workspaceId]);
   const p = await proposePublish(app, gw, scope, { skillId, skillName: "上架测试", body: "干净正文", description: "干净描述", by: "MEM-001" });
   assert(!p.deduped, "提案成功");
   const r1 = await reviewPublish(app, gw, scope, { reviewId: p.reviewId, by: "MEM-002", gesture: "approve" });
@@ -1323,8 +1345,8 @@ h("D15-② 流水线：提案 → 双人复核 → 完成上架全链路", async
 h("D15-② 流水线：提案人禁止自批", async () => {
   const { proposePublish, reviewPublish } = await import("@workloom/base/skills");
   const skillId = `skill-t-ws-yunqi-self-${SFX}`;
-  await qApp(`INSERT INTO skills (id, level, bundle, name, version, description, fence_bindings, body, desensitized) VALUES ($1,'team','workloom-hotel','自批测试','1.0.0','d','[]','b',false)`, [skillId]);
-  const p = await proposePublish(app, gw, scope, { skillId, skillName: "自批测试", body: "干净正文", description: "", by: "MEM-001" });
+  await qApp(`INSERT INTO skills (id, level, bundle, name, version, description, fence_bindings, body, desensitized, owner_tenant_id, owner_workspace_id, ownership_state, ownership_reason) VALUES ($1,'team','workloom-hotel','自批测试','1.0.0','d','[]','b',false,$2,$3,'owned','explicit_scope')`, [skillId, scope.tenantId, scope.workspaceId]);
+  const p = await proposePublish(app, gw, scope, { skillId, skillName: "自批测试", body: "b", description: "d", by: "MEM-001" });
   let threw = false;
   try { await reviewPublish(app, gw, scope, { reviewId: p.reviewId, by: "MEM-001", gesture: "approve" }); } catch { threw = true; }
   assert(threw, "自批必拒");
@@ -1333,8 +1355,8 @@ h("D15-② 流水线：提案人禁止自批", async () => {
 h("D15-② 流水线：驳回必填原因 + 重复复核幂等", async () => {
   const { proposePublish, reviewPublish } = await import("@workloom/base/skills");
   const skillId = `skill-t-ws-yunqi-rej-${SFX}`;
-  await qApp(`INSERT INTO skills (id, level, bundle, name, version, description, fence_bindings, body, desensitized) VALUES ($1,'team','workloom-hotel','驳回测试','1.0.0','d','[]','b',false)`, [skillId]);
-  const p = await proposePublish(app, gw, scope, { skillId, skillName: "驳回测试", body: "干净正文", description: "", by: "MEM-001" });
+  await qApp(`INSERT INTO skills (id, level, bundle, name, version, description, fence_bindings, body, desensitized, owner_tenant_id, owner_workspace_id, ownership_state, ownership_reason) VALUES ($1,'team','workloom-hotel','驳回测试','1.0.0','d','[]','b',false,$2,$3,'owned','explicit_scope')`, [skillId, scope.tenantId, scope.workspaceId]);
+  const p = await proposePublish(app, gw, scope, { skillId, skillName: "驳回测试", body: "b", description: "d", by: "MEM-001" });
   let noReason = false;
   try { await reviewPublish(app, gw, scope, { reviewId: p.reviewId, by: "MEM-002", gesture: "reject" }); } catch { noReason = true; }
   assert(noReason, "空原因驳回必拒");
@@ -1346,7 +1368,7 @@ h("D15-② 流水线：驳回必填原因 + 重复复核幂等", async () => {
 });
 h("D15-④ 吊销：吊销技能禁止新安装（kill switch）", async () => {
   const { revokeSkill, installSkill } = await import("@workloom/base/skills");
-  const skillId = `skill-t-ws-yunqi-rev-${SFX}`;
+  const skillId = `skill-o-suite-rev-${SFX}`;
   await qApp(`INSERT INTO skills (id, level, bundle, name, version, description, fence_bindings, body, desensitized) VALUES ($1,'official','workloom-hotel','吊销测试','1.0.0','d','[]','b',true)`, [skillId]);
   await revokeSkill(app, gw, scope, { skillId, reason: "发现恶意行为", by: "MEM-001" });
   let threw = false;
@@ -1355,7 +1377,7 @@ h("D15-④ 吊销：吊销技能禁止新安装（kill switch）", async () => {
 });
 h("D15-④ 吊销：装配围栏并集排除吊销技能", async () => {
   const { revokeSkill, installSkill, resolveAgentFenceBindings } = await import("@workloom/base/skills");
-  const skillId = `skill-t-ws-yunqi-revasm-${SFX}`;
+  const skillId = `skill-o-suite-revasm-${SFX}`;
   // 哨兵绑定 R3：真实规则且种子安装行快照（R1R2/R4R5/R6/[]）无人持有（R5 会被 channel-reconciler 干扰，D31 实测；E8.1 要求真实规则）
   await qApp(`INSERT INTO skills (id, level, bundle, name, version, description, fence_bindings, body, desensitized) VALUES ($1,'official','workloom-hotel','装配吊销','1.0.0','d','["R3"]','b',true)`, [skillId]);
   await installSkill(app, gw, scope, { skillId, by: "MEM-001" });
@@ -1371,7 +1393,7 @@ h("D15-④ 吊销：装配围栏并集排除吊销技能", async () => {
 });
 h("D15-④ 吊销：重复吊销幂等", async () => {
   const { revokeSkill } = await import("@workloom/base/skills");
-  const skillId = `skill-t-ws-yunqi-rev2-${SFX}`;
+  const skillId = `skill-o-suite-rev2-${SFX}`;
   await qApp(`INSERT INTO skills (id, level, bundle, name, version, description, fence_bindings, body, desensitized) VALUES ($1,'official','workloom-hotel','重复吊销','1.0.0','d','[]','b',true)`, [skillId]);
   const r1 = await revokeSkill(app, gw, scope, { skillId, reason: "第一次", by: "MEM-001" });
   const r2 = await revokeSkill(app, gw, scope, { skillId, reason: "第二次", by: "MEM-001" });
@@ -1380,7 +1402,7 @@ h("D15-④ 吊销：重复吊销幂等", async () => {
 });
 h("D15-⑤ 版本通道：安装记版本快照，升版后可检出更新", async () => {
   const { installSkill, listSkillUpdates, uninstallSkill } = await import("@workloom/base/skills");
-  const skillId = `skill-t-ws-yunqi-ver-${SFX}`;
+  const skillId = `skill-o-suite-ver-${SFX}`;
   await qApp(`INSERT INTO skills (id, level, bundle, name, version, description, fence_bindings, body, desensitized) VALUES ($1,'official','workloom-hotel','版本通道','1.0.0','d','[]','b',true)`, [skillId]);
   await installSkill(app, gw, scope, { skillId, by: "MEM-001" });
   eq((await listSkillUpdates(app, scope)).filter((u) => u.skillId === skillId).length, 0, "同版无更新提示");
@@ -1978,6 +2000,7 @@ p("事务中途出错回滚不留脏数据", async () => {
   const c = await app.connect();
   try {
     await c.query("BEGIN");
+    await c.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
     await c.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
     await c.query(`INSERT INTO threads (id, tenant_id, workspace_id, title, mode, status, created_by) VALUES ($1,$2,$3,'x','quest','queued','MEM-001')`, [tid, scope.tenantId, scope.workspaceId]);
     throw new Error("模拟中途失败");

@@ -245,7 +245,7 @@ d("PG 集成 · 账号全链路（0027 迁移后）", () => {
       phone, code: devCode, displayName: "老板甲",
       tenantName: "测试民宿集团", workspaceName: "云栖一号店", workspaceSlug: wsSlug, industry: "hotel",
     });
-    expect(r.identity.role).toBe("owner");
+    expect(r.identity?.role).toBe("owner");
     expect(r.accessToken.split(".").length).toBe(3);
     expect(r.refreshToken.length).toBeGreaterThan(20);
     session = r;

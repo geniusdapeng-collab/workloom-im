@@ -27,6 +27,7 @@
 const { app, BrowserWindow, Tray, Menu, Notification, nativeImage, shell, dialog } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
+const { collectStartupDiagnostics, sanitizeDiagnosticText } = require("./diagnostics.cjs");
 
 // 测试/多产品实例的浏览器存储必须与运行时支持目录一致，避免 Local Storage 串包。
 if (process.env.WORKLOOM_SUPPORT_DIR) {
@@ -186,33 +187,11 @@ function showSplash(message, error = "", reference = lastBootstrapReference ?? "
 }
 
 function diagnosticText() {
-  const logDir = path.join(supportDirResolved ?? app.getPath("userData"), "logs");
-  const sections = [
-    "WorkLoom 启动诊断",
-    `导出时间：${new Date().toISOString()}`,
-    `应用版本：${app.getVersion()}`,
-    `系统：${process.platform} ${process.arch}`,
-    `支持参考：${lastBootstrapReference ?? "无"}`,
-    `最近错误：${lastBootstrapError ?? "无"}`,
-  ];
-  try {
-    const files = fs.readdirSync(logDir).filter((name) => /\.(?:log|json)$/i.test(name)).sort().slice(-12);
-    for (const name of files) {
-      const file = path.join(logDir, name);
-      const size = fs.statSync(file).size;
-      const start = Math.max(0, size - 200_000);
-      const fd = fs.openSync(file, "r");
-      const buffer = Buffer.alloc(size - start);
-      fs.readSync(fd, buffer, 0, buffer.length, start);
-      fs.closeSync(fd);
-      sections.push(`\n===== ${name}（末尾 ${buffer.length} 字节）=====\n${buffer.toString("utf8")}`);
-    }
-  } catch (error) {
-    sections.push(`\n日志读取失败：${error instanceof Error ? error.message : String(error)}`);
-  }
-  return sections.join("\n")
-    .replace(/(JWT_SECRET|PII_SALT|API[_-]?KEY|ACCESS[_-]?TOKEN|REFRESH[_-]?TOKEN)\s*[:=]\s*[^\s,}\]]+/gi, "$1=[已脱敏]")
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [已脱敏]");
+  return collectStartupDiagnostics({
+    supportDir: supportDirResolved ?? app.getPath("userData"),
+    version: app.getVersion(), platform: process.platform, arch: process.arch,
+    reference: lastBootstrapReference, error: lastBootstrapError, fsImpl: fs,
+  });
 }
 
 async function handleSplashAction(action) {
@@ -230,10 +209,15 @@ async function handleSplashAction(action) {
       defaultPath: path.join(app.getPath("documents"), `WorkLoom-启动诊断-${Date.now()}.txt`),
       filters: [{ name: "文本诊断", extensions: ["txt"] }],
     };
-    const result = splash
-      ? await dialog.showSaveDialog(splash, options)
-      : await dialog.showSaveDialog(options);
-    if (!result.canceled && result.filePath) fs.writeFileSync(result.filePath, diagnosticText(), { mode: 0o600 });
+    try {
+      const result = splash
+        ? await dialog.showSaveDialog(splash, options)
+        : await dialog.showSaveDialog(options);
+      if (!result.canceled && result.filePath) fs.writeFileSync(result.filePath, diagnosticText(), { mode: 0o600 });
+    } catch (error) {
+      const detail = sanitizeDiagnosticText(error instanceof Error ? error.message : String(error));
+      dialog.showErrorBox("诊断导出未完成", `请改选可写目录后重试。\n${detail}`);
+    }
     return;
   }
   if (action === "exit") {

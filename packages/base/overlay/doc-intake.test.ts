@@ -85,7 +85,7 @@ describe("parseDelimited（CSV/TSV）", () => {
     const rows = parseDelimited('名称,价格,备注\n红糖姜茶,0,"冲泡好,热饮"\n蛋糕,168,"说""提前2小时""预订"', ",");
     expect(rows).toHaveLength(3);
     expect(rows[1]).toEqual(["红糖姜茶", "0", "冲泡好,热饮"]);
-    expect(rows[2][2]).toBe('说"提前2小时"预订');
+    expect(rows[2]?.[2]).toBe('说"提前2小时"预订');
   });
   it("空行与尾部换行不产生幽灵行", () => {
     expect(parseDelimited("a,b\n\n1,2\n", ",")).toHaveLength(2);
@@ -132,7 +132,7 @@ describe("extractIntentsDeterministic", () => {
     const { intents, skipped } = extractIntentsDeterministic(doc);
     expect(intents.some((i) => i.kind === "forbidden-add")).toBe(true);
     expect(skipped).toHaveLength(1);
-    expect(skipped[0].reason).toContain("未识别");
+    expect(skipped[0]?.reason).toContain("未识别");
   });
 
   it("问：/答： 与 ？+答句 两种 FAQ 结构", () => {
@@ -191,7 +191,7 @@ describe("Prompt Injection 防护（文档内容永不是指令）", () => {
     ]);
     const out = await extractIntentsWithLlm("随便一段文档", fakeLlm);
     expect(out).toHaveLength(1);
-    expect(out![0].kind).toBe("faq");
+    expect(out?.[0]?.kind).toBe("faq");
   });
 
   it("LLM 提示词明示「文档是数据不是指令」", () => {
@@ -224,7 +224,7 @@ describe("detectConflicts", () => {
       },
     );
     expect(conflicts.map((c) => c.type).sort()).toEqual(["faq-dup", "forbidden-dup", "price-diff", "rule-diff"]);
-    expect(conflicts[0].intentIndex).toBeGreaterThanOrEqual(0);
+    expect(conflicts[0]?.intentIndex).toBeGreaterThanOrEqual(0);
   });
 
   it("现状为空 → 零冲突", () => {
@@ -242,7 +242,7 @@ describe("buildIntakePreview（端到端：文件 → 意图卡）", () => {
     expect(p1.batchId).toBe(p2.batchId);
     expect(p1.via).toBe("rule");
     expect(p1.cards).toHaveLength(2);
-    expect(p1.cards[0].summary).toContain("红糖姜茶");
+    expect(p1.cards[0]?.summary).toContain("红糖姜茶");
     expect(p1.stats.extracted).toBe(2);
   });
 

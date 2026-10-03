@@ -27,12 +27,8 @@
       "sha256": "1cdbc0ad2980975fd2efe3bf59c4028b5950ec4dbb6737c3aeee02a73785231e"
     },
     {
-      "path": "apps/web/package.json",
-      "sha256": "be14a57489c5687f6fb209975bf6f6d0041a214f670bf638bf7e37d631a232e0"
-    },
-    {
       "path": "package.json",
-      "sha256": "c54ac2609bbb60e8f1f221a2b8c28407be120133d8efd92aed0f139ba966c6d8"
+      "sha256": "6e927cc51d734f8fa46d62ee2cc19d5ad1c91a4fc9532fee9e0988c5ee81b1ba"
     },
     {
       "path": "packages/base/package.json",
@@ -68,7 +64,7 @@
     },
     {
       "path": "scripts/pack-nm-merge.mjs",
-      "sha256": "8e7aa9c1e7fe10e13165802f27c6162bbda9d45ae95c97841e9484e2560856ce"
+      "sha256": "68e7d24ee26626babad7f78fa364feb571484fbf35241214a6ba77b9a90a19bc"
     },
     {
       "path": "scripts/payload-policy.mjs",
@@ -83,6 +79,6 @@
       "sha256": "38d5eba21ae509aec4de97000bda055ca632f0216473e1d1000eeba6b5e0a475"
     }
   ],
-  "manifestSha256": "28a4eb3f27de3e7e5a70d9942355b46525aaa13e5f856fa7b3817240f0a3ce25",
-  "packageLockSha256": "1b47b98a84cbb9aa2211849d21bc8e6f65bf859d8dc87e138d0f8a221c42a9d3"
+  "manifestSha256": "f63619b134bd72848d78354ff9c4bd4cdea052285eff87a055cd6f16a9ed584e",
+  "packageLockSha256": "01fd4823a38a96e127b330d5619a2c7c1c26c39cbcd5e350749ff03b5e47e67d"
 }

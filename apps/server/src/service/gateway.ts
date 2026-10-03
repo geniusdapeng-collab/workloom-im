@@ -46,6 +46,7 @@ import {
 } from "./ticket.js";
 import { appendEventOn, serviceTx } from "./events.js";
 import { ServiceWorkspaceRoutingError, selectServiceWorkspaceId } from "./workspace-routing.js";
+import { runWithServiceScope, validatedServiceScope, type ServiceScope } from "./scope.js";
 
 export const serviceGateway = new Hono();
 
@@ -87,8 +88,7 @@ function cChannelConfigSelfCheck(): void {
 cChannelConfigSelfCheck();
 
 /** C 端工作区解析仅在建立会话时走 owner 池，并逐个校验配置目标确实存在。 */
-const validatedWorkspaceIds = new Set<string>();
-async function cWorkspaceId(workspaceKey?: string): Promise<string> {
+async function cWorkspaceScope(workspaceKey?: string): Promise<ServiceScope> {
   let id: string;
   try {
     id = selectServiceWorkspaceId({
@@ -100,13 +100,13 @@ async function cWorkspaceId(workspaceKey?: string): Promise<string> {
     if (err instanceof ServiceWorkspaceRoutingError) throw new ServiceHttpError(err.message, 503);
     throw err;
   }
-  if (validatedWorkspaceIds.has(id)) return id;
-  const found = await getOwnerPool().query(`SELECT id FROM workspaces WHERE id=$1 LIMIT 1`, [id]);
-  if (!found.rows[0]?.id) {
+  const found = await getOwnerPool().query<{ id: string; tenant_id: string }>(
+    `SELECT id,tenant_id FROM workspaces WHERE id=$1 LIMIT 1`, [id],
+  );
+  if (!found.rows[0]?.id || !found.rows[0].tenant_id?.trim()) {
     throw new ServiceHttpError("C 端配置的工作区不存在，请联系管理员检查站点映射", 503);
   }
-  validatedWorkspaceIds.add(id);
-  return id;
+  return validatedServiceScope({ workspaceId: found.rows[0].id, tenantId: found.rows[0].tenant_id });
 }
 
 /* ---------------- 内存限流（60 次/分钟；Map 5 分钟 TTL 清扫防内存膨胀） ---------------- */
@@ -140,7 +140,7 @@ async function cAuth(c: Context, next: Next): Promise<Response | void> {
   if (!payload) return c.json({ error: "c-token 无效或已过期" }, 401);
   if (rateLimited(`c:${payload.cUserId}`)) return c.json({ error: "请求过于频繁（60 次/分钟）" }, 429);
   c.set("cAuth", payload);
-  await next();
+  await runWithServiceScope(payload, next);
 }
 
 function authOf(c: Context): CTokenPayload {
@@ -313,14 +313,14 @@ serviceGateway.post("/session", async (c) => {
       if (!ex.ok) return c.json({ error: `渠道未配置：${channel}（${ex.reason}）`, requestId }, 503);
       openid = ex.openid;
     }
-    const workspaceId = await cWorkspaceId(trustedWorkspaceKey);
-    const user = await resolveCUser({
-      workspaceId,
+    const scope = await cWorkspaceScope(trustedWorkspaceKey);
+    const user = await runWithServiceScope(scope, () => resolveCUser({
+      workspaceId: scope.workspaceId,
       channel,
       openid,
       nickname: authMode === "demo" ? body.nickname : "已验证用户",
-    });
-    const token = await issueCToken({ workspaceId, cUserId: user.id, channel: user.channel, secret: cSecret() });
+    }));
+    const token = await issueCToken({ ...scope, cUserId: user.id, channel: user.channel, secret: cSecret() });
     return c.json({
       token,
       user: {

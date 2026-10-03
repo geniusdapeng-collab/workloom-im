@@ -235,6 +235,7 @@ if (process.env.SKILL_DIST_REGISTRY_URL && process.env.SKILL_DIST_SIGNING_KEY) {
       try {
         await client.query("BEGIN");
         await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+        await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
         const r = await client.query<{ industry: string | null }>(`SELECT industry FROM workspaces WHERE id=$1`, [scope.workspaceId]);
         await client.query("COMMIT");
         return {

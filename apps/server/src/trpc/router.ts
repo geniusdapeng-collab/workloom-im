@@ -30,7 +30,7 @@ import {
   resolveDispatchPresetKey,
   runQuestForThread,
 } from "../runtime/thread-runner.js";
-import { applyKbPublishAfterApproval, searchKB } from "../service/kb.js";
+import { applyKbPublishAfterApprovalOn, searchKB } from "../service/kb.js";
 import { acquisitionQuestPlanner } from "../industry/hotel/acquisition-planner.js";
 import {
   actionProcedure,
@@ -158,6 +158,7 @@ import {
 } from "@workloom/base/bundles";
 import { serviceRouter } from "../service/router.js";
 import { appendEventOn } from "../service/events.js";
+import { runWithServiceScope } from "../service/scope.js";
 import {
   advanceWizardDraftOn,
   assignWizardDraft,
@@ -1259,6 +1260,7 @@ const threadsRouter = router({
         // 事务级 RLS 上下文必须在显式事务内设置：autocommit 下 set_config(...,true) 语句结束即失效
         await client.query("BEGIN");
         await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+        await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
         const r = await client.query(
           `SELECT id, title, mode, status, progress_done, progress_total, created_by, agent_id, created_at, updated_at,
                   /**
@@ -1377,6 +1379,7 @@ const threadsRouter = router({
       try {
         await client.query("BEGIN");
         await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+        await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
         const t = await client.query<{ mode: string; agent_id: string | null; title: string }>(`SELECT mode, agent_id, title FROM threads WHERE id=$1 AND workspace_id=$2`, [input.threadId, scope.workspaceId]);
         if (!t.rows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "任务不存在或无权访问" });
         selectedAgent = await runnableAgentOn(client, scope.workspaceId, input.presetKey ?? t.rows[0].agent_id);
@@ -1487,7 +1490,8 @@ async function activateFenceRuleAfterApproval(
  * 注（合并口径，2026-09-30）：基座原先的 Quest 续跑语义是**人工"继续推进"**（threads.run），
  * 跨重启的遗留挂起由 A-05 启动补扫兜底；本轮排雷 T-2026-0929-0200 的 MC-101 进一步把
  * **步骤级关卡"采纳/编辑后采纳"** 的线程在同一事务内直接置回 `queued`（见 review-console/approvals.ts），
- * 由既有调度器重入并携带 approvalRef 执行该步；本钩子仍只负责围栏激活 / HR 汰换 / 知识库生效等副作用，
+ * 由既有调度器重入并携带 approvalRef 执行该步；本钩子仍只负责围栏激活 / HR 汰换等副作用，
+ * 知识库状态由 `onDecidedInTx` 与审批同一事务提交，失败必须整体回滚。
  * 两者叠加不重复执行（step_id 幂等锚点 + replay 只认已核实回执）。非步骤级审批（围栏提案、HR、
  * 技能下发等无 session_id/step_id 的行）一律不动线程。
  */
@@ -1506,6 +1510,7 @@ async function runPostApprovalSideEffects(
     try {
       await c.query("BEGIN");
       await c.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+      await c.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
       const snap = await c.query<{ snapshot: Record<string, unknown> }>(
         `SELECT snapshot FROM approvals WHERE approval_id=$1`, [approvalId],
       );
@@ -1559,25 +1564,11 @@ const approvalsRouter = router({
           undefined,
           // B-05/B-06：批准后副作用统一钩子（原先内联在此处的围栏激活 + HR 汰换已收敛进钩子，
           // 与 batchApprove / IM 回调三路同源；deduped 不触发，各项失败隔离不反噬接口）
-          { onApproved: (id) => runPostApprovalSideEffects(scopeOf(ctx.identity), id) },
+          {
+            onApproved: (id) => runPostApprovalSideEffects(scopeOf(ctx.identity), id),
+            onDecidedInTx: (client, id) => applyKbPublishAfterApprovalOn(client, scopeOf(ctx.identity), id),
+          },
         );
-        /**
-         * 合并口径（T-2026-0929-0200 × T-2026-0929-0201）：
-         *  - 批准/编辑后的副作用（围栏激活 + HR 汰换 + 知识库生效）统一走云端 main 的
-         *    `runPostApprovalSideEffects` 钩子（decide/batchApprove/IM 回调三路同源，失败隔离）；
-         *  - 驳回仍需收敛知识库状态（MC-110）：`onApproved` 只在 approved/edited 触发，
-         *    因此这里单独补一条 reject 分支，语义与 approve 侧一致（失败不反噬接口）。
-         */
-        if (!res.deduped && res.status === "rejected") {
-          try {
-            await applyKbPublishAfterApproval(scopeOf(ctx.identity), input.approvalId);
-          } catch (err) {
-            console.error(
-              `[approvals] 知识库驳回回滚副作用失败 ${input.approvalId}（审批结果不变）：`,
-              err instanceof Error ? err.message : err,
-            );
-          }
-        }
         return res;
       } catch (err) {
         if (err instanceof ApprovalError) {
@@ -1601,7 +1592,10 @@ const approvalsRouter = router({
           { memberNo: ctx.identity.memberNo, role: ctx.identity.role },
           input.approvalIds,
           // B-05：批量批准与单笔 decide 同钩子——围栏激活 / HR 汰换不再只挂在单笔路径
-          { onApproved: (id) => runPostApprovalSideEffects(scopeOf(ctx.identity), id) },
+          {
+            onApproved: (id) => runPostApprovalSideEffects(scopeOf(ctx.identity), id),
+            onDecidedInTx: (client, id) => applyKbPublishAfterApprovalOn(client, scopeOf(ctx.identity), id),
+          },
         );
         return res;
       } catch (err) {
@@ -2024,6 +2018,7 @@ async function instanceProfileOf(scope: { tenantId: string; workspaceId: string 
   try {
     await client.query("BEGIN");
     await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
     const r = await client.query<{ industry: string | null }>(`SELECT industry FROM workspaces WHERE id=$1`, [scope.workspaceId]);
     await client.query("COMMIT");
     return {
@@ -2080,6 +2075,7 @@ const workspaceRouter = router({
       // 事务级 RLS 上下文必须在显式事务内设置：autocommit 下 set_config(...,true) 语句结束即失效
       await client.query("BEGIN");
       await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+      await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
       const r = await client.query<{
         id: string; preset_key: string; name: string; version: string; kind: string;
         readonly: boolean; status: string; meta: { night_shift?: boolean };
@@ -2145,6 +2141,7 @@ const nightShiftRouter = router({
       // 事务级 RLS 上下文必须在显式事务内设置：autocommit 下 set_config(...,true) 语句结束即失效
       await client.query("BEGIN");
       await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+      await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
       const r = await client.query<{
         id: string; status: string; run_date: string; fence_snapshot_version: string | null;
         candidate_count: number; started_at: Date | null;
@@ -2320,6 +2317,7 @@ const fenceRouter = router({
       // 事务级 RLS 上下文必须在显式事务内设置：autocommit 下 set_config(...,true) 语句结束即失效
       await client.query("BEGIN");
       await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+      await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
       const r = await client.query(
         `SELECT version, status, count(*) AS rules, min(created_at) AS created_at
          FROM fence_rules WHERE (workspace_id=$1 OR workspace_id='*')
@@ -2924,7 +2922,7 @@ const imRouter = router({
   /** 手势回调（F5.4 手势回写多通道；decide 内聚 L5.1/L5.2/L5.3/E5.3 全纪律）
    *  P0-1 通道验签：secret 已配置 → x-channel-signature 必须通过；开发缺省 secret 降级为
    *  「仅允许会话成员本人操作」（operatorOpenId 必须等于当前会话成员在该通道绑定的 openid），响应标注 unsigned:true */
-  callback: writeProcedure
+  callback: actionProcedure("approval.decide")
     .input(
       z.object({
         channel: z.enum(["dingtalk", "wecom", "feishu"]),
@@ -2963,7 +2961,10 @@ const imRouter = router({
           input,
           mockDriverFor(input.channel),
           // B-05：IM 手势批准与端内 decide 同钩子（批准≠执行断链对症）
-          { onApproved: (id) => runPostApprovalSideEffects(scope, id) },
+          {
+            onApproved: (id) => runPostApprovalSideEffects(scope, id),
+            onDecidedInTx: (client, id) => applyKbPublishAfterApprovalOn(client, scope, id),
+          },
         );
         return { ...r, unsigned: sig.unsigned };
       } catch (err) {
@@ -3144,8 +3145,8 @@ function llmCall(scene = "generic", scope?: { tenantId: string; workspaceId: str
 }
 
 /** 模型策略只认经过完整性校验的活动 Bundle，不读取可漂移的行业字段。 */
-async function workspaceIndustry(scope: { workspaceId: string }): Promise<string | null> {
-  const active = await resolveWorkspaceActiveBundle(scope.workspaceId);
+async function workspaceIndustry(scope: { tenantId: string; workspaceId: string }): Promise<string | null> {
+  const active = await runWithServiceScope(scope, () => resolveWorkspaceActiveBundle(scope.workspaceId));
   return active.state === "ready" ? active.bundleId : null;
 }
 
@@ -3189,6 +3190,7 @@ const captainRouter = router({
     try {
       await client.query("BEGIN");
       await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+      await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
       const t = await client.query<{ tier: string; n: string }>(
         `SELECT tier, count(*)::text AS n FROM approvals WHERE workspace_id=$1 AND status='pending' GROUP BY 1`,
         [scope.workspaceId],
@@ -3369,6 +3371,7 @@ const captainRouter = router({
               try {
                 await c.query("BEGIN");
                 await c.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+                await c.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
                 const q = await c.query<{ payload: Record<string, unknown> }>(`SELECT payload FROM biz_events WHERE event_id=$1`, [r.eventId]);
                 await c.query("COMMIT");
                 return q.rows[0]?.payload;
@@ -3427,6 +3430,7 @@ const captainRouter = router({
       try {
         await client.query("BEGIN");
         await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+        await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
         const r = await client.query<{ event_id: string; payload: Record<string, unknown>; created_at: string }>(
           `SELECT event_id, payload, created_at FROM biz_events
            WHERE workspace_id=$1 AND payload->'decision'->>'action' IN ('ceo.briefing','ceo.decision','ceo.circuit_breaker','initiative.launch')
@@ -3451,6 +3455,7 @@ const captainRouter = router({
     try {
       await client.query("BEGIN");
       await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+      await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
       const r = await client.query<{
         approval_id: string; event_id: string; snapshot: Record<string, unknown>; payload: Record<string, unknown>;
       }>(
@@ -3525,6 +3530,7 @@ const captainRouter = router({
     try {
       await client.query("BEGIN");
       await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+      await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
       const tiers = await client.query<{ tier: string; n: string }>(
         `SELECT tier, count(*)::text AS n FROM approvals WHERE workspace_id=$1 AND status='pending' GROUP BY 1`,
         [scope.workspaceId],
@@ -3756,7 +3762,7 @@ export type { IntelItem, RepoPulse } from "../service/aipm.js";
 registerIndustryQuestPlanner((goal) => acquisitionQuestPlanner(goal));
 registerAskKbSearch(async (scope, question, limit) => {
   // MC-111：ask 事实面按相关性下限注入（P22 检索面仍用宽召回，默认 0）
-  const hits = await searchKB({ workspaceId: scope.workspaceId, query: question, limit, minScore: ASK_KB_MIN_SCORE });
+  const hits = await runWithServiceScope(scope, () => searchKB({ workspaceId: scope.workspaceId, query: question, limit, minScore: ASK_KB_MIN_SCORE }));
   return hits.map((hit) => ({
     content: hit.content,
     ...(hit.heading ? { heading: hit.heading } : {}),

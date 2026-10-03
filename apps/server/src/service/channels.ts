@@ -8,6 +8,7 @@
 import { SignJWT, jwtVerify } from "jose";
 import { ensureServiceSchema } from "./store.js";
 import { serviceTx, svcQuery } from "./events.js";
+import { validatedServiceScope } from "./scope.js";
 
 export const CHANNELS = ["wechat-mini", "alipay", "h5"] as const;
 export type Channel = (typeof CHANNELS)[number];
@@ -37,6 +38,7 @@ export interface CUser {
 }
 
 export interface CTokenPayload {
+  tenantId: string;
   workspaceId: string;
   cUserId: string;
   channel: Channel;
@@ -140,9 +142,13 @@ export async function getCUser(workspaceId: string, cUserId: string): Promise<CU
 }
 
 export async function issueCToken(input: {
-  workspaceId: string; cUserId: string; channel: Channel; secret: string;
+  tenantId: string; workspaceId: string; cUserId: string; channel: Channel; secret: string;
 }): Promise<string> {
-  return new SignJWT({ workspaceId: input.workspaceId, cUserId: input.cUserId, channel: input.channel, scope: "c-user" })
+  const scope = validatedServiceScope(input);
+  if (!input.cUserId?.trim() || !(CHANNELS as readonly string[]).includes(input.channel)) {
+    throw new Error("C 会话签名缺少用户或有效通道");
+  }
+  return new SignJWT({ ...scope, cUserId: input.cUserId, channel: input.channel, scope: "c-user" })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setIssuer("workloom-c")
@@ -153,10 +159,15 @@ export async function issueCToken(input: {
 export async function verifyCToken(token: string, secret: string): Promise<CTokenPayload | null> {
   try {
     const { payload } = await jwtVerify(token, key(secret), { issuer: "workloom-c" });
-    if (payload.scope !== "c-user") return null;
+    // 旧 workspace-only token 不足以证明租户作用域，返回 401 后由原会话入口重新签发。
+    if (payload.scope !== "c-user" || typeof payload.tenantId !== "string" || !payload.tenantId.trim()
+        || typeof payload.workspaceId !== "string" || !payload.workspaceId.trim()
+        || typeof payload.cUserId !== "string" || !payload.cUserId.trim()
+        || typeof payload.channel !== "string" || !(CHANNELS as readonly string[]).includes(payload.channel)) return null;
     return {
-      workspaceId: String(payload.workspaceId),
-      cUserId: String(payload.cUserId),
+      tenantId: payload.tenantId,
+      workspaceId: payload.workspaceId,
+      cUserId: payload.cUserId,
       channel: payload.channel as Channel,
       scope: "c-user",
     };

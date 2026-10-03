@@ -13,6 +13,7 @@ import type pg from "pg";
 import { NIGHT_DEFAULTS } from "@workloom/shared";
 import { syncDistribution, type EventActor, type ManifestFetcher, type SyncResult } from "./receiver.js";
 import type { InstanceProfile } from "./types.js";
+import { setSkillScope, rollbackSkills, releaseSkillClient } from "../skills/scope.js";
 
 const AUTO_ACTOR: EventActor = { id: "night-shift", type: "system" };
 
@@ -59,7 +60,7 @@ export async function autoSyncWorkspace(
   const client = await app.connect();
   try {
     await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+    await setSkillScope(client, scope);
     const lock = await client.query<{ ok: boolean }>(
       `SELECT pg_try_advisory_xact_lock(hashtext($1)) AS ok`, [`skill-dist-autosync:${scope.workspaceId}`]);
     if (!lock.rows[0]?.ok) {
@@ -84,9 +85,8 @@ export async function autoSyncWorkspace(
       return { workspaceId: scope.workspaceId, ran: false, reason: "not_due" };
     }
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally { client.release(); }
+    return await rollbackSkills(client, err);
+  } finally { releaseSkillClient(client); }
 
   const result = await syncDistribution(app, gateway, scope, {
     registryUrl: opts.registryUrl,

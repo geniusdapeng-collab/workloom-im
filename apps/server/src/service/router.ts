@@ -29,6 +29,7 @@ import { pushMessage } from "./channels.js";
 import { appendEventOn, serviceTx, svcQuery } from "./events.js";
 import { llmCall } from "./llm.js";
 import { ensureServiceSchema } from "./store.js";
+import { memberAccessGrants } from "./access-authority.js";
 import {
   activeInstall, clearBundle, clearPreview, confirmAndAssembleStaffing, customizationStatus, generateStaffing,
   onboardingExam, rollbackSnapshot,
@@ -87,7 +88,8 @@ function toTrpcServiceError(err: unknown): never {
 function remapServiceErrorResult(result: { ok: boolean; error?: unknown }): void {
   if (result.ok) return;
   const cause = (result.error as { cause?: unknown } | null | undefined)?.cause;
-  if (cause) toTrpcServiceError(cause); // 命中 ServiceHttpError 即抛语义码；其余错误原样放行
+  // 仅映射服务层语义；Zod 校验和显式 TRPCError 必须保留框架已有的错误码与 cause。
+  if (cause instanceof ServiceHttpError) toTrpcServiceError(cause);
 }
 
 /** 写过程基座：workspace.write 守卫 + 服务层语义错误映射 */
@@ -114,25 +116,44 @@ const svcApprovalProcedure = actionProcedure("approval.decide").use(async ({ nex
  * 现在：待审区的「批准生效」就是**逐条人审动作本身**（INV-4：发布必须人审），审批行按既有
  * 三手势口径直接落 approved（gesture/decided_by/decided_at 齐备）——审批台显示为一条带决策人的
  * 完成记录，而不是待办；撤回走知识库「停用」（同样写事件留痕）。
- * 返回 null 表示文档不存在或已是 active（调用方按幂等处理）。
+ * 先锁定文档，再按当前版本与不可变事件回读已批准回执；重复请求返回同一非空回执。
  */
 async function publishKbDocumentInTx(
   client: pg.PoolClient,
   sc: { tenantId: string; workspaceId: string },
   actor: { memberNo: string },
   documentId: string,
-): Promise<{ eventId: string; approvalId: string } | null> {
-  const doc = await client.query<{ title: string; version: number }>(
-    `UPDATE kb_documents SET status='active'
-      WHERE workspace_id=$1 AND id=$2 AND status <> 'active'
-      RETURNING title, version`,
+  allowDisabled = false,
+): Promise<{ eventId: string; approvalId: string; deduped: boolean }> {
+  const doc = await client.query<{ title: string; version: number; hash: string | null; status: string }>(
+    `SELECT title,version,hash,status FROM kb_documents WHERE workspace_id=$1 AND id=$2 FOR UPDATE`,
     [sc.workspaceId, documentId],
   );
   const row = doc.rows[0];
-  if (!row) return null;
+  if (!row) throw new TRPCError({ code: "NOT_FOUND", message: `文档不存在：${documentId}` });
+  if (row.status === "disabled" && !allowDisabled) {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: "文档已停用，请在文档抽屉中重新启用并逐条审阅。" });
+  }
+  if (row.status === "active") {
+    const previous = await client.query<{ approval_id: string; event_id: string }>(
+      `SELECT a.approval_id,a.event_id FROM approvals a
+         JOIN biz_events e ON e.event_id=a.event_id AND e.workspace_id=a.workspace_id AND e.tenant_id=a.tenant_id
+        WHERE a.tenant_id=$1 AND a.workspace_id=$2 AND a.status IN ('approved','edited')
+          AND a.decided_by IS NOT NULL AND a.decided_at IS NOT NULL
+          AND e.payload->'object'->>'type'='kb_document' AND e.payload->'object'->>'id'=$3
+          AND e.payload->'decision'->>'action'='kb.publish'
+          AND e.payload->'decision'->'after'->>'version'=$4
+          AND (e.payload->'decision'->'after'->>'documentId' IS NULL OR e.payload->'decision'->'after'->>'documentId'=$3)
+          AND (e.payload->'decision'->'after'->>'hash' IS NULL OR e.payload->'decision'->'after'->>'hash'=$5)
+        ORDER BY e.seq DESC LIMIT 1`,
+      [sc.tenantId, sc.workspaceId, documentId, String(row.version), row.hash],
+    );
+    if (previous.rows[0]) return { eventId: previous.rows[0].event_id, approvalId: previous.rows[0].approval_id, deduped: true };
+  }
+  await client.query(`UPDATE kb_documents SET status='active' WHERE workspace_id=$1 AND id=$2`, [sc.workspaceId, documentId]);
   const ev = await appendEventOn(client, sc, { id: actor.memberNo, type: "human" }, {
     objectType: "kb_document", objectId: documentId, action: "kb.publish",
-    after: { title: row.title, version: row.version, status: "active", approved_by: actor.memberNo },
+    after: { documentId, title: row.title, version: row.version, hash: row.hash, status: "active", approved_by: actor.memberNo },
     basis: [
       "待审区逐条人审后发布：文档进入客户问答检索范围（INV-4）",
       "审批记录与文档生效同一 COMMIT 落库（MC-110：不再产生「已执行却待办」的幽灵条目）",
@@ -141,21 +162,20 @@ async function publishKbDocumentInTx(
   const approvalId = `apr-${ev.eventId.toLowerCase()}`;
   await client.query(
     `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, gesture, decided_by, decided_at, snapshot)
-     VALUES ($1,$2,$3,$4,'inapp','approved',$5,$6,now(),$7)
-     ON CONFLICT (event_id, channel) DO NOTHING`,
+     VALUES ($1,$2,$3,$4,'inapp','approved',$5,$6,now(),$7)`,
     [
       approvalId, sc.tenantId, sc.workspaceId, ev.eventId,
       JSON.stringify({ type: "approve", weight: GESTURE_WEIGHT.approve, reason_text: "待审区「批准生效」（逐条人审）" }),
       actor.memberNo,
       JSON.stringify({
-        after: { documentId, fence_action: "kb.publish" },
+        after: { documentId, version: row.version, hash: row.hash, fence_action: "kb.publish" },
         post_hoc: true,
         high_risk: false,
-        basis: "批准动作的当场留痕（不可回滚）；撤回请走知识库「停用」，同样写事件留痕（MC-110）",
+        basis: "当前版本逐条人审的当场留痕；撤回请走知识库「停用」，同样写事件留痕",
       }),
     ],
   );
-  return { eventId: ev.eventId, approvalId };
+  return { eventId: ev.eventId, approvalId, deduped: false };
 }
 
 const kbRouter = router({
@@ -208,22 +228,16 @@ const kbRouter = router({
     .input(z.object({ documentId: z.string(), status: z.enum(["active", "pending_review", "disabled"]) }))
     .mutation(async ({ ctx, input }) => {
       const scope = scopeOf(ctx.identity);
+      if (input.status === "active") {
+        const grants = memberAccessGrants({ role: ctx.identity.role, plan: ctx.identity.plan, guest: ctx.identity.memberNo === "GUEST", permissions: ctx.memberPermissions });
+        if (!grants.actionPermissions.includes("approval.decide")) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "当前成员没有“审批裁决”权限。" });
+        }
+      }
       return serviceTx(scope.workspaceId, async (client, sc) => {
         if (input.status === "active") {
-          /**
-           * MC-110：待审文档的「置为生效」与 approveDocument 是同一个动作（发布），必须走同一留痕路径；
-           * 已生效/停用文档的重新启用仍是普通状态切换（此前已有一条 kb.publish 审批记录）。
-           */
-          const cur = await client.query<{ status: string }>(
-            `SELECT status FROM kb_documents WHERE workspace_id=$1 AND id=$2`,
-            [scope.workspaceId, input.documentId],
-          );
-          const from = cur.rows[0]?.status;
-          if (from === "pending_review") {
-            const r = await publishKbDocumentInTx(client, sc, { memberNo: ctx.identity.memberNo }, input.documentId);
-            if (!r) throw new TRPCError({ code: "NOT_FOUND", message: `文档不存在：${input.documentId}` });
-            return { ok: true, status: "active", eventId: r.eventId, approvalId: r.approvalId, deduped: false };
-          }
+          const receipt = await publishKbDocumentInTx(client, sc, { memberNo: ctx.identity.memberNo }, input.documentId, true);
+          return { ok: true, status: "active", ...receipt };
         }
         await setDocumentStatusOn(client, { workspaceId: scope.workspaceId, documentId: input.documentId, status: input.status });
         await appendEventOn(client, sc, { id: ctx.identity.memberNo, type: "human" }, {
@@ -304,33 +318,8 @@ const kbRouter = router({
     .mutation(async ({ ctx, input }) => {
       const scope = scopeOf(ctx.identity);
       return serviceTx(scope.workspaceId, async (client, sc) => {
-        const cur = await client.query<{ status: string }>(
-          `SELECT status FROM kb_documents WHERE workspace_id=$1 AND id=$2`,
-          [scope.workspaceId, input.documentId],
-        );
-        const row = cur.rows[0];
-        if (!row) throw new TRPCError({ code: "NOT_FOUND", message: `文档不存在：${input.documentId}` });
-        if (row.status === "active") {
-          // 幂等（L5.3 同口径）：重复「批准生效」不重复落事件/审批，回读既有留痕
-          const prev = await client.query<{ approval_id: string; event_id: string }>(
-            `SELECT a.approval_id, a.event_id FROM approvals a
-               JOIN biz_events e ON e.event_id = a.event_id AND e.workspace_id = a.workspace_id
-              WHERE a.workspace_id=$1 AND e.payload->'decision'->>'action'='kb.publish'
-                AND e.payload->'decision'->'after'->>'documentId'=$2
-              ORDER BY a.created_at DESC LIMIT 1`,
-            [scope.workspaceId, input.documentId],
-          );
-          return { ok: true, status: "active", eventId: prev.rows[0]?.event_id ?? null, approvalId: prev.rows[0]?.approval_id ?? null, deduped: true };
-        }
-        if (row.status !== "pending_review") {
-          throw new TRPCError({
-            code: "PRECONDITION_FAILED",
-            message: `文档当前为「${row.status}」，不在待审状态——请在知识库文档抽屉中直接启用/停用`,
-          });
-        }
-        const r = await publishKbDocumentInTx(client, sc, { memberNo: ctx.identity.memberNo }, input.documentId);
-        if (!r) throw new TRPCError({ code: "NOT_FOUND", message: `文档不存在：${input.documentId}` });
-        return { ok: true, status: "active", eventId: r.eventId, approvalId: r.approvalId, deduped: false };
+        const receipt = await publishKbDocumentInTx(client, sc, { memberNo: ctx.identity.memberNo }, input.documentId);
+        return { ok: true, status: "active", ...receipt };
       });
     }),
 });

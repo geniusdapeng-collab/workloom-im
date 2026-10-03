@@ -36,7 +36,7 @@ import { join, resolve } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { cliArgs, findRepoRoot, loadProfile } from "./lib/profile.mjs";
 import { fingerprintEnvironment, fingerprintLines, loadEnvFile, resolveEnvironment, probeEnvironment } from "./lib/target.mjs";
-import { createBudget, normalizeBudgets } from "./lib/live/budget.mjs";
+import { createBudget, normalizeBudgets, isValidBudgetTaskId } from "./lib/live/budget.mjs";
 import {
   createMultimodalFixture,
   readImageFixture, resolveLiveModels, runChatTask, runDshTask, runImageTask,
@@ -266,12 +266,19 @@ const results = [];
 
 async function runTask(task) {
   const startedAt = Date.now();
-  const base = { id: task.id, title: task.title, kind: task.kind, chain: task.chain ?? null, criticality: task.criticality ?? "P1", model: task.model ?? null, selftest: SELFTEST };
+  const base = { id: isValidBudgetTaskId(task?.id) ? task.id : `INVALID-${results.length + 1}`, title: task.title, kind: task.kind, chain: task.chain ?? null, criticality: task.criticality ?? "P1", model: task.model ?? null, selftest: SELFTEST };
+  if (!isValidBudgetTaskId(task?.id)) return { ...base, status: "blocked", reason: "任务标识非法：不得包含路径/控制字符", ms: 0 };
   if (task._skip) return { ...base, status: "skipped", reason: task._skip, ms: 0 };
   const resolved = task.model ? modelById.get(task.model) : resolvedModels.find((m) => m.kind === (task.kind === "product" ? "llm" : task.kind));
   const chain = task.chain ?? resolved?.adapter ?? "model-gateway";
+  if (task.kind !== "product" && ["llm", "image", "video"].includes(task.kind) && (!resolved || resolved.kind !== task.kind)) {
+    return { ...base, chain, status: "blocked", reason: "模型未声明或模型模态与任务不匹配", ms: 0 };
+  }
   try {
     if (task.kind === "llm") {
+      if (!["dsh-harness", "model-gateway"].includes(chain)) return { ...base, chain, status: "blocked", reason: "未知 LLM 链路，无法约束配额", ms: 0 };
+      if (chain === "dsh-harness" && !SELFTEST) return { ...base, chain, status: "blocked", reason: "dsh-harness 缺少对子调用的有界调用/token 计量，禁止生产派发", accounting: { mode: "estimated", usageVerified: false }, ms: 0 };
+      if (!resolved || resolved.ready === false) return { ...base, chain, status: "blocked", reason: resolved?.missing?.join("；") || "模型未声明，禁止调用", ms: 0 };
       const units = 1;
       const gate = budget.reserve({ taskId: task.id, kind: "llm", units, tokens: task.expectedTokens ?? 8000, detail: chain });
       if (!gate.allowed) return { ...base, status: "blocked", reason: gate.reason, ms: Date.now() - startedAt };
@@ -343,6 +350,7 @@ async function runTask(task) {
           },
           timeoutMs: TASK_TIMEOUT_MS,
           imagePath: fixturePath,
+          selftest: SELFTEST,
         });
       } else {
         const image = task.imageFixture ? readImageFixture(resolve(REPO_ROOT, task.imageFixture)) : null;
@@ -355,14 +363,15 @@ async function runTask(task) {
           ...resolved,
           baseUrl: String(runnerEnv.LLM_BASE_URL || resolved.baseUrl || "").replace(/\/anthropic\/?$/u, ""),
         };
-        out = await runChatTask({ resolved: gatewayResolved, prompt: task.prompt, timeoutMs: TASK_TIMEOUT_MS, image, env: runnerEnv });
+        out = await runChatTask({ resolved: gatewayResolved, prompt: task.prompt, timeoutMs: TASK_TIMEOUT_MS, image, env: runnerEnv, maxTokens: task.expectedTokens ?? 8000 });
       }
-      budget.commit({ taskId: task.id, kind: "llm", tokens: out.tokens ?? 0, detail: chain });
+      const accounting = budget.commit({ reservationId: gate.reservationId, taskId: task.id, kind: "llm", tokens: out.tokens ?? null, costCny: out.costCny ?? null, usageVerified: out.usageVerified ?? false, detail: chain });
       const verified = verifyExpectations(effectiveTask, out);
-      const status = out.status === "ok" && verified.ok ? "ok" : out.status === "blocked" ? "blocked" : "failed";
+      const status = meteredStatus(out, verified, accounting);
       return {
         ...base, chain, status, ms: out.ms ?? Date.now() - startedAt,
-        reason: failureReason(out, verified),
+        reason: meteredReason(out, verified, accounting),
+        accounting,
         answer: (out.answer ?? "").slice(0, 800),
         receipt: out.receipt ?? null,
         evidence: out.evidence ?? null,
@@ -373,16 +382,17 @@ async function runTask(task) {
     }
 
     if (task.kind === "image") {
-      const units = Number(task.images ?? 1);
+      const units = task.images ?? 1;
       const gate = budget.reserve({ taskId: task.id, kind: "image", units, detail: chain });
       if (!gate.allowed) return { ...base, status: "blocked", reason: gate.reason, ms: Date.now() - startedAt };
       const out = await runImageTask({ resolved, task, timeoutMs: Math.max(TASK_TIMEOUT_MS, 5 * 60_000), artifactsDir: join(OUT_DIR, "artifacts"), env: runnerEnv });
-      budget.commit({ taskId: task.id, kind: "image", units, detail: chain });
+      const accounting = budget.commit({ reservationId: gate.reservationId, taskId: task.id, kind: "image", units: out.units ?? null, costCny: out.costCny ?? null, usageVerified: out.usageVerified ?? false, detail: chain });
       const verified = verifyExpectations(task, out);
       return {
-        ...base, chain, status: out.status === "ok" && verified.ok ? "ok" : out.status === "blocked" ? "blocked" : "failed",
+        ...base, chain, status: meteredStatus(out, verified, accounting),
         ms: out.ms ?? Date.now() - startedAt,
-        reason: failureReason(out, verified),
+        reason: meteredReason(out, verified, accounting),
+        accounting,
         artifacts: out.artifacts ?? [],
         receipt: out.receipt ?? null,
         units,
@@ -390,19 +400,20 @@ async function runTask(task) {
     }
 
     if (task.kind === "video") {
-      const units = Number(task.durationSeconds ?? 12);
+      const units = task.durationSeconds ?? 12;
       const gate = budget.reserve({ taskId: task.id, kind: "video", units, detail: chain });
       if (!gate.allowed) return { ...base, status: "blocked", reason: gate.reason, ms: Date.now() - startedAt };
       const out = await runVideoTask({
         resolved, task, timeoutMs: Math.max(TASK_TIMEOUT_MS, 20 * 60_000),
         artifactsDir: join(OUT_DIR, "artifacts"), pollMs: SELFTEST ? 200 : 8000, env: runnerEnv,
       });
-      budget.commit({ taskId: task.id, kind: "video", units, detail: chain });
+      const accounting = budget.commit({ reservationId: gate.reservationId, taskId: task.id, kind: "video", units: out.units ?? null, costCny: out.costCny ?? null, usageVerified: out.usageVerified ?? false, detail: chain });
       const verified = verifyExpectations(task, out);
       return {
-        ...base, chain, status: out.status === "ok" && verified.ok ? "ok" : out.status === "blocked" ? "blocked" : "failed",
+        ...base, chain, status: meteredStatus(out, verified, accounting),
         ms: out.ms ?? Date.now() - startedAt, taskId: out.taskId ?? null,
-        reason: failureReason(out, verified),
+        reason: meteredReason(out, verified, accounting),
+        accounting,
         artifacts: out.artifacts ?? [],
         receipt: out.receipt ?? null,
         units,
@@ -419,36 +430,8 @@ async function runTask(task) {
           ms: Date.now() - startedAt,
         };
       }
-      // 目标 server 不可达（如本机预览只起了三端、正式库连不上）→ blocked，不是产品缺陷
-      const apiHealth = (probeResult.checks ?? []).find((c) => c.name === "server.health");
-      if (!apiHealth?.ok) {
-        return { ...base, status: "blocked", reason: `目标 server 不可达（${environment.urls.api}${apiHealth?.error ? `：${apiHealth.error}` : ""}）——先确认目标环境再测产品链`, ms: Date.now() - startedAt };
-      }
-      let out;
-      try {
-        const token = await loginAsMember({
-          apiUrl: environment.urls.api,
-          workspaceSlug: task.workspaceSlug ?? profile.identity?.workspaceSlug ?? null,
-          memberNo: task.memberNo ?? profile.identity?.human ?? "MEM-001",
-        });
-        out = await runProductDispatchTask({
-          apiUrl: environment.urls.api, token, task,
-          timeoutMs: Math.max(TASK_TIMEOUT_MS, 8 * 60_000),
-          allowDb: Boolean(liveProfile.allowDb) && environment.isLocal,
-        });
-      } catch (err) {
-        const message = String(err?.message ?? err);
-        const networkLike = /fetch failed|ECONNREFUSED|ETIMEDOUT|socket hang up|network/i.test(message);
-        return { ...base, chain: "product-dispatch", status: networkLike ? "blocked" : "failed", reason: `${networkLike ? "目标不可达/网络错误" : "派单失败"}：${message.slice(0, 200)}`, ms: Date.now() - startedAt };
-      }
-      const verified = verifyExpectations(task, out);
-      return {
-        ...base, chain: "product-dispatch", status: out.status === "ok" && verified.ok ? "ok" : "failed",
-        ms: out.ms, threadId: out.threadId, finalStatus: out.finalStatus, asserts: out.asserts,
-        falseSuccess: out.falseSuccess,
-        reason: verified.ok ? undefined : `未满足期望：${verified.detail}`,
-        receipt: out.receipt,
-      };
+      const out = await runProductDispatchTask();
+      return { ...base, chain: "product-dispatch", status: out.status, reason: out.reason, accounting: { mode: "estimated", usageVerified: false }, ms: Date.now() - startedAt };
     }
     return { ...base, status: "failed", reason: `未知任务类型：${task.kind}`, ms: 0 };
   } catch (err) {
@@ -462,7 +445,7 @@ for (const task of tasks) {
   const icon = result.status === "ok" ? "✓" : result.status === "blocked" ? "⏸" : result.status === "skipped" ? "–" : "✗";
   console.log(`[acceptance:live] ${icon} ${result.id} ${result.status}${result.reason ? `（${result.reason.slice(0, 120)}）` : ""}`);
   const receiptPath = join(OUT_DIR, "receipts", `${result.id}.json`);
-  writeFileSync(receiptPath, JSON.stringify({ task: result.id, at: new Date().toISOString(), status: result.status, receipt: result.receipt ?? null, artifacts: result.artifacts ?? [], reason: result.reason ?? null }, null, 1));
+  writeFileSync(receiptPath, JSON.stringify({ task: result.id, at: new Date().toISOString(), status: result.status, accounting: result.accounting ?? null, receipt: result.receipt ?? null, artifacts: result.artifacts ?? [], reason: result.reason ?? null }, null, 1));
   writeFileSync(join(OUT_DIR, "transcripts", `${result.id}.json`), JSON.stringify(result, null, 1));
 }
 
@@ -484,8 +467,10 @@ const failed = results.filter((r) => r.status === "failed");
 const noCredentials = resolvedModels.length > 0 && resolvedModels.every((m) => !m.ready);
 const verdict = SELFTEST
   ? "selftest（非生产实测证据）"
-  : anyFalseSuccess
+  : anyFalseSuccess || budgetSummary.exceeded.length || budgetSummary.accounting.auditFailure
     ? "fail"
+    : !results.length
+      ? "blocked（未验证：没有匹配的实测任务）"
     : failed.length
       ? environment.isProduction || !noCredentials ? "fail" : "blocked（未验证，不得写通过：本机预览档位且缺真实凭据）"
       : blocked.length ? "blocked（未验证，不得写通过）" : "pass";
@@ -532,6 +517,18 @@ if (REQUIRE_LIVE && verdict !== "pass") process.exitCode = 1;
  * 统一失败原因口径：blocked 用原始原因；调用失败保留**适配器原始错误**（不再只剩“未满足期望”）；
  * 调用成功但判定不过才写“未满足期望”。这样报告能直接指出 404/参数不支持等真实原因。
  */
+function meteredStatus(out, verified, accounting) {
+  if (!accounting.allowed) return "failed";
+  if (out.status === "ok" && !accounting.usageVerified && !SELFTEST) return "blocked";
+  return out.status === "ok" && verified.ok ? "ok" : out.status === "blocked" ? "blocked" : "failed";
+}
+
+function meteredReason(out, verified, accounting) {
+  if (!accounting.allowed) return accounting.reason;
+  if (out.status === "ok" && !accounting.usageVerified && !SELFTEST) return "实际用量缺失或不可核验：保留预估计量，未验证，不能写生产实测通过";
+  return failureReason(out, verified);
+}
+
 function failureReason(out, verified) {
   if (out.status === "blocked") return out.reason;
   if (out.status !== "ok") return `调用失败：${String(out.reason ?? "未知原因").slice(0, 240)}`;
@@ -608,7 +605,11 @@ function renderMarkdown(r) {
   md.push(`| 生图张数 | ${u.images} | ${b.maxImages} |`);
   md.push(`| 视频段数 | ${u.videoClips} | ${b.maxVideoClips} |`);
   md.push(`| 视频总秒数 | ${u.videoSeconds} | ${b.maxVideoSecondsTotal} |`);
-  md.push(`| 预估成本 | ¥${u.costCny} | ¥${b.maxCostCny} |`);
+  md.push(`| 保守计入成本 | ¥${u.costCny} | ¥${b.maxCostCny} |`);
+  md.push("");
+  md.push(`- 用量计量：${r.budget.accounting.mode}；未核验任务：${r.budget.accounting.unverified.join("、") || "无"}；未结算任务：${r.budget.accounting.pending.join("、") || "无"}。`);
+  md.push("- 成本按保守预估或已报告费用取大值；单价估计不等于供应商账单。LLM completion 有显式上界，输入 token 仍按响应 usage 结算；超额记入并禁止后续调用。");
+  md.push("- dsh/product 多轮子调用尚无可执行的预算上界，生产派发已阻断；自检替身不能证明 P 域真实能力。");
   if (r.budget.blocked.length) {
     md.push("");
     md.push("额度拦下的任务（不得静默跳过）：");

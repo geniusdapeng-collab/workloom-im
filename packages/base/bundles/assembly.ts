@@ -20,6 +20,7 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import YAML from "yaml";
+import { loadPcPageRegistry, validateBundlePcCases, type PcCaseValidation } from "./pc-page-registry.mjs";
 import { gatewayAppend, gatewayAppendOnClient, registerReadActions, registerWriteActions } from "../workdata/gateway.js";
 import { fenceRulesOf } from "../fence-engine/dsl.js";
 import { parseModelPolicy } from "../model-router/policy.js";
@@ -63,8 +64,8 @@ export function bundlesRoot(): string {
   return DEFAULT_BUNDLES_ROOT;
 }
 
-/** 已注册工作台页面（P7E3 ⑤「UI 用例同步」校验基准；新增页面须同步此表与 cases.json） */
-export const REGISTERED_PAGES = ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9"] as const;
+/** UI 用例使用当前 PC 的实际路由登记；行业用例清单不能自行注册页面。 */
+export { loadPcPageRegistry, registeredBundlePcPages } from "./pc-page-registry.mjs";
 
 export type SlotId = "archive" | "enums" | "tools" | "fences" | "presets" | "ui" | "model-policy";
 export interface SlotState {
@@ -798,6 +799,8 @@ export interface BundleDiskAssets {
   fenceFiles: string[];
   fencePacks: FenceYml[];
   uiCases: UiCasesJson | null;
+  /** 事务外校验真实 PC 登记和当前已验证 Bundle 的页面权限，失败直接进入起飞前检查单。 */
+  uiCaseValidation: PcCaseValidation;
   /** 第⑦槽：模型路由策略原文（缺失=null → 底座默认；非法 → 校验标红） */
   modelPolicyText: string | null;
 }
@@ -825,6 +828,16 @@ function loadBundleDiskAssets(dir: string, slug: string): BundleDiskAssets {
     // HP-02：装配层统一把 `fences:` 形态归一为 `rules:`，后续消费方（覆盖层视图/rebase/计数）只看 rules
     return { assetPath, value: { ...value, rules: fenceRulesOf(value) as FenceYml["rules"] } };
   });
+  const uiCases = readDeclaredJson<UiCasesJson>(uiCasesPath);
+  let uiCaseValidation: PcCaseValidation;
+  try {
+    uiCaseValidation = validateBundlePcCases(uiCases, loadPcPageRegistry(), bj);
+  } catch (error) {
+    uiCaseValidation = {
+      ok: false, pages: [], caseCount: Array.isArray(uiCases?.cases) ? uiCases.cases.length : 0,
+      detail: error instanceof Error ? error.message : "工作台页面登记校验失败",
+    };
+  }
   return {
     dir,
     bj,
@@ -835,7 +848,8 @@ function loadBundleDiskAssets(dir: string, slug: string): BundleDiskAssets {
     presets: parseBundleWorkforcePresets(bj, slug, bundleRoot),
     fenceFiles: fenceAssets.map(({ assetPath }) => assetPath.split("/").at(-1) ?? assetPath),
     fencePacks: fenceAssets.map(({ value }) => value).filter((fence) => fence?.version),
-    uiCases: readDeclaredJson(uiCasesPath),
+    uiCases,
+    uiCaseValidation,
     modelPolicyText: provides.modelPolicy
       ? readFileSync(verifiedAssetPath(slug, provides.modelPolicy, bundleRoot), "utf-8")
       : null,
@@ -1018,17 +1032,11 @@ async function computeAssemblyScoped(
 
   /* ---------- 槽⑥ 工作台 UI + 校验⑤ UI 用例同步 ---------- */
   const uiCases = assets.uiCases;
-  const cases = uiCases?.cases ?? [];
-  const casePages = [...new Set(cases.map((c) => c.page))];
-  const unregistered = casePages.filter((p) => !(REGISTERED_PAGES as readonly string[]).includes(p));
-  const checkUi: CheckItem = !uiCases
-    ? { key: "ui", label: "界面状态用例", ok: false, slot: "ui",
-        detail: "缺少界面状态用例清单", fix: "在行业包里补齐工作台界面用例" }
-    : unregistered.length > 0
-      ? { key: "ui", label: "界面状态用例", ok: false, slot: "ui",
-          detail: `用例引用了未注册页面：${unregistered.join("、")}`, fix: "同步页面登记或修正用例" }
-      : { key: "ui", label: "界面状态用例", ok: true, slot: "ui",
-          detail: `${casePages.length} 个页面 · ${cases.length} 条界面状态用例已就位` };
+  const uiValidation = assets.uiCaseValidation;
+  const checkUi: CheckItem = {
+    key: "ui", label: "界面状态用例", ok: uiValidation.ok, slot: "ui", detail: uiValidation.detail,
+    ...(!uiValidation.ok ? { fix: "重新构建工作台页面登记，并核对行业页面、导航权限与状态用例" } : {}),
+  };
 
   /* ---------- 槽⑦ 模型路由策略（v3.0：非阻断——缺失用底座默认；存在但非法 → 标红拒绝激活） ---------- */
   let modelPolicyScenes = 0;
@@ -1069,7 +1077,7 @@ async function computeAssemblyScoped(
         ? `${presets.length} 个岗位 · 安全规则绑定校验 ${fenceFails.length > 0 ? `${fenceFails.length} 项失败` : "通过"}`
         : "待填充", go: "p8" },
     { id: "ui", label: "⑥ 工作台界面", filled: !!uiCases, failed: failedSlots.has("ui"),
-      summary: uiCases ? `${casePages.length} 个页面 · ${cases.length} 条界面状态用例` : "待填充" },
+      summary: uiCases ? `${uiValidation.pages.length} 个页面 · ${uiValidation.caseCount} 条界面状态用例` : "待填充" },
     { id: "model-policy", label: "⑦ 模型与成本策略", filled: assets.modelPolicyText !== null,
       failed: failedSlots.has("model-policy"),
       summary: assets.modelPolicyText !== null

@@ -25,6 +25,7 @@ export async function buildScorecard(app: pg.Pool, scope: Scope, windowDays = 30
   try {
     await client.query("BEGIN");
     await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+    await client.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
     const r = await client.query<{ action: string; dry: number | null; n: string }>(
       `SELECT payload->'decision'->>'action' AS action,
               CASE WHEN payload->'decision'->'params'->>'dry_run' = 'true' THEN 1 ELSE 0 END AS dry,

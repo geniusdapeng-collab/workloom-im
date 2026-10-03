@@ -1,37 +1,41 @@
 /**
  * service · 五元事件写入助手（D16 同事务纪律）
- *  - serviceTx：BEGIN + set_config 双 GUC + tenantId 解析 → 回调 → COMMIT/ROLLBACK
+ *  - serviceTx：可信双作用域 → BEGIN + set_config 双 GUC → 回调 → COMMIT/ROLLBACK
  *  - appendEventOn：事务内经 gatewayAppendOnClient 落五元事件（三段瀑布 + 哈希链 + 幂等）
  * C 端 actor 为 c_user（who.type=human，id=cUserId）；B 端为成员编号（MEM-xxx）；系统动作 type=system。
  */
 import type pg from "pg";
 import { getAppPool } from "@workloom/db";
 import { gatewayAppendOnClient, type ActorInfo } from "@workloom/base/workdata";
+import { requireServiceScope, runWithServiceScope, type ServiceScope } from "./scope.js";
+export type { ServiceScope } from "./scope.js";
 
-export interface ServiceScope { tenantId: string; workspaceId: string }
-
-/** 在 RLS 上下文事务内执行（解析 tenantId 一并交给回调） */
+/** 在已认证的 RLS 上下文执行；非 HTTP 调用方可传已有可信 scope，禁止属主反查。 */
 export async function serviceTx<T>(
   workspaceId: string,
   fn: (client: pg.PoolClient, scope: ServiceScope) => Promise<T>,
+  explicitScope?: ServiceScope,
 ): Promise<T> {
+  const scope = requireServiceScope(workspaceId, explicitScope);
   const pool = getAppPool();
   const client = await pool.connect();
+  let releaseError: Error | undefined;
   try {
     await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [workspaceId]);
-    const ws = await client.query<{ tenant_id: string }>(`SELECT tenant_id FROM workspaces WHERE id=$1`, [workspaceId]);
-    if (!ws.rows[0]?.tenant_id) throw new Error(`serviceTx: 工作区不存在 ${workspaceId}`); // M5 fail-closed：不写 tenant_id='' 孤儿事件
-    const tenantId = ws.rows[0].tenant_id as string;
-    await client.query("SELECT set_config('app.tenant_id', $1, true)", [tenantId]);
-    const result = await fn(client, { tenantId, workspaceId });
+    await client.query("SELECT set_config('app.workspace_id', $1, true), set_config('app.tenant_id', $2, true)", [scope.workspaceId, scope.tenantId]);
+    const result = await runWithServiceScope(scope, () => fn(client, scope));
     await client.query("COMMIT");
     return result;
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackError) {
+      releaseError = rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError));
+      throw new AggregateError([err, rollbackError], "serviceTx: 事务回滚失败", { cause: err });
+    }
     throw err;
   } finally {
-    client.release();
+    client.release(releaseError);
   }
 }
 
@@ -40,11 +44,12 @@ export async function svcQuery<T extends Record<string, unknown> = Record<string
   workspaceId: string,
   sql: string,
   params: unknown[] = [],
+  explicitScope?: ServiceScope,
 ): Promise<T[]> {
   return serviceTx(workspaceId, async (client) => {
     const r = await client.query(sql, params);
     return r.rows as T[];
-  });
+  }, explicitScope);
 }
 
 /** 事务内落五元事件（调用方须在 serviceTx 回调内使用，与业务写同一 COMMIT） */

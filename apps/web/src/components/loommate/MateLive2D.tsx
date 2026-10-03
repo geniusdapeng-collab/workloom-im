@@ -24,6 +24,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import * as PIXI from "pixi.js";
 import type { Live2DModel } from "pixi-live2d-display";
 import { VoiceEngine } from "../../voice/VoiceEngine";
+import { createMateWebGLSurface, type MateWebGLSurface } from "./MateWebGLRenderer";
 
 export type MateMood = "neutral" | "happy" | "fear" | "love";
 export type MateGesture = "handup" | "thumbup" | null;
@@ -53,14 +54,49 @@ export interface MateAvatarTelemetry {
 declare global {
   interface Window {
     Live2D?: unknown;
+    Live2DCubismCore?: unknown;
     PIXI?: typeof PIXI;
     __loommateLive2D?: Live2DHandle;
     __loommateLive2DReady?: () => boolean;
     __loommateStep?: (dt: number) => void;
+    __loommateSay?: (sec: number) => void;
     __loommateTelemetry?: MateAvatarTelemetry;
+    __loommateL2DErr?: string;
     /** 打包验收专用：仍走正式参数驱动与动作组，只替代不可预测的系统 TTS boundary。 */
     __loommateExercise?: () => void;
   }
+}
+
+interface AvatarProbes {
+  handle?: Live2DHandle;
+  ready?: () => boolean;
+  step?: (dt: number) => void;
+  say?: (sec: number) => void;
+  telemetry: MateAvatarTelemetry;
+  exercise: () => void;
+}
+
+const avatarProbeOwners = new Set<AvatarProbes>();
+
+function publishAvatarProbes(probes?: AvatarProbes) {
+  window.__loommateLive2D = probes?.handle;
+  window.__loommateLive2DReady = probes?.ready;
+  window.__loommateStep = probes?.step;
+  window.__loommateSay = probes?.say;
+  window.__loommateTelemetry = probes?.telemetry;
+  window.__loommateExercise = probes?.exercise;
+}
+
+function registerAvatarProbes(probes: AvatarProbes): () => void {
+  avatarProbeOwners.add(probes);
+  publishAvatarProbes(probes);
+  return () => {
+    if (!avatarProbeOwners.delete(probes)) return;
+    if (window.__loommateTelemetry !== probes.telemetry && window.__loommateExercise !== probes.exercise) return;
+    let survivor: AvatarProbes | undefined;
+    for (const owner of avatarProbeOwners) survivor = owner;
+    publishAvatarProbes(survivor);
+  };
 }
 
 interface ModelProfile {
@@ -101,26 +137,49 @@ const OPEN_OF_CHAR = (ch: string): number => {
 };
 
 let corePromise: Promise<void> | null = null;
+const coreLoads = new Map<string, Promise<void>>();
+const CORE_LOAD_TIMEOUT = 12_000;
+const AVATAR_STARTUP_TIMEOUT = 15_000;
 /** 加载 Cubism 2.1 + 4 双 core（插件两个 factory 都检查 runtime），幂等 */
 function ensureCore(): Promise<void> {
-  if (window.Live2D) return Promise.resolve();
-  const inject = (src: string) => new Promise<void>((resolve, reject) => {
-    const s = document.createElement("script");
-    s.src = src;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error(src + " 加载失败"));
-    document.head.appendChild(s);
-  });
+  if (window.Live2D && window.Live2DCubismCore) return Promise.resolve();
+  const inject = (src: string, available: () => boolean): Promise<void> => {
+    if (available()) return Promise.resolve();
+    const pending = coreLoads.get(src);
+    if (pending) return pending;
+    const load = new Promise<void>((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = src;
+      const finish = (error?: Error) => {
+        window.clearTimeout(timeout);
+        script.onload = null;
+        script.onerror = null;
+        if (error) { script.remove(); reject(error); }
+        else resolve();
+      };
+      const timeout = window.setTimeout(() => finish(new Error(`${src} core 加载超时`)), CORE_LOAD_TIMEOUT);
+      script.onload = () => finish(available() ? undefined : new Error(`${src} 未提供 Cubism 运行时`));
+      script.onerror = () => finish(new Error(`${src} 加载失败`));
+      document.head.appendChild(script);
+    }).finally(() => { coreLoads.delete(src); });
+    coreLoads.set(src, load);
+    return load;
+  };
   corePromise ??= Promise.all([
-    inject("/live2d/live2d.min.js"),
-    inject("/live2d/live2dcubismcore.min.js"),
-  ]).then(() => undefined);
+    inject("/live2d/live2d.min.js", () => !!window.Live2D),
+    inject("/live2d/live2dcubismcore.min.js", () => !!window.Live2DCubismCore),
+  ]).then(() => undefined).finally(() => { corePromise = null; });
   return corePromise;
 }
 
 /* 启动预热：应用空闲 1.5s 后预载双 core（不与首屏关键资源争抢），挂件首开即载即演 */
 if (typeof window !== "undefined") {
-  window.setTimeout(() => { void ensureCore().catch(() => undefined); }, 1500);
+  window.setTimeout(() => {
+    if (!canUseWebGL()) return;
+    void ensureCore().catch((error) => {
+      window.__loommateL2DErr = String(error).slice(0, 500);
+    });
+  }, 1500);
 }
 
 interface MateRenderProps {
@@ -152,6 +211,8 @@ function MateVector2D({ size, mood = "neutral", gesture = null, frame = "bust", 
   const [speaking, setSpeaking] = useState(false);
   const [commandGesture, setCommandGesture] = useState<MateGesture>(null);
   const handleRef = useRef<Live2DHandle | null>(null);
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
   const telemetryRef = useRef<MateAvatarTelemetry>({
     backend: "vector2d", modelUrl: "vector2d", mouthParameter: "svg-mouth",
     mouthPeak: 0, lipStarts: 0, lipBoundaries: 0, syntheticLipFrames: 0,
@@ -174,12 +235,10 @@ function MateVector2D({ size, mood = "neutral", gesture = null, frame = "bust", 
 
   useEffect(() => {
     const telemetry = telemetryRef.current;
-    window.__loommateTelemetry = telemetry;
     // CSS 眨眼每 5.2 秒一次；计数用于整包验收确认动画时钟确实在推进。
     const blinkTimer = window.setInterval(() => { telemetry.blinkCount += 1; }, 5200);
     return () => {
       window.clearInterval(blinkTimer);
-      if (window.__loommateTelemetry === telemetry) window.__loommateTelemetry = undefined;
     };
   }, []);
 
@@ -191,9 +250,12 @@ function MateVector2D({ size, mood = "neutral", gesture = null, frame = "bust", 
 
   useEffect(() => {
     let gestureTimer = 0;
+    let exerciseTimer = 0;
+    let disposed = false;
     const handle: Live2DHandle = {
       setMood: () => undefined,
       gesture: (g) => {
+        if (disposed) return;
         telemetryRef.current.gestureCount += 1;
         telemetryRef.current.lastMotionGroup = g;
         setCommandGesture(g);
@@ -203,7 +265,8 @@ function MateVector2D({ size, mood = "neutral", gesture = null, frame = "bust", 
       speakWithAudio: () => undefined,
     };
     handleRef.current = handle;
-    window.__loommateExercise = () => {
+    const exercise = () => {
+      if (disposed) return;
       const telemetry = telemetryRef.current;
       telemetry.lipStarts += 1;
       telemetry.syntheticLipFrames += 1;
@@ -211,15 +274,19 @@ function MateVector2D({ size, mood = "neutral", gesture = null, frame = "bust", 
       telemetry.blinkCount += 1;
       setSpeaking(true); setMouthOpen(true);
       handle.gesture("handup");
-      window.setTimeout(() => { setSpeaking(false); setMouthOpen(false); }, 650);
+      window.clearTimeout(exerciseTimer);
+      exerciseTimer = window.setTimeout(() => { setSpeaking(false); setMouthOpen(false); }, 650);
     };
-    onReady?.(handle);
+    const offProbes = registerAvatarProbes({ telemetry: telemetryRef.current, exercise });
+    onReadyRef.current?.(handle);
     return () => {
+      disposed = true;
       window.clearTimeout(gestureTimer);
-      window.__loommateExercise = undefined;
+      window.clearTimeout(exerciseTimer);
+      offProbes();
       handleRef.current = null;
     };
-  }, [onReady]);
+  }, []);
 
   const happy = mood === "happy" || mood === "love";
   const afraid = mood === "fear";
@@ -313,11 +380,16 @@ function MateVector2D({ size, mood = "neutral", gesture = null, frame = "bust", 
 function Live2DBackend({ size, mood = "neutral", gesture = null, modelUrl = "/live2d/mao/Mao.model3.json", frame = "bust", onReady, onFailure }: MateRenderProps & { onFailure: (reason: string) => void }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const modelRef = useRef<Live2DModel | null>(null);
-  const appRef = useRef<PIXI.Application | null>(null);
+  const handleRef = useRef<Live2DHandle | null>(null);
+  const appRef = useRef<MateWebGLSurface | null>(null);
   const moodRef = useRef<MateMood>(mood);
   moodRef.current = mood;
   const gestureRef = useRef<MateGesture>(gesture);
   gestureRef.current = gesture;
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
+  const onFailureRef = useRef(onFailure);
+  onFailureRef.current = onFailure;
   const lipTimer = useRef<number | null>(null);
   const [renderReady, setRenderReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -329,8 +401,63 @@ function Live2DBackend({ size, mood = "neutral", gesture = null, modelUrl = "/li
     let offLip: (() => void) | null = null;
     let offMouse: (() => void) | null = null;
     let offModelOverride: (() => void) | null = null;
+    let offContextLoss: (() => void) | null = null;
+    let offAudio: (() => void) | null = null;
+    let offProbes: (() => void) | null = null;
+    let ownedApp: MateWebGLSurface | null = null;
+    let ownedModel: Live2DModel | null = null;
+    let ownedHandle: Live2DHandle | null = null;
+    let ownedReady: (() => boolean) | null = null;
+    let ownedStep: ((dt: number) => void) | null = null;
+    let ownedSay: ((sec: number) => void) | null = null;
+    let ownedExercise: (() => void) | null = null;
+    let exerciseTimer = 0;
+    let startupTimer = 0;
+    let phase = "Cubism core";
     let raf = 0;
     let last = performance.now();
+
+    const release = () => {
+      disposed = true;
+      window.clearTimeout(startupTimer);
+      window.clearTimeout(exerciseTimer);
+      cancelAnimationFrame(raf);
+      offLip?.(); offLip = null;
+      offMouse?.(); offMouse = null;
+      offModelOverride?.(); offModelOverride = null;
+      offContextLoss?.(); offContextLoss = null;
+      offAudio?.(); offAudio = null;
+      if (lipTimer.current) { window.clearInterval(lipTimer.current); lipTimer.current = null; }
+      offProbes?.(); offProbes = null;
+      if (handleRef.current === ownedHandle) handleRef.current = null;
+      const model = ownedModel;
+      ownedModel = null;
+      if (modelRef.current === model) modelRef.current = null;
+      if (model) {
+        try {
+          ownedApp?.stage.removeChild(model);
+          // 纹理由 Pixi 按 URL 共享；释放本模型，不销毁其它实例仍使用的纹理缓存。
+          model.destroy({ children: true });
+        } catch (error) { console.warn("Live2D 模型释放失败", error); }
+      }
+      const app = ownedApp;
+      ownedApp = null;
+      if (appRef.current === app) appRef.current = null;
+      if (app) {
+        try { app.destroy(); }
+        catch (error) { console.warn("Live2D 画布释放失败", error); }
+      }
+    };
+    const fail = (error: unknown) => {
+      if (disposed) return;
+      const message = String(error instanceof Error ? error.stack ?? error.message : error).slice(0, 500);
+      window.__loommateL2DErr = message;
+      release();
+      setLoadError(message);
+      setRenderReady(false);
+      onFailureRef.current(message);
+    };
+    startupTimer = window.setTimeout(() => fail(new Error(`${phase} 数字人启动超时`)), AVATAR_STARTUP_TIMEOUT);
 
     (async () => {
       await ensureCore();
@@ -338,28 +465,32 @@ function Live2DBackend({ size, mood = "neutral", gesture = null, modelUrl = "/li
       window.PIXI = PIXI;
       // 动态 import：该插件在模块求值时即检查 window.Live2D（Cubism 2 runtime），
       // 必须等 core 注入后再加载（静态 import 会整包报错白屏——已踩过）
+      phase = "Live2D 插件";
       const { Live2DModel } = await import("pixi-live2d-display");
+      if (disposed || !hostRef.current) return;
 
       const capture = new URLSearchParams(location.search).has("capture");
-      const app = new PIXI.Application({
-        width: size,
-        height: size,
-        backgroundAlpha: 0,
-        antialias: true,
-        preserveDrawingBuffer: capture,   // 路线 B 截图保真
-        autoStart: false,                 // 自控时钟（虚拟时钟契约前提）
-      });
+      const app = createMateWebGLSurface(size);
+      ownedApp = app;
       appRef.current = app;
-      const canvas = app.view as HTMLCanvasElement;
+      const canvas = app.view;
       hostRef.current.appendChild(canvas);
       canvas.style.width = "100%";
       canvas.style.height = "100%";
       canvas.style.position = "relative";
       canvas.style.zIndex = "2";
-      canvas.addEventListener("webglcontextlost", () => setRenderReady(false), { once: true });
+      const onContextLoss = () => fail(new Error("Live2D WebGL 上下文丢失"));
+      app.sourceView.addEventListener("webglcontextlost", onContextLoss, { once: true });
+      offContextLoss = () => app.sourceView.removeEventListener("webglcontextlost", onContextLoss);
+      const renderFrame = () => {
+        try { app.render(); return true; }
+        catch (error) { fail(error); return false; }
+      };
 
+      phase = "Live2D 模型";
       const model = await Live2DModel.from(modelUrl, { autoUpdate: false });
-      if (disposed) return;
+      ownedModel = model;
+      if (disposed) { release(); return; }
       modelRef.current = model;
       // 构图：bust=头肩胸取景——模型向下多探，让脸部占据视窗上中部（shizuku 为带课桌全身模型）；
       //      full=全身像——整体缩放至视口 ~92%，脚底贴视口底部（首装仪式舞台位，完整入镜不裁切）
@@ -385,12 +516,13 @@ function Live2DBackend({ size, mood = "neutral", gesture = null, modelUrl = "/li
         blinkCount: 0, gestureCount: 0, lastMotionGroup: null,
         parameterWrites: 0, parameterWriteFailures: 0,
       };
-      window.__loommateTelemetry = telemetry;
 
       // MotionManager 会用 IDLE 优先级自动启动 profile.idleMotion；这里不能手动以默认
       // NORMAL 优先级启动，否则同为 NORMAL 的首个 TapBody 手势会被拒绝（实机验收已复现）。
       const expr = moodExprOf(modelUrl, moodRef.current);
-      if (expr) await model.expression(expr).catch(() => undefined);
+      phase = "Live2D 初始表情";
+      if (expr) await model.expression(expr).catch((error) => console.warn("Live2D 初始表情加载失败", error));
+      if (disposed) return;
 
       /* ================= 口型平滑引擎 =================
        * 驱动方只设「目标值」，引擎在 tick 内指数趋近：开口快（k=0.55）闭口慢（k=0.18），
@@ -464,6 +596,7 @@ function Live2DBackend({ size, mood = "neutral", gesture = null, modelUrl = "/li
        * tick 内 focusCur 以 0.06 惯性趋近目标（叠模型内部惯性，双层平滑）。capture 禁用。 */
       let focusTX = 0, focusTY = 0, focusCX = 0, focusCY = 0;
       let lastMouse = 0, nextWander = 0;
+      let focusFailureReported = false;
       if (!capture && typeof window !== "undefined") {
         let mThrottle = 0;
         const onMove = (e: MouseEvent) => {
@@ -495,7 +628,11 @@ function Live2DBackend({ size, mood = "neutral", gesture = null, modelUrl = "/li
           focusCY += dy * 0.06;
           const r = (app.view as HTMLCanvasElement).getBoundingClientRect();
           if (r.width > 0) {
-            try { model.focus(r.left + r.width / 2 + focusCX * r.width * 0.45, r.top + r.height / 2 + focusCY * r.height * 0.45); } catch { /* 静默 */ }
+            try { model.focus(r.left + r.width / 2 + focusCX * r.width * 0.45, r.top + r.height / 2 + focusCY * r.height * 0.45); }
+            catch (error) {
+              if (!focusFailureReported) console.warn("Live2D 视线驱动失败", error);
+              focusFailureReported = true;
+            }
           }
         }
       };
@@ -562,30 +699,50 @@ function Live2DBackend({ size, mood = "neutral", gesture = null, modelUrl = "/li
       /* ---------- 对外句柄（调试探针 + 验收驱动） ---------- */
       const handle: Live2DHandle = {
         setMood: (m) => {
+          if (disposed) return;
           moodRef.current = m;
           const e = moodExprOf(modelUrl, m);
-          if (e) void model.expression(e).catch(() => undefined);
-          else void model.expression(null as unknown as string).catch(() => undefined);
+          void model.expression(e as unknown as string).catch((error) => console.warn("Live2D 表情切换失败", error));
           poke();
         },
         gesture: (g) => {
+          if (disposed) return;
           if (g === "handup" || g === "thumbup") {
             void model.motion(profile.gestureMotion).then((started) => {
-              if (started) {
+              if (started && !disposed) {
                 telemetry.gestureCount += 1;
                 telemetry.lastMotionGroup = profile.gestureMotion;
               }
-            }).catch(() => false);
+            }).catch((error) => console.warn("Live2D 手势加载失败", error));
           }
           poke();
         },
         speakWithAudio: (url) => {
+          if (disposed) return;
+          offAudio?.();
+          offAudio = null;
           /* 口型驱动②：音频文件 —— RMS 振幅 → 开口度目标；频带能量比 → 嘴形（若模型支持）。
            * 低频占比高偏圆唇(o/u)，中高频占比高偏展唇(a/i)。 */
           void (async () => {
+            let stopAudio: (() => void) | null = null;
             try {
               const audio = new Audio(url);
               const ctx = new AudioContext();
+              let alive = true;
+              let audioRaf = 0;
+              stopAudio = () => {
+                if (!alive) return;
+                alive = false;
+                cancelAnimationFrame(audioRaf);
+                audio.onended = null;
+                audio.onerror = null;
+                audio.pause();
+                mouthTarget = 0;
+                openUntil = 0;
+                void ctx.close().catch((error) => console.warn("Live2D 音频分析器释放失败", error));
+                if (offAudio === stopAudio) offAudio = null;
+              };
+              offAudio = stopAudio;
               const src = ctx.createMediaElementSource(audio);
               const analyser = ctx.createAnalyser();
               analyser.fftSize = 512;
@@ -595,10 +752,13 @@ function Live2DBackend({ size, mood = "neutral", gesture = null, modelUrl = "/li
               const tbuf = new Uint8Array(analyser.frequencyBinCount);
               const fbuf = new Uint8Array(analyser.frequencyBinCount);
               const binHz = (ctx.sampleRate / 2) / analyser.frequencyBinCount;
-              let alive = true;
-              audio.onended = () => { alive = false; mouthTarget = 0; openUntil = 0; void ctx.close(); };
+              audio.onended = stopAudio;
+              audio.onerror = () => {
+                console.warn("Live2D 音频口型资源加载失败");
+                stopAudio?.();
+              };
               const loop = () => {
-                if (!alive) return;
+                if (!alive || disposed) { stopAudio?.(); return; }
                 analyser.getByteTimeDomainData(tbuf);
                 let sum = 0;
                 for (const v of tbuf) sum += (v - 128) * (v - 128);
@@ -621,36 +781,45 @@ function Live2DBackend({ size, mood = "neutral", gesture = null, modelUrl = "/li
                   }
                 }
                 poke();
-                requestAnimationFrame(loop);
+                audioRaf = requestAnimationFrame(loop);
               };
               await audio.play();
+              if (!alive || disposed) { stopAudio(); return; }
               loop();
-            } catch { /* 静默 */ }
+            } catch (error) {
+              stopAudio?.();
+              console.warn("Live2D 音频口型播放失败", error);
+            }
           })();
         },
       };
-      window.__loommateLive2D = handle;
-      window.__loommateLive2DReady = () => true;
-      window.__loommateExercise = () => {
+      ownedHandle = handle;
+      handleRef.current = handle;
+      // 多实例的表情加载完成顺序不固定，探针与遥测必须来自同一个已就绪实例。
+      ownedReady = () => !disposed;
+      ownedExercise = () => {
+        if (disposed) return;
         driveLip({ type: "start", text: "数字人动作验收" });
         driveLip({ type: "boundary", text: "数字人动作验收", charIndex: 1 });
         handle.gesture("handup");
         blinkStartedAt = performance.now();
-        window.setTimeout(() => driveLip({ type: "end" }), 700);
+        window.clearTimeout(exerciseTimer);
+        exerciseTimer = window.setTimeout(() => driveLip({ type: "end" }), 700);
       };
       // 首屏 handup 在模型异步加载前已经成为 props；加载完成时必须补执行一次。
       if (gestureRef.current) handle.gesture(gestureRef.current);
-      onReady?.(handle);
 
       /* ---------- 时钟：capture=虚拟步进；常态=rAF（按需渲染+生态降帧） ---------- */
       if (capture) {
         // 路线 B：虚拟时钟——口型/动作/物理全部按 dt 推进，与墙钟解耦（契约不动）
         let virtualT = 0;
         let speakUntil = -1;
-        (window as unknown as { __loommateSay?: (sec: number) => void }).__loommateSay = (sec: number) => {
+        ownedSay = (sec: number) => {
+          if (disposed) return;
           speakUntil = virtualT + sec;
         };
-        window.__loommateStep = (dt: number) => {
+        ownedStep = (dt: number) => {
+          if (disposed) return;
           virtualT += dt;
           if (virtualT < speakUntil) {
             // 说话节律：双频叠加近似自然开合（非机械正弦）
@@ -660,9 +829,9 @@ function Live2DBackend({ size, mood = "neutral", gesture = null, modelUrl = "/li
             mouthCur = 0;
           }
           model.update(dt * 1000);
-          app.render();
+          renderFrame();
         };
-        app.render();
+        if (!renderFrame()) return;
         setRenderReady(true);
       } else {
         const tick = (now: number) => {
@@ -693,59 +862,32 @@ function Live2DBackend({ size, mood = "neutral", gesture = null, modelUrl = "/li
             ecoDiv = 0;
           }
           model.update(dt);
-          app.render();
+          if (!renderFrame()) return;
           raf = requestAnimationFrame(tick);
         };
-        app.render();
+        if (!renderFrame()) return;
         setRenderReady(true);
         raf = requestAnimationFrame(tick);
       }
-    })().catch((e) => {
-      // 加载失败留证（SVG 兜底由 LoomMate 侧接管）
-      const message = String(e?.stack ?? e).slice(0, 500);
-      (window as unknown as { __loommateL2DErr?: string }).__loommateL2DErr = message;
-      if (!disposed) {
-        setLoadError(message);
-        onFailure(message);
-      }
-    });
+      window.clearTimeout(startupTimer);
+      offProbes = registerAvatarProbes({
+        handle, ready: ownedReady, telemetry, exercise: ownedExercise,
+        step: ownedStep ?? undefined, say: ownedSay ?? undefined,
+      });
+      onReadyRef.current?.(handle);
+    })().catch(fail);
 
-    return () => {
-      disposed = true;
-      cancelAnimationFrame(raf);
-      offLip?.();
-      offMouse?.();
-      offModelOverride?.();
-      if (lipTimer.current) window.clearInterval(lipTimer.current);
-      window.__loommateLive2DReady = undefined;
-      window.__loommateStep = undefined;
-      window.__loommateExercise = undefined;
-      window.__loommateTelemetry = undefined;
-      try { appRef.current?.destroy(true, { children: true }); } catch { /* 静默 */ }
-      appRef.current = null;
-      modelRef.current = null;
-    };
-  }, [size, modelUrl, frame, onReady, onFailure]);
+    return release;
+  }, [size, modelUrl, frame]);
 
   // mood 联动
   useEffect(() => {
-    const model = modelRef.current;
-    if (!model) return;
-    const e = moodExprOf(modelUrl, mood);
-    if (e) void model.expression(e).catch(() => undefined);
+    handleRef.current?.setMood(mood);
   }, [mood]);
 
   // 手势联动
   useEffect(() => {
-    if (!gesture || !modelRef.current) return;
-    const profile = profileOf(modelUrl);
-    void modelRef.current.motion(profile.gestureMotion).then((started) => {
-      const telemetry = window.__loommateTelemetry;
-      if (started && telemetry) {
-        telemetry.gestureCount += 1;
-        telemetry.lastMotionGroup = profile.gestureMotion;
-      }
-    }).catch(() => false);
+    if (gesture) handleRef.current?.gesture(gesture);
   }, [gesture, modelUrl]);
 
   return (
