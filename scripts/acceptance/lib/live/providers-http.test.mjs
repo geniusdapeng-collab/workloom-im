@@ -57,15 +57,12 @@ async function mediaWire(t, handle) {
 }
 const reply = (res, status, body) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(body)); };
 const mediaArgs = (kind, url, extra = {}) => ({ resolved: { ready: true, credentialEnv: "SYNTHETIC_API_KEY", model: "synthetic-model", baseUrl: url }, env,
-  // This is a loopback fixture deadline; production adapter defaults are unchanged.
-  task: { id: kind === "image" ? "IMG-UNKNOWN" : "VID-UNKNOWN", prompt: "synthetic", images: 1, durationSeconds: 12 }, timeoutMs: 5000, pollMs: 0, ...extra });
+  task: { id: kind === "image" ? "IMG-UNKNOWN" : "VID-UNKNOWN", prompt: "synthetic", images: 1, durationSeconds: 12 }, timeoutMs: 500, pollMs: 0, ...extra });
 
 test("media usage: actual HTTP timeout never becomes measured zero image count or video duration", async (t) => {
   for (const kind of ["image", "video"]) {
     const wire = await mediaWire(t, () => {});
-    // Leave time for the real HTTP request to arrive before timing out the
-    // deliberately silent server; the request-count assertion remains mandatory.
-    const result = await (kind === "image" ? runImageTask : runVideoTask)(mediaArgs(kind, wire.url, { timeoutMs: 2000 }));
+    const result = await (kind === "image" ? runImageTask : runVideoTask)(mediaArgs(kind, wire.url, { timeoutMs: 200 }));
     assert.equal(wire.calls.length, 1); assert.equal(result.called, true);
     assert.equal(result.measurementComplete, false); assert.equal(result.receipt.measurementComplete, false);
     assert.equal(kind === "image" ? result.produced : result.durationSeconds, null);

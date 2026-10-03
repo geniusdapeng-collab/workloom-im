@@ -68,9 +68,7 @@ function fixture(t, mode = "complete", caps = {}) {
   const workDir = join(repoRoot, "outputs/live"); mkdirSync(workDir, { recursive: true });
   const budgetOptions = { outDir: workDir, runId: "synthetic-run", environmentKind: "synthetic", budgets: normalizeBudgets(caps).budgets };
   const budget = createBudget(budgetOptions);
-  // Cold subprocess/module loading can share the machine with browser suites.
-  // Only the explicit timeout case below tests a short deadline.
-  const options = { repoRoot, workDir, model: "deepseek-flash", prompt: "synthetic", rulesFile: join(workDir, "synthetic-rules.json"), taskId: "LLM-R1", budgetOptions, expectedTokens: 100, timeoutMs: 30_000, baseUrl: "http://127.0.0.1:1/explicit-anthropic", env: { DEEPSEEK_API_KEY: "synthetic-not-a-real-key", DSH_SYNTHETIC_MODE: mode } };
+  const options = { repoRoot, workDir, model: "deepseek-flash", prompt: "synthetic", rulesFile: join(workDir, "synthetic-rules.json"), taskId: "LLM-R1", budgetOptions, expectedTokens: 100, timeoutMs: 5000, baseUrl: "http://127.0.0.1:1/explicit-anthropic", env: { DEEPSEEK_API_KEY: "synthetic-not-a-real-key", DSH_SYNTHETIC_MODE: mode } };
   writeFileSync(options.rulesFile, "[]\n");
   return { ...options, options, budget, requests: () => existsSync(join(workDir, "synthetic-provider-calls.json")) ? JSON.parse(readFileSync(join(workDir, "synthetic-provider-calls.json"))).count : 0 };
 }
