@@ -3,8 +3,9 @@
  * 集成用例仅在 RUN_DB_TESTS=1 且 DATABASE_GATEWAY_URL 可达时运行（CI/沙箱实测口径），
  * 否则自动跳过——单元用例永远全量跑。
  */
-import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { createHash, randomUUID } from "node:crypto";
+import { withWorkspace } from "@workloom/db";
+import { afterAll, describe, expect, it } from "vitest";
 import { maskDeep, maskText } from "./pii.js";
 import {
   checkHighRiskAuthorization,
@@ -230,16 +231,23 @@ d("PG 集成（H-2/L1.4：幂等丢弃、哈希链序）", async () => {
   const scope = { tenantId: "tenant-demo", workspaceId: "ws-yunqi" };
   const ctx = { ...scope, actor: { id: "pricing-agent", type: "agent" as const, fenceBindings: ["R1", "R2"] } };
 
-  /** 读侧辅助：RLS 要求会话级 workspace 上下文（L7.1），否则返回空 */
+  afterAll(() => pool.end());
+
+  /** 与生产读写一致：双 GUC 只在本事务内生效，归还连接时不遗留身份。 */
+  const scopedQuery = <T extends Record<string, unknown> = Record<string, unknown>>(
+    sql: string,
+    params: unknown[] = [],
+    activeScope = scope,
+  ) => withWorkspace(pool, activeScope, (_db, client) => client.query<T>(sql, params));
+
+  /** 读正例必须实际见到本次写入行，不能把 RLS 返回空当作断言通过。 */
   const readEvent = async (eventId: string) => {
-    const c = await pool.connect();
-    try {
-      await c.query("SELECT set_config('app.workspace_id', $1, false)", [scope.workspaceId]);
-      const r = await c.query("SELECT prev_hash, hash, payload FROM biz_events WHERE tenant_id=$1 AND event_id=$2", [scope.tenantId, eventId]);
-      return r.rows[0];
-    } finally {
-      c.release();
-    }
+    const r = await scopedQuery<{ prev_hash: string; hash: string; payload: unknown }>(
+      "SELECT prev_hash, hash, payload FROM biz_events WHERE tenant_id=$1 AND workspace_id=$2 AND event_id=$3",
+      [scope.tenantId, scope.workspaceId, eventId],
+    );
+    expect(r.rows).toHaveLength(1);
+    return r.rows[0]!;
   };
 
   it("网关落库 → 事件编号续接 + 哈希链推进", async () => {
@@ -255,23 +263,17 @@ d("PG 集成（H-2/L1.4：幂等丢弃、哈希链序）", async () => {
     const { createHash } = await import("node:crypto");
     const sha256 = (s: string) => createHash("sha256").update(s, "utf-8").digest("hex");
     // 种子链首条必须从 GENESIS 起且可重算（#32 前：种子 stringify 口径重算全部不符）
-    const c = await pool.connect();
-    try {
-      await c.query("SELECT set_config('app.workspace_id', $1, false)", [scope.workspaceId]);
-      const rows = await c.query<{ event_id: string; payload: unknown; prev_hash: string; hash: string }>(
-        `SELECT event_id, payload, prev_hash, hash FROM biz_events WHERE tenant_id=$1 AND workspace_id=$2 ORDER BY seq LIMIT 10`,
-        [scope.tenantId, scope.workspaceId],
-      );
-      expect(rows.rows.length).toBeGreaterThan(0);
-      let prev = GENESIS_HASH;
-      for (const row of rows.rows) {
-        expect(row.prev_hash).toBe(prev);
-        expect(row.hash).toBe(sha256(prev + canonicalJson(row.payload)));
-        expect(row.hash).toBe(eventHash(prev, row.payload)); // 与生产 eventHash 同结果
-        prev = row.hash;
-      }
-    } finally {
-      c.release();
+    const rows = await scopedQuery<{ event_id: string; payload: unknown; prev_hash: string; hash: string }>(
+      `SELECT event_id, payload, prev_hash, hash FROM biz_events WHERE tenant_id=$1 AND workspace_id=$2 ORDER BY seq LIMIT 10`,
+      [scope.tenantId, scope.workspaceId],
+    );
+    expect(rows.rows.length).toBeGreaterThan(0);
+    let prev = GENESIS_HASH;
+    for (const row of rows.rows) {
+      expect(row.prev_hash).toBe(prev);
+      expect(row.hash).toBe(sha256(prev + canonicalJson(row.payload)));
+      expect(row.hash).toBe(eventHash(prev, row.payload)); // 与生产 eventHash 同结果
+      prev = row.hash;
     }
   });
 
@@ -299,18 +301,112 @@ d("PG 集成（H-2/L1.4：幂等丢弃、哈希链序）", async () => {
     // 此前用「抢注下一个全局序列号」构造：全量并行跑批时其他测试文件并发消耗
     // biz_events_eid_seq，哨兵占位号与实际分配号错位，用例随机失败；
     // 回放通道与序列分配走同一个 append_event_insert 比对逻辑，路径等价且无竞态。
-    const iso = { tenantId: `tenant-t26-${Date.now().toString(36)}`, workspaceId: "ws-t26" };
+    const iso = { tenantId: `tenant-t26-${randomUUID()}`, workspaceId: "ws-t26" };
     const isoCtx = { ...iso, actor: ctx.actor };
-    const attackId = `E-RPL-p03-${Date.now().toString(36)}`;
-    const first = { ...draft("price.adjust"), event_id: attackId } as const;
-    const r1 = await gatewayAppendIdempotent(pool, isoCtx, first as never);
+    const attackId = `E-RPL-p03-${randomUUID()}`;
+    const isoDraft = (action: string) => {
+      const value = draft(action);
+      return {
+        ...value,
+        context: { ...value.context, tenant_id: iso.tenantId, workspace_id: iso.workspaceId },
+        event_id: attackId,
+      };
+    };
+    const first = isoDraft("price.adjust");
+    const r1 = await gatewayAppendIdempotent(pool, isoCtx, first);
     expect(r1.deduped).toBe(false);
     // 同 id 不同 payload → 抢占攻击拒绝（不再静默 deduped）
-    const hijack = { ...draft("order.refund"), event_id: attackId } as const;
-    await expect(gatewayAppendIdempotent(pool, isoCtx, hijack as never)).rejects.toThrow(/抢占攻击/);
+    const hijack = isoDraft("order.refund");
+    await expect(gatewayAppendIdempotent(pool, isoCtx, hijack)).rejects.toMatchObject({
+      code: "P0001", // 真正的 payload 冲突；作用域拒绝的 42501 不满足本断言。
+      message: expect.stringMatching(/抢占攻击|conflict with different payload \(P0-3\)/),
+    });
     // 对照：同 id 同 payload 仍是幂等丢弃——拒绝的是 payload 不一致，而非重复本身（L1.4）
-    const r2 = await gatewayAppendIdempotent(pool, isoCtx, first as never);
+    const r2 = await gatewayAppendIdempotent(pool, isoCtx, first);
     expect(r2.deduped).toBe(true);
+    expect(r2.seq).toBe(r1.seq);
+    expect(r2.hash).toBe(r1.hash);
+    const original = await scopedQuery<{ seq: string; hash: string; payload: unknown }>(
+      "SELECT seq, hash, payload FROM biz_events WHERE tenant_id=$1 AND workspace_id=$2 AND event_id=$3",
+      [iso.tenantId, iso.workspaceId, attackId], iso,
+    );
+    expect(original.rows).toHaveLength(1);
+    expect(BigInt(original.rows[0]!.seq)).toBe(r1.seq);
+    expect(original.rows[0]!.hash).toBe(r1.hash);
+    expect(original.rows[0]!.payload).toEqual(first);
+  });
+
+  it("双 GUC 读正负对照：本作用域可见，缺失/空白/错租户/错工作区均不可见", async () => {
+    const written = await gatewayAppend(pool, ctx, draft("price.adjust"));
+    const sql = "SELECT event_id FROM biz_events WHERE tenant_id=$1 AND workspace_id=$2 AND event_id=$3";
+    const params = [scope.tenantId, scope.workspaceId, written.eventId];
+    expect((await scopedQuery(sql, params)).rows).toHaveLength(1);
+    for (const wrongScope of [
+      { ...scope, tenantId: "" },
+      { ...scope, tenantId: " \t" },
+      { ...scope, tenantId: "tenant-workdata-foreign" },
+      { ...scope, workspaceId: "" },
+      { ...scope, workspaceId: " \t" },
+      { ...scope, workspaceId: "ws-workdata-foreign" },
+    ]) {
+      expect((await scopedQuery(sql, params, wrongScope)).rows).toHaveLength(0);
+    }
+    expect((await scopedQuery(sql, params)).rows).toHaveLength(1);
+  });
+
+  it("回放作用域守卫：合法合成作用域可写，payload 越租户/越工作区与空白归属 42501 且不落库", async () => {
+    const iso = { tenantId: `tenant-workdata-${randomUUID()}`, workspaceId: `ws-workdata-${randomUUID()}` };
+    const isoCtx = { ...iso, actor: ctx.actor };
+    const value = draft("price.adjust");
+    const event = {
+      ...value,
+      context: { ...value.context, tenant_id: iso.tenantId, workspace_id: iso.workspaceId },
+      event_id: `E-RPL-scope-${randomUUID()}`,
+    };
+    expect((await gatewayAppendIdempotent(pool, isoCtx, event)).deduped).toBe(false);
+    for (const payloadScope of [
+      { tenant_id: scope.tenantId, workspace_id: iso.workspaceId },
+      { tenant_id: iso.tenantId, workspace_id: scope.workspaceId },
+    ]) {
+      const bad = { ...event, event_id: `E-RPL-scope-${randomUUID()}`, context: { ...event.context, ...payloadScope } };
+      await expect(gatewayAppendIdempotent(pool, isoCtx, bad)).rejects.toMatchObject({ code: "42501" });
+      const missing = await scopedQuery(
+        "SELECT event_id FROM biz_events WHERE tenant_id=$1 AND workspace_id=$2 AND event_id=$3",
+        [iso.tenantId, iso.workspaceId, bad.event_id], iso,
+      );
+      expect(missing.rows).toHaveLength(0);
+    }
+    for (const blankScope of [{ ...iso, tenantId: " \t" }, { ...iso, workspaceId: " \t" }]) {
+      const blankEvent = {
+        ...event, event_id: `E-RPL-scope-${randomUUID()}`,
+        context: { ...event.context, tenant_id: blankScope.tenantId, workspace_id: blankScope.workspaceId },
+      };
+      await expect(gatewayAppendIdempotent(pool, { ...blankScope, actor: ctx.actor }, blankEvent)).rejects.toMatchObject({ code: "42501" });
+    }
+    const rows = await scopedQuery<{ payload: unknown }>(
+      "SELECT payload FROM biz_events WHERE tenant_id=$1 AND workspace_id=$2",
+      [iso.tenantId, iso.workspaceId], iso,
+    );
+    expect(rows.rows).toHaveLength(1);
+    expect(rows.rows[0]!.payload).toEqual(event);
+  });
+
+  it("读侧失败回滚与连接卫生：SQL 错误后无残留 GUC，后续合法读取仍生效", async () => {
+    await expect(scopedQuery("SELECT 1 / 0")).rejects.toMatchObject({ code: "22012" });
+    const client = await pool.connect();
+    try {
+      const gucs = await client.query<{ tenant: string | null; workspace: string | null }>(
+        "SELECT current_setting('app.tenant_id', true) AS tenant, current_setting('app.workspace_id', true) AS workspace",
+      );
+      expect(gucs.rows[0]!.tenant ?? "").toBe("");
+      expect(gucs.rows[0]!.workspace ?? "").toBe("");
+      const hidden = await client.query("SELECT event_id FROM biz_events WHERE tenant_id=$1 AND workspace_id=$2", [scope.tenantId, scope.workspaceId]);
+      expect(hidden.rows).toHaveLength(0);
+    } finally {
+      client.release();
+    }
+    const visible = await scopedQuery("SELECT event_id FROM biz_events WHERE tenant_id=$1 AND workspace_id=$2", [scope.tenantId, scope.workspaceId]);
+    expect(visible.rows.length).toBeGreaterThan(0);
   });
 
   it("L6：gatewayAppendIdempotent 段序统一先 zod 后权限（坏 payload 先报附录 E）", async () => {
@@ -332,25 +428,15 @@ d("PG 集成（H-2/L1.4：幂等丢弃、哈希链序）", async () => {
       rule_impact: [],
     });
     const tag = Date.now().toString(36);
+    const approvalIds: string[] = [];
     const insApr = async (id: string, status: string, snapshot: unknown) => {
-      const c = await pool.connect();
-      try {
-        await c.query("BEGIN");
-        await c.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-        await c.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
-        await c.query(
-          `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, snapshot)
-           VALUES ($1,$2,$3,$4,'inapp',$5,$6)`,
-          // approvals 有 UNIQUE(event_id, channel)：每行用独立 event_id 避免互撞
-          [id, scope.tenantId, scope.workspaceId, `E-RPL-${id}`, status, JSON.stringify(snapshot)],
-        );
-        await c.query("COMMIT");
-      } catch (err) {
-        await c.query("ROLLBACK").catch(() => undefined);
-        throw err;
-      } finally {
-        c.release();
-      }
+      approvalIds.push(id);
+      await scopedQuery(
+        `INSERT INTO approvals (approval_id, tenant_id, workspace_id, event_id, channel, status, snapshot)
+         VALUES ($1,$2,$3,$4,'inapp',$5,$6)`,
+        // approvals 有 UNIQUE(event_id, channel)：每行用独立 event_id 避免互撞
+        [id, scope.tenantId, scope.workspaceId, `E-RPL-${id}`, status, JSON.stringify(snapshot)],
+      );
     };
     try {
       // 伪造引用（查无此行）→ 拒
@@ -392,15 +478,15 @@ d("PG 集成（H-2/L1.4：幂等丢弃、哈希链序）", async () => {
         gatewayAppend(pool, { ...desktopCtx, approvalRef: `apr-p18-ok-${tag}` }, ddraft("RT-P18")),
       ).rejects.toThrow(/已被消费/);
     } finally {
-      const c = await pool.connect();
-      try {
-        await c.query("BEGIN");
-        await c.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-        await c.query(`DELETE FROM approvals WHERE approval_id LIKE 'apr-p18-%'`);
-        await c.query("COMMIT");
-      } finally {
-        c.release();
-      }
+      await scopedQuery(
+        "DELETE FROM approvals WHERE tenant_id=$1 AND workspace_id=$2 AND approval_id=ANY($3::text[])",
+        [scope.tenantId, scope.workspaceId, approvalIds],
+      );
+      const remaining = await scopedQuery(
+        "SELECT approval_id FROM approvals WHERE tenant_id=$1 AND workspace_id=$2 AND approval_id=ANY($3::text[])",
+        [scope.tenantId, scope.workspaceId, approvalIds],
+      );
+      expect(remaining.rows).toHaveLength(0);
     }
   });
 
@@ -421,15 +507,11 @@ d("PG 集成（H-2/L1.4：幂等丢弃、哈希链序）", async () => {
     const forged = draft("price.adjust");
     (forged.who as { id: string }).id = "MEM-999"; // who 伪造他人归因，actor 仍是 pricing-agent
     await expect(gatewayAppend(pool, ctx, forged)).rejects.toThrow(/身份不一致/);
-    const c = await pool.connect();
-    try {
-      await c.query("SELECT set_config('app.workspace_id', $1, false)", [scope.workspaceId]);
-      const n = await c.query<{ c: string }>(
-        `SELECT count(*) AS c FROM biz_events WHERE workspace_id=$1 AND payload->'who'->>'id'='MEM-999'`,
-        [scope.workspaceId],
-      );
-      expect(Number(n.rows[0]!.c)).toBe(0); // 伪造事件未落库
-    } finally { c.release(); }
+    const n = await scopedQuery<{ c: string }>(
+      `SELECT count(*) AS c FROM biz_events WHERE tenant_id=$1 AND workspace_id=$2 AND payload->'who'->>'id'='MEM-999'`,
+      [scope.tenantId, scope.workspaceId],
+    );
+    expect(Number(n.rows[0]!.c)).toBe(0); // 伪造事件未落库
   });
 
   it("脱敏落库：事件库无明文手机号（F1.10 机制位）", async () => {
