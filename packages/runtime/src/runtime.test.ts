@@ -3,7 +3,7 @@
  * Quest 循环（围栏瀑布/回执）+ replay 断点续跑幂等（H-5）
  * PG 集成仅 RUN_DB_TESTS=1 启用。
  */
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { routeIntent, ruleBasedRoute, LlmIntentClassifier, type IntentClassifier } from "./intent.js";
 import type { QuestPlanner } from "./loop.js";
 // 注意：loop.js（经 tools.js 模块级常量读 TOOL_UNVERIFIED_RATE）禁止静态 import——
@@ -199,38 +199,76 @@ d("PG 集成 Quest 循环（种子库）", async () => {
   // 集成测试关闭随机扰动保证可重跑；须在动态 import loop.js（链至 tools.js 模块级常量）之前设置
   process.env.TOOL_UNVERIFIED_RATE = "0";
   const pg = (await import("pg")).default;
+  const { withWorkspace } = await import("@workloom/db");
+  const { safeParseBusinessEvent } = await import("@workloom/shared");
   const { runQuest } = await import("./loop.js");
   const { assemblePreset, AssemblyReject } = await import("./assembly.js");
   const app = new pg.Pool({ connectionString: process.env.DATABASE_APP_URL });
   const gw = new pg.Pool({ connectionString: process.env.DATABASE_GATEWAY_URL });
   const scope = { tenantId: "tenant-demo", workspaceId: "ws-yunqi" };
 
+  const createdThreads = new Set<string>();
+  afterAll(async () => {
+    try {
+      await withWorkspace(app, scope, async (_db, c) => {
+        const ids = [...createdThreads];
+        // 只清理由本夹具创建的审批/线程；真实只增事件保留给验链与回执取证。
+        await c.query(
+          `DELETE FROM approvals WHERE tenant_id=$1 AND workspace_id=$2
+           AND event_id IN (SELECT event_id FROM biz_events
+             WHERE tenant_id=$1 AND workspace_id=$2 AND session_id=ANY($3::text[]))`,
+          [scope.tenantId, scope.workspaceId, ids],
+        );
+        await c.query(
+          `DELETE FROM threads WHERE tenant_id=$1 AND workspace_id=$2 AND id=ANY($3::text[])`,
+          [scope.tenantId, scope.workspaceId, ids],
+        );
+      });
+    } finally {
+      await Promise.all([app.end(), gw.end()]);
+    }
+  });
+
   const newThread = async (title: string) => {
     const id = `T-${Date.now().toString(36)}-${Math.floor(Math.random() * 999)}`;
-    const c = await app.connect();
-    try {
-      await c.query("SELECT set_config('app.workspace_id', $1, false)", [scope.workspaceId]);
-      await c.query("SELECT set_config('app.tenant_id', $1, false)", [scope.tenantId]);
+    await withWorkspace(app, scope, async (_db, c) => {
       await c.query(
         `INSERT INTO threads (id, tenant_id, workspace_id, title, mode, status, created_by)
          VALUES ($1,$2,$3,$4,'quest','queued','MEM-001')`,
         [id, scope.tenantId, scope.workspaceId, title],
       );
-    } finally { c.release(); }
+    });
+    createdThreads.add(id);
     return id;
   };
 
-  const threadEvents = async (threadId: string) => {
-    const c = await gw.connect();
-    try {
-      await c.query("SELECT set_config('app.workspace_id', $1, false)", [scope.workspaceId]);
-      const r = await c.query<{ payload: import('@workloom/shared').BusinessEvent }>(
-        `SELECT payload FROM biz_events WHERE tenant_id=$1 AND session_id=$2 ORDER BY seq`,
-        [scope.tenantId, threadId],
-      );
-      return r.rows.map((x) => x.payload);
-    } finally { c.release(); }
-  };
+  const threadEvents = async (threadId: string) => withWorkspace(gw, scope, async (_db, c) => {
+    const r = await c.query<{
+      event_id: string; tenant_id: string; workspace_id: string; session_id: string;
+      seq: string; hash: string; payload: import('@workloom/shared').BusinessEvent;
+    }>(
+      `SELECT event_id, tenant_id, workspace_id, session_id, seq::text, hash, payload
+       FROM biz_events WHERE tenant_id=$1 AND workspace_id=$2 AND session_id=$3 ORDER BY seq`,
+      [scope.tenantId, scope.workspaceId, threadId],
+    );
+    // 合法线程必须读到真实历史；空读不能给 replay 的“零新增”断言冒充幂等。
+    expect(r.rows.length).toBeGreaterThan(0);
+    expect(new Set(r.rows.map((row) => row.event_id)).size).toBe(r.rows.length);
+    let previousSeq = 0n;
+    for (const row of r.rows) {
+      expect(row.tenant_id).toBe(scope.tenantId);
+      expect(row.workspace_id).toBe(scope.workspaceId);
+      expect(row.session_id).toBe(threadId);
+      expect(row.payload.event_id).toBe(row.event_id);
+      expect(row.payload.context.tenant_id).toBe(scope.tenantId);
+      expect(row.payload.context.workspace_id).toBe(scope.workspaceId);
+      expect(safeParseBusinessEvent(row.payload).success).toBe(true);
+      expect(row.hash).toMatch(/^[a-f0-9]{64}$/);
+      expect(BigInt(row.seq)).toBeGreaterThan(previousSeq);
+      previousSeq = BigInt(row.seq);
+    }
+    return r.rows.map((row) => row.payload);
+  });
 
   it("L3.7 三要素缺一拒绝（目标缺失）", async () => {
     await expect(
@@ -255,12 +293,11 @@ d("PG 集成 Quest 循环（种子库）", async () => {
     const r = await runQuest(app, gw, scope, { threadId: tid, goal: "回复差评", presetKey: "review-agent", fallbackPlanner: hotelFixturePlanner });
     expect(r.status).toBe("pending_review");
     expect(r.pendingApprovalId).toBeDefined();
-    const c = await app.connect();
-    try {
-      await c.query("SELECT set_config('app.workspace_id', $1, false)", [scope.workspaceId]);
+    await withWorkspace(app, scope, async (_db, c) => {
       const a = await c.query(`SELECT status FROM approvals WHERE approval_id=$1`, [r.pendingApprovalId]);
+      expect(a.rows).toHaveLength(1);
       expect(a.rows[0].status).toBe("pending");
-    } finally { c.release(); }
+    });
   });
 
   it("#34 审批通过 → replay 恢复执行：挂起步骤带授权引用完成，Quest 闭环 completed", async () => {
@@ -279,15 +316,15 @@ d("PG 集成 Quest 循环（种子库）", async () => {
     expect(resumed).toBeTruthy(); // 执行事件带「经审批 <id> 批准执行」留痕
     expect((resumed!.decision.basis as string[])[0]).toContain(approvalId);
     // 恢复执行不产生新审批行（同线程审批数不变）
-    const c = await app.connect();
-    try {
-      await c.query("SELECT set_config('app.workspace_id', $1, false)", [scope.workspaceId]);
+    await withWorkspace(app, scope, async (_db, c) => {
       const n = await c.query<{ c: string }>(
-        `SELECT count(*) AS c FROM approvals a JOIN biz_events e ON e.event_id=a.event_id WHERE e.session_id=$1`,
-        [tid],
+        `SELECT count(*) AS c FROM approvals a JOIN biz_events e
+         ON e.tenant_id=a.tenant_id AND e.event_id=a.event_id
+         WHERE e.tenant_id=$1 AND e.workspace_id=$2 AND e.session_id=$3`,
+        [scope.tenantId, scope.workspaceId, tid],
       );
       expect(Number(n.rows[0]!.c)).toBe(1); // 仅最初挂起产生的那一条
-    } finally { c.release(); }
+    });
     // 再次 replay 幂等：不产生新事件
     const n1 = evs.length;
     await runQuest(app, gw, scope, { threadId: tid, goal: "回复差评", presetKey: "review-agent", fallbackPlanner: hotelFixturePlanner });
@@ -309,20 +346,22 @@ d("PG 集成 Quest 循环（种子库）", async () => {
   it("MC-108 高危岗位写步骤：命中 auto 也升级人审；快照带 high_risk 且批量采纳被拦", async () => {
     // 借用既有 preset（pricing-agent 的 price.adjust 命中 R1 auto）临时标记为高危岗位，
     // 覆盖「围栏命中 auto、但岗位高危必须逐次人审」这条路径；无论成败都恢复 meta（重跑安全）。
-    const markHighRisk = async (remove: boolean) => {
-      const c = await app.connect();
-      try {
-        await c.query("SELECT set_config('app.workspace_id', $1, false)", [scope.workspaceId]);
-        await c.query(
-          remove
-            ? `UPDATE agents SET meta = meta - 'high_risk' WHERE workspace_id=$1 AND preset_key='pricing-agent'`
-            : `UPDATE agents SET meta = jsonb_set(meta, '{high_risk}', 'true'::jsonb) WHERE workspace_id=$1 AND preset_key='pricing-agent'`,
-          [scope.workspaceId],
-        );
-      } finally { c.release(); }
-    };
-    await markHighRisk(false);
+    const original = await withWorkspace(app, scope, async (_db, c) => {
+      const rows = await c.query<{ id: string; meta: string }>(
+        `SELECT id, meta::text AS meta FROM agents WHERE workspace_id=$1 AND preset_key='pricing-agent'`,
+        [scope.workspaceId],
+      );
+      expect(rows.rows).toHaveLength(1);
+      return rows.rows[0]!;
+    });
     try {
+      await withWorkspace(app, scope, async (_db, c) => {
+        const marked = await c.query(
+          `UPDATE agents SET meta=jsonb_set(meta, '{high_risk}', 'true'::jsonb)
+           WHERE id=$1 AND workspace_id=$2`, [original.id, scope.workspaceId],
+        );
+        expect(marked.rowCount).toBe(1);
+      });
       const tid = await newThread("高危岗位调价（MC-108）");
       const r1 = await runQuest(app, gw, scope, { threadId: tid, goal: "周五调价 2%", presetKey: "pricing-agent", fallbackPlanner: hotelFixturePlanner });
       // 两个读步骤照常自动执行；写步骤（R1 auto）因岗位高危被升级 → 挂起人审
@@ -330,14 +369,12 @@ d("PG 集成 Quest 循环（种子库）", async () => {
       const approvalId = r1.pendingApprovalId!;
       expect(approvalId).toBeDefined();
       // 快照必须带 high_risk（批量/超时守卫的判据）+ MC-106 绑定字段（网关段③可比对）
-      const c = await app.connect();
-      let snap: Record<string, unknown> = {};
-      try {
-        await c.query("SELECT set_config('app.workspace_id', $1, false)", [scope.workspaceId]);
+      const snap = await withWorkspace(app, scope, async (_db, c) => {
         const a = await c.query<{ snapshot: Record<string, unknown> }>(
           `SELECT snapshot FROM approvals WHERE approval_id=$1`, [approvalId]);
-        snap = a.rows[0]!.snapshot;
-      } finally { c.release(); }
+        expect(a.rows).toHaveLength(1);
+        return a.rows[0]!.snapshot;
+      });
       expect(snap.high_risk).toBe(true);
       /**
        * 合并口径（bfd5fe6 采用云端 main 的 loop.ts）：步骤级审批快照写 `action`（MC-106 必备绑定）
@@ -362,26 +399,98 @@ d("PG 集成 Quest 循环（种子库）", async () => {
       expect(executed).toBeTruthy();
       expect((executed.decision.basis as string[])[0]).toContain(approvalId);
     } finally {
-      await markHighRisk(true);
+      await withWorkspace(app, scope, async (_db, c) => {
+        const restored = await c.query(
+          `UPDATE agents SET meta=$3::jsonb WHERE id=$1 AND workspace_id=$2 RETURNING meta::text`,
+          [original.id, scope.workspaceId, original.meta],
+        );
+        expect(restored.rows).toHaveLength(1);
+        expect(restored.rows[0]!.meta).toBe(original.meta);
+      });
     }
   });
 
   it("#24 装配围栏并集：安装技能绑定进装配声明（F8.2/L8.3），卸载即收缩", async () => {
     const { installSkill, uninstallSkill, listSkills } = await import("@workloom/base/skills");
-    const revenue = (await listSkills(app, scope, { level: "official" })).find((s) => s.name === "revenue-manager")!;
-    // 从「未安装」态开始（重跑安全）
-    await uninstallSkill(app, gw, scope, { skillId: revenue.id, by: "MEM-001" }).catch(() => undefined);
-    const before = await assemblePreset(app, scope, { workspaceId: scope.workspaceId, presetKey: "content-agent", goal: "装配并集探针" });
-    // 0013 契约：seed 安装行落真实快照——review-crisis(R6)、channel-reconciler(R4/R5) 在装，
-    // 并集 = content-agent 自身声明 R3 ∪ 全部在装技能快照
-    expect(before.fenceBindings).toEqual(["R3", "R4", "R5", "R6"]);
-    // 安装即绑定：装配声明并入技能 fence_bindings 快照
-    await installSkill(app, gw, scope, { skillId: revenue.id, by: "MEM-001" });
-    const after = await assemblePreset(app, scope, { workspaceId: scope.workspaceId, presetKey: "content-agent", goal: "装配并集探针" });
-    expect(after.fenceBindings).toEqual(["R1", "R2", "R3", "R4", "R5", "R6"]); // preset 声明 ∪ 技能快照
-    // 卸载即撤销：并集收缩
-    await uninstallSkill(app, gw, scope, { skillId: revenue.id, by: "MEM-001" });
-    const revoked = await assemblePreset(app, scope, { workspaceId: scope.workspaceId, presetKey: "content-agent", goal: "装配并集探针" });
-    expect(revoked.fenceBindings).toEqual(["R3", "R4", "R5", "R6"]);
+    const revenues = (await listSkills(app, scope, { level: "official" })).filter((s) => s.name === "revenue-manager");
+    expect(revenues).toHaveLength(1);
+    const revenue = revenues[0]!;
+    type Install = { skill_id: string; workspace_id: string; installed_by: string; installed_at: string;
+      fence_bindings_snapshot: string[]; installed_version: string };
+    // 保留数据库 JSON 原文：installed_at 的微秒不经 JS Date 舍入；恢复后全行逐字比对。
+    const readInstalls = () => withWorkspace(app, scope, async (_db, c) => {
+      const rows = await c.query<{ row: string }>(
+        `SELECT to_jsonb(i)::text AS row FROM skill_installs i WHERE workspace_id=$1 ORDER BY skill_id`,
+        [scope.workspaceId],
+      );
+      return rows.rows.map(({ row }) => ({ row, install: JSON.parse(row) as Install }));
+    });
+    const original = await readInstalls();
+    expect(original.length).toBeGreaterThan(0);
+    const originalRevenue = original.find(({ install }) => install.skill_id === revenue.id);
+    const unchanged = original.filter(({ install }) => install.skill_id !== revenue.id);
+    const declarations = await withWorkspace(app, scope, async (_db, c) => {
+      const preset = await c.query<{ row: string; fence_bindings: string[] }>(
+        `SELECT to_jsonb(a)::text AS row, fence_bindings FROM agents a
+         WHERE workspace_id=$1 AND preset_key='content-agent'`, [scope.workspaceId],
+      );
+      expect(preset.rows).toHaveLength(1);
+      const revoked = await c.query<{ skill_id: string }>(`SELECT skill_id FROM skill_revocations`);
+      return { preset: preset.rows[0]!, revoked: new Set(revoked.rows.map(({ skill_id }) => skill_id)) };
+    });
+    const expectedBefore = [...new Set([
+      ...declarations.preset.fence_bindings,
+      ...unchanged.flatMap(({ install }) => declarations.revoked.has(install.skill_id) ? [] : install.fence_bindings_snapshot),
+    ])].sort();
+    const expectedAfter = [...new Set([...expectedBefore, ...revenue.fence_bindings])].sort();
+    try {
+      // 仅在真实安装行存在时卸载；其他失败原样上抛，不能吞掉错误假定“未安装”。
+      if (originalRevenue) {
+        const removed = await uninstallSkill(app, gw, scope, { skillId: revenue.id, by: "MEM-001" });
+        expect(removed.revokedBindings).toEqual(originalRevenue.install.fence_bindings_snapshot);
+      }
+      expect(await readInstalls()).toEqual(unchanged);
+      const before = await assemblePreset(app, scope, { workspaceId: scope.workspaceId, presetKey: "content-agent", goal: "装配并集探针" });
+      // 独立读出的 preset 声明 ∪ 全部可见、未吊销的安装快照；不按规则名缩小种子集合。
+      expect(before.fenceBindings).toEqual(expectedBefore);
+      const installed = await installSkill(app, gw, scope, { skillId: revenue.id, by: "MEM-001" });
+      expect(installed).toEqual({ installed: true, deduped: false, bindings: revenue.fence_bindings });
+      const after = await assemblePreset(app, scope, { workspaceId: scope.workspaceId, presetKey: "content-agent", goal: "装配并集探针" });
+      expect(after.fenceBindings).toEqual(expectedAfter);
+      expect(after.fenceBindings.filter((binding) => !before.fenceBindings.includes(binding)))
+        .toEqual(expectedAfter.filter((binding) => !expectedBefore.includes(binding)));
+      const withRevenue = await readInstalls();
+      expect(withRevenue.filter(({ install }) => install.skill_id !== revenue.id)).toEqual(unchanged);
+      expect(withRevenue.map(({ install }) => install.skill_id)).toEqual([...unchanged.map(({ install }) => install.skill_id), revenue.id].sort());
+      const currentRevenue = withRevenue.find(({ install }) => install.skill_id === revenue.id)!.install;
+      expect(currentRevenue.fence_bindings_snapshot).toEqual(revenue.fence_bindings);
+      expect(currentRevenue.installed_version).toBe(revenue.version);
+      expect(currentRevenue.installed_by).toBe("MEM-001");
+      expect(currentRevenue.workspace_id).toBe(scope.workspaceId);
+      const removed = await uninstallSkill(app, gw, scope, { skillId: revenue.id, by: "MEM-001" });
+      expect(removed.revokedBindings).toEqual(revenue.fence_bindings);
+      const revoked = await assemblePreset(app, scope, { workspaceId: scope.workspaceId, presetKey: "content-agent", goal: "装配并集探针" });
+      expect(revoked.fenceBindings).toEqual(expectedBefore);
+      expect(after.fenceBindings.filter((binding) => !revoked.fenceBindings.includes(binding)))
+        .toEqual(expectedAfter.filter((binding) => !expectedBefore.includes(binding)));
+      expect(await readInstalls()).toEqual(unchanged);
+    } finally {
+      await withWorkspace(app, scope, async (_db, c) => {
+        await c.query(`DELETE FROM skill_installs WHERE workspace_id=$1 AND skill_id=$2`, [scope.workspaceId, revenue.id]);
+        if (originalRevenue) {
+          await c.query(
+            `INSERT INTO skill_installs SELECT (jsonb_populate_record(NULL::skill_installs, $1::jsonb)).*`,
+            [originalRevenue.row],
+          );
+        }
+        const preset = await c.query<{ row: string }>(
+          `SELECT to_jsonb(a)::text AS row FROM agents a WHERE workspace_id=$1 AND preset_key='content-agent'`,
+          [scope.workspaceId],
+        );
+        expect(preset.rows).toHaveLength(1);
+        expect(preset.rows[0]!.row).toBe(declarations.preset.row);
+      });
+      expect(await readInstalls()).toEqual(original);
+    }
   });
 });

@@ -14,6 +14,7 @@ import type pg from "pg";
 import { createHash } from "node:crypto";
 import { judge, judgeViews, type JudgeView, type RuntimeRule, type RuleImpact } from "@workloom/base/fence-engine";
 import { gatewayAppend, gatewayAppendOnClient, registerWriteActions } from "@workloom/base/workdata";
+import { withSkillScope } from "@workloom/base/skills";
 
 /** D16（#1/A）：步骤内「事件 + 线程状态」单事务封装（双 GUC 齐备） */
 async function inTx<T>(
@@ -261,36 +262,25 @@ export function planQuest(goal: string, preset: AssembledPreset): QuestStep[] {
 /* ================= 规则装载 ================= */
 
 async function loadActiveRules(app: pg.Pool, scope: { tenantId: string; workspaceId: string }): Promise<{ rules: RuntimeRule[]; defaultLevel: "auto" | "review" | "block" }> {
-  const client = await app.connect();
-  try {
-    // 事务级 RLS 上下文必须在显式事务内设置：autocommit 下 set_config(...,true) 语句结束即失效
-    await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
-    const r = await client.query<{
-      rule_id: string; version: string; name: string; level: "auto" | "review" | "block";
-      is_baseline: boolean; match_spec: { object_types: string[]; actions: string[]; when: string };
-    }>(
-      `SELECT rule_id, version, name, level, is_baseline, match_spec
-       FROM fence_rules WHERE (workspace_id=$1 OR workspace_id='*') AND status='active'`,
-      [scope.workspaceId],
-    );
-    const rules: RuntimeRule[] = r.rows.map((row) => ({
-        rule_id: row.rule_id, version: row.version, name: row.name, level: row.level,
-        is_baseline: row.is_baseline, objectTypes: row.match_spec.object_types,
-        actions: row.match_spec.actions, when: row.match_spec.when,
-      }));
-    // HP-02：本工作区围栏包声明的写类动作在判定与执行前完成登记——
-    // 否则行业写类动作（如 inventory.adjust / order.reconcile）被网关段①当读类放行，
-    // 且 judge 无命中时不走 default_level（E2.1），形成静默放宽。
-    registerWriteActions(rules.flatMap((rule) => rule.actions));
-    return { rules, defaultLevel: "review" }; // 活动围栏包未命中时的保守默认
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally {
-    await client.query("COMMIT").catch(() => undefined);
-    client.release();
-  }
+  // MC-038：真实属主校验和双 GUC 在同一事务内；提交失败不得以空规则或成功返回。
+  const r = await withSkillScope(app, scope, (client) => client.query<{
+    rule_id: string; version: string; name: string; level: "auto" | "review" | "block";
+    is_baseline: boolean; match_spec: { object_types: string[]; actions: string[]; when: string };
+  }>(
+    `SELECT rule_id, version, name, level, is_baseline, match_spec
+     FROM fence_rules WHERE (workspace_id=$1 OR workspace_id='*') AND status='active'`,
+    [scope.workspaceId],
+  ));
+  const rules: RuntimeRule[] = r.rows.map((row) => ({
+    rule_id: row.rule_id, version: row.version, name: row.name, level: row.level,
+    is_baseline: row.is_baseline, objectTypes: row.match_spec.object_types,
+    actions: row.match_spec.actions, when: row.match_spec.when,
+  }));
+  // HP-02：本工作区围栏包声明的写类动作在判定与执行前完成登记——
+  // 否则行业写类动作（如 inventory.adjust / order.reconcile）被网关段①当读类放行，
+  // 且 judge 无命中时不走 default_level（E2.1），形成静默放宽。
+  registerWriteActions(rules.flatMap((rule) => rule.actions));
+  return { rules, defaultLevel: "review" }; // 活动围栏包未命中时的保守默认
 }
 
 /* ================= 循环 ================= */
@@ -376,25 +366,17 @@ async function existingStepReceipts(
 }
 
 async function updateThread(app: pg.Pool, scope: { tenantId: string; workspaceId: string }, threadId: string, patch: Record<string, unknown>): Promise<void> {
-  const client = await app.connect();
-  try {
-    // 事务级 RLS 上下文必须在显式事务内设置：autocommit 下 set_config(...,true) 语句结束即失效
-    await client.query("BEGIN");
-    await client.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
+  await withSkillScope(app, scope, async (client) => {
     const sets: string[] = ["updated_at = now()"];
-    const params: unknown[] = [threadId, scope.workspaceId];
+    const params: unknown[] = [threadId, scope.workspaceId, scope.tenantId];
     for (const [k, v] of Object.entries(patch)) {
       params.push(v);
       sets.push(`${k} = $${params.length}`);
     }
-    await client.query(`UPDATE threads SET ${sets.join(", ")} WHERE id=$1 AND workspace_id=$2`, params);
-    await client.query("COMMIT"); // A-08：显式提交，失败即抛（不再 finally 吞错）
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw err;
-  } finally {
-    client.release();
-  }
+    const updated = await client.query(
+      `UPDATE threads SET ${sets.join(", ")} WHERE id=$1 AND workspace_id=$2 AND tenant_id=$3`, params);
+    if (updated.rowCount !== 1) throw new Error("线程不存在或当前作用域不可访问，状态写回失败");
+  });
 }
 
 /* ================= 计划持久化（GR-01） ================= */

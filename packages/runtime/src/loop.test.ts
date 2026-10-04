@@ -88,7 +88,9 @@ beforeEach(() => {
           expect(sql).toContain("ORDER BY seq");
           return { rows: events.filter((e) => e.tenantId === params[0] && e.workspaceId === params[1] && e.threadId === params[2]) };
         }
-        if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(sql) || sql.includes("set_config(") || sql.includes("UPDATE threads")) return { rows: [] };
+        if (sql.includes("SELECT 1 FROM workspaces WHERE id=$1 AND tenant_id=$2")) return { rows: [{ "?column?": 1 }], rowCount: 1 };
+        if (sql.includes("UPDATE threads")) return { rows: [], rowCount: 1 };
+        if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(sql) || sql.includes("set_config(")) return { rows: [] };
         // GR-01 计划持久化：首次运行没有持久化计划（返回空行 → 走规划并写回）
         if (sql.includes("SELECT plan, plan_version FROM threads")) return { rows: [] };
         // N-14 挂起去重 + review 分支写审批：旧用例关注回执行语义，这里补最小桩
