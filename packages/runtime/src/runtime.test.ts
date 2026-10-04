@@ -248,7 +248,7 @@ d("PG 集成 Quest 循环（种子库）", async () => {
       seq: string; hash: string; payload: import('@workloom/shared').BusinessEvent;
     }>(
       `SELECT event_id, tenant_id, workspace_id, session_id, seq::text, hash, payload
-       FROM biz_events WHERE tenant_id=$1 AND workspace_id=$2 AND session_id=$3 ORDER BY seq`,
+       FROM biz_events WHERE tenant_id=$1 AND workspace_id=$2 AND session_id=$3 ORDER BY biz_events.seq`,
       [scope.tenantId, scope.workspaceId, threadId],
     );
     // 合法线程必须读到真实历史；空读不能给 replay 的“零新增”断言冒充幂等。
