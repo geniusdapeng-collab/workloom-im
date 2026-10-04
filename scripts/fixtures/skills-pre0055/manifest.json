@@ -1,0 +1,381 @@
+{
+  "schema": "workloom.skills-pre0055-fixture/v1",
+  "description": "Six byte-frozen historical modules with current public dependencies and synthetic rows; this is not a complete historical product replay.",
+  "source_commits": {
+    "base": "5376a6deb13ea30adafec79dd6c08f559b0766e6",
+    "hotel": "585051361233a0478d8a32e17d9e5f62fb25d630"
+  },
+  "modules": [
+    {
+      "path": "packages/base/skills/forge.ts",
+      "sha256": "068e546ca4b9ead0b621722c61e76ad4e0bccbe9ca171c8c2b2900de54d40b7c"
+    },
+    {
+      "path": "packages/base/skills/registry.ts",
+      "sha256": "e899b40e9e95f60d9a5df84d54f12aaa1f3bfb29fdc4c0b4db64ef88955c3a0b"
+    },
+    {
+      "path": "packages/base/skills/publish.ts",
+      "sha256": "6650496261330328b698ac508e0aecf24c61dfab267af8eb2d742c5bca2ba9d0"
+    },
+    {
+      "path": "packages/base/skill-ops/policy.ts",
+      "sha256": "7d2f802ef44b48632d93355aa182e5556f4617e5623292fc6a3d505d8155754d"
+    },
+    {
+      "path": "packages/base/skill-ops/reflux.ts",
+      "sha256": "19e51f3aee81e1514848e7e2ea01b101f161827ff2ffe8a2a49a48ef6fe9cdb3"
+    },
+    {
+      "path": "packages/base/skill-ops/receiver.ts",
+      "sha256": "c31bf6d6a1f73d58706f568ea7214c8334beaaf363e0b90bfd5e6518b1c2fe07"
+    }
+  ],
+  "pre0055_migrations": {
+    "base": [
+      {
+        "name": "0001_init.sql",
+        "sha256": "fd8b5f636a2d77d7e6adbe73d1fefa5521df06c526ebd2cf9d70f69f5e763be0"
+      },
+      {
+        "name": "0002_bugfix.sql",
+        "sha256": "f47fe537abbb522084f8cd0eecb7f5faf2dbb4dbc19a15d09c8f5a728816346b"
+      },
+      {
+        "name": "0003_im_inbound_dedupe.sql",
+        "sha256": "07b61f807f4ca448aa5b950d321197127e59dec2ed237b3103b8a7c4f6adbe3d"
+      },
+      {
+        "name": "0004_biz_events_no_truncate.sql",
+        "sha256": "e4ba2708a356c38690d826d9c46920ab044d900307333d00014c42f73753ebb7"
+      },
+      {
+        "name": "0005_fence_baseline_guard.sql",
+        "sha256": "50ad6d177f7a0c9d0698356b8e91090a17754c08970680fa0a730b722b20dd5b"
+      },
+      {
+        "name": "0006_industry_publish_gate.sql",
+        "sha256": "2f205cee7ec4d7f8f61c1e7cad251a686695366ca230fa1d76622597602ab663"
+      },
+      {
+        "name": "0007_append_event_function.sql",
+        "sha256": "67647470851008a2c0e70c00e5940bf34f86bec7c00a02483539e9d124d3f2ba"
+      },
+      {
+        "name": "0008_publish_reviews_rls.sql",
+        "sha256": "5040d4bb6e22340cfe8a6fb68b45cc6bb4ea327812e90c187a1b4c48fe9441ae"
+      },
+      {
+        "name": "0009_captain.sql",
+        "sha256": "8fda6d113d9e1e1a9ea0d348334a6809924fb15d7250c25a08e33efc74b37156"
+      },
+      {
+        "name": "0010_service_c.sql",
+        "sha256": "fc9bf14fb3f910f623159390164f8a0b6ee7162559c53b14ac3e8003f86dfb27"
+      },
+      {
+        "name": "0011_service_c_hardening.sql",
+        "sha256": "d66940ec3d257c980631a6c2cc44c95c5bba83b43edbaa02f27515369a9a3825"
+      },
+      {
+        "name": "0012_service_c_demo_pk.sql",
+        "sha256": "2677ceb411f23c6e6ef65d65f60e5cfce4c9bd61c5bcaa4eeaac40d8c9ceee53"
+      },
+      {
+        "name": "0013_memory_usage_workspace_rls.sql",
+        "sha256": "34f667813d0a12aa94c0128b5e00a86bedd88b0c7ac597d7aaa9cc96f4bfe33f"
+      },
+      {
+        "name": "0013_pipeline_hardening.sql",
+        "sha256": "f3445c4ca722d284daad3e73c9b829981e4c85671e27d0c6e9314332a1dc2a7a"
+      },
+      {
+        "name": "0016_readable_id_tail.sql",
+        "sha256": "11e4137ea25764dd0b609dd4464d965e583864c3bcc9eadd3bad5f334c1f4a45"
+      },
+      {
+        "name": "0017_skill_revoke_channel.sql",
+        "sha256": "f9c6bf6a7b5f088ce44cb67344851b5915333e3c9e4d41a7c162b6ee1f5667d9"
+      },
+      {
+        "name": "0018_skill_ops_distribution.sql",
+        "sha256": "8bc710bfb7c3f4de0a92fb4cd6a54cc950dca007dfcc60c4f3d34313d4479f38"
+      },
+      {
+        "name": "0019_skill_ops_autosync.sql",
+        "sha256": "bd0d1db9fb3621b4e05eec34a19b65077cf37ed51b5793266d25be2762fbeb6d"
+      },
+      {
+        "name": "0020_skill_reflux.sql",
+        "sha256": "4fcb2caf1d98f1ce2160d787e8ac6720bec0ce1a2a596518771654e833230dc0"
+      },
+      {
+        "name": "0021_eval_core.sql",
+        "sha256": "c3dfc5419b81ad08a0856896bb218d3c8828ed7a29857610a6c0dead48ab516c"
+      },
+      {
+        "name": "0022_bundle_mechanism.sql",
+        "sha256": "0bd0fef17aba902350b55f9ee161124504b8a6eab53265ce3ccf83e110c736ad"
+      },
+      {
+        "name": "0023_dev_fabric.sql",
+        "sha256": "2f22ab1f351ec6e0da77422e22031012cda2202987eb703f63e7a487eea4c126"
+      },
+      {
+        "name": "0024_secretary.sql",
+        "sha256": "5dd2d14a6f83aa5aaf072fc229c95556e60fb7dc29c5b82c08fbcd34b32afb47"
+      },
+      {
+        "name": "0025_loommate_modes.sql",
+        "sha256": "29a3d936c5379afe6dcfed066bcaaf3e3241ff13abcbf2c6fc8cff8752919d74"
+      },
+      {
+        "name": "0026_tenant_overlay.sql",
+        "sha256": "7880ca754aaaeddfaf72f38802276dbf75d462ac06d609c34bedff37ba645ebf"
+      },
+      {
+        "name": "0027_accounts.sql",
+        "sha256": "fea7a12844dd42f747ab2870911364ec273d28f85e11df99ff22c732c3a399fa"
+      },
+      {
+        "name": "0028_onboarding_truth_gate.sql",
+        "sha256": "64b889ef1f495bde45865d40cb9cc84caaaf5ff4ff9867b3b1e510b81d400e09"
+      },
+      {
+        "name": "0029_onboarding_continuity.sql",
+        "sha256": "77b7e628acf279d6a6a07ef8d40a3e39d411a787d753afc5ed735a2a12daaf44"
+      },
+      {
+        "name": "0030_single_active_bundle_install.sql",
+        "sha256": "58855a30e4c2fbc375f581b6992284a56fc3af57fc12ebb03d10ec1cd219a2bf"
+      },
+      {
+        "name": "0031_accounts_overlay_least_privilege.sql",
+        "sha256": "164c83e3960c322e4581c9555a622b16470eba31914a320ee82109d416aef0ad"
+      },
+      {
+        "name": "0032_remove_cross_industry_hotel_bootstrap.sql",
+        "sha256": "ef5459cd9b5aeccc3ef2aff989ed3f12e4192b6735aef6c03ca52019237a890c"
+      },
+      {
+        "name": "0033_neutral_workspace_industry_default.sql",
+        "sha256": "4b2e930998468568c33a93c44717aebfc5e0296ac0682a69315f1dae74a0fdf0"
+      },
+      {
+        "name": "0034_api_key_rotation.sql",
+        "sha256": "cc9d0f87d34a878918ba74d42f93073efe61cbb347477bc255b1108e829d3973"
+      },
+      {
+        "name": "0035_tenant_overlay_single_active.sql",
+        "sha256": "26f71250672e523e4703e449de6be63451d87d352ba246ca3b794f103f2032d7"
+      },
+      {
+        "name": "0047_thread_plan_persist.sql",
+        "sha256": "1e4a217bd98204c2dd9ce52ae9341dab9a0fd26378e9a800ff90fdfb8dd6d9fe"
+      },
+      {
+        "name": "0048_readable_id_sequences.sql",
+        "sha256": "a17cbf641438fa5d1086bd78e2385a0d8606ccb3b9f155af78381c22a9f15cb0"
+      },
+      {
+        "name": "0049_thread_cancelled_status.sql",
+        "sha256": "2446b6c2a406a2b0b291a7646f50ccf549bbc8dd3f9b108b41eb8882500e9351"
+      },
+      {
+        "name": "0050_thread_no_sequence_floor.sql",
+        "sha256": "bff17a0f16e7564f7185a615ead2dad885a13bc30d81027f575c7514b22d9106"
+      },
+      {
+        "name": "0051_append_event_tenant_guard.sql",
+        "sha256": "4030f3dd3d8d1be51ffa09e46d79020742995c8ad37b8c7f872252a15c78ce76"
+      },
+      {
+        "name": "0052_thread_no_sequence_pure.sql",
+        "sha256": "e39aebe0a55c457d9136691d57ca1502b617a2fcee924590fe72d61ef52464a3"
+      },
+      {
+        "name": "0053_approval_one_time_consumption.sql",
+        "sha256": "58f465ba61267dd81a20d8a1b056c9f23dbe61fda0cf41ee284e219a59d95c86"
+      },
+      {
+        "name": "0054_approval_queue_covering_indexes.sql",
+        "sha256": "d28e8e1353f94b89829f9489705c7651803f7bded7802a3e9f7f9a378ca6eec6"
+      }
+    ],
+    "hotel": [
+      {
+        "name": "0001_init.sql",
+        "sha256": "fd8b5f636a2d77d7e6adbe73d1fefa5521df06c526ebd2cf9d70f69f5e763be0"
+      },
+      {
+        "name": "0002_bugfix.sql",
+        "sha256": "f47fe537abbb522084f8cd0eecb7f5faf2dbb4dbc19a15d09c8f5a728816346b"
+      },
+      {
+        "name": "0003_im_inbound_dedupe.sql",
+        "sha256": "07b61f807f4ca448aa5b950d321197127e59dec2ed237b3103b8a7c4f6adbe3d"
+      },
+      {
+        "name": "0004_biz_events_no_truncate.sql",
+        "sha256": "e4ba2708a356c38690d826d9c46920ab044d900307333d00014c42f73753ebb7"
+      },
+      {
+        "name": "0005_fence_baseline_guard.sql",
+        "sha256": "50ad6d177f7a0c9d0698356b8e91090a17754c08970680fa0a730b722b20dd5b"
+      },
+      {
+        "name": "0006_industry_publish_gate.sql",
+        "sha256": "2f205cee7ec4d7f8f61c1e7cad251a686695366ca230fa1d76622597602ab663"
+      },
+      {
+        "name": "0007_append_event_function.sql",
+        "sha256": "67647470851008a2c0e70c00e5940bf34f86bec7c00a02483539e9d124d3f2ba"
+      },
+      {
+        "name": "0008_publish_reviews_rls.sql",
+        "sha256": "5040d4bb6e22340cfe8a6fb68b45cc6bb4ea327812e90c187a1b4c48fe9441ae"
+      },
+      {
+        "name": "0009_captain.sql",
+        "sha256": "8fda6d113d9e1e1a9ea0d348334a6809924fb15d7250c25a08e33efc74b37156"
+      },
+      {
+        "name": "0010_service_c.sql",
+        "sha256": "fc9bf14fb3f910f623159390164f8a0b6ee7162559c53b14ac3e8003f86dfb27"
+      },
+      {
+        "name": "0011_service_c_hardening.sql",
+        "sha256": "d66940ec3d257c980631a6c2cc44c95c5bba83b43edbaa02f27515369a9a3825"
+      },
+      {
+        "name": "0012_service_c_demo_pk.sql",
+        "sha256": "2677ceb411f23c6e6ef65d65f60e5cfce4c9bd61c5bcaa4eeaac40d8c9ceee53"
+      },
+      {
+        "name": "0013_memory_usage_workspace_rls.sql",
+        "sha256": "34f667813d0a12aa94c0128b5e00a86bedd88b0c7ac597d7aaa9cc96f4bfe33f"
+      },
+      {
+        "name": "0013_pipeline_hardening.sql",
+        "sha256": "f3445c4ca722d284daad3e73c9b829981e4c85671e27d0c6e9314332a1dc2a7a"
+      },
+      {
+        "name": "0015_event_id_tail.sql",
+        "sha256": "a7063bd23b63a014e44deda24bdbaaf3735769396338b76027afef0b5a1a37dd"
+      },
+      {
+        "name": "0016_readable_id_tail.sql",
+        "sha256": "11e4137ea25764dd0b609dd4464d965e583864c3bcc9eadd3bad5f334c1f4a45"
+      },
+      {
+        "name": "0017_skill_revoke_channel.sql",
+        "sha256": "f9c6bf6a7b5f088ce44cb67344851b5915333e3c9e4d41a7c162b6ee1f5667d9"
+      },
+      {
+        "name": "0018_skill_ops_distribution.sql",
+        "sha256": "8bc710bfb7c3f4de0a92fb4cd6a54cc950dca007dfcc60c4f3d34313d4479f38"
+      },
+      {
+        "name": "0019_skill_ops_autosync.sql",
+        "sha256": "bd0d1db9fb3621b4e05eec34a19b65077cf37ed51b5793266d25be2762fbeb6d"
+      },
+      {
+        "name": "0020_skill_reflux.sql",
+        "sha256": "4fcb2caf1d98f1ce2160d787e8ac6720bec0ce1a2a596518771654e833230dc0"
+      },
+      {
+        "name": "0021_eval_core.sql",
+        "sha256": "c3dfc5419b81ad08a0856896bb218d3c8828ed7a29857610a6c0dead48ab516c"
+      },
+      {
+        "name": "0022_bundle_mechanism.sql",
+        "sha256": "0bd0fef17aba902350b55f9ee161124504b8a6eab53265ce3ccf83e110c736ad"
+      },
+      {
+        "name": "0023_dev_fabric.sql",
+        "sha256": "2f22ab1f351ec6e0da77422e22031012cda2202987eb703f63e7a487eea4c126"
+      },
+      {
+        "name": "0024_secretary.sql",
+        "sha256": "5dd2d14a6f83aa5aaf072fc229c95556e60fb7dc29c5b82c08fbcd34b32afb47"
+      },
+      {
+        "name": "0025_loommate_modes.sql",
+        "sha256": "29a3d936c5379afe6dcfed066bcaaf3e3241ff13abcbf2c6fc8cff8752919d74"
+      },
+      {
+        "name": "0026_tenant_overlay.sql",
+        "sha256": "7880ca754aaaeddfaf72f38802276dbf75d462ac06d609c34bedff37ba645ebf"
+      },
+      {
+        "name": "0027_accounts.sql",
+        "sha256": "fea7a12844dd42f747ab2870911364ec273d28f85e11df99ff22c732c3a399fa"
+      },
+      {
+        "name": "0028_onboarding_truth_gate.sql",
+        "sha256": "64b889ef1f495bde45865d40cb9cc84caaaf5ff4ff9867b3b1e510b81d400e09"
+      },
+      {
+        "name": "0029_onboarding_continuity.sql",
+        "sha256": "77b7e628acf279d6a6a07ef8d40a3e39d411a787d753afc5ed735a2a12daaf44"
+      },
+      {
+        "name": "0030_single_active_bundle_install.sql",
+        "sha256": "58855a30e4c2fbc375f581b6992284a56fc3af57fc12ebb03d10ec1cd219a2bf"
+      },
+      {
+        "name": "0031_accounts_overlay_least_privilege.sql",
+        "sha256": "164c83e3960c322e4581c9555a622b16470eba31914a320ee82109d416aef0ad"
+      },
+      {
+        "name": "0032_remove_cross_industry_hotel_bootstrap.sql",
+        "sha256": "ef5459cd9b5aeccc3ef2aff989ed3f12e4192b6735aef6c03ca52019237a890c"
+      },
+      {
+        "name": "0033_neutral_workspace_industry_default.sql",
+        "sha256": "4b2e930998468568c33a93c44717aebfc5e0296ac0682a69315f1dae74a0fdf0"
+      },
+      {
+        "name": "0034_api_key_rotation.sql",
+        "sha256": "cc9d0f87d34a878918ba74d42f93073efe61cbb347477bc255b1108e829d3973"
+      },
+      {
+        "name": "0035_tenant_overlay_single_active.sql",
+        "sha256": "26f71250672e523e4703e449de6be63451d87d352ba246ca3b794f103f2032d7"
+      },
+      {
+        "name": "0047_thread_plan_persist.sql",
+        "sha256": "1e4a217bd98204c2dd9ce52ae9341dab9a0fd26378e9a800ff90fdfb8dd6d9fe"
+      },
+      {
+        "name": "0048_readable_id_sequences.sql",
+        "sha256": "a17cbf641438fa5d1086bd78e2385a0d8606ccb3b9f155af78381c22a9f15cb0"
+      },
+      {
+        "name": "0049_thread_cancelled_status.sql",
+        "sha256": "2446b6c2a406a2b0b291a7646f50ccf549bbc8dd3f9b108b41eb8882500e9351"
+      },
+      {
+        "name": "0050_thread_no_sequence_floor.sql",
+        "sha256": "bff17a0f16e7564f7185a615ead2dad885a13bc30d81027f575c7514b22d9106"
+      },
+      {
+        "name": "0051_append_event_tenant_guard.sql",
+        "sha256": "4030f3dd3d8d1be51ffa09e46d79020742995c8ad37b8c7f872252a15c78ce76"
+      },
+      {
+        "name": "0052_thread_no_sequence_pure.sql",
+        "sha256": "e39aebe0a55c457d9136691d57ca1502b617a2fcee924590fe72d61ef52464a3"
+      },
+      {
+        "name": "0053_approval_one_time_consumption.sql",
+        "sha256": "58f465ba61267dd81a20d8a1b056c9f23dbe61fda0cf41ee284e219a59d95c86"
+      }
+    ]
+  },
+  "setup_helper": {
+    "sha256": "66181ad2aa025d7e0f7390058afddbca425a8393fbb3445b0ba4970599e47454",
+    "adapted_from_sha256": "ebb7968d26e8b22458b333b62570a77efc996b801731b3ca2c90907c6556b58e",
+    "adaptation": "Only header and synthetic-demo-row description changed; original product calls, preservation checks, and owned URL guards remain unchanged."
+  }
+}

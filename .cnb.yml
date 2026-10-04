@@ -159,6 +159,13 @@
         # 同 static-gate：@workloom/ui dist 不入库，三端构建前必须先构建
         pnpm -C packages/ui build
 
+    - name: 四项专属 PostgreSQL 回归（独立 Unix socket + 旧数据升级）
+      script: |
+        set -eu
+        pnpm -C packages/industry-contract build
+        node --test scripts/test-owned-pg-contract.test.mjs
+        node scripts/test-owned-pg.mjs --repo base
+
     - name: 启动 PostgreSQL 17 + pgvector
       script: |
         set -eu
@@ -201,7 +208,7 @@
         set -a; . ./.env; set +a
         set -eu
         pnpm -C packages/shared test
-        pnpm -C packages/base test
+        WORKLOOM_GENERIC_DB_CI=1 pnpm -C packages/base test
         pnpm -C packages/runtime test
 
     - name: server 契约与 E2E

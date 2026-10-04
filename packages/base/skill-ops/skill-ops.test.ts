@@ -4,7 +4,9 @@
  * PG 集成（RUN_DB_TESTS=1）：L0 静默装载 / L1 升级快照跟进 / L2 审批门禁 / 预检拦截 /
  *                          prompt 策略 / 回滚 / 幂等重推 / 事件留痕
  */
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
+import type { PoolClient } from "pg";
 import { signPackage, verifySignature } from "./signature.js";
 import { matchesTargets, compareVersions } from "./targeting.js";
 import { classifyTier, diffDistMeta, hasPermissionDrift } from "./tier.js";
@@ -194,34 +196,88 @@ describe.runIf(RUN_DB)("skill-ops PG 集成（P0 分发闭环）", async () => {
   const { installSkill, listInstalls } = await import("../skills/registry.js");
   const app = new pg.Pool({ connectionString: process.env.DATABASE_APP_URL });
   const gw = new pg.Pool({ connectionString: process.env.DATABASE_GATEWAY_URL });
-  const scope = { tenantId: "tenant-demo", workspaceId: "ws-yunqi" };
+  const RUN = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+  // The distribution suite mutates installs/policies; a seeded workspace is a shared read fixture.
+  const scope = { tenantId: `tenant-skill-ops-${RUN}`, workspaceId: `ws-skill-ops-${RUN}` };
+  const ownedSkillIds = new Set([
+    ...["l0", "l1", "l2", "bad", "prompt", "rb", "auto", "rfx", "rfx2", "loop"]
+      .map((kind) => `skill-dist-${kind}-${RUN}`),
+    `skill-dist-rfx2-${RUN}-bad`,
+  ]);
+  let fixturesReady = false;
   const instance = { bundles: [] as string[], edition: "community" };
-  const qApp = async <T extends Record<string, any> = Record<string, any>>(sql: string, params: unknown[] = []) => {
+  const appTx = async <T>(action: (client: PoolClient) => Promise<T>): Promise<T> => {
     const c = await app.connect();
+    let destroy = false;
     try {
       await c.query("BEGIN");
       await c.query("SELECT set_config('app.workspace_id', $1, true)", [scope.workspaceId]);
       await c.query("SELECT set_config('app.tenant_id', $1, true)", [scope.tenantId]);
-      const r = await c.query<T>(sql, params);
+      const r = await action(c);
       await c.query("COMMIT");
       return r;
-    } catch (err) {
-      await c.query("ROLLBACK").catch(() => undefined);
-      throw err;
-    } finally { c.release(); }
+    } catch (error) {
+      try { await c.query("ROLLBACK"); }
+      catch (rollbackError) {
+        destroy = true;
+        throw new AggregateError([error, rollbackError], "分发测试事务与回滚均失败");
+      }
+      throw error;
+    } finally { c.release(destroy); }
   };
-  const RUN = Date.now().toString(36);
+  const qApp = <T extends Record<string, unknown> = Record<string, unknown>>(sql: string, params: unknown[] = []) =>
+    appTx((c) => c.query<T>(sql, params));
   const manifestOf = (pkgs: SkillPackage[]) => ({
     registryVersion: `test-${RUN}`, publishedAt: new Date().toISOString(),
     entries: pkgs.map((p) => ({ targets: {}, package: p })),
   });
   const fetcherOf = (pkgs: SkillPackage[]) => async () => manifestOf(pkgs);
   const cleanup = async (skillId: string) => {
-    await qApp(`DELETE FROM skill_dist_staging WHERE skill_id=$1`, [skillId]);
-    await qApp(`DELETE FROM skill_dist_snapshots WHERE skill_id=$1`, [skillId]);
-    await qApp(`DELETE FROM skill_installs WHERE skill_id=$1 AND workspace_id=$2`, [skillId, scope.workspaceId]);
-    await qApp(`DELETE FROM skills WHERE id=$1`, [skillId]);
+    if (!ownedSkillIds.has(skillId)) throw new Error(`拒绝清理非本测试技能：${skillId}`);
+    await appTx(async (c) => {
+      // Remove visibility-dependent caches before their skill row; the outbox RLS checks that row.
+      await c.query(`DELETE FROM skill_reflux_outbox WHERE skill_id=$1 AND workspace_id=$2`, [skillId, scope.workspaceId]);
+      await c.query(`DELETE FROM skill_reflux_inbox WHERE skill_id=$1 AND from_tenant=$2 AND from_workspace=$3`, [skillId, scope.tenantId, scope.workspaceId]);
+      await c.query(`DELETE FROM skill_dist_staging WHERE skill_id=$1 AND workspace_id=$2`, [skillId, scope.workspaceId]);
+      await c.query(`DELETE FROM skill_dist_snapshots WHERE skill_id=$1 AND workspace_id=$2`, [skillId, scope.workspaceId]);
+      await c.query(`DELETE FROM skill_installs WHERE skill_id=$1 AND workspace_id=$2`, [skillId, scope.workspaceId]);
+      await c.query(`DELETE FROM skills WHERE id=$1`, [skillId]);
+    });
   };
+
+  beforeAll(async () => {
+    if (!process.env.DATABASE_GATEWAY_URL) throw new Error("分发 PG 测试必须显式配置 DATABASE_GATEWAY_URL");
+    await appTx(async (c) => {
+      await c.query("INSERT INTO tenants(id,name) VALUES($1,'分发测试租户')", [scope.tenantId]);
+      await c.query("INSERT INTO workspaces(id,tenant_id,name,slug,industry) VALUES($1,$2,'分发测试工作区',$1,'general')", [scope.workspaceId, scope.tenantId]);
+    });
+    fixturesReady = true;
+  });
+
+  afterAll(async () => {
+    const failures: unknown[] = [];
+    try {
+      if (fixturesReady) {
+        await appTx(async (c) => {
+          await c.query("DELETE FROM skill_reflux_outbox WHERE workspace_id=$1", [scope.workspaceId]);
+          await c.query("DELETE FROM skill_reflux_inbox WHERE from_tenant=$1 AND from_workspace=$2 AND skill_id=ANY($3::text[])", [scope.tenantId, scope.workspaceId, [...ownedSkillIds]]);
+          await c.query("DELETE FROM skill_dist_staging WHERE workspace_id=$1", [scope.workspaceId]);
+          await c.query("DELETE FROM skill_dist_snapshots WHERE workspace_id=$1", [scope.workspaceId]);
+          await c.query("DELETE FROM skill_installs WHERE workspace_id=$1", [scope.workspaceId]);
+          await c.query("DELETE FROM approvals WHERE tenant_id=$1 AND workspace_id=$2", [scope.tenantId, scope.workspaceId]);
+          await c.query("DELETE FROM skill_dist_policy WHERE workspace_id=$1", [scope.workspaceId]);
+          await c.query("DELETE FROM skill_dist_state WHERE workspace_id=$1", [scope.workspaceId]);
+          await c.query("DELETE FROM skills WHERE id=ANY($1::text[])", [[...ownedSkillIds]]);
+          // Tenant/workspace audit anchors and immutable biz_events remain available for chain checks.
+        });
+      }
+    } catch (error) { failures.push(error); }
+    finally {
+      const closed = await Promise.allSettled([app.end(), gw.end()]);
+      for (const result of closed) if (result.status === "rejected") failures.push(result.reason);
+    }
+    if (failures.length) throw new AggregateError(failures, "分发 PG 夹具清理/连接池关闭失败");
+  });
 
   it("未配置 registry/密钥 → 分发整体禁用（不降级跳过验签）", async () => {
     const r = await syncDistribution(app, gw, scope, {
@@ -395,7 +451,7 @@ describe.runIf(RUN_DB)("skill-ops PG 集成（P0 分发闭环）", async () => {
     });
     expect(r1).toMatchObject({ ran: false, reason: "out_of_window" });
 
-    // ② 窗口内且到期 → 执行（intervalMs=0 强制到期：共享库可能有历史自动同步事件）
+    // ② 窗口内且到期 → 执行（intervalMs=0 强制到期，覆盖此前本夹具的同步记录）
     const r2 = await autoSyncWorkspace(app, gw, scope, {
       registryUrl: "u", signingKey: KEY, instance, fetcher: fetcherOf([pkg]), now: nightNow, intervalMs: 0,
     });
@@ -441,7 +497,7 @@ describe.runIf(RUN_DB)("skill-ops PG 集成（P0 分发闭环）", async () => {
       registryUrl: "u", signingKey: KEY, instance, by: "MEM-001", fetcher: fetcherOf([pkg]),
     });
     await qApp(`UPDATE skills SET body=$2 WHERE id=$1`, [skillId, "# 差评安抚\n\n## 触发（何时用）\n客人来电 13812345678 时\n\n## 步骤\n1. 安抚\n\n## 边界（什么不做）\n不承诺免房"]);
-    // ① opt-in 关闭 → 拒发（先显式复位：共享库策略行可能被历史测试置过 true）
+    // ① opt-in 关闭 → 拒发（显式复位，避免依赖此前用例的策略状态）
     await setRefluxOptIn(app, gw, scope, { optIn: false, by: "MEM-001" });
     expect(await getRefluxOptIn(app, scope)).toBe(false);
     await expect(sendReflux(app, gw, scope, { skillId, by: "MEM-001" })).rejects.toThrow(/opt-in/);
@@ -484,7 +540,6 @@ describe.runIf(RUN_DB)("skill-ops PG 集成（P0 分发闭环）", async () => {
     await expect(buildRefluxPayload(app, scope, badId)).rejects.toThrow(/脱敏管道拦截/);
     await cleanup(skillId);
     await cleanup(`${skillId}-bad`);
-    await qApp(`DELETE FROM skill_reflux_outbox WHERE skill_id LIKE $1`, [`${skillId}%`]);
   });
 
   it("官方消化闭环：接收(验签) → 双人复核 → 官方化(origin=customer-reflux) → buildManifest 签名 → 客户端同步", async () => {
