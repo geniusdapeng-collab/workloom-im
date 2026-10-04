@@ -1,19 +1,49 @@
 /** P-domain observations are evaluated separately; aggregate success never fans out to all items. */
 import { LIVE_BUDGET_CAPS } from "./budget.mjs";
 
+const timestamp = (value) => typeof value === "string" ? Date.parse(value) : NaN;
+function completedTask(task, report) {
+  const stamp = timestamp(task.receipt?.verified_at);
+  const reservations = (report.budget?.reservations ?? []).filter((row) => row.taskId === task.id && row.kind === task.kind);
+  return task.status === "ok" && task.called === true && task.receipt?.synced === true && task.selftest === false && task.verification?.ok === true
+    && Number.isFinite(stamp) && stamp >= timestamp(report.startedAt) && stamp <= timestamp(report.at)
+    && Boolean(task.receiptPath && task.transcriptPath)
+    && (task.kind === "product" || (reservations.length > 0 && reservations.every((row) => row.settlement?.measured === true && row.settlement.status === "ok")
+      && Boolean(task.modelResolved) && task.receipt.model === task.modelResolved))
+    && (task.kind !== "llm" || (task.usage?.complete === true && task.receipt.usageComplete === true))
+    && (!["image", "video"].includes(task.kind) || (task.measurementComplete === true && task.receipt.measurementComplete === true));
+}
+
+/** Negative provenance declarations only tighten classification; absence is never a real-source guarantee. */
+export function classifyLiveEvidence(report) {
+  const synthetic = report.evidenceMode === "synthetic" || report.evidenceType === "synthetic-transport";
+  const realEnvironment = report.selftest === false && ["client-runtime", "deployed"].includes(report.environment?.kind);
+  const start = timestamp(report.startedAt); const end = timestamp(report.at);
+  const run = typeof report.runId === "string" && /^live-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(report.runId)
+    && report.budget?.runId === report.runId && Number.isFinite(start) && Number.isFinite(end) && end >= start && end <= Date.now() + 300_000;
+  const target = report.environment?.declaredTarget === true && report.environment.targetDeclaredExplicitly === true && report.fingerprint?.targetProbe?.ok === true
+    && /^[0-9a-f]{40}$/iu.test(report.fingerprint?.repo?.commit ?? "") && report.fingerprint.repo.dirty === false
+    && (report.environment.kind !== "client-runtime" || Boolean(report.fingerprint.clientRuntimeVersion && report.fingerprint.clientInstallState?.status));
+  const productionEvidence = !synthetic && report.productionEvidence !== false && realEnvironment && run && target && (report.tasks ?? []).some((task) => completedTask(task, report));
+  const evidenceType = synthetic ? "synthetic-transport" : report.selftest === true ? "synthetic-selftest" : realEnvironment ? productionEvidence ? "production-observation" : "unverified-production" : "local-preview";
+  return { productionEvidence, evidenceType };
+}
+
 export function buildLiveChecks(report, { reportPath, outputPaths = [], secretScan, requestedTaskIds = [] }) {
   const checks = [];
-  const real = report.selftest === false && ["client-runtime", "deployed"].includes(report.environment.kind);
+  const provenance = classifyLiveEvidence(report);
+  const real = provenance.productionEvidence;
   const tasks = report.tasks ?? [];
   const productionReady = real && report.fingerprint.targetProbe?.ok === true && report.environment.declaredTarget === true;
   const observe = (id, ok, expected, actual, { evidencePaths = [reportPath], unverified = false, note = "" } = {}) => {
     const status = !real || unverified ? "unverified" : ok ? "pass" : "fail";
-    checks.push({ id, status, pass: status === "pass" ? true : status === "fail" ? false : null, expected, actual, evidencePaths, note: !real ? "本机预览/自检不构成生产实测证据" : note });
+    const productionEvidence = real && status !== "unverified";
+    const evidenceType = real && !productionEvidence ? "unverified-production" : provenance.evidenceType;
+    checks.push({ id, status, pass: status === "pass" ? true : status === "fail" ? false : null, productionEvidence, evidenceType, expected, actual, evidencePaths,
+      note: !real ? provenance.evidenceType === "synthetic-transport" ? "显式运输替身声明：只证明合成管道，不构成任何 P 域生产观察" : "缺少同次运行、真实目标、调用回执与完整计量；本机预览/自检也不构成生产实测证据" : note });
   };
   const taskEvidence = (set) => [reportPath, ...set.flatMap((task) => [task.receiptPath, task.transcriptPath]).filter(Boolean)];
-  const completed = (task) => task.status === "ok" && task.receipt?.synced === true && task.selftest === false && task.verification?.ok === true
-    && (task.kind !== "llm" || (task.usage?.complete === true && task.receipt.usageComplete === true))
-    && (!["image", "video"].includes(task.kind) || (task.measurementComplete === true && task.receipt.measurementComplete === true));
+  const completed = (task) => completedTask(task, report);
   const group = (id, selected, predicate, expected) => observe(id, selected.length > 0 && selected.every((task) => completed(task) && predicate(task)), expected,
     selected.map((task) => ({ id: task.id, status: task.status, verified: task.verification?.ok === true, observation: predicate(task) })), { evidencePaths: taskEvidence(selected), unverified: !productionReady || selected.length === 0 || selected.some((task) => ["blocked", "skipped"].includes(task.status)) });
 

@@ -33,6 +33,16 @@ import { evaluateEventAssertion, freshReceipt, realExecution } from "./assertion
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const modelIdentity = (value) => typeof value === "string" && value.trim() ? value.trim() : null;
+const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const tokenCount = (value) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && !Object.is(value, -0);
+// A partial/contradictory sample can establish a lower bound, never an actual aggregate.
+function knownOpenAiTokens(usage) {
+  if (!object(usage)) return null;
+  const parts = [usage.prompt_tokens, usage.completion_tokens].filter(tokenCount);
+  const sum = parts.reduce((total, value) => total + value, 0);
+  const lowerBound = Math.max(tokenCount(usage.total_tokens) ? usage.total_tokens : 0, tokenCount(sum) ? sum : Math.max(0, ...parts));
+  return lowerBound > 0 ? lowerBound : null;
+}
 
 /** Pinned dsh-v0.2.0-rc.2 API-key plugin and Messages transport configuration. */
 export const DSH_DEEPSEEK_DEFAULTS = {
@@ -206,7 +216,15 @@ export async function runDshTask({
   expectedTokens = 8000,
   allowedModels = [],
   baseUrl = null,
+  selftest = false,
 }) {
+  if (selftest) {
+    try {
+      const endpoint = new URL(baseUrl ?? env.DEEPSEEK_BASE_URL ?? DSH_DEEPSEEK_DEFAULTS.baseURL);
+      if (!["http:", "https:"].includes(endpoint.protocol) || !["127.0.0.1", "[::1]"].includes(endpoint.hostname) || endpoint.username || endpoint.password) throw new Error("non-local endpoint");
+    } catch { return { status: "blocked", called: false, reason: "DSH selftest 只能使用显式本地隔离端点，尚未启动进程或调用模型" }; }
+  }
+  if (!budgetOptions || typeof workDir !== "string" || resolve(budgetOptions.outDir ?? "") !== resolve(workDir) || !Number.isSafeInteger(expectedTokens) || expectedTokens <= 0) return { status: "blocked", called: false, reason: "DSH 缺少同次运行预算配置或有效逐请求 token 预占" };
   const { gate, bin, patchTemplate } = dshPaths(repoRoot);
   if (!existsSync(bin)) {
     return { status: "blocked", reason: `dsh 可执行文件缺失：${bin}（先跑 packages/runtime/dsh-gate 的 pnpm install）` };
@@ -217,7 +235,6 @@ export async function runDshTask({
   if (rulesToken) return { status: "blocked", called: false, reason: "DSH 围栏需 rulesFile 或无凭据 URL；禁止把 rulesToken 写入 patch" };
   if (!Array.isArray(allowedModels) || allowedModels.some((value) => !modelIdentity(value))) return { status: "blocked", called: false, reason: "DSH allowedModels 必须是非空模型名组成的显式数组" };
   try { assertSafeTaskId(taskId); } catch (error) { return { status: "blocked", called: false, reason: error.message }; }
-  if (!budgetOptions || resolve(budgetOptions.outDir ?? "") !== resolve(workDir) || !Number.isSafeInteger(expectedTokens) || expectedTokens <= 0) return { status: "blocked", called: false, reason: "DSH 缺少同次运行预算配置或有效逐请求 token 预占" };
   const installedPackage = join(gate, "node_modules", "@deepseek-ai", "dsh", "package.json");
   let version;
   try { version = JSON.parse(readFileSync(installedPackage, "utf8")).version; } catch { return { status: "blocked", called: false, reason: "DSH 已安装运行时版本不可回读，尚未调用模型" }; }
@@ -355,8 +372,9 @@ function runProcess(cmd, args, { cwd, env, timeoutMs }) {
 export const LLM_TOTAL_BUDGET_BLOCK = "文本模型入口缺少可信的输入、输出及重试总 token 用量上界；expectedTokens 只是估算，DSH maxTokens 仅约束输出。正式非 selftest 执行在调用前阻断，尚未预占、登录、启动 DSH 或请求供应商，真实 LLM 链未验证";
 
 /** Controlled low-level transport only; formal CLI blocks external LLM admission before this adapter. */
-export async function runChatTask({ resolved, prompt, timeoutMs = 180_000, env = process.env, image = null }) {
+export async function runChatTask({ resolved, prompt, timeoutMs = 180_000, env = process.env, image = null, maxTokens = 8000 }) {
   if (!resolved?.ready) return { status: "blocked", called: false, reason: resolved?.missing?.join("；") ?? "文本模型未配置" };
+  if (!tokenCount(maxTokens) || maxTokens <= 0) return { status: "blocked", called: false, reason: "文本模型 maxTokens 必须是有限正安全整数，尚未调用供应商" };
   const apiKey = pickEnv([resolved.credentialEnv, DSH_DEEPSEEK_DEFAULTS.apiKeyEnv, "LLM_API_KEY"], env).value;
   if (!apiKey) return { status: "blocked", called: false, reason: "文本模型凭据未配置" };
   /** 兜底再归一一次：即使 profile 直接把 Anthropic 根声明给 model-gateway，也不至于打出 /anthropic/chat/completions（404） */
@@ -373,39 +391,42 @@ export async function runChatTask({ resolved, prompt, timeoutMs = 180_000, env =
     ]
     : prompt;
   const started = Date.now();
-  const unknown = (status, reason) => ({ status, reason, called: true, tokens: null, usage: { complete: false, calls: 1, totalTokens: null, reason: "已尝试请求，供应商实际计量不可得" }, ms: Date.now() - started,
-    receipt: { kind: "model-gateway", endpoint: url, id: null, model: null, usageComplete: false, tokens: null, synced: false, verified_at: new Date().toISOString() } });
+  const unknown = (status, reason) => ({ status, reason, called: true, calls: 1, tokens: null, knownTokens: null, usageVerified: false,
+    usage: { complete: false, calls: 1, totalTokens: null, knownTokens: null, reason: "已尝试请求，供应商实际计量不可得" }, ms: Date.now() - started,
+    receipt: { kind: "model-gateway", endpoint: url, id: null, model: null, usageComplete: false, usageVerified: false, tokens: null, knownTokens: null, synced: false, verified_at: new Date().toISOString() } });
   let res;
   try {
     res = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: resolved.model, messages: [{ role: "user", content }], temperature: 0.2, stream: false }),
+      // This is an output ceiling. Formal CLI still blocks external LLM because total input/retry usage is unbounded.
+      body: JSON.stringify({ model: resolved.model, messages: [{ role: "user", content }], temperature: 0.2, stream: false, max_tokens: maxTokens }),
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (err) {
-    return unknown("blocked", `模型调用失败/超时，实际用量未验证：${String(err?.message ?? err).slice(0, 200)}`);
+    return unknown("failed", `模型调用失败/超时，实际用量未验证：${String(err?.message ?? err).slice(0, 200)}`);
   }
   const text = await res.text().catch(() => "");
   let json = null;
   try { json = JSON.parse(text); } catch { /* 非 JSON 错误体 */ }
-  if (!res.ok) {
-    return unknown([401, 403].includes(res.status) ? "blocked" : "failed", `HTTP ${res.status}：${text.slice(0, 300)}`);
-  }
   const answer = typeof json?.choices?.[0]?.message?.content === "string" ? json.choices[0].message.content : "";
-  const usage = normalizeOpenAiUsage(json?.usage);
+  const normalized = normalizeOpenAiUsage(json?.usage);
+  const usage = normalized?.totalTokens > 0 ? normalized : null;
+  const knownTokens = knownOpenAiTokens(json?.usage);
   const actualModel = modelIdentity(json?.model);
   const identity = typeof json?.id === "string" && json.id.trim() && actualModel;
+  const synced = Boolean(res.ok && answer && identity && usage);
   return {
-    status: !usage ? "blocked" : answer && identity ? "ok" : "failed",
-    reason: !usage ? "模型响应没有有效的供应商实际 usage；不能记为零用量或完成" : !identity ? "模型响应没有可回读的调用 ID/实际模型" : !answer ? "模型没有返回答案" : undefined,
-    called: true,
+    status: !res.ok ? [401, 403].includes(res.status) ? "blocked" : "failed" : !usage ? "blocked" : answer && identity ? "ok" : "failed",
+    reason: !res.ok ? `HTTP ${res.status}：${text.slice(0, 300)}` : !usage ? "模型响应没有有效的供应商实际 usage；不能记为零用量或完成" : !identity ? "模型响应没有可回读的调用 ID/实际模型" : !answer ? "模型没有返回答案" : undefined,
+    called: true, calls: 1,
     answer,
     ms: Date.now() - started,
     model: actualModel,
     requestedModel: resolved.model,
     tokens: usage?.totalTokens ?? null,
-    usage: { complete: Boolean(usage), calls: 1, totalTokens: usage?.totalTokens ?? null },
+    knownTokens, usageVerified: Boolean(usage),
+    usage: { complete: Boolean(usage), calls: 1, totalTokens: usage?.totalTokens ?? null, knownTokens },
     receipt: {
       kind: "model-gateway",
       endpoint: url,
@@ -413,8 +434,8 @@ export async function runChatTask({ resolved, prompt, timeoutMs = 180_000, env =
       requestedModel: resolved.model,
       id: json?.id ?? null,
       tokens: usage?.totalTokens ?? null,
-      usageComplete: Boolean(usage),
-      synced: Boolean(answer && identity && usage),
+      knownTokens, usageComplete: Boolean(usage), usageVerified: Boolean(usage),
+      synced,
       verified_at: new Date().toISOString(),
     },
   };
@@ -448,9 +469,10 @@ export async function runImageTask({ resolved, task, timeoutMs = 300_000, env = 
   const apiKey = pickEnv([resolved.credentialEnv, "SEEDREAM_API_KEY", "VOLCENGINE_ARK_API_KEY", "ARK_API_KEY"], env).value;
   if (!apiKey) return preflight("图片模型凭据未配置");
   const base = String(resolved.baseUrl).replace(/\/$/, "");
-  const count = Number(task.images ?? 1);
+  const count = task.images === undefined ? 1 : task.images;
   if (!Number.isSafeInteger(count) || count <= 0 || count > LIVE_BUDGET_CAPS.maxImages) return preflight("图片张数必须是配额范围内的正整数");
-  if (["model", "prompt", "response_format", "sequential_image_generation", "sequential_image_generation_options", "n"].some((key) => Object.hasOwn(task.params ?? {}, key))) {
+  const params = task.params === undefined ? {} : task.params;
+  if (!object(params) || ["model", "prompt", "response_format", "sequential_image_generation", "sequential_image_generation_options", "n"].some((key) => Object.hasOwn(params, key))) {
     return preflight("图片 params 不得覆盖模型、内容或已占额的生成数量");
   }
   const started = Date.now();
@@ -465,16 +487,16 @@ export async function runImageTask({ resolved, task, timeoutMs = 300_000, env = 
     const model = measurementComplete && models.length > 0 && models.every((value) => value && value === models[0]) ? models[0] : null;
     if (status === "ok" && !model) { status = "failed"; reason = "生成/交付已完成，但缺少各轮一致的供应商实际返回模型，不能借请求配置证明路由"; }
     return {
-    status, reason, called: calls > 0, measurementComplete,
+    status, reason, called: calls > 0, measurementComplete, usageVerified: measurementComplete,
     ms: Date.now() - started, model, requestedModel: resolved.model, calls,
-    produced: measurementComplete ? produced : null,
+    produced: measurementComplete ? produced : null, units: measurementComplete ? produced : null,
     knownProduced: produced, observedProduced: urls.length, artifacts,
     receipt: {
       kind: "gen-http.image", model, requestedModel: resolved.model, endpoint: `${base}/images/generations`,
       created: lastJson?.created ?? null, urls: urls.map(publicArtifactUrl), calls,
       requested: count, produced: measurementComplete ? produced : null,
       knownProduced: produced, observedProduced: urls.length,
-      measurementComplete, measurementSource: measurementComplete ? "usage.generated_images" : null,
+      measurementComplete, usageVerified: measurementComplete, measurementSource: measurementComplete ? "usage.generated_images" : null,
       generationUsage, delivered: artifacts.length, artifacts: artifacts.map((artifact) => ({ ...artifact })),
       synced: status === "ok", verified_at: new Date().toISOString(),
     },
@@ -494,7 +516,7 @@ export async function runImageTask({ resolved, task, timeoutMs = 300_000, env = 
           response_format: "url",
           watermark: task.watermark ?? false,
           ...(sequential ? { sequential_image_generation: "auto", sequential_image_generation_options: { max_images: count } } : {}),
-          ...(task.params ?? {}),
+          ...params,
         }),
         signal: AbortSignal.timeout(timeoutMs),
       });
@@ -518,6 +540,8 @@ export async function runImageTask({ resolved, task, timeoutMs = 300_000, env = 
   }
 
   const rounds = groupable ? 1 : Math.max(1, count);
+  let measurementComplete = true;
+  let terminal = null;
   for (let round = 0; round < rounds; round += 1) {
     const r = await callOnce(groupable);
     calls += 1;
@@ -528,13 +552,15 @@ export async function runImageTask({ resolved, task, timeoutMs = 300_000, env = 
     generationUsage.push({ call: calls, model: modelIdentity(r.json?.model), generatedImages: Number.isSafeInteger(r.generatedImages) && r.generatedImages >= 0 ? r.generatedImages : null,
       returnedImages: r.urls.length, measurementComplete: r.measurementComplete === true });
     lastJson = r.json ?? lastJson;
+    measurementComplete &&= r.measurementComplete === true;
     if (r.error) {
-      // 未知轮次立即停止；此前返回 URL 与可信部分用量留在回执，不能再调用下一轮。
-      return finish(r.measurementComplete ? "failed" : "blocked", r.error, r.measurementComplete === true);
+      // Stop generation immediately, then deliver prior/current observed URLs without more paid calls.
+      terminal = { status: measurementComplete ? "failed" : "blocked", reason: r.error };
+      break;
     }
     if (!groupable && urls.length >= count) break;
   }
-  if (produced > count) return finish("failed", "供应商产出数量超过已占额数量，禁止继续下载并将实际产出全额计量", true);
+  if (produced > count) return finish("failed", "供应商产出数量超过已占额数量，禁止继续下载并将实际产出全额计量", measurementComplete);
   const saved = [];
   const failures = [];
   for (const [i, url] of urls.entries()) {
@@ -542,9 +568,10 @@ export async function runImageTask({ resolved, task, timeoutMs = 300_000, env = 
     if (delivery.ok) saved.push(delivery.artifact);
     else failures.push(delivery);
   }
-  const complete = failures.length === 0 && saved.length === count && urls.length === count;
-  const reason = failures.map((f) => f.reason).join("；") || (!complete ? `生成/落盘数量 ${urls.length}/${saved.length} 与请求 ${count} 不一致` : undefined);
-  return finish(complete ? "ok" : failures.some((f) => f.status === "blocked") ? "blocked" : "failed", reason, true, saved);
+  const complete = !terminal && measurementComplete && failures.length === 0 && saved.length === count && urls.length === count;
+  const reason = [terminal?.reason, ...failures.map((f) => f.reason), !complete && !terminal && !failures.length ? `生成/落盘数量 ${urls.length}/${saved.length} 与请求 ${count} 不一致` : null].filter(Boolean).join("；") || undefined;
+  const status = complete ? "ok" : failures.some((f) => f.status === "failed") ? "failed" : terminal?.status ?? (failures.some((f) => f.status === "blocked") ? "blocked" : "failed");
+  return finish(status, reason, measurementComplete, saved);
 }
 
 /** 生视频（异步任务制）：POST {base}/contents/generations/tasks → GET …/tasks/{id} */
@@ -555,18 +582,19 @@ export async function runVideoTask({ resolved, task, timeoutMs = 20 * 60_000, en
   const apiKey = pickEnv([resolved.credentialEnv, "SEEDANCE_API_KEY", "VOLCENGINE_ARK_API_KEY", "ARK_API_KEY"], env).value;
   if (!apiKey) return preflight("视频模型凭据未配置");
   const base = String(resolved.baseUrl).replace(/\/$/, "");
-  const duration = Number(task.durationSeconds ?? 12);
-  if (!Number.isFinite(duration) || duration < LIVE_BUDGET_CAPS.minVideoSeconds || duration > LIVE_BUDGET_CAPS.maxVideoSeconds) return preflight("视频时长超出配额允许范围");
-  if (["model", "content", "duration"].some((key) => Object.hasOwn(task.params ?? {}, key))) return preflight("视频 params 不得覆盖模型、内容或已占额时长");
+  const duration = task.durationSeconds === undefined ? 12 : task.durationSeconds;
+  if (!Number.isSafeInteger(duration) || duration < LIVE_BUDGET_CAPS.minVideoSeconds || duration > LIVE_BUDGET_CAPS.maxVideoSeconds) return preflight("视频时长超出配额允许范围");
+  const params = task.params === undefined ? {} : task.params;
+  if (!object(params) || ["model", "content", "duration"].some((key) => Object.hasOwn(params, key))) return preflight("视频 params 不得覆盖模型、内容或已占额时长");
   const started = Date.now();
   let taskId = null;
   let last = null;
   let actualModel = null;
-  const unknown = (reason) => ({ status: "blocked", reason, called: true, measurementComplete: false,
-    ms: Date.now() - started, model: actualModel, requestedModel: resolved.model, taskId, durationSeconds: null, artifacts: [],
+  const unknown = (reason) => ({ status: "blocked", reason, called: true, measurementComplete: false, usageVerified: false,
+    ms: Date.now() - started, model: actualModel, requestedModel: resolved.model, taskId, durationSeconds: null, units: null, artifacts: [],
     receipt: { kind: "gen-http.video", model: actualModel, requestedModel: resolved.model, endpoint: `${base}/contents/generations/tasks`, taskId,
       durationSeconds: null, reportedDurationSeconds: last?.duration ?? last?.data?.duration ?? null,
-      measurementComplete: false, measurementSource: null, artifacts: [], synced: false, verified_at: new Date().toISOString() } });
+      measurementComplete: false, usageVerified: false, measurementSource: null, artifacts: [], synced: false, verified_at: new Date().toISOString() } });
   let submit;
   try {
     submit = await fetch(`${base}/contents/generations/tasks`, {
@@ -579,7 +607,7 @@ export async function runVideoTask({ resolved, task, timeoutMs = 20 * 60_000, en
         ratio: task.ratio ?? "16:9",
         resolution: task.resolution ?? "720p",
         generate_audio: task.generateAudio ?? false,
-        ...(task.params ?? {}),
+        ...params,
       }),
       signal: AbortSignal.timeout(Math.max(1, Math.min(timeoutMs, 120_000))),
     });
@@ -619,16 +647,16 @@ export async function runVideoTask({ resolved, task, timeoutMs = 20 * 60_000, en
       const validDuration = Number.isFinite(durationSeconds) && durationSeconds >= LIVE_BUDGET_CAPS.minVideoSeconds && durationSeconds <= LIVE_BUDGET_CAPS.maxVideoSeconds;
       const complete = delivery.ok && validDuration && Boolean(actualModel);
       return {
-        status: complete ? "ok" : !measurementComplete || delivery.status === "blocked" ? "blocked" : "failed",
+        status: complete ? "ok" : delivery.status === "blocked" ? "blocked" : "failed",
         reason: !delivery.ok ? delivery.reason : !validDuration ? "视频真实时长超出允许范围" : !actualModel ? "视频没有返回可核验的实际模型，不能借请求配置证明路由" : undefined,
         called: true,
-        measurementComplete,
+        measurementComplete, usageVerified: measurementComplete,
         ms: Date.now() - started,
         model: actualModel,
         requestedModel: resolved.model,
         taskId,
         artifacts,
-        durationSeconds,
+        durationSeconds, units: durationSeconds,
         receipt: {
           kind: "gen-http.video",
           model: actualModel,
@@ -638,7 +666,7 @@ export async function runVideoTask({ resolved, task, timeoutMs = 20 * 60_000, en
           videoUrl: url ? publicArtifactUrl(url) : null,
           durationSeconds,
           reportedDurationSeconds,
-          measurementComplete,
+          measurementComplete, usageVerified: measurementComplete,
           measurementSource: measurementComplete ? "decoded-local-file" : null,
           artifacts: artifacts.map((a) => ({ ...a })),
           synced: complete,

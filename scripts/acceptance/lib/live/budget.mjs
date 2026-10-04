@@ -18,7 +18,7 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 
 /** 基座硬上限：profile 只能更紧，不能更松（v3.1 默认值 = 产品所有者 2026-09-20 给定配额） */
-export const LIVE_BUDGET_CAPS = {
+export const LIVE_BUDGET_CAPS = Object.freeze({
   maxLlmCalls: 40,
   maxLlmTokens: 300_000,
   maxImages: 8,
@@ -28,44 +28,43 @@ export const LIVE_BUDGET_CAPS = {
   maxVideoSecondsTotal: 45,
   maxCostCny: 120,
   maxWallClockMin: 45,
-};
+});
 
-export const DEFAULT_LIVE_BUDGETS = { ...LIVE_BUDGET_CAPS };
+export const DEFAULT_LIVE_BUDGETS = Object.freeze({ ...LIVE_BUDGET_CAPS });
+const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+export const isValidBudgetTaskId = (id) => typeof id === "string" && /^[\p{L}\p{N}][\p{L}\p{N}._:-]{0,127}$/u.test(id);
+const money = (value) => Number(value.toPrecision(15));
 
 /** 应用硬上限：max* 取更小者，min* 取更大者；返回告警列表（不静默） */
 export function normalizeBudgets(declared = {}) {
+  if (!object(declared)) throw new TypeError("live.budgets 必须是对象");
   const warnings = [];
   const out = { ...DEFAULT_LIVE_BUDGETS };
   for (const [key, cap] of Object.entries(LIVE_BUDGET_CAPS)) {
     const value = declared[key];
     if (value === undefined || value === null) continue;
-    const integer = ["maxLlmCalls", "maxLlmTokens", "maxImages", "maxVideoClips"].includes(key);
-    if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || (integer && !Number.isSafeInteger(value))) {
-      warnings.push(`live.budgets.${key} 必须是有限非负${integer ? "整数" : "数字"}，已回落基座默认 ${cap}`);
-      continue;
-    }
+    const integral = !["maxCostCny", "maxWallClockMin"].includes(key);
+    if (!number(value) || (integral && !integer(value))) throw new TypeError(`live.budgets.${key} 必须是有限非负${integral ? "安全整数" : "数字"}`);
     const isMin = key.startsWith("min");
     if (isMin && value < cap) warnings.push(`live.budgets.${key}=${value} 低于基座下限 ${cap}，已抬到下限`);
     else if (!isMin && value > cap) warnings.push(`live.budgets.${key}=${value} 高于基座上限 ${cap}，已收到上限`);
     out[key] = isMin ? Math.max(cap, value) : Math.min(cap, value);
   }
-  if (declared.pricing !== undefined) {
-    out.pricing = {};
-    for (const [key, fallback] of Object.entries(DEFAULT_PRICING)) {
-      const value = declared.pricing?.[key];
-      if (value === undefined) out.pricing[key] = fallback;
-      else if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-        warnings.push(`live.budgets.pricing.${key} 必须是有限非负数字，已回落默认 ${fallback}`);
-        out.pricing[key] = fallback;
-      } else out.pricing[key] = value;
-    }
+  if (out.minVideoSeconds > out.maxVideoSeconds) throw new RangeError("live.budgets 视频时长区间为空");
+  const declaredPricing = declared.pricing === undefined ? {} : declared.pricing;
+  if (!object(declaredPricing)) throw new TypeError("live.budgets.pricing 必须是对象");
+  const pricing = { ...DEFAULT_PRICING };
+  for (const [key, value] of Object.entries(declaredPricing)) {
+    if (!Object.hasOwn(pricing, key) || !number(value)) throw new TypeError("live.budgets.pricing 包含非法单价");
+    pricing[key] = value;
   }
-  return { budgets: out, warnings };
+  out.pricing = Object.freeze(pricing);
+  return { budgets: Object.freeze(out), warnings };
 }
 
-const DEFAULT_PRICING = { llmCnyPer1kTokens: 0.002, imageCny: 0.35, videoCnyPerSecond: 1.2 };
+const DEFAULT_PRICING = Object.freeze({ llmCnyPer1kTokens: 0.002, imageCny: 0.35, videoCnyPerSecond: 1.2 });
 const SCHEMA = "workloom.live-budget/v2";
-const number = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0;
+const number = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0 && !Object.is(value, -0);
 const integer = (value) => number(value) && Number.isSafeInteger(value);
 
 /**
@@ -77,15 +76,15 @@ const integer = (value) => number(value) && Number.isSafeInteger(value);
  */
 export function createBudget({ budgets: declaredBudgets, outDir, environmentKind = "local-preview", runId = "default" }) {
   const { budgets } = normalizeBudgets(declaredBudgets);
-  const pricing = { ...DEFAULT_PRICING, ...(budgets.pricing ?? {}) };
+  const pricing = Object.freeze({ ...DEFAULT_PRICING, ...(budgets.pricing ?? {}) });
   if (typeof runId !== "string" || !runId.trim()) throw new Error("预算 runId 必须是非空字符串");
   mkdirSync(outDir, { recursive: true });
   const ledgerPath = join(outDir, "budget-ledger.jsonl");
   const lockPath = `${ledgerPath}.lock`;
   const estimate = ({ kind, units = 0, tokens = 0 }) => {
-    if (kind === "llm") return (tokens / 1000) * pricing.llmCnyPer1kTokens;
-    if (kind === "image") return units * pricing.imageCny;
-    if (kind === "video") return units * pricing.videoCnyPerSecond;
+    if (kind === "llm") return money((tokens / 1000) * pricing.llmCnyPer1kTokens);
+    if (kind === "image") return money(units * pricing.imageCny);
+    if (kind === "video") return money(units * pricing.videoCnyPerSecond);
     return 0;
   };
   const record = (entry) => {
@@ -123,12 +122,12 @@ export function createBudget({ budgets: declaredBudgets, outDir, environmentKind
     for (const row of rows) {
       if (typeof row.event !== "string" || row.environmentKind !== environmentKind || !Number.isFinite(Date.parse(row.at))) throw new Error("预算账本事件/时间无效或环境不一致，禁止继续付费调用");
       if (row.event === "reserve") {
-        if (!identify(row) || !number(row.units) || !integer(row.tokens) || !number(row.estimateCny) || row.estimateCny !== estimate(row) || (row.kind === "llm" && row.tokens === 0) || (row.kind === "image" && (!integer(row.units) || row.units === 0))) throw new Error("预算账本占额计量无效，禁止继续付费调用");
+        if (!identify(row) || !quantities(row) || !number(row.estimateCny) || row.estimateCny !== estimate(row)) throw new Error("预算账本占额计量无效，禁止继续付费调用");
         if (reservations.has(row.reservationId)) throw new Error("预算账本重复占额，禁止继续付费调用");
         reservations.set(row.reservationId, { ...row, settlement: null });
       } else if (row.event === "commit") {
         const reservation = reservations.get(row.reservationId);
-        if (!reservation || reservation.settlement || reservation.taskId !== row.taskId || reservation.kind !== row.kind || !number(row.units) || !integer(row.tokens) || !integer(row.calls) || (row.kind !== "llm" && row.calls !== 0) || typeof row.measured !== "boolean" || (row.costCny !== null && !number(row.costCny)) || !["ok", "failed", "blocked"].includes(row.status)) throw new Error("预算账本结算链断裂或计量非法，禁止继续付费调用");
+        if (!reservation || reservation.settlement || reservation.taskId !== row.taskId || reservation.kind !== row.kind || !identify(row) || !quantities(row, true) || !integer(row.calls) || (row.kind !== "llm" && row.calls !== 0) || typeof row.measured !== "boolean" || (row.measured && row.kind === "llm" && row.calls > 0 && row.tokens === 0) || (row.costCny !== null && !number(row.costCny)) || !["ok", "failed", "blocked"].includes(row.status)) throw new Error("预算账本结算链断裂或计量非法，禁止继续付费调用");
         reservation.settlement = row;
       } else if (row.event === "usage-unverified") {
         if (typeof row.taskId !== "string" || !row.taskId.trim() || typeof row.reason !== "string" || !row.reason.trim()) throw new Error("预算账本缺少未计量原因，禁止继续付费调用");
@@ -164,7 +163,7 @@ export function createBudget({ budgets: declaredBudgets, outDir, environmentKind
         if (reservation.kind === "llm") { to.llmCalls += calls; to.llmTokens += tokens; }
         if (reservation.kind === "image") to.images += units;
         if (reservation.kind === "video") { to.videoClips += units > 0 ? 1 : 0; to.videoSeconds += units; }
-        to.costCny += costCny;
+        to.costCny = money(to.costCny + costCny);
       };
       add(used, conservative.tokens, conservative.units, cost, reservation.kind === "llm" ? Math.max(1, s?.calls ?? 0) : 0);
       if (!s) add(pending, reservation.tokens, reservation.units, reservation.estimateCny);
@@ -182,7 +181,8 @@ export function createBudget({ budgets: declaredBudgets, outDir, environmentKind
       ["videoClips", "maxVideoClips"], ["videoSeconds", "maxVideoSecondsTotal"], ["costCny", "maxCostCny"],
     ].filter(([key, limit]) => used[key] > budgets[limit]).map(([key]) => key);
   }
-  const exceededState = (state) => [...new Set([...exceeded(usage(state).used), ...[...state.reservations.values()].some((r) => r.kind === "video" && Math.max(r.units, r.settlement?.units ?? 0) > budgets.maxVideoSeconds) ? ["videoDuration"] : []])];
+  const exceededState = (state) => [...new Set([...exceeded(usage(state).used), ...[...state.reservations.values()].some((r) => r.kind === "video" && Math.max(r.units, r.settlement?.units ?? 0) > budgets.maxVideoSeconds) ? ["videoDuration"] : [],
+    ...[...state.reservations.values()].some((r) => r.settlement) && (Date.now() - state.init.startedAt) / 60000 >= budgets.maxWallClockMin ? ["wallClock"] : []])];
 
   function deny(event, args, reason, estimateCny = 0) {
     record({ event: `${event}-denied`, taskId: args.taskId, kind: args.kind, reservationId: args.reservationId, reason });
@@ -190,18 +190,24 @@ export function createBudget({ budgets: declaredBudgets, outDir, environmentKind
   }
 
   function identify(args) {
-    return typeof args.taskId === "string" && args.taskId.trim() && typeof args.reservationId === "string" && args.reservationId.trim()
+    return isValidBudgetTaskId(args.taskId) && isValidBudgetTaskId(args.reservationId)
       && ["llm", "image", "video"].includes(args.kind);
+  }
+  function quantities({ kind, units, tokens }, settlement = false) {
+    if (!integer(tokens) || !number(units)) return false;
+    if (kind === "llm") return integer(units) && units <= 1 && (settlement || tokens > 0);
+    if (tokens !== 0 || (!settlement && units === 0)) return false;
+    return kind === "video" && settlement ? true : integer(units);
   }
 
   /**
    * 占额：超限返回 {allowed:false, reason}，调用方必须把任务标为 blocked（不得静默跳过）。
    * @returns {{allowed:boolean, reason?:string, estimateCny:number}}
    */
-  function reserve({ taskId, reservationId = taskId, kind, units = 0, tokens = 0, detail = "" }) {
+  function reserve({ taskId, reservationId = taskId, kind, units = 0, tokens = 0, detail = "" } = {}) {
     return locked(() => {
       const args = { taskId, reservationId, kind, units, tokens };
-      if (!identify(args) || !number(units) || !integer(tokens) || (kind === "llm" && tokens === 0) || (kind === "image" && (!integer(units) || units === 0))) {
+      if (!identify(args) || !quantities(args)) {
         return deny("reserve", args, "占额参数无效：任务/幂等键/模态/数量必须明确且为有限非负值");
       }
       const state = replay();
@@ -213,10 +219,11 @@ export function createBudget({ budgets: declaredBudgets, outDir, environmentKind
       }
       const { used } = usage(state);
       const est = estimate(args);
+      if (!number(est)) return deny("reserve", args, "占额成本超出有限数字范围，尚未付费调用");
       if (frozenBy(state).length) return deny("reserve", args, "此前实际用量未验证，禁止后续付费调用", est);
       if ((Date.now() - state.init.startedAt) / 60000 >= budgets.maxWallClockMin) return deny("reserve", args, "实测墙钟已达上限", est);
       if (exceededState(state).length) return deny("reserve", args, "此前实际用量已超额，禁止后续付费调用", est);
-      if (used.costCny + est > budgets.maxCostCny) return deny("reserve", args, "本次预占将超过成本上限", est);
+      if (money(used.costCny + est) > budgets.maxCostCny) return deny("reserve", args, "本次预占将超过成本上限", est);
       if (kind === "llm" && (used.llmCalls + 1 > budgets.maxLlmCalls || used.llmTokens + tokens > budgets.maxLlmTokens)) return deny("reserve", args, "本次预占将超过 LLM 调用/token 上限", est);
       if (kind === "image" && used.images + units > budgets.maxImages) return deny("reserve", args, "本次预占将超过图片张数上限", est);
       if (kind === "video" && (units < budgets.minVideoSeconds || units > budgets.maxVideoSeconds || used.videoClips + 1 > budgets.maxVideoClips || used.videoSeconds + units > budgets.maxVideoSecondsTotal)) {
@@ -229,10 +236,12 @@ export function createBudget({ budgets: declaredBudgets, outDir, environmentKind
   }
 
   /** 回填实际用量：实际超过预估的部分补记；实际少于预估**不退还**（保守口径，防超支） */
-  function commit({ taskId, reservationId = taskId, kind, units = 0, tokens = 0, calls = kind === "llm" ? 1 : 0, costCny = null, measured = false, status = "ok", detail = "" }) {
+  function commit(input = {}) {
+    const { taskId, reservationId = taskId, kind, units = 0, tokens = 0, calls = kind === "llm" ? 1 : 0, costCny = null, status = "ok", detail = "" } = input;
+    const measured = input.measured === undefined ? input.usageVerified ?? false : input.measured;
     return locked(() => {
       const args = { taskId, reservationId, kind, units, tokens, calls, costCny, measured, status };
-      if (!identify(args) || !number(units) || !integer(tokens) || !integer(calls) || (kind !== "llm" && calls !== 0) || typeof measured !== "boolean" || (costCny !== null && !number(costCny)) || !["ok", "failed", "blocked"].includes(status)) {
+      if (!identify(args) || !quantities(args, true) || !integer(calls) || (kind !== "llm" && calls !== 0) || typeof measured !== "boolean" || (input.usageVerified !== undefined && (typeof input.usageVerified !== "boolean" || input.measured !== undefined && input.usageVerified !== measured)) || (measured && kind === "llm" && calls > 0 && tokens === 0) || (costCny !== null && !number(costCny)) || !["ok", "failed", "blocked"].includes(status)) {
         return deny("commit", args, "结算参数无效；原预占继续保守计量");
       }
       const state = replay();
@@ -241,11 +250,12 @@ export function createBudget({ budgets: declaredBudgets, outDir, environmentKind
       if (prior.settlement) {
         const same = ["units", "tokens", "calls", "costCny", "measured", "status"].every((key) => prior.settlement[key] === args[key]);
         if (!same) return deny("commit", args, "幂等键已结算；冲突结算不得覆盖或重复计量");
-        return { committed: true, duplicate: true, reservationId, exceeded: exceededState(state) };
+        const over = exceededState(state);
+        return { committed: true, allowed: over.length === 0, duplicate: true, idempotent: true, reservationId, exceeded: over, usageVerified: measured, accounting: measured ? "verified" : "estimated" };
       }
       record({ event: "commit", ...args, detail });
       const over = exceededState(replay());
-      return { committed: true, duplicate: false, reservationId, exceeded: [...new Set(over)] };
+      return { committed: true, allowed: over.length === 0, duplicate: false, idempotent: false, reservationId, exceeded: [...new Set(over)], usageVerified: measured, accounting: measured ? "verified" : "estimated" };
     });
   }
 
@@ -263,7 +273,11 @@ export function createBudget({ budgets: declaredBudgets, outDir, environmentKind
   function snapshot(state) {
     const { used, pending, actual, unmeasured } = usage(state);
     const frozen = frozenBy(state);
-    const rounded = (value) => ({ ...value, costCny: Number(value.costCny.toFixed(4)) });
+    const rounded = (value) => ({ ...value, costCny: money(value.costCny) });
+    const reservations = [...state.reservations.values()];
+    const pendingIds = reservations.filter((r) => !r.settlement).map((r) => r.taskId);
+    const unverifiedIds = reservations.filter((r) => r.settlement?.measured !== true).map((r) => r.taskId);
+    const measurementComplete = frozen.length === 0 && reservations.every((r) => r.settlement?.measured === true);
     return {
       schema: SCHEMA,
       runId,
@@ -274,7 +288,8 @@ export function createBudget({ budgets: declaredBudgets, outDir, environmentKind
       pending: rounded(pending),
       actual: rounded(actual),
       unmeasured: rounded(unmeasured),
-      measurementComplete: frozen.length === 0 && [...state.reservations.values()].every((reservation) => reservation.settlement?.measured === true),
+      measurementComplete,
+      accounting: { mode: !reservations.length ? "not-started" : measurementComplete ? "verified" : "estimated", verified: reservations.length > 0 && measurementComplete, pending: pendingIds, unverified: unverifiedIds, auditFailure: false, costBasis: "frozen-price-conservative-estimate; not supplier invoice" },
       frozenBy: frozen,
       reservations: [...state.reservations.values()].map((r) => ({ reservationId: r.reservationId, taskId: r.taskId, kind: r.kind, units: r.units, tokens: r.tokens, status: r.settlement?.status ?? "pending", settlement: r.settlement })),
       exceeded: exceededState(state),

@@ -1,7 +1,7 @@
 /** Actual CLI + loopback HTTP; all provider keys/data are synthetic and no external calls occur. */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -26,6 +26,17 @@ function child(f, flags = [], extraEnv = {}) {
     proc.stdout.on("data", (data) => { stdout += data; }); proc.stderr.on("data", (data) => { stderr += data; });
     proc.on("error", (error) => { clearTimeout(timer); reject(error); }); proc.on("close", (status) => { clearTimeout(timer); resolve({ status, stdout, stderr }); });
   });
+}
+
+function retainMediaCase(f, result, calls, mode) {
+  const actual = report(f);
+  if (process.env.RDAS_GENERATION_EVIDENCE_DIR) {
+    const path = join(process.env.RDAS_GENERATION_EVIDENCE_DIR, `canonical-wire-${mode}`);
+    mkdirSync(path, { recursive: true });
+    writeFileSync(join(path, "cli.json"), JSON.stringify({ result, calls, report: actual, productionVerified: false }, null, 2), { flag: "wx" });
+    cpSync(f.out, join(path, "out"), { recursive: true });
+  }
+  return actual;
 }
 
 test("live CLI wire: opaque product tasks stop before login/dispatch even when requireModel is false", async (t) => {
@@ -108,19 +119,32 @@ const videoModel = { ...model, id: "synthetic-video", kind: "video", adapter: "g
 const imageTask = { id: "IMG-01", kind: "image", model: imageModel.id, title: "synthetic image", prompt: "synthetic", images: 1 };
 const videoTask = { id: "VID-01", kind: "video", model: videoModel.id, title: "synthetic video", prompt: "synthetic", durationSeconds: 12 };
 const mediaProfile = (url, tasks) => ({ environment: { kind: "local-preview", target: { apiUrl: url, pcUrl: url, bMobileUrl: url, cMobileUrl: url }, timeouts: { healthMs: 500 } },
-  live: { enabled: true, models: [model, imageModel, videoModel], tasks } });
+  live: { enabled: true, evidenceMode: "synthetic", models: [model, imageModel, videoModel], tasks } });
 
 for (const mode of ["image-http", "image-network", "image-partial", "image-missing-usage", "video-submit-http", "video-poll-http", "video-no-url", "video-download-http"]) {
   test(`live CLI media budget: ${mode} retains unmeasured reservations and stops every later modality before HTTP`, async (t) => {
     const s = await mediaServer(t, mode);
     const isImage = mode.startsWith("image-"); const first = isImage ? { ...imageTask, images: mode === "image-partial" ? 2 : 1 } : videoTask;
     const f = fixture(t, mediaProfile(s.url, [first, { ...imageTask, id: "IMG-NEXT" }, { ...videoTask, id: "VID-NEXT" }, { ...llm, id: "LLM-NEXT", expectedTokens: 100 }]));
-    const result = await child(f, [], { SYNTHETIC_API_KEY: "synthetic-only-media-key", SYNTHETIC_BASE_URL: s.url }); assert.equal(result.status, 2, result.stderr);
-    const actual = report(f); assert.equal(actual.tasks[0].measurementComplete, false); assert.equal(actual.tasks[0].receipt.measurementComplete, false);
+    const result = await child(f, [], { SYNTHETIC_API_KEY: "synthetic-only-media-key", SYNTHETIC_BASE_URL: s.url });
+    const actual = retainMediaCase(f, result, s.calls, mode);
+    // Stronger delivery contract: a proven download/no-URL failure stays failed,
+    // while unmeasured accounting still holds the entire reservation and freezes all later calls.
+    // The byte-identical canonical test and its 161/165 run are retained outside this active adapter.
+    const failedDelivery = ["image-partial", "image-missing-usage", "video-no-url", "video-download-http"].includes(mode);
+    assert.equal(result.status, failedDelivery ? 1 : 2, result.stderr);
+    assert.equal(actual.tasks[0].status, failedDelivery ? "failed" : "blocked");
+    assert.equal(actual.tasks[0].receipt.synced, false);
+    if (failedDelivery) assert.match(actual.tasks[0].reason, mode === "video-no-url" ? /未返回 video_url/u : /媒体下载 HTTP 403/u);
+    assert.equal(actual.productionEvidence, false); assert.equal(actual.evidenceType, "synthetic-transport");
+    assert.match(actual.verdict, /^blocked/u); assert.equal(actual.checks.length, 18);
+    assert.equal(actual.checks.every((check) => check.status === "unverified" && check.productionEvidence === false && check.evidenceType === "synthetic-transport"), true);
+    assert.equal(actual.tasks[0].measurementComplete, false); assert.equal(actual.tasks[0].receipt.measurementComplete, false);
     assert.equal(actual.budget.measurementComplete, false); assert.equal(actual.budget.reservations.length, 1); assert.equal(actual.budget.reservations[0].settlement.measured, false);
     const quantity = isImage ? "images" : "videoSeconds"; const reserved = isImage ? first.images : 12;
     assert.equal(actual.budget.used[quantity], reserved); assert.equal(actual.budget.unmeasured[quantity], reserved); assert.equal(actual.budget.actual[quantity], 0);
     assert.equal(actual.budget.frozenBy.length, 1); assert.equal(actual.tasks.slice(1).every((task) => task.status === "blocked"), true);
+    assert.equal(actual.tasks.slice(1).every((task) => task.called === false), true);
     assert.equal(s.calls.filter((call) => call.url === "/chat/completions").length, 0);
     assert.equal(s.calls.filter((call) => call.url === "/images/generations").length, isImage ? mode === "image-partial" ? 2 : 1 : 0);
     assert.equal(s.calls.filter((call) => call.method === "POST" && call.url === "/contents/generations/tasks").length, isImage ? 0 : 1);

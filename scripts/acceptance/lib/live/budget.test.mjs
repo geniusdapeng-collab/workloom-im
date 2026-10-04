@@ -183,11 +183,11 @@ test("budget: unreadable and corrupted journals fail before paid-call permission
 
 test("budget: wall-clock zero disables admission and invalid caps cannot widen limits", (t) => {
   assert.equal(budget(t, { maxWallClockMin: 0 }).reserve(llm("first", 1)).allowed, false);
-  const normalized = normalizeBudgets({ maxLlmTokens: Infinity, maxImages: -1, maxLlmCalls: 1.5, maxCostCny: NaN, pricing: { imageCny: -1 } });
-  assert.equal(normalized.budgets.maxLlmTokens, LIVE_BUDGET_CAPS.maxLlmTokens);
-  assert.equal(normalized.budgets.maxImages, LIVE_BUDGET_CAPS.maxImages);
-  assert.equal(normalized.budgets.maxLlmCalls, LIVE_BUDGET_CAPS.maxLlmCalls);
-  assert.ok(normalized.warnings.length >= 5);
+  // MC024 stricter input validation supersedes fallback-to-default. Immutable upstream preimage is archived.
+  for (const declared of [{ maxLlmTokens: Infinity }, { maxImages: -1 }, { maxLlmCalls: 1.5 }, { maxCostCny: NaN }, { pricing: { imageCny: -1 } }]) {
+    assert.throws(() => normalizeBudgets(declared), /live\.budgets/);
+  }
+  assert.equal(LIVE_BUDGET_CAPS.maxLlmTokens, 300_000); assert.equal(LIVE_BUDGET_CAPS.maxImages, 8);
 });
 
 test("budget: a single actual video-duration overrun is reported and blocks other modalities", (t) => {

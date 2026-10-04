@@ -49,7 +49,7 @@ import {
 import { startStubProvider } from "./lib/live/stub-provider.mjs";
 import { assertSafeTaskId } from "./lib/live/media.mjs";
 import { verifyExpectations } from "./lib/live/verification.mjs";
-import { buildLiveChecks } from "./lib/live/checks.mjs";
+import { buildLiveChecks, classifyLiveEvidence } from "./lib/live/checks.mjs";
 import { recordEvidenceRun, writeAcceptanceItems } from "../delivery/evidence.mjs";
 
 const RUN_ID = `live-${randomUUID()}`;
@@ -316,15 +316,16 @@ const results = [];
 async function runTask(task) {
   const startedAt = Date.now();
   const base = { id: task.id, title: task.title, kind: task.kind, chain: task.chain ?? null, criticality: task.criticality ?? "P1", model: task.model ?? null, selftest: SELFTEST };
-  if (task._blocked) return { ...base, status: "blocked", reason: task._blocked, ms: 0 };
-  if (task._skip) return { ...base, status: "skipped", reason: task._skip, ms: 0 };
+  if (task._blocked) return { ...base, status: "blocked", called: false, reason: task._blocked, ms: 0 };
+  if (task._skip) return { ...base, status: "skipped", called: false, reason: task._skip, ms: 0 };
   const resolved = task.model ? modelById.get(task.model) : resolvedModels.find((m) => m.kind === (task.kind === "product" ? "llm" : task.kind));
   const chain = task.chain ?? resolved?.adapter ?? "model-gateway";
   let reserved = null;
   let settled = false;
   const settle = (out, usage) => {
     if (usage.measured !== true) {
-      out.status = "blocked";
+      // An invalid delivery remains a visible failure even when its quantity is unknown.
+      if (out.status !== "failed") out.status = "blocked";
       out.reason = `${out.reason ?? `${chain} 实际用量未验证`}；继续持有预占并冻结后续全部付费模态`;
       if (out.receipt) out.receipt = { ...out.receipt, synced: false };
     }
@@ -416,6 +417,7 @@ async function runTask(task) {
           baseUrl: resolved.baseUrl,
           timeoutMs: TASK_TIMEOUT_MS,
           imagePath: fixturePath,
+          selftest: SELFTEST,
         });
       } else {
         const image = task.imageFixture ? readImageFixture(resolve(REPO_ROOT, task.imageFixture)) : null;
@@ -429,10 +431,10 @@ async function runTask(task) {
           baseUrl: resolved.baseUrl,
         };
         const gate = budget.reserve({ taskId: task.id, kind: "llm", units: 1, tokens: task.expectedTokens ?? 8000, detail: chain });
-        if (!gate.allowed) return { ...base, chain, status: "blocked", reason: gate.reason, ms: Date.now() - startedAt };
+        if (!gate.allowed || gate.duplicate) return { ...base, chain, status: "blocked", called: false, reason: gate.reason ?? "占额已存在，禁止第二次物理付费调用", ms: Date.now() - startedAt };
         reserved = { kind: "llm" };
-        out = await runChatTask({ resolved: gatewayResolved, prompt: task.prompt, timeoutMs: TASK_TIMEOUT_MS, image, env: runnerEnv });
-        settle(out, { tokens: out.tokens ?? 0, calls: out.called === false ? 0 : out.calls ?? 1, measured: out.called === false || out.usage?.complete === true });
+        out = await runChatTask({ resolved: gatewayResolved, prompt: task.prompt, timeoutMs: TASK_TIMEOUT_MS, image, env: runnerEnv, maxTokens: task.maxTokens ?? task.expectedTokens ?? 8000 });
+        settle(out, { tokens: out.tokens ?? out.knownTokens ?? 0, calls: out.called === false ? 0 : out.calls ?? 1, measured: out.called === true && out.usage?.complete === true });
       }
       const verified = await verifyExpectations({ ...effectiveTask, expectedModel: resolved.model }, out, { artifactsDir: join(OUT_DIR, "artifacts") });
       const status = out.status === "ok" && verified.ok ? "ok" : out.status === "blocked" ? "blocked" : "failed";
@@ -446,6 +448,7 @@ async function runTask(task) {
         fenceHits: out.fenceHits ?? null,
         usage: out.usage ?? null,
         tokens: out.tokens ?? null,
+        knownTokens: out.knownTokens ?? null,
         called: out.called ?? false,
         modelResolved: out.model ?? null,
         verification: verified,
@@ -455,12 +458,12 @@ async function runTask(task) {
 
     if (task.kind === "image") {
       if (!resolved?.ready) return { ...base, status: "blocked", called: false, reason: resolved?.missing?.join("；") ?? "图片模型未配置", ms: 0 };
-      const units = Number(task.images ?? 1);
+      const units = task.images === undefined ? 1 : task.images;
       const gate = budget.reserve({ taskId: task.id, kind: "image", units, detail: chain });
-      if (!gate.allowed) return { ...base, status: "blocked", called: false, reason: gate.reason, ms: Date.now() - startedAt };
+      if (!gate.allowed || gate.duplicate) return { ...base, status: "blocked", called: false, reason: gate.reason ?? "占额已存在，禁止第二次物理付费调用", ms: Date.now() - startedAt };
       reserved = { kind: "image" };
       const out = await runImageTask({ resolved, task, timeoutMs: Math.max(TASK_TIMEOUT_MS, 5 * 60_000), artifactsDir: join(OUT_DIR, "artifacts"), env: runnerEnv });
-      settle(out, { units: out.called === false ? 0 : out.produced ?? out.knownProduced ?? 0, measured: out.called === false || out.measurementComplete === true });
+      settle(out, { units: out.called === false ? 0 : out.produced ?? out.knownProduced ?? 0, measured: out.called === true && out.measurementComplete === true });
       const verified = await verifyExpectations({ ...task, expectedModel: resolved.model }, out, { artifactsDir: join(OUT_DIR, "artifacts") });
       return {
         ...base, chain, status: out.status === "ok" && verified.ok ? "ok" : out.status === "blocked" ? "blocked" : "failed",
@@ -480,15 +483,15 @@ async function runTask(task) {
 
     if (task.kind === "video") {
       if (!resolved?.ready) return { ...base, status: "blocked", called: false, reason: resolved?.missing?.join("；") ?? "视频模型未配置", ms: 0 };
-      const units = Number(task.durationSeconds ?? 12);
+      const units = task.durationSeconds === undefined ? 12 : task.durationSeconds;
       const gate = budget.reserve({ taskId: task.id, kind: "video", units, detail: chain });
-      if (!gate.allowed) return { ...base, status: "blocked", called: false, reason: gate.reason, ms: Date.now() - startedAt };
+      if (!gate.allowed || gate.duplicate) return { ...base, status: "blocked", called: false, reason: gate.reason ?? "占额已存在，禁止第二次物理付费调用", ms: Date.now() - startedAt };
       reserved = { kind: "video" };
       const out = await runVideoTask({
         resolved, task, timeoutMs: Math.max(TASK_TIMEOUT_MS, 20 * 60_000),
         artifactsDir: join(OUT_DIR, "artifacts"), pollMs: SELFTEST ? 200 : 8000, env: runnerEnv,
       });
-      settle(out, { units: out.called === false ? 0 : out.durationSeconds ?? 0, measured: out.called === false || out.measurementComplete === true });
+      settle(out, { units: out.called === false ? 0 : out.durationSeconds ?? 0, measured: out.called === true && out.measurementComplete === true });
       const verified = await verifyExpectations({ ...task, expectedModel: resolved.model }, out, { artifactsDir: join(OUT_DIR, "artifacts") });
       return {
         ...base, chain, status: out.status === "ok" && verified.ok ? "ok" : out.status === "blocked" ? "blocked" : "failed",
@@ -506,17 +509,18 @@ async function runTask(task) {
     }
 
     if (task.kind === "product") {
-      if (SELFTEST) return { ...base, status: "skipped", reason: "自检模式跳过产品派单", ms: 0 };
+      if (SELFTEST) return { ...base, status: "skipped", called: false, reason: "自检模式跳过产品派单", ms: 0 };
       if (environment.isProduction && !environment.allowWrites) {
         return {
           ...base,
           status: "blocked",
+          called: false,
           reason: "生产档位默认只读：产品派单会写入目标环境（线程/事件），需显式 --allow-prod-writes",
           ms: Date.now() - startedAt,
         };
       }
       if (environment.isProduction && (!task.fixtureMarker || !task.residualDisclosure || !String(task.input ?? task.title).includes(task.fixtureMarker))) {
-        return { ...base, status: "blocked", reason: "产品派单写入需要 fixtureMarker（包含在输入中）与 residualDisclosure 残留披露", ms: 0 };
+        return { ...base, status: "blocked", called: false, reason: "产品派单写入需要 fixtureMarker（包含在输入中）与 residualDisclosure 残留披露", ms: 0 };
       }
       // dispatch 总先 routeIntent(intentClassifier(scope))；任务声明不控制服务端计量。
       // 当前接口仅 Promise<string>，没有可绑定此次 budget/WAL 的逐请求占额与 usage。
@@ -551,6 +555,7 @@ if (stub) await stub.close();
 
 /* ---------------------------- 汇总与报告 ---------------------------- */
 const budgetSummary = budget.persist();
+const budgetExceeded = budgetSummary.exceeded.length > 0;
 const byStatus = results.reduce((a, r) => { a[r.status] = (a[r.status] ?? 0) + 1; return a; }, {});
 const anyFalseSuccess = results.some((r) => r.falseSuccess);
 const blocked = results.filter((r) => r.status === "blocked");
@@ -563,7 +568,9 @@ const failed = results.filter((r) => r.status === "failed");
  *     应把失败项留在失败清单里（不得洗白），但不能据此判产品不通过。
  */
 const noCredentials = resolvedModels.length > 0 && resolvedModels.every((m) => !m.ready);
-const verdict = SELFTEST
+const verdict = budgetExceeded
+  ? "fail"
+  : SELFTEST
   ? "selftest（非生产实测证据）"
   : anyFalseSuccess
     ? "fail"
@@ -576,8 +583,11 @@ if (failed.length && !environment.isProduction && noCredentials) {
 
 const report = redactValue({
   at: new Date().toISOString(),
+  startedAt: RUN_STARTED_AT,
+  runId: RUN_ID,
   spec: "rdas/v3.1",
   selftest: SELFTEST,
+  evidenceMode: liveProfile.evidenceMode === "synthetic" ? "synthetic" : null,
   environment: {
     kind: environment.kind,
     isProduction: environment.isProduction,
@@ -622,15 +632,28 @@ for (const path of outputFiles) {
 }
 report.secretScan = { passed: leakedFiles === 0 && redactedFiles === 0, scannedFiles, leakedFiles, redactedFiles, basis: "本次继承凭据值扫描；不替代仓库完整 secret 扫描" };
 if (!report.secretScan.passed) report.verdict = "fail";
+Object.assign(report, classifyLiveEvidence(report));
+if (report.evidenceType === "synthetic-transport") {
+  report.pipelineVerdict = report.verdict;
+  report.verdict = "blocked（运输替身，只证明合成管道，不得作为生产实测证据）";
+} else if (report.verdict === "pass" && !report.productionEvidence) {
+  report.verdict = "blocked（缺少同次运行、目标、回执和计量证据，不得写通过）";
+}
 const reportPath = evidencePath(join(OUT_DIR, "live-report.json"));
 const outputPaths = [...outputFiles].filter((path) => existsSync(path) && lstatSync(path).isFile()).map(evidencePath);
 report.checks = buildLiveChecks(report, { reportPath, outputPaths, secretScan: report.secretScan, requestedTaskIds: tasks.map((task) => task.id) });
 writeFileSync(join(OUT_DIR, "live-report.json"), JSON.stringify(report, null, 1));
 writeFileSync(join(OUT_DIR, "live-report.md"), renderMarkdown(report));
-const exitCode = failed.length || anyFalseSuccess || !report.secretScan.passed ? 1 : SELFTEST ? blocked.length || results.length === 0 || results.some((result) => result.status === "skipped") || REQUIRE_LIVE ? 2 : 0 : report.verdict === "pass" ? 0 : 2;
+const exitCode = budgetExceeded || failed.length || anyFalseSuccess || !report.secretScan.passed ? 1 : SELFTEST ? blocked.length || results.length === 0 || results.some((result) => result.status === "skipped") || REQUIRE_LIVE ? 2 : 0 : report.verdict === "pass" ? 0 : 2;
 const run = recordEvidenceRun({ repoRoot: REPO_ROOT, artifactRoot: EVIDENCE_ROOT, runId: RUN_ID, command: redactText([process.execPath, ...process.argv.slice(1)].join(" ")), actor: "acceptance:live", role: "automation", exitCode,
   startedAt: RUN_STARTED_AT, finishedAt: new Date().toISOString(), outputPaths: [...outputPaths, reportPath, evidencePath(join(OUT_DIR, "live-report.md"))], exec: { file: process.execPath, args: process.argv.slice(1).map(redactText) } });
 writeAcceptanceItems({ artifactRoot: EVIDENCE_ROOT, run, checks: report.checks });
+// Preserve P-domain provenance on native item files without widening the shared evidence writer.
+for (const check of report.checks) {
+  const path = join(EVIDENCE_ROOT, "items", `${check.id}.json`);
+  const item = JSON.parse(readFileSync(path, "utf8"));
+  writeFileSync(path, `${JSON.stringify({ ...item, productionEvidence: check.productionEvidence, evidenceType: check.evidenceType }, null, 2)}\n`);
+}
 
 console.log(`[acceptance:live] 结论：${report.verdict}；任务 ${results.length}（ok ${byStatus.ok ?? 0} / blocked ${byStatus.blocked ?? 0} / failed ${byStatus.failed ?? 0}）；产物 ${OUT_DIR}`);
 process.exitCode = exitCode;
@@ -653,6 +676,8 @@ function renderMarkdown(r) {
   md.push(`> 生成：${r.at}｜环境档位：**${r.environment.kind}**${r.selftest ? "｜**自检模式（非生产实测证据）**" : ""}`);
   md.push("");
   md.push(`**结论：${r.verdict}**`);
+  md.push(`证据来源：\`${r.evidenceType}\`；生产观察：${r.productionEvidence ? "有，仍按逐项证据判定" : "无"}。`);
+  if (r.pipelineVerdict) md.push(`合成管道原始结果：${r.pipelineVerdict}；任务失败与预算冻结仍逐项保留。`);
   md.push("");
   md.push("## 一、环境与指纹");
   md.push("");

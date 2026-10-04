@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -63,8 +64,13 @@ test("G04 / N7: image generation does not succeed when the artifact download rec
 });
 
 test("P18 checks: one measured reasoning task cannot fan aggregate success out to unobserved domains", (t) => {
-  const budget = createBudget({ outDir: temp(t), budgets: normalizeBudgets({}).budgets }).summary();
-  const observed = { selftest: false, environment: { kind: "deployed", targetDeclaredExplicitly: true, declaredTarget: true }, fingerprint: { repo: { commit: "a".repeat(40), dirty: false }, targetProbe: { ok: true } }, models: [], budget, summary: { failedIds: [], blockedIds: [] }, verdict: "pass", tasks: [{ id: "LLM-R1", kind: "llm", selftest: false, status: "ok", answer: "TASK_COMPLETE", verification: { ok: true }, usage: { complete: true }, receipt: { synced: true, usageComplete: true }, receiptPath: "live/receipts/LLM-R1.json", transcriptPath: "live/transcripts/LLM-R1.json" }] };
+  // The direct observation fixture now includes the run, measured settlement and fresh receipt required by production classification.
+  const runId = `live-${randomUUID()}`; const startedAt = new Date(Date.now() - 1000).toISOString();
+  const ledger = createBudget({ outDir: temp(t), budgets: normalizeBudgets({}).budgets, environmentKind: "deployed", runId });
+  assert.equal(ledger.reserve({ taskId: "LLM-R1", kind: "llm", tokens: 8 }).allowed, true);
+  assert.equal(ledger.commit({ taskId: "LLM-R1", kind: "llm", tokens: 8, measured: true }).committed, true);
+  const at = new Date().toISOString(); const budget = ledger.summary();
+  const observed = { at, startedAt, runId, selftest: false, environment: { kind: "deployed", targetDeclaredExplicitly: true, declaredTarget: true }, fingerprint: { repo: { commit: "a".repeat(40), dirty: false }, targetProbe: { ok: true } }, models: [], budget, summary: { failedIds: [], blockedIds: [] }, verdict: "pass", tasks: [{ id: "LLM-R1", kind: "llm", selftest: false, status: "ok", called: true, modelResolved: "observed-model", answer: "TASK_COMPLETE", verification: { ok: true }, usage: { complete: true }, receipt: { synced: true, usageComplete: true, model: "observed-model", verified_at: at }, receiptPath: "live/receipts/LLM-R1.json", transcriptPath: "live/transcripts/LLM-R1.json" }] };
   const checks = buildLiveChecks(observed, { reportPath: "live/live-report.json", requestedTaskIds: ["LLM-R1"], secretScan: { passed: true } });
   assert.equal(checks.length, 18); assert.equal(checks.find((check) => check.id === "P2-01").status, "pass");
   for (const id of ["P2-02", "P2-03", "P2-04", "P2-05", "P2-06"]) assert.equal(checks.find((check) => check.id === id).status, "unverified");

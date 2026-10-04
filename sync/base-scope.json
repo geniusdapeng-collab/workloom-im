@@ -267,12 +267,8 @@
       "reason": "UI 发布门禁连接串是临时 GitHub Actions PostgreSQL 服务的公开测试值，不用于任何外部或生产数据库。"
     },
     "apps/server/src/service/adapters/business-registry.pg.test.ts": {
-      "sha256": "d8d66b9414ef7c29de5eea4d6a34f31eadd5a0bbf2a2d35f9ca731be0a5f7889",
+      "sha256": "eda6f6a33fb114b00efca35db7637c5d265278aa3adeea3825089cf2be281d70",
       "findings": [
-        {
-          "rule": "credential-in-url",
-          "line": 8
-        },
         {
           "rule": "credential-in-url",
           "line": 9
@@ -280,6 +276,10 @@
         {
           "rule": "credential-in-url",
           "line": 10
+        },
+        {
+          "rule": "credential-in-url",
+          "line": 11
         }
       ],
       "reason": "活库适配器契约仅使用仓库 docker-compose 的本机测试库默认值，不用于任何外部或生产数据库。"
@@ -295,15 +295,15 @@
       "reason": "C 端 H5 签名负向测试使用明确标记为 test 的固定夹具，不是运行凭据。"
     },
     "apps/server/src/service/eval-source.pg.test.ts": {
-      "sha256": "afbfaa543b54db948ec41d0802aacb9b1ed85b07ac3fbf32863b2c97d0dfcc70",
+      "sha256": "a73b8e4c06daf6a2b95cfc078c7694a30beff0cb471d803764ace87218d063bd",
       "findings": [
         {
           "rule": "credential-in-url",
-          "line": 8
+          "line": 9
         },
         {
           "rule": "credential-in-url",
-          "line": 9
+          "line": 10
         }
       ],
       "reason": "仅用于可选 PG 契约测试的仓库内公开本机开发库默认连接串；生产值仍只能来自环境变量。"
