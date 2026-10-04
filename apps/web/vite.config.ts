@@ -1,7 +1,8 @@
+/// <reference types="vitest/config" />
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-// vitest/config 复用 Vite 的 defineConfig 并额外接受 test 段；生产构建行为不变。
-import { defineConfig } from "vitest/config";
+// test 段只引用 Vitest 类型，生产 preview 无需导入测试运行时。
+import { defineConfig } from "vite";
 import { workloomProductVite } from "../../scripts/vite-product.mjs";
 
 const product = workloomProductVite("B 端工作台");

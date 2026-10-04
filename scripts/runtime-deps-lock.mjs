@@ -22,7 +22,7 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { buildMergedRuntimeManifest, runtimeDependencySources } from "./pack-nm-merge.mjs";
+import { buildMergedRuntimeManifest, loadPnpmRuntimeLock, runtimeDependencySources } from "./pack-nm-merge.mjs";
 import { loadProductRuntime } from "./product-runtime.mjs";
 import { payloadPolicyFor } from "./payload-policy.mjs";
 
@@ -163,6 +163,30 @@ function expectedMetadata(root, product, policy, manifest, packageLock) {
   };
 }
 
+export function buildRuntimeDepsManifest(root, policy) {
+  const manifest = buildMergedRuntimeManifest(root, policy);
+  // 已发布的稳定客户端仍可能在 Vite config 中运行时导入 vitest/config。
+  // 兼容闭包只采用仓根已声明且 pnpm 已锁定的 Vitest；不借用宿主开发依赖。
+  const source = readJson(join(root, "package.json"), "package.json");
+  const locked = loadPnpmRuntimeLock(root).importers?.["."]?.devDependencies?.vitest;
+  const specifier = source.devDependencies?.vitest;
+  if (typeof specifier !== "string" || !specifier || locked?.specifier !== specifier) {
+    throw new Error("Vitest 运行兼容依赖缺失或 pnpm-lock.yaml specifier 漂移");
+  }
+  const version = typeof locked?.version === "string"
+    ? locked.version.match(/^(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)(?:\(.+\))?$/u)?.[1]
+    : null;
+  if (!version) throw new Error("Vitest 运行兼容依赖必须有 pnpm 已解析的精确版本");
+  if (manifest.dependencies.vitest && manifest.dependencies.vitest !== version) {
+    throw new Error("Vitest 运行兼容依赖与产品运行依赖版本冲突");
+  }
+  return {
+    ...manifest,
+    dependencies: Object.fromEntries(Object.entries({ ...manifest.dependencies, vitest: version })
+      .sort(([left], [right]) => left.localeCompare(right))),
+  };
+}
+
 function assertRegistryEntry(path, entry) {
   if (typeof entry?.version !== "string" || !entry.version) throw new Error(`runtime package-lock 缺少版本：${path}`);
   if (entry.link) throw new Error(`runtime package-lock 不得包含链接：${path}`);
@@ -211,7 +235,7 @@ export function verifyRuntimePackageLock(manifest, packageLock) {
 export function verifyRuntimeDepsLock(root = DEFAULT_ROOT) {
   const resolvedRoot = resolve(root);
   const { product, policy } = productContext(resolvedRoot);
-  const expectedManifest = buildMergedRuntimeManifest(resolvedRoot, policy);
+  const expectedManifest = buildRuntimeDepsManifest(resolvedRoot, policy);
   const paths = lockPaths(resolvedRoot);
   const actualManifest = readJson(paths.manifest, `${RUNTIME_DEPS_DIR}/package.json`);
   if (!same(actualManifest, expectedManifest)) throw new Error("runtime 精确 manifest 已过期，请刷新每产品依赖锁");
@@ -233,10 +257,18 @@ function npmDlx(root, args) {
 export function refreshRuntimeDepsLock(root = DEFAULT_ROOT) {
   const resolvedRoot = resolve(root);
   const { product, policy } = productContext(resolvedRoot);
-  const manifest = buildMergedRuntimeManifest(resolvedRoot, policy);
+  const manifest = buildRuntimeDepsManifest(resolvedRoot, policy);
+  const paths = lockPaths(resolvedRoot);
   const temporary = mkdtempSync(join(tmpdir(), "workloom-runtime-lock-"));
   try {
     writeFileSync(join(temporary, "package.json"), json(manifest));
+    // 在原有受控闭包上增删直接依赖，保留不受改动影响的传递锁版本与完整性。
+    // npm 仍会按新 manifest 校正旧锁；已有锁损坏时明确失败，不静默丢弃。
+    if (existsSync(paths.manifest) || existsSync(paths.lock)) {
+      const previousManifest = readJson(paths.manifest, "已有 runtime package.json");
+      const previousLock = verifyRuntimePackageLock(previousManifest, readJson(paths.lock, "已有 runtime package-lock.json"));
+      writeFileSync(join(temporary, "package-lock.json"), json(previousLock));
+    }
     npmDlx(temporary, [
       "install",
       "--package-lock-only",
@@ -249,7 +281,6 @@ export function refreshRuntimeDepsLock(root = DEFAULT_ROOT) {
     ]);
     const packageLock = verifyRuntimePackageLock(manifest, readJson(join(temporary, "package-lock.json"), "新生成 runtime package-lock"));
     const metadata = expectedMetadata(resolvedRoot, product, policy, manifest, packageLock);
-    const paths = lockPaths(resolvedRoot);
     mkdirSync(paths.directory, { recursive: true });
     writeFileSync(paths.manifest, json(manifest));
     writeFileSync(paths.lock, json(packageLock));
