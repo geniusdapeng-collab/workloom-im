@@ -80,7 +80,17 @@ if (product) {
     let configured;
     try { configured = YAML.parse(desktopWorkflow); }
     catch (error) { errors.push(`CNB 桌面发布工作流无法解析：${error instanceof Error ? error.message : String(error)}`); }
-    for (const [trigger, event] of [["main", "push"], ["**", "pull_request"]]) {
+    const isRequired = (item) => item !== null && typeof item === "object" && !Array.isArray(item)
+      && ["allow_failure", "allowFailure", "if"].every((key) => !Object.hasOwn(item, key));
+    const hasRequiredStages = (job) => isRequired(job) && Array.isArray(job.stages) && job.stages.length > 0
+      && job.stages.every((stage) => isRequired(stage) && typeof stage.script === "string" && stage.script.trim().length > 0);
+    const sourceJobs = configured?.["**"]?.pull_request;
+    const sourceNames = ["py-gate", "oss-gate", "protocol-gate"];
+    if (!Array.isArray(sourceJobs) || sourceJobs.length !== sourceNames.length
+        || sourceNames.some((name) => sourceJobs.filter((job) => job?.name === name && hasRequiredStages(job)).length !== 1)) {
+      errors.push("CNB **/pull_request 必须仅包含必需的 py-gate、oss-gate、protocol-gate 源码门禁");
+    }
+    for (const [trigger, event, candidate] of [["main", "push", false], ["**", "api_trigger_tiger_native_candidate", true]]) {
       const jobs = configured?.[trigger]?.[event];
       for (const [platform, tags] of [["mac", ["mac", "arm64"]], ["win", ["windows"]]]) {
         const nativePath = product.desktop?.nativeBuilders?.[platform];
@@ -88,10 +98,28 @@ if (product) {
           errors.push(`产品清单缺少受控 ${platform} 原生构建入口`);
           continue;
         }
-        const matches = Array.isArray(jobs) ? jobs.filter((job) => job.runner?.namespace === "group"
+        const matches = Array.isArray(jobs) ? jobs.filter((job) => job?.runner?.namespace === "group"
           && tags.every((tag) => Array.isArray(job.runner.tags) && job.runner.tags.includes(tag))) : [];
-        if (matches.length !== 1 || matches[0].allow_failure || matches[0].allowFailure
-            || !matches[0].stages?.some((stage) => typeof stage.script === "string" && stage.script.replaceAll("\\", "/").includes(nativePath))) {
+        const job = matches[0];
+        const workflowEntry = path.relative(repositoryRoot, path.join(root, nativePath)).replaceAll("\\", "/");
+        const escapedEntry = workflowEntry.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+        const invocation = new RegExp(`^\\s*${platform === "mac" ? "bash" : "&"}\\s+(?:\\./)?${escapedEntry}(?:\\s+(.*))?$`, "u");
+        const commands = hasRequiredStages(job) ? job.stages.flatMap((stage) => stage.script.split(/\r?\n/u))
+          .map((line) => invocation.exec(line.replaceAll("\\", "/")))
+          .filter(Boolean) : [];
+        const argumentsText = commands[0]?.[1]?.trim() ?? "";
+        // Only a standalone switch passed to the controlled invocation selects
+        // candidate mode; a comment, quoted version or chained command cannot.
+        const argumentsOnly = argumentsText.replace(/(?:^|\s)#.*$/u, "").trim();
+        const argumentTokens = argumentsOnly.match(/"[^"\r\n]*"|'[^'\r\n]*'|[^\s"']+/gu) ?? [];
+        const validArguments = !/[;&|`]/u.test(argumentsOnly)
+          && argumentTokens.join(" ") === argumentsOnly.replace(/\s+/gu, " ");
+        const candidateArguments = argumentTokens.map((argument) => argument.replace(/^(?:"(.*)"|'(.*)')$/u, "$1$2"))
+          .filter((argument) => platform === "mac" ? /^--candidate(?:=|:|$)/u.test(argument) : /^-Candidate(?::|=|$)/iu.test(argument));
+        const validCandidate = candidateArguments.length === 1 && (platform === "mac"
+          ? candidateArguments[0] === "--candidate" : argumentTokens.some((argument) => /^-Candidate$/iu.test(argument)));
+        if (matches.length !== 1 || !hasRequiredStages(job) || Object.hasOwn(job, "docker")
+            || commands.length !== 1 || !validArguments || (candidate ? !validCandidate : candidateArguments.length !== 0)) {
           errors.push(`CNB ${trigger}/${event} 缺少必需的 ${platform} 原生桌面门禁`);
         }
       }
