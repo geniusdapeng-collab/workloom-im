@@ -148,6 +148,15 @@ export async function provisionProtocol(slug, options = {}) {
     );
   }
 
+  // Resolve the exact YAML runtime and validate the original pipeline before any
+  // labels/protection mutation. Python-only projects use delivery/runtime/.
+  const originalCnb = await rawFile(slug, 'main', '.cnb.yml');
+  if (typeof originalCnb !== 'string' || !originalCnb.trim()) throw new Error('必需 .cnb.yml 缺失，拒绝无门禁纳管');
+  const preflightGate = injectGate(originalCnb);
+  if (preflightGate.mode === 'unsupported') throw new Error('无法识别 .cnb.yml 结构，拒绝缺少协议门禁的纳管');
+  try { await injectDeliveryConfig(preflightGate.content, { bootstrap: true }); }
+  catch (error) { throw new Error(`纳管 CI 预检失败（须先安装锁定的 scripts/delivery/runtime 依赖）：${error.message}`); }
+
   await ensureLabels(slug, { dryRun, log });
   await ensureBranchProtection(slug, { dryRun, log });
 

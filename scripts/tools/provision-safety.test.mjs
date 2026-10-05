@@ -54,6 +54,17 @@ test('weak existing main protection blocks; a weak creation readback also blocks
   };
   await assert.rejects(provision.ensureBranchProtection('workloom-ai/demo', { log: () => {} }), /回读/);
 });
+test('unreadable, unsupported or invalid product CI fails before label and protection mutations', async t => {
+  let ci = ''; const methods = [];
+  stubFetch(t, async (url, options) => {
+    methods.push(options.method ?? 'GET');
+    return new Response(String(url).endsWith('sync/child-repos.json') ? JSON.stringify({ children: [], isolatedRepos: [] }) : ci, { status: 200 });
+  });
+  for (const source of ['', 'arbitrary: data\n', 'main:\n  push:\n    - *missing\n']) {
+    ci = source; await assert.rejects(provision.provisionProtocol('workloom-ai/demo', { log: () => {} }), /cnb|结构|预检/i);
+  }
+  assert.ok(methods.length > 0); assert.equal(methods.every(method => method === 'GET'), true);
+});
 test('Git/API errors redact raw and Basic credentials; cross-host API calls and force merge fail before fetch', async t => {
   const token = ['transient', 'boundary', 'token'].join('-');
   const encoded = Buffer.from(`cnb:${token}`).toString('base64');
