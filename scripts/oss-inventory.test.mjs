@@ -104,6 +104,19 @@ test("Python 与容器镜像：解析约束、镜像来源", () => {
   }
 });
 
+test('本地 CNB include 镜像保留 digest，递归去重并拒绝越界或缺失必需文件', () => {
+  const image = 'cnbcool/code-review@sha256:' + 'a'.repeat(64);
+  const root = fixture({ '.cnb.yml': 'include: [scripts/delivery/cnb.yml]\n',
+    'scripts/delivery/cnb.yml': `include: [.cnb.yml, {path: optional.yml, ignoreError: true}]\nmain:\n  pull_request.target:\n    - stages:\n        - image: ${image}\n` });
+  try {
+    assert.deepEqual(collectContainerInventory(root), [{ image, sources: ['scripts/delivery/cnb.yml'] }]);
+    writeFileSync(join(root, '.cnb.yml'), 'include: [../outside.yml]\n');
+    assert.throws(() => collectContainerInventory(root), /escapes/);
+    writeFileSync(join(root, '.cnb.yml'), 'include: [missing.yml]\n');
+    assert.throws(() => collectContainerInventory(root), /missing/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test("probe 探测：regex / vendor / lockfile 三类来源", () => {
   const root = fixture({
     "package.json": { name: "fixture" },

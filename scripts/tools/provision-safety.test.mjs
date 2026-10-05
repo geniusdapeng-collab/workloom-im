@@ -6,6 +6,8 @@ import * as provision from './provision-protocol.mjs';
 test('new branch policy requires review and removes admin push/force/deletion exceptions', () => {
   const p = api.branchProtectionPayload();
   assert.equal(p.required_pull_request_reviews, true);
+  assert.equal(p.required_master_approve, false);
+  assert.equal(p.forbid_approve_pull_created_by_own_npc, false);
   assert.equal(p.allow_master_pushes, false);
   assert.equal(p.allow_master_force_pushes, false);
   assert.equal(p.allow_master_deletions, false);

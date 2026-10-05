@@ -22,7 +22,7 @@
  * 纪律：本脚本只读仓库、零网络；写盘仅限清单文档（--write）。
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -478,7 +478,7 @@ export function collectContainerInventory(root) {
   const images = new Map();
   const add = (image, source) => {
     if (!image || typeof image !== "string") return;
-    const key = image.split("@")[0];
+    const key = image;
     if (!images.has(key)) images.set(key, { image: key, sources: new Set() });
     images.get(key).sources.add(source);
   };
@@ -489,19 +489,39 @@ export function collectContainerInventory(root) {
   }
   const cnbPath = join(root, ".cnb.yml");
   if (existsSync(cnbPath)) {
-    const visit = (node, path = "") => {
+    const visit = (node, source) => {
       if (Array.isArray(node)) {
-        node.forEach((item, index) => visit(item, `${path}[${index}]`));
+        node.forEach(item => visit(item, source));
         return;
       }
       if (!node || typeof node !== "object") return;
       for (const [key, value] of Object.entries(node)) {
-        if (key === "image" && typeof value === "string" && value.includes(":")) add(value, ".cnb.yml");
-        else visit(value, `${path}.${key}`);
+        if (key === "image" && typeof value === "string" && value.includes(":")) add(value, source);
+        else visit(value, source);
       }
     };
     if (YAML_AVAILABLE) {
-      visit(readYaml(cnbPath, {}));
+      const seen = new Set(); const canonicalRoot = realpathSync(root);
+      const include = (file, ignoreError = false) => {
+        if (/^https?:\/\//.test(file)) return; // Offline inventory cannot read remote configuration.
+        const full = resolve(root, file);
+        if (relative(root, full).split(sep).includes('..')) throw new Error('CNB include escapes repository');
+        if (!existsSync(full)) { if (ignoreError) return; throw new Error(`Required CNB include missing: ${file}`); }
+        const canonical = realpathSync(full);
+        if (relative(canonicalRoot, canonical).split(sep).includes('..')) throw new Error('CNB include symlink escapes repository');
+        if (seen.has(canonical)) return;
+        if (seen.size >= 64) throw new Error('CNB local include exceeds 64 files');
+        seen.add(canonical);
+        const config = readYaml(full, null);
+        if (!config || typeof config !== 'object') throw new Error(`Invalid CNB include: ${file}`);
+        visit(config, posix(relative(root, full)));
+        for (const entry of Array.isArray(config.include) ? config.include : config.include ? [config.include] : []) {
+          if (typeof entry === 'string') include(entry);
+          else if (typeof entry?.path === 'string') include(entry.path, entry.ignoreError === true);
+          else if (entry?.config && typeof entry.config === 'object') visit(entry.config, `${file}#include`);
+        }
+      };
+      include('.cnb.yml');
     } else {
       for (const image of readYamlSubset(cnbPath, "images")?.images ?? []) add(image, ".cnb.yml");
     }
@@ -713,7 +733,7 @@ export function renderMarkdown({ root, repo, registry, inventory, state, planFil
   lines.push(`| 安全事件（CVE / 供应链投毒） | 不等周期，立即全量扫描 | \`${cmd("oss:watch")} --all\` |`);
   lines.push(`| 发布前 | 复核清单新鲜度与更新计划 | \`${cmd("oss:plan")}\` |`);
   lines.push("");
-  lines.push("升级纪律：**扫描自动；升级走独立 PR（按 `docs/oss-update-plan.md` 组批 + 门禁 + 协议 §1/§9.5 合并），破坏性/大版本升级按 §3 人审放行**。");
+  lines.push("升级纪律：**扫描自动；升级走独立 PR（按 `docs/oss-update-plan.md` 组批 + 门禁 + 协议 §1/§9.5 合并）；破坏性/大版本升级须包含迁移与回滚证据，并通过独立 AI 评审和必需检查，按 §3 执行**。");
   lines.push("");
   lines.push("## 1. 登记组件（治理清单 · 人工登记 + 自动探测当前版本 + 自动扫描上游最新版本）");
   lines.push("");

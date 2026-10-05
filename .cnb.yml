@@ -123,7 +123,7 @@ include:
     - name: 持续交付与不可变发布回归
       script: |
         set -eu
-        node --test scripts/delivery/queue.test.mjs scripts/tools/task.test.mjs scripts/tools/provision-protocol.test.mjs scripts/cnb-release-publish.test.mjs
+        node --test scripts/delivery/queue.test.mjs scripts/tools/task.test.mjs scripts/tools/provision-safety.test.mjs scripts/cnb-release-publish.test.mjs
 
     - name: 三端生产构建
       script: |

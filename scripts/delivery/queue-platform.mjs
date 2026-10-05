@@ -1,13 +1,18 @@
 import { api, redactCredentials } from '../tools/cnb-api.mjs';
 import { SHA_RE, parseIntent, checksVerdict, hash } from './queue-model.mjs';
-import { validateSourcePipeline } from './queue-policy.mjs';
+import { sourcePipelineReport } from './queue-policy.mjs';
 
 export class Platform {
   constructor(repo, token, request = api) {
     this.repo = repo; this.token = token; this.request = request;
   }
   call(path, options = {}) { return this.request(this.repo, path, { token: this.token, retries: options.method && options.method !== 'GET' ? 0 : 2, ...options }); }
-  pull(number) { return this.call(`/-/pulls/${Number(number)}`); }
+  async pull(number) {
+    const pull = await this.call(`/-/pulls/${Number(number)}`);
+    const actual = Number(pull?.number);
+    if (!Number.isSafeInteger(actual) || actual !== Number(number) || actual <= 0) throw new Error('Platform PR identity is invalid');
+    return { ...pull, number: actual };
+  }
   main() { return this.call('/-/git/branches/main'); }
   commit(sha) {
     if (!SHA_RE.test(sha ?? '')) throw new Error('Invalid commit SHA');
@@ -22,7 +27,7 @@ export class Platform {
       for (const item of list) {
         const id = String(item.number ?? item.id ?? '');
         if (!id || seen.has(id)) throw new Error('Repeated/missing pagination identity');
-        seen.add(id); all.push(item);
+        seen.add(id); all.push(item.number === undefined ? item : { ...item, number: Number(item.number) });
       }
       if (list.length < 100) return all;
     }
@@ -55,19 +60,23 @@ export class Platform {
     const headCommit = await this.commit(headSha);
     let checkErrors = []; let hasFailedChecks = false;
     let checkSha = null;
+    let ciPolicyChanges = [];
+    if (Array.isArray(policy.requiredPipelines)) {
+      const sourceYaml = await this.call(`/-/git/raw/${headSha}/.cnb.yml`);
+      if (typeof sourceYaml !== 'string') throw new Error('Source CI configuration is unreadable');
+      const report = await sourcePipelineReport(sourceYaml, policy);
+      checkErrors.push(...report.errors); ciPolicyChanges = report.changes;
+    }
     if (checks) {
       const payload = await this.call(`/-/pulls/${number}/commit-statuses`);
       hasFailedChecks = Array.isArray(payload?.statuses) && payload.statuses.some(status => policy.requiredNames.some(name => String(status.context ?? '').startsWith('cnb/pull_request/') && String(status.context).endsWith(`(${name})`)) && ['error', 'failure', 'cancel'].includes(status.state));
       checkSha = payload.sha;
       if (!SHA_RE.test(checkSha ?? '')) checkErrors.push('Missing tested commit');
-      else checkErrors = checksVerdict(payload, await this.commit(checkSha), { headSha, mainSha }, policy.requiredNames);
-      const sourceYaml = await this.call(`/-/git/raw/${headSha}/.cnb.yml`);
-      if (typeof sourceYaml !== 'string') throw new Error('Source CI configuration is unreadable');
-      checkErrors.push(...await validateSourcePipeline(sourceYaml, policy));
+      else checkErrors.push(...checksVerdict(payload, await this.commit(checkSha), { headSha, mainSha }, policy.requiredNames));
     }
     const [finalPull, finalMain] = await Promise.all([this.pull(number), this.main()]);
     if (finalPull.head?.sha !== headSha || finalPull.base?.sha !== pull.base?.sha || finalMain.commit?.sha !== mainSha || finalPull.state !== pull.state || finalPull.head?.ref !== pull.head?.ref || finalPull.base?.ref !== pull.base?.ref || JSON.stringify(finalPull.labels) !== JSON.stringify(pull.labels) || finalPull.is_wip !== pull.is_wip || finalPull.body !== pull.body) throw new Error('Platform snapshot changed while reading');
-    return { number: Number(number), pull: finalPull, headSha, mainSha, files, intent: parseIntent(finalPull), headTime: Date.parse(headCommit.commit?.committer?.date ?? headCommit.commit?.author?.date), mergeBase: compare.merge_base_commit?.sha, checkErrors, checkSha, hasFailedChecks };
+    return { number: Number(number), pull: finalPull, headSha, mainSha, files, intent: parseIntent(finalPull), headTime: Date.parse(headCommit.commit?.committer?.date ?? headCommit.commit?.author?.date), mergeBase: compare.merge_base_commit?.sha, checkErrors, checkSha, hasFailedChecks, ciPolicyChanges };
   }
 
   async assertCandidateProtection() {
@@ -101,7 +110,9 @@ export class Platform {
         if (!candidate) throw error;
       }
     }
-    if (!Number.isSafeInteger(candidate.number) || candidate.head?.sha !== snapshot.headSha || !String(candidate.body).includes(marker)) throw new Error('Candidate PR did not match immutable source intent');
+    if (!Number.isSafeInteger(Number(candidate.number)) || Number(candidate.number) <= 0) throw new Error('Candidate PR creation receipt lacks an identity');
+    candidate = await this.pull(Number(candidate.number));
+    if (candidate.head?.sha !== snapshot.headSha || !String(candidate.body).includes(marker)) throw new Error('Candidate PR did not match immutable source intent');
     return { number: candidate.number, branch, headSha: snapshot.headSha, mainSha: snapshot.mainSha, marker };
   }
 

@@ -1,6 +1,6 @@
 import { branchName, dependencyState, eligibility, hash, leaseOperation, sensitiveScopes, updateTask } from './queue-model.mjs';
 import { alignBranch, dispatchRecovery } from './queue-work.mjs';
-import { enqueueReleases, reconcileReleases } from './queue-release.mjs';
+import { enqueueReleases } from './queue-release.mjs';
 
 export function integratedDependency(pull, task) {
   return pull.is_merged === true || Boolean(task?.merge && task.merge.sourceSha === pull.head?.sha && ['integrated', 'release_pending', 'delivered'].includes(task.status));
@@ -224,9 +224,7 @@ export async function reconcile({ platform, store, policy, now = Date.now(), dry
       report.waiting.push({ reason: 'Installed pipelines await verified activation' });
       return report;
     }
-    // Releases have their own receipts, environment queues and errors. They cannot skip the integration pass.
-    try { report.releases = await (services.reconcileReleases ?? reconcileReleases)({ platform, store, now }); }
-    catch (error) { report.failed.push({ stage: 'releases', error: platform.error(error) }); }
+    // Release IO runs in its own native pipeline/lock; it never occupies the integration executor.
     try { await recoverMerges({ platform, store, now }); }
     catch (error) { report.failed.push({ stage: 'recover-merge', error: platform.error(error) }); return report; }
   }

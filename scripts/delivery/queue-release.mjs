@@ -29,6 +29,10 @@ async function bytes(repo, tag, name, { maximum = 1024 * 1024 * 1024, json = fal
 }
 
 export async function verifyRelease(platform, release, download = bytes) {
+  if (!release.build?.sn) throw new Error('Release has no actual build receipt');
+  const key = release.key ?? releaseKey({ repo: platform.repo, sha: release.sha, kind: release.kind, version: release.version });
+  const actualBuild = (await releaseBuilds(platform, release)).filter(build => build.sn === release.build.sn && build.sha === release.sha && build.event === eventFor(release.kind) && build.title === `WorkLoom release ${key}`);
+  if (actualBuild.length !== 1) throw new Error('Release build source/event/intent did not read back');
   const tag = release.kind === 'ui' ? `ui-v${release.version}` : release.version;
   const metadata = await platform.call(`/-/releases/tags/${encodeURIComponent(tag)}`);
   const source = await platform.call(`/-/git/commits/${encodeURIComponent(tag)}`);
@@ -74,7 +78,7 @@ export async function reconcileReleases({ platform, store, now = Date.now(), ver
     const item = queue[0];
     try {
       if (item.status === 'launching' || item.status === 'unknown') {
-        const matches = (await releaseBuilds(platform, item)).filter(build => !item.knownBuilds.includes(build.sn));
+        const matches = (await releaseBuilds(platform, item)).filter(build => !item.knownBuilds.includes(build.sn) && build.sha === item.sha && build.event === eventFor(item.kind) && build.title === `WorkLoom release ${item.key}`);
         if (matches.length !== 1 || !matches[0].sn) {
           report.push({ kind, status: 'unknown', key: item.key, reason: 'Launch acknowledgement cannot be resolved; no duplicate launch' });
           continue;

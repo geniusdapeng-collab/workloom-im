@@ -50,6 +50,25 @@
       timeout: 12m
       script: node scripts/delivery/queue-runner.mjs reconcile
 
+.delivery-releases: &delivery_releases
+  name: delivery-releases
+  docker:
+    image: node:24.19.0-bookworm
+  lock:
+    key: workloom-delivery-release
+    expires: 7200
+    wait: true
+    timeout: 60
+  env:
+    DELIVERY_NATIVE_LOCK: workloom-delivery-release
+  stages:
+    - name: Install locked delivery parser
+      timeout: 120s
+      script: npm ci --prefix scripts/delivery/runtime --ignore-scripts --no-audit --no-fund
+    - name: Recover frozen publications and verify actual source and bytes
+      timeout: 15m
+      script: node scripts/delivery/queue-runner.mjs releases
+
 main:
   pull_request.target:
     - *delivery_review
@@ -57,9 +76,13 @@ main:
     - *delivery_reconcile
   pull_request.merged:
     - *delivery_reconcile
+    - *delivery_releases
   api_trigger_delivery_review:
     - *delivery_review
   api_trigger_delivery_reconcile:
     - *delivery_reconcile
+  api_trigger_delivery_releases:
+    - *delivery_releases
   "crontab: */5 * * * *":
     - *delivery_reconcile
+    - *delivery_releases

@@ -119,7 +119,11 @@ export function validateReview(output, snapshot, policyHash) {
   const expected = [...snapshot.files].sort();
   if (JSON.stringify([...output.reviewed_files].sort()) !== JSON.stringify(expected)) throw new Error('AI review omitted changed files');
   if (!Array.isArray(output.depends_on) || output.depends_on.some(n => !Number.isSafeInteger(n) || n <= 0 || n === snapshot.number)) throw new Error('AI review dependencies are invalid');
-  return { id: randomUUID(), number: snapshot.number, headSha: snapshot.headSha, mainSha: snapshot.mainSha, policyHash, filesHash: hash(expected), resultHash: hash(output), dependsOn: output.depends_on, passed: true };
+  const migration = output.ci_policy_changes ?? [];
+  const ciIds = (snapshot.ciPolicyChanges ?? []).map(change => change.id).sort();
+  if (!Array.isArray(migration) || migration.some(change => typeof change.id !== 'string' || typeof change.rationale !== 'string' || !change.rationale.trim()) ||
+    JSON.stringify(migration.map(change => change.id).sort()) !== JSON.stringify(ciIds)) throw new Error('AI CI migration receipt is incomplete or for another policy change');
+  return { id: randomUUID(), number: snapshot.number, headSha: snapshot.headSha, mainSha: snapshot.mainSha, policyHash, filesHash: hash(expected), resultHash: hash(output), dependsOn: output.depends_on, ciPolicyChangesHash: hash(ciIds), passed: true };
 }
 
 export function checksVerdict(payload, testedCommit, { headSha, mainSha }, requiredNames) {
@@ -151,6 +155,7 @@ export function eligibility(snapshot, task, policy, now = Date.now()) {
   reasons.push(...checkErrors);
   const review = task?.review;
   if (!review?.passed || review.headSha !== headSha || review.mainSha !== mainSha || review.policyHash !== policy.hash || review.filesHash !== hash([...files].sort())) reasons.push('No current complete AI review');
+  else if (snapshot.ciPolicyChanges?.length && review.ciPolicyChangesHash !== hash(snapshot.ciPolicyChanges.map(change => change.id).sort())) reasons.push('No exact AI CI migration receipt');
   return reasons;
 }
 

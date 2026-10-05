@@ -6,18 +6,19 @@ import { GitStateStore, git } from './git-state.mjs';
 import { Platform } from './queue-platform.mjs';
 import { loadPolicy } from './queue-policy.mjs';
 import { prepareReview, finishReview } from './queue-work.mjs';
-import { reconcile } from './queue-controller.mjs';
+import { reconcile, writeTaskReceipts } from './queue-controller.mjs';
+import { reconcileReleases } from './queue-release.mjs';
 import { appendEvent, branchName, checksVerdict, leaseOperation, parseIntent, STATE_BRANCH, updateTask } from './queue-model.mjs';
 import { branchProtectionPayload, redactCredentials, requireToken, validateBranchProtection } from '../tools/cnb-api.mjs';
 
 const arg = (name, fallback) => { const index = process.argv.indexOf(name); return index < 0 ? fallback : process.argv[index + 1]; };
 const ROOT = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 
-export async function requireTrustedRunner(platform, root, env = process.env) {
-  const allowed = new Set(['pull_request.target', 'pull_request.mergeable', 'pull_request.merged', 'api_trigger_delivery_review', 'api_trigger_delivery_reconcile']);
+export async function requireTrustedRunner(platform, root, env = process.env, lock = 'workloom-delivery-merge') {
+  const allowed = new Set(['pull_request.target', 'pull_request.mergeable', 'pull_request.merged', 'api_trigger_delivery_review', 'api_trigger_delivery_reconcile', 'api_trigger_delivery_releases']);
   const event = String(env.CNB_EVENT ?? '');
   if (!env.CNB_BUILD_ID || (!allowed.has(event) && env.CNB_IS_CRONEVENT !== 'true')) throw new Error('Delivery mutation requires a trusted CNB main pipeline');
-  if (env.DELIVERY_NATIVE_LOCK !== 'workloom-delivery-merge') throw new Error('Delivery mutation requires its native repository lock');
+  if (env.DELIVERY_NATIVE_LOCK !== lock) throw new Error('Delivery mutation requires its native repository lock');
   const head = await git(['rev-parse', 'HEAD'], { cwd: root });
   if (head !== (await platform.main()).commit?.sha) throw new Error('Runner is not checked out at current trusted main');
 }
@@ -44,11 +45,11 @@ export async function activate({ platform, store, root, installer }) {
   const main = rules.find(rule => rule.rule === 'main');
   const errors = validateBranchProtection(main, { requireReview: true });
   if (errors.length) throw new Error(errors.join('; '));
-  if (main.required_master_approve !== false) {
+  if (main.required_master_approve !== false || main.forbid_approve_pull_created_by_own_npc !== false) {
     const { id, ...current } = main;
-    await platform.call(`/-/settings/branch-protections/${encodeURIComponent(id)}`, { method: 'PATCH', body: { ...current, required_master_approve: false } });
+    await platform.call(`/-/settings/branch-protections/${encodeURIComponent(id)}`, { method: 'PATCH', body: { ...current, required_master_approve: false, forbid_approve_pull_created_by_own_npc: false } });
     const after = (await platform.protections()).find(rule => rule.id === id);
-    if (!after || after.required_master_approve !== false || after.required_status_checks !== true || validateBranchProtection(after).length) throw new Error('Automatic AI approval policy did not read back');
+    if (!after || after.required_master_approve !== false || after.forbid_approve_pull_created_by_own_npc !== false || after.required_status_checks !== true || validateBranchProtection(after).length) throw new Error('Automatic AI approval policy did not read back');
   }
   const stateRule = (await platform.protections()).find(rule => rule.rule === STATE_BRANCH);
   const expected = { ...branchProtectionPayload({ rule: STATE_BRANCH, requireReview: false }), allow_pushes: false, allow_master_pushes: true, required_must_push_via_pull_request: false, required_status_checks: false };
@@ -121,7 +122,16 @@ export async function main() {
     if (report.failed.length) process.exitCode = 1;
     return;
   }
-  throw new Error('Usage: queue-runner.mjs status|lease|handoff|review-prepare|review-finish|activate|reconcile [--repo org/name]');
+  if (command === 'releases') {
+    await requireTrustedRunner(platform, root, process.env, 'workloom-delivery-release');
+    if (!(await store.read()).events.some(event => event.kind === 'activated')) { console.log(JSON.stringify({ waiting: 'Verified activation is required' })); return; }
+    const report = await reconcileReleases({ platform, store });
+    await writeTaskReceipts({ platform, store });
+    console.log(JSON.stringify(report, null, 2));
+    if (report.some(item => ['parked', 'unknown', 'failed', 'timeout_running'].includes(item.status))) process.exitCode = 1;
+    return;
+  }
+  throw new Error('Usage: queue-runner.mjs status|lease|handoff|review-prepare|review-finish|activate|reconcile|releases [--repo org/name]');
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(error => { console.error(redactCredentials(error.message)); process.exitCode = 1; });

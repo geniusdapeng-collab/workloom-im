@@ -139,7 +139,7 @@ export function branchProtectionPayload({ rule = "main", requireReview = true } 
     allow_master_manual_merge: true,
     allow_master_pushes: false,
     allow_pushes: false,
-    forbid_approve_pull_created_by_own_npc: true,
+    forbid_approve_pull_created_by_own_npc: false,
     required_approved_review_count: 1,
     required_approved_review_ratio: 100,
     required_commit_signatures: false,

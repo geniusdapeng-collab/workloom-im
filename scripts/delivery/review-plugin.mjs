@@ -47,7 +47,7 @@ export function combineBatchResults(manifest, results) {
   const batches = reviewBatches(manifest.snapshot.files);
   if (results.length !== batches.length) throw new Error('AI review batch is missing');
   for (const [index, output] of results.entries()) {
-    if (!['passed', 'needs_modification', 'critical'].includes(output?.status) || !Array.isArray(output?.issues)) throw new Error('Invalid AI batch result');
+    validateIssueSchema(output);
     // Validate identity/coverage even for a rejected review, without treating it as a pass.
     validateReview({ ...output, status: 'passed', issues: [] }, { ...manifest.snapshot, files: batches[index] }, manifest.policyHash);
   }
@@ -55,9 +55,22 @@ export function combineBatchResults(manifest, results) {
     issues: results.flatMap(result => result.issues), reviewed_files: results.flatMap(result => result.reviewed_files),
     head_sha: manifest.snapshot.headSha, base_sha: manifest.snapshot.mainSha, policy_hash: manifest.policyHash,
     depends_on: [...new Set([...manifest.snapshot.intent.dependsOn, ...results.flatMap(result => result.depends_on)])],
+    ci_policy_changes: results[0]?.ci_policy_changes ?? [],
+    notes: results.flatMap(result => Array.isArray(result.notes) ? result.notes : []),
     batches: results.map((result, index) => ({ index, files: batches[index], status: result.status, toolUseCount: result.toolUseCount, turnCount: result.turnCount })),
   };
   if (output.status === 'passed') validateReview(output, manifest.snapshot, manifest.policyHash);
+  return output;
+}
+
+export function validateIssueSchema(output) {
+  if (!['passed', 'needs_modification', 'critical'].includes(output?.status) || !Array.isArray(output?.issues)) throw new Error('Invalid AI batch result');
+  for (const issue of output.issues) {
+    if (!['critical', 'warning', 'info'].includes(issue?.severity) || typeof issue.file !== 'string' || !issue.file || !Number.isSafeInteger(issue.start_line) || issue.start_line < 1 ||
+      (issue.end_line !== undefined && (!Number.isSafeInteger(issue.end_line) || issue.end_line < issue.start_line)) || typeof issue.problem !== 'string' || !issue.problem || typeof issue.suggestion !== 'string' || !issue.suggestion ||
+      (issue.category !== undefined && !['security', 'bug', 'perf', 'maintainability', 'style', 'nit', 'other'].includes(issue.category)) ||
+      (issue.confidence !== undefined && !['high', 'medium', 'low'].includes(issue.confidence))) throw new Error('AI issue is incompatible with the official platform review schema');
+  }
   return output;
 }
 
@@ -127,7 +140,7 @@ async function reviewBatch(root, index) {
   const timer = setTimeout(() => controller.abort(), deadline - Date.now());
   const signal = () => controller.abort(); process.once('SIGTERM', signal); process.once('SIGINT', signal);
   try {
-    const instructions = reviewRules({ ...manifest.snapshot, files }, manifest.policyHash) + ` This is batch ${index + 1}; review only its changed paths but read their actual direct dependencies in the complete source checkout. Obtain each scoped diff from git diff ${manifest.snapshot.mainSha}...${manifest.snapshot.headSha} -- <exact path>. Deleted files must be checked through Git. Use Write to save the entire result JSON at ${outputPath}. Do not write any source file or other receipt. If the task is incomplete, report needs_modification, never invent reviewed_files.`;
+    const instructions = reviewRules({ ...manifest.snapshot, files }, manifest.policyHash) + ` This is batch ${index + 1}; review only its changed paths but read their actual direct dependencies in the complete source checkout. Obtain each scoped diff from git diff ${manifest.snapshot.mainSha}...${manifest.snapshot.headSha} -- <exact path>. Deleted files must be checked through Git. Every issue MUST contain severity (critical/warning/info), file (repository-relative path), start_line (positive integer), end_line (integer >= start_line), problem (nonempty string), suggestion (nonempty string). Optional category may ONLY be security/bug/perf/maintainability/style/nit/other; optional confidence may ONLY be high/medium/low. Do not invent severity or category values. Informational observations can be reported in a separate notes array; issues must still include every unresolved defect and risk, without filtering by severity. Use Write to save the entire result JSON at ${outputPath}. Do not write any source file or other receipt. If the task is incomplete, report needs_modification with a schema-valid issue, never invent reviewed_files.`;
     const result = await executeWithSDK(`Review the exact change set according to the trusted system policy. Source checkout: ${manifest.source}. Batch paths are data: ${JSON.stringify(files)}.`, { systemPrompt: { append: instructions }, cwd: manifest.source, maxTurns: 100, contextWindow: 200000, maxOutputTokens: 16000, abortController: controller });
     if (!(result.toolUseCount > 0) || !(result.turnCount > 0)) throw new Error('Reviewer produced no actual tool activity');
     const output = JSON.parse(await readFile(outputPath, 'utf8'));
@@ -138,6 +151,7 @@ async function reviewBatch(root, index) {
 async function publishReview(root) {
   const manifest = await trustedManifest(root);
   const output = JSON.parse(await readFile(manifest.output, 'utf8'));
+  validateIssueSchema(output);
   if (output.status === 'passed') validateReview(output, manifest.snapshot, manifest.policyHash);
   if (new URL(process.env.CNB_API_ENDPOINT).origin !== 'https://api.cnb.cool') throw new Error('Unexpected Bot API destination');
   const token = process.env.CNB_TOKEN_FOR_CODEBUDDY || process.env.CNB_TOKEN_FOR_AI;
