@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { AGENT_RULE, appendAgentRule, applyInstallation, CORE_ASSETS, INSTALL_MARKER, installationPlan, readAssets } from './install-assets.mjs';
-import { createOnce, discoverAccount, ensureInstallationMainProtection, finishInstallation, freezeInstallerSource, preparePropagated, traceInstallerMerge } from './install-repository.mjs';
+import { createOnce, discoverAccount, ensureInstallationMainProtection, ensureInstallationPolicy, finishInstallation, freezeInstallerSource, preparePropagated, traceInstallerMerge } from './install-repository.mjs';
 import { appendEvent, emptyState, validRepoSlug } from './queue-model.mjs';
 import { branchProtectionPayload } from '../tools/cnb-api.mjs';
 import { git, GitStateStore } from './git-state.mjs';
@@ -133,6 +133,17 @@ test('exact protected installation source must read back before a merge; a weak 
   await freezeInstallerSource(platform, pull); assert.equal(writes, 1);
   actualHead = main; await assert.rejects(freezeInstallerSource(platform, pull), /changed/);
   actualHead = head; rules[0].allow_master_pushes = true; await assert.rejects(freezeInstallerSource(platform, pull), /immutable/);
+});
+test('an activated package update preserves verified AI main policy without restoring the human approval counter', async () => {
+  const state = emptyState(repo); appendEvent(state, 'activated', { mainSha: main });
+  let rule = { ...branchProtectionPayload({ requireReview: false }), id: 'main-rule' }; let writes = 0; let candidates = 0;
+  const platform = { protections: async () => [rule], call: async () => { writes++; }, assertCandidateProtection: async () => { candidates++; } };
+  assert.equal((await ensureInstallationPolicy(platform, state)).required_pull_request_reviews, false);
+  assert.equal(writes, 0); assert.equal(candidates, 1);
+  for (const patch of [{ required_pull_request_reviews: true }, { allow_master_pushes: true }, { required_master_approve: true }]) {
+    const before = rule; rule = { ...rule, ...patch }; await assert.rejects(ensureInstallationPolicy(platform, state), /drifted/); rule = before;
+  }
+  assert.equal(writes, 0);
 });
 test('merge recovery traces actual first-parent ancestry and exact tested parents, never a fabricated Pull merge field', async () => {
   const snapshot = { number: 7, headSha: head, mainSha: main };

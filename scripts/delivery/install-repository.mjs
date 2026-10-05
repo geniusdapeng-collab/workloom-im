@@ -48,6 +48,16 @@ export async function ensureInstallationMainProtection(platform) {
   return after;
 }
 
+/** Package updates must not reinstate the human counter removed by a verified activation. */
+export async function ensureInstallationPolicy(platform, state) {
+  if (!state.events.some(event => event.kind === 'activated')) return ensureInstallationMainProtection(platform);
+  const mainRule = (await platform.protections()).find(rule => rule.rule === 'main');
+  const errors = validateBranchProtection(mainRule, { requireReview: false });
+  if (errors.length || mainRule.required_pull_request_reviews !== false || mainRule.required_master_approve !== false) throw new Error('Active installation policy drifted; preserve AI policy and stop instead of restoring a human counter');
+  await platform.assertCandidateProtection();
+  return mainRule;
+}
+
 function taskCard(taskId, repo, marker, files) {
   return `<!-- delivery-install:${marker.packageHash} -->\n\n任务号：${taskId}\n\n## four_questions\n1. 公共研发交付机制，在 ${repo} 独立安装。\n2. 只变更研发 CI、租约和真实 AI 审查，业务围栏/账户/客户数据不变。\n3. 不改变行业身份、隔离登记或业务同步。\n4. 原仓必需 CI、独立 CodeBuddy、准确 merge 双亲与 activation 回读；失败保留任务，回滚通过独立 revert PR。\n\n## scope\n${files.map(path => `- ${path}`).join('\n')}\n\n## acceptance\n- 保留原仓机器检查与业务文件。\n- 普通研发不等待用户点 Approve。\n- 首装准备账本 → 真实 AI/检查 → 普通 merge → 当前 main 激活回读。\n\n## risk\n治理代码接受完整独立 AI 审查。缺权限/未知操作保持未启用，凭据只在进程内。`;
 }
@@ -145,7 +155,7 @@ export async function prepareRepository({ repo, token, sourceRoot, sourceSha, so
       }
       return { repo, status: pull.is_merged ? 'merged_pending_activation' : pull.state === 'open' ? 'waiting_checks' : 'closed_unmerged', number: pull.number, branch, packageHash: plan.marker.packageHash };
     }
-    await ensureInstallationMainProtection(platform);
+    await ensureInstallationPolicy(platform, await store.read());
     const issues = [...await platform.list('/-/issues?state=open'), ...await platform.list('/-/issues?state=closed')];
     const date = now.toISOString().slice(0, 10).replaceAll('-', '');
     const prefix = `T-${date.slice(0, 4)}-${date.slice(4)}`;
