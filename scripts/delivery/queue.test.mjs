@@ -8,7 +8,7 @@ import { appendEvent, checksVerdict, dependencyState, eligibility, emptyState, h
 import { GitStateStore, git } from './git-state.mjs';
 import { alignBranch } from './queue-work.mjs';
 import { Platform } from './queue-platform.mjs';
-import { BASE_POLICY, parser, sourcePipelineReport, validateSourcePipeline } from './queue-policy.mjs';
+import { BASE_POLICY, ciImplementationChanges, parser, sourcePipelineReport, validateSourcePipeline } from './queue-policy.mjs';
 import { dependencies, integratedDependency, mergeCandidate, reconcile, requestReview, writeTaskReceipts } from './queue-controller.mjs';
 import { enqueueReleases, reconcileReleases, verifyRelease } from './queue-release.mjs';
 import { injectDeliveryConfig } from './install-config.mjs';
@@ -129,6 +129,18 @@ test('source CI preserves required identities; implementation changes require ex
   const receipt = validateReview({ ...output, ci_policy_changes: [{ id: report.changes[0].id, rationale: 'The replacement runs the same compile with updated tooling; compile regression remains required.' }] }, s, policy.hash);
   assert.deepEqual(eligibility(s, { review: receipt }, policy, now), []);
   assert.ok(eligibility(s, { review: review(s) }, policy, now).includes('No exact AI CI migration receipt'));
+});
+test('unchanged YAML cannot hide edits to required check implementations and dependency policy', () => {
+  const files = [{ path: 'scripts/ci/verify-lock-conflict.mjs', status: 'modify' }, { path: 'governance/scripts/ci/verify.py', status: 'delete' }, { path: 'pnpm-lock.yaml', status: 'modify' }, { path: 'scripts/delivery/cnb.yml', status: 'add' }, { path: 'apps/product.ts', status: 'modify' }];
+  const changes = ciImplementationChanges(files, main, head);
+  assert.equal(changes.length, 4);
+  assert.deepEqual(changes[0].before, { ref: main, path: files[0].path, absent: false });
+  assert.equal(changes[1].after.absent, true); assert.equal(changes[3].before.absent, true);
+  assert.notEqual(changes[0].id, ciImplementationChanges(files, head, main)[0].id);
+  const s = snapshot(1, { files: files.map(file => file.path), ciPolicyChanges: changes });
+  const output = { status: 'passed', issues: [], reviewed_files: s.files, head_sha: head, base_sha: main, policy_hash: policy.hash, depends_on: [] };
+  assert.throws(() => validateReview(output, s, policy.hash), /migration/);
+  assert.equal(validateReview({ ...output, ci_policy_changes: changes.map(change => ({ id: change.id, rationale: 'Read exact old/new Git source and verified retained assertions.' })) }, s, policy.hash).passed, true);
 });
 test('CI installation is idempotent and preserves every existing product event/stage', async () => {
   const input = '# existing\nmain:\n  push:\n    - name: product\n      stages: [keep]\ninclude: old.yml\n'; const YAML = await parser();

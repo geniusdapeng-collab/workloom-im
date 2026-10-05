@@ -1,6 +1,6 @@
 import { api, redactCredentials } from '../tools/cnb-api.mjs';
 import { SHA_RE, parseIntent, checksVerdict, hash } from './queue-model.mjs';
-import { sourcePipelineReport } from './queue-policy.mjs';
+import { ciImplementationChanges, sourcePipelineReport } from './queue-policy.mjs';
 
 export class Platform {
   constructor(repo, token, request = api) {
@@ -65,7 +65,7 @@ export class Platform {
       const sourceYaml = await this.call(`/-/git/raw/${headSha}/.cnb.yml`);
       if (typeof sourceYaml !== 'string') throw new Error('Source CI configuration is unreadable');
       const report = await sourcePipelineReport(sourceYaml, policy);
-      checkErrors.push(...report.errors); ciPolicyChanges = report.changes;
+      checkErrors.push(...report.errors); ciPolicyChanges = [...report.changes, ...ciImplementationChanges(compare.files, mainSha, headSha)];
     }
     if (checks) {
       const payload = await this.call(`/-/pulls/${number}/commit-statuses`);
