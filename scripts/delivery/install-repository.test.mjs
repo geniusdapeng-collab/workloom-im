@@ -7,9 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { AGENT_RULE, appendAgentRule, applyInstallation, CORE_ASSETS, INSTALL_MARKER, installationPlan, readAssets } from './install-assets.mjs';
 import { createOnce, discoverAccount, ensureInstallationMainProtection, finishInstallation, freezeInstallerSource, preparePropagated, traceInstallerMerge } from './install-repository.mjs';
-import { appendEvent, emptyState } from './queue-model.mjs';
+import { appendEvent, emptyState, validRepoSlug } from './queue-model.mjs';
 import { branchProtectionPayload } from '../tools/cnb-api.mjs';
-import { git } from './git-state.mjs';
+import { git, GitStateStore } from './git-state.mjs';
+import { modelGateway } from './model-gateway.mjs';
 import { parser, resolvePipelineConfig } from './queue-policy.mjs';
 
 const sourceRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -85,6 +86,21 @@ test('account discovery paginates all owned active repos and fails on ambiguous 
   await assert.rejects(discoverAccount('ephemeral', async () => [{ id: '1', path: 'org/one' }, { id: '1', path: 'org/two' }]), /ambiguous/);
   await assert.rejects(discoverAccount('ephemeral', async () => [{ id: '1', path: 'org/one' }, { id: '2', path: 'org/one' }]), /ambiguous/);
   await assert.rejects(discoverAccount('ephemeral', async () => ({})), /unreadable/);
+});
+test('nested CNB groups use the exact model and state destination; traversal and foreign origins are rejected', async () => {
+  const nested = 'owner/group/subgroup/project';
+  assert.ok(validRepoSlug(nested)); assert.equal(new GitStateStore({ repo: nested }).repo, nested);
+  const discovered = await discoverAccount(fixtureCredential, async () => [{ id: 'nested', path: nested }]); assert.equal(discovered[0].repo, nested);
+  for (const bad of ['owner/../other', 'owner//other', '/owner/repo', 'owner/repo?x=y', 'https://foreign/repo']) {
+    assert.equal(validRepoSlug(bad), false); assert.throws(() => new GitStateStore({ repo: bad }), /slug/);
+  }
+  assert.throws(() => new GitStateStore({ repo: nested, token: fixtureCredential, remote: 'https://example.com/repo.git' }), /destination/);
+  let calls = 0;
+  const broker = await modelGateway({ repo: nested, token: fixtureCredential, request: async (url, options) => { calls++; assert.equal(url, `https://api.cnb.cool/${nested}/-/ai/v1/messages`); assert.equal(options.headers.authorization, `Bearer ${fixtureCredential}`); return new Response('{}'); } });
+  try {
+    assert.equal((await fetch(`${broker.url}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 200);
+    assert.equal(calls, 1);
+  } finally { await broker.close(); }
 });
 test('object creation recovers a single actual lost acknowledgement without blind retry or accepting a collision', async () => {
   let objects = []; let writes = 0;

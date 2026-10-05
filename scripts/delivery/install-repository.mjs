@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { api, branchProtectionPayload, redactCredentials, requireToken, validateBranchProtection } from '../tools/cnb-api.mjs';
 import { GitStateStore, git } from './git-state.mjs';
-import { appendEvent, branchName, hash, parseIntent, SHA_RE, updateTask } from './queue-model.mjs';
+import { appendEvent, branchName, hash, parseIntent, SHA_RE, updateTask, validRepoSlug } from './queue-model.mjs';
 import { Platform } from './queue-platform.mjs';
 import { activate, configureAutomaticReviewPolicy, prepareInstallation, verifyInstallerChecks } from './queue-runner.mjs';
 import { independentCodeBuddyApproval } from './queue-work.mjs';
@@ -14,7 +14,6 @@ import { loadPolicy } from './queue-policy.mjs';
 import { applyInstallation, installationPlan, INSTALL_MARKER, readAssets } from './install-assets.mjs';
 
 const SOURCE_REPO = 'workloom-ai/workloom-im';
-const REPO_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /** Official /user/repos API, all owned active repositories across groups, with explicit pagination. */
@@ -24,7 +23,7 @@ export async function discoverAccount(token, request = api) {
     const result = await request('', `https://api.cnb.cool/user/repos?role=Owner&status=active&page_size=100&page=${page}&order_by=slug_path&desc=false`, { token });
     if (!Array.isArray(result)) throw new Error('Account repository discovery is unreadable');
     for (const repo of result) {
-      if (!REPO_RE.test(repo.path ?? '') || !repo.id || seen.has(String(repo.id)) || seenPaths.has(repo.path.toLowerCase())) throw new Error('Account repository discovery identity is ambiguous');
+      if (!validRepoSlug(repo.path) || !repo.id || seen.has(String(repo.id)) || seenPaths.has(repo.path.toLowerCase())) throw new Error('Account repository discovery identity is ambiguous');
       seen.add(String(repo.id)); seenPaths.add(repo.path.toLowerCase()); repos.push({ id: String(repo.id), repo: repo.path, frozen: repo.freeze === true });
     }
     if (result.length < 100) return repos;
@@ -108,7 +107,7 @@ export async function traceInstallerMerge(platform, snapshot) {
 }
 
 export async function prepareRepository({ repo, token, sourceRoot, sourceSha, sourceRepo = SOURCE_REPO, checkout, platform = new Platform(repo, token), store = new GitStateStore({ repo, token }), assets, now = new Date() }) {
-  if (!REPO_RE.test(repo ?? '') || !SHA_RE.test(sourceSha ?? '') || !token) throw new Error('Invalid privileged installation identity');
+  if (!validRepoSlug(repo) || !SHA_RE.test(sourceSha ?? '') || !token) throw new Error('Invalid privileged installation identity');
   const remote = `https://cnb.cool/${repo}.git`;
   const directory = checkout ? resolve(checkout) : await mkdtemp(join(tmpdir(), 'delivery-install-'));
   const root = checkout ? directory : join(directory, 'repo');

@@ -2,7 +2,7 @@
 import { lstat, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import { git } from './git-state.mjs';
-import { hash, SHA_RE } from './queue-model.mjs';
+import { hash, SHA_RE, validRepoSlug } from './queue-model.mjs';
 import { injectDeliveryConfig } from './install-config.mjs';
 import { parser, resolvePipelineConfig } from './queue-policy.mjs';
 
@@ -96,7 +96,7 @@ export async function readAssets(sourceRoot, sourceSha) {
 
 /** Preflight the complete migration before writing any target file. */
 export async function installationPlan({ root, assets, sourceRepo, sourceSha, repo }) {
-  if (!SHA_RE.test(sourceSha ?? '') || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(sourceRepo ?? '') || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo ?? '')) throw new Error('Invalid installation identity');
+  if (!SHA_RE.test(sourceSha ?? '') || !validRepoSlug(sourceRepo) || !validRepoSlug(repo)) throw new Error('Invalid installation identity');
   if (CORE_ASSETS.some(path => typeof assets[path] !== 'string' || !assets[path])) throw new Error('Incomplete execution asset closure');
   const original = await optionalFile(root, '.cnb.yml');
   if (!original?.trim()) throw new Error('Repository needs an existing, verifiable main PR CI before automatic installation');
