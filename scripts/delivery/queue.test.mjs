@@ -215,6 +215,13 @@ test('required native node-test stages refer to existing repository files', asyn
   }
   assert.ok(verified > 0);
 });
+test('installer updates cancel only their own obsolete bootstrap review and do not share the ordinary review lock', async () => {
+  const YAML = await parser();
+  const bootstrap = YAML.parse(await readFile(new URL('./bootstrap-cnb.yml', import.meta.url), 'utf8'))['**'].pull_request[0];
+  const ordinary = YAML.parse(await readFile(new URL('./cnb.yml', import.meta.url), 'utf8'))['.delivery-review'];
+  assert.equal(bootstrap.lock.key, 'workloom-delivery-bootstrap-$CNB_PULL_REQUEST_IID'); assert.equal(bootstrap.lock['cancel-in-progress'], true);
+  assert.notEqual(bootstrap.lock.key, ordinary.lock.key); assert.notEqual(ordinary.lock['cancel-in-progress'], true);
+});
 test('real review orchestration caps concurrent batches and withholds decisions on incomplete coverage or drift', async t => {
   const root = await temporary(t, 'delivery-batch-'); const directory = join(root, '.delivery-review/snapshot-x'); await mkdir(directory, { recursive: true });
   const s = snapshot(1, { files: Array.from({ length: 91 }, (_, index) => `source/${index}.ts`) });

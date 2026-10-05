@@ -6,8 +6,9 @@
       docker:
         image: node:24.19.0-bookworm
       lock:
-        key: workloom-delivery-review
+        key: workloom-delivery-bootstrap-$CNB_PULL_REQUEST_IID
         expires: 7200
+        cancel-in-progress: true
         wait: true
         timeout: 60
       env:
