@@ -9,12 +9,14 @@ import {
   collectNpmInventory,
   collectPythonInventory,
   compareVersions,
+  containerVersion,
   generateDocument,
   highestVersion,
   isOutdated,
   normalizeRepoIdentityForCompare,
   probeVersions,
   renderMarkdown,
+  resolveCurrent,
 } from "./oss-inventory.mjs";
 
 function fixture(files) {
@@ -139,6 +141,15 @@ test("probe 探测：regex / vendor / lockfile 三类来源", () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('摘要镜像的版本解析保留 tag，registry 端口和纯 digest 不伪装成 latest', t => {
+  const digest = 'sha256:' + 'a'.repeat(64);
+  for (const [image, expected] of [['node:20@' + digest, '20'], ['registry:5000/team/node:20@' + digest, '20'], ['registry:5000/team/node@' + digest, digest], ['team/node@' + digest, digest], ['registry:5000/team/node', 'latest']]) assert.equal(containerVersion(image), expected);
+  const root = fixture({ '.cnb.yml': `main:\n  push:\n    - docker:\n        image: registry:5000/team/node:20@${digest}\n` });
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  assert.equal(probeVersions(root, [{ name: 'node', probe: { kind: 'docker', image: 'registry:5000/team/node:' } }]).node.value, '20');
+  assert.equal(resolveCurrent({ channel: 'docker', image: 'registry:5000/team/node:' }, { containers: collectContainerInventory(root) }, {}).current, '20');
 });
 
 test("清单渲染：确定性、含上游最新与漂移标记、--check 可复现", () => {

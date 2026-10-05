@@ -538,6 +538,13 @@ export function collectContainerInventory(root) {
 }
 
 /** 随包二进制/素材引脚：登记表 probe 声明的正则解析（如 nats-server、PG）。 */
+export function containerVersion(image) {
+  const [name, digest] = String(image).split('@');
+  const separator = name.lastIndexOf(':');
+  if (separator > name.lastIndexOf('/')) return name.slice(separator + 1);
+  return digest ?? 'latest';
+}
+
 export function probeVersions(root, components) {
   const results = {};
   for (const component of components ?? []) {
@@ -552,7 +559,7 @@ export function probeVersions(root, components) {
     } else if (probe.kind === "docker") {
       const images = collectContainerInventory(root);
       const hit = images.find((entry) => entry.image.startsWith(probe.image));
-      if (hit) results[component.name] = { value: hit.image.split(":")[1] ?? "latest", source: hit.sources[0] };
+      if (hit) results[component.name] = { value: containerVersion(hit.image), source: hit.sources[0] };
     } else if (probe.kind === "vendor") {
       const manifest = readJson(join(root, probe.file));
       if (manifest?.version) results[component.name] = { value: manifest.version, source: probe.file };
@@ -648,7 +655,7 @@ export function resolveCurrent(component, inventory, probes) {
   }
   if (component.channel === "docker" && component.image) {
     const hit = inventory.containers.find((entry) => entry.image.startsWith(component.image));
-    if (hit) return { current: hit.image.split(":")[1] ?? "latest", source: hit.sources.join(", "), evidence: "A" };
+    if (hit) return { current: containerVersion(hit.image), source: hit.sources.join(", "), evidence: "A" };
   }
   if (component.current) return { current: component.current, source: component.currentSource ?? "登记", evidence: "C" };
   return { current: "未引入", source: "—", evidence: "D" };
