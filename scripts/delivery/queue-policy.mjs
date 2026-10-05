@@ -17,7 +17,7 @@ export async function parser() {
 
 export const REVIEW_IMAGE = 'cnbcool/code-review@sha256:c20b1e826d854738c807f4949859a6df5d58b95545ebefc96197369943a4bcce';
 export const BASE_POLICY = Object.freeze({
-  version: 5,
+  version: 6,
   cooldownMs: 10 * 60_000,
   maxAlignmentAttempts: 3,
   maxInfrastructureAttempts: 2,
@@ -102,7 +102,9 @@ function controlPipelines(config) {
 
 export async function loadPolicy(root) {
   const base = await realpath(root);
+  const ciFiles = new Set(['.cnb.yml']);
   const readLocal = async path => {
+    ciFiles.add(path);
     const actual = await realpath(resolve(base, path));
     const delta = relative(base, actual);
     if (delta === '..' || delta.startsWith('../') || delta.startsWith('..\\')) throw new Error('CI include escapes repository');
@@ -110,16 +112,18 @@ export async function loadPolicy(root) {
   };
   const config = await resolvePipelineConfig(await readFile(join(base, '.cnb.yml'), 'utf8'), { readLocal });
   const requiredPipelines = pipelines(config);
-  const source = { ...BASE_POLICY, reviewImage: REVIEW_IMAGE, requiredPipelines, requiredControlPipelines: controlPipelines(config) };
+  const source = { ...BASE_POLICY, reviewImage: REVIEW_IMAGE, ciFiles: [...ciFiles].sort(), requiredPipelines, requiredControlPipelines: controlPipelines(config) };
   return { ...source, hash: hash(source), requiredNames: requiredPipelines.map(p => p.name) };
 }
 
 /** Structural checks remain required; changes to their implementation need an explicit, exact AI migration receipt. */
 export async function sourcePipelineReport(sourceText, policy, options = {}) {
   const errors = [];
+  const ciFiles = new Set(['.cnb.yml']);
   let source; let config;
-  try { config = await resolvePipelineConfig(sourceText, options); source = pipelines(config); }
-  catch (error) { return { errors: [`Source CI is invalid: ${error.message}`], changes: [] }; }
+  const readLocal = typeof options.readLocal === 'function' ? path => { ciFiles.add(path); return options.readLocal(path); } : undefined;
+  try { config = await resolvePipelineConfig(sourceText, { ...options, readLocal }); source = pipelines(config); }
+  catch (error) { return { errors: [`Source CI is invalid: ${error.message}`], changes: [], ciFiles: [...ciFiles].sort() }; }
   const changes = [];
   const changedPolicy = (pipeline, stage, before, after, binding) => changes.push({ id: hash({ pipeline, stage, before, after, binding }), pipeline, stage, before, after, ...(binding ? { binding } : {}) });
   const comparePipelines = (trustedPipelines, source, binding) => {
@@ -147,14 +151,15 @@ export async function sourcePipelineReport(sourceText, policy, options = {}) {
     const entries = config[binding.branch]?.[binding.event];
     comparePipelines(binding.pipelines, Array.isArray(entries) ? entries.filter(p => p.allowFailure !== true) : [], { branch: binding.branch, event: binding.event });
   }
-  return { errors, changes };
+  return { errors, changes, ciFiles: [...ciFiles].sort() };
 }
 
 export async function validateSourcePipeline(sourceText, policy) { return (await sourcePipelineReport(sourceText, policy)).errors; }
 
 /** Conservatively include executable CI helpers and policy/dependency inputs, even when YAML text is unchanged. */
-export function ciImplementationChanges(files, mainSha, headSha) {
-  return files.filter(file => /^(?:(?:governance\/)?scripts\/|sync\/|\.cnb\/|\.github\/workflows\/)/.test(file.path ?? file.name ?? '') && /\.(?:mjs|cjs|js|ts|py|sh|json|ya?ml)$/.test(file.path ?? file.name ?? '') || /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$/.test(file.path ?? file.name ?? ''))
+export function ciImplementationChanges(files, mainSha, headSha, ciFiles = []) {
+  const configured = new Set(['.cnb.yml', ...ciFiles]);
+  return files.filter(file => configured.has(file.path ?? file.name ?? '') || /^(?:(?:governance\/)?scripts\/|sync\/|\.cnb\/|\.github\/workflows\/)/.test(file.path ?? file.name ?? '') && /\.(?:mjs|cjs|js|ts|py|sh|json|ya?ml)$/.test(file.path ?? file.name ?? '') || /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$/.test(file.path ?? file.name ?? ''))
     .map(file => {
       const path = file.path ?? file.name;
       const before = { ref: mainSha, path, absent: file.status === 'add' };
