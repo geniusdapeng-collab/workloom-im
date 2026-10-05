@@ -56,7 +56,19 @@ node sync/merge-sync-prs.mjs                             # 派发仓内 trusted-
 
 公共交付器及锁定的解析器运行时由 `sync/base-scope.json#requiredRootAssets` 送到 **Git 根目录**；Tiger 的 `governance/` 前缀不能改变它的位置。各仓 `.cnb.yml` 只追加 `scripts/delivery/cnb.yml` include，保留原语言栈/阶段/行业种子。CI 凭据来自 CNB 原生注入；一次性的候选/状态保护规则安装与策略激活需有仓库设置权限的当前任务授权，不把用户会话令牌存入 CI。
 
-隔离副本无安装、无保护规则变更、无 PR；Andromeda 的 platform-ops 不分发到其他仓。是否已激活以 `automation/delivery-state` 的 activation 事件及平台回读为准。
+产品所有者于 2026-10-05 明确要求十二仓独立安装研发交付机制；两个隔离副本可在各自仓建立安装 PR、保护和账本，业务 fanout 仍然跳过它们，冻结认知/上游摘要与 none-in-none-out 不变。Andromeda 的 platform-ops 不分发到其他仓。是否已激活以 `automation/delivery-state` 的 activation 事件及平台回读为准。
+
+### 1.3.2 既有仓的首装顺序（不能把文件分发当作启用）
+
+`base-sync` 只分发执行资产，**不会自动改子仓 `.cnb.yml`**。旧仓拿到脚本而没有 delivery include 时，`merge-sync-prs` 的派发会明确失败；这代表尚未安装，不能当作交付器已接管。首次舰队上线由具备仓库设置权限的授权安装端逐仓执行以下闭环，然后再把该仓纳入正常派发：
+
+1. 在目标当前 main 的独立 `chore/protocol-onboarding-*` 分支准备完整 delivery/CI 依赖闭包，追加 `scripts/delivery/cnb.yml` 与 `scripts/delivery/bootstrap-cnb.yml` include，保留原流水线、阶段、行业配置及隔离状态；开准确路径、四问、验收和回滚任务卡/安装 PR。只对共享研发资产升级，不用全量旧纳管器清理目标标签。
+2. 推送准确安装源码后，设置权限者在该源码工作树执行 `node scripts/delivery/queue-runner.mjs prepare-install --repo <org/repo> --pr <安装PR>`。此步骤创建并回读强保护状态分支、保存准确 source/main 的 installation_prepared；源 PR 原生令牌仅回读，bootstrap 的 verify-install 缺该证据就拒绝 AI 批准。
+3. 安装 PR 必须通过**目标仓全部原必需检查及真实 bootstrap AI**。回读完整覆盖与准确 source/main、当前独立 CodeBuddy Approve，才按平台保护普通 merge；不强制合并、不直推 main，不用本地通过替代云端通过。
+4. 在合入后的目标当前 main 执行 `node scripts/delivery/queue-runner.mjs activate --repo <org/repo> --pr <安装PR>`：验证合并、原准确测试双亲和独立 AI，安装不可修改候选规则、保留 main 强保护/自有 NPC 自批限制、取消额外管理员批准并写 activation。再回读每五分钟原生流水线的实际状态写入，才记录该仓已接管。
+5. 未完成此闭环的仓保持“安装中”，继续保留原 PR/分支及明确欠项；不恢复旧的第二条直接 merge 车道。安装完成的仓独立开始恢复，不等待全部仓同时就绪。两个隔离副本按本次明确授权各自安装，不加入业务分发队列。
+
+后续新仓也须先完成同一首装闭环；原生 CI 令牌只有仓库设置读权限，不能用它伪装首次保护安装成功。缺设置写权限时由当前任务授权的持续安装端负责，不将会话令牌保存为 CI 变量或文件。
 
 ### 1.4 权限模型（谁给谁开权限）
 
