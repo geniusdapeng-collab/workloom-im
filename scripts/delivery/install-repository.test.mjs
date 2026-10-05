@@ -61,6 +61,24 @@ test('installation preflight rejects incomplete assets, invalid or missing produ
   const root = await fixture(t); const incomplete = { ...assets }; delete incomplete[CORE_ASSETS[0]];
   await assert.rejects(plan(root, { assets: incomplete }), /closure/);
 });
+test('an unknown hardened Git/PR gate is preserved and rejected before target writes', async t => {
+  const root = await fixture(t); await mkdir(join(root, 'scripts/ci'), { recursive: true });
+  const hardened = 'export async function runLockGate() { throw new Error("Target-specific source binding"); }\n';
+  await writeFile(join(root, 'scripts/ci/verify-lock-conflict.mjs'), hardened);
+  await assert.rejects(plan(root), /explicit reviewed migration/);
+  assert.equal(await readFile(join(root, 'scripts/ci/verify-lock-conflict.mjs'), 'utf8'), hardened);
+  assert.equal(await readFile(join(root, '.cnb.yml'), 'utf8'), original);
+  await assert.rejects(readFile(join(root, INSTALL_MARKER)), { code: 'ENOENT' });
+});
+test('a partial or changed already-adapted hardened gate cannot fall back to overwriting the target', async t => {
+  const root = await fixture(t); await mkdir(join(root, 'scripts/ci'), { recursive: true });
+  const partial = '// WORKLOOM_DELIVERY_BOUND_PROTOCOL_V1\nexport async function runLockGate() { throw new Error("Incomplete migration"); }\n';
+  await writeFile(join(root, 'scripts/ci/verify-lock-conflict.mjs'), partial);
+  await assert.rejects(plan(root), /migration/);
+  assert.equal(await readFile(join(root, 'scripts/ci/verify-lock-conflict.mjs'), 'utf8'), partial);
+  assert.equal(await readFile(join(root, '.cnb.yml'), 'utf8'), original);
+  await assert.rejects(readFile(join(root, INSTALL_MARKER)), { code: 'ENOENT' });
+});
 test('actual installed main-selector Python product runs the copied delivery regression with resolved include gates and the normalized bootstrap selector', async t => {
   const root = await fixture(t);
   // Verify the complete package under review before committing; production readAssets remains exact-Git only.

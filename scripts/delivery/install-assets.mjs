@@ -5,6 +5,7 @@ import { git } from './git-state.mjs';
 import { hash, SHA_RE, validRepoSlug } from './queue-model.mjs';
 import { injectDeliveryConfig } from './install-config.mjs';
 import { parser, resolvePipelineConfig } from './queue-policy.mjs';
+import { preserveBoundProtocol, PROTOCOL_ADDITIONAL_ASSETS } from './install-protocol.mjs';
 
 export const CORE_ASSETS = Object.freeze([
   ...['queue-model.mjs', 'queue-policy.mjs', 'queue-platform.mjs', 'queue-controller.mjs', 'queue-work.mjs', 'queue-release.mjs', 'queue-runner.mjs', 'git-state.mjs', 'review-plugin.mjs', 'model-gateway.mjs', 'install-config.mjs', 'release-source.mjs', 'queue.test.mjs', 'cnb.yml', 'bootstrap-cnb.yml', 'runtime/package.json', 'runtime/package-lock.json'].map(path => `scripts/delivery/${path}`),
@@ -34,7 +35,7 @@ export const DELIVERY_DOC = `# 普通研发自动交付
 4. main 原生执行器每 5 分钟恢复，仓级原生锁只串行实际集成。敏感候选合并前强制取得并核验 fenced 集成租约。失败任务单独保留；语义冲突、权限不足、未知写入不会伪装成功或重复外部动作。
 5. automation/delivery-state 通过普通 fast-forward CAS 保存只增事件、租约、尝试、AI 与集成证明。丢失响应先回读 transaction id。UI/桌面声明的发布使用独立执行器与固定 SHA/版本，核验构建、tag、manifest 与实际字节；没有发布回执不关完成任务。
 6. 首装由具备设置权限的安装端创建并回读强保护账本、准备准确安装 source/main，随后运行真正 bootstrap AI 和原有门禁。普通合入后在当前 main activate，回读独立 AI、真实测试和候选/主干保护，并取消额外管理员点击批准要求。源 PR 原生令牌实测只读，原生 main 运行；会话凭据不写进 CI 或文件。
-7. 账户新仓由同一 Codex chat 的持续安装调度发现并处理。平台原生令牌没有设置写权限，初次保护安装使用当前任务授权的短期会话权限，只在进程内注入。调度运行需要本机 Codex 可用及凭据仍有效；发现权限/平台不兼容即明确告警并保留可恢复任务，不能声称已启用。未有 main/可验证产品 CI 的仓先保留准备状态，不能把交付机制自测当成产品已验收。
+7. 账户安装器完整分页发现 Owner/active 仓库并幂等处理，命令为 node scripts/delivery/install-account.mjs --source-root <已激活的基座主干目录> --directory <本任务专用安装目录> --concurrency 2。平台原生令牌没有设置写权限，初次保护安装使用当前任务授权的短期会话权限，只在进程内注入。安装运行需要凭据仍有效；发现权限/平台不兼容即明确告警并保留可恢复任务，不能声称已启用。未有 main/可验证产品 CI 的仓先保留准备状态，不能把交付机制自测当成产品已验收。未来自动发现需要另行启用账户安装调度；本机制不自行创建 Codex chat 定时任务，用户取消的任务保持取消。
 
 安装清单保存在 .workloom-delivery-install.json，列出来源提交和每个准确资产摘要。安装器不会替换 product.manifest、WORKLOOM_PRODUCT_CONTEXT、冻结同步摘要、行业业务或标签；隔离仓不会加入 children，也不会开启业务 fanout。
 
@@ -114,7 +115,9 @@ export async function installationPlan({ root, assets, sourceRepo, sourceSha, re
   const selector = parsed.main?.pull_request ? 'main' : parsed['**']?.pull_request ? '**' : parsed.$?.pull_request ? '$' : null;
   const existingPr = selector ? parsed[selector].pull_request : null;
   if (!Array.isArray(existingPr) || !existingPr.some(p => p.allowFailure !== true && p.name && p.stages?.length)) throw new Error('Existing product PR checks are missing');
-  const YAML = await parser(); const executionAssets = { ...assets };
+  const YAML = await parser();
+  const protocol = await preserveBoundProtocol({ ...assets }, path => optionalFile(root, path));
+  const executionAssets = protocol.assets;
   // CNB selects the matching branch key. Put the added PR gates on the same
   // selector as the product instead of hiding them behind a fallback selector.
   for (const path of ['scripts/delivery/bootstrap-cnb.yml', 'scripts/delivery/install-cnb.yml']) {
@@ -124,7 +127,7 @@ export async function installationPlan({ root, assets, sourceRepo, sourceSha, re
   }
   const changes = new Map();
   for (const [path, content] of Object.entries(executionAssets)) {
-    if (!CORE_ASSETS.includes(path) && !['docs/AUTOMATIC-RD-DELIVERY.md', 'scripts/delivery/install-cnb.yml'].includes(path)) throw new Error('Installation asset outside permitted closure');
+    if (!CORE_ASSETS.includes(path) && !['docs/AUTOMATIC-RD-DELIVERY.md', 'scripts/delivery/install-cnb.yml', ...(protocol.preserved ? PROTOCOL_ADDITIONAL_ASSETS : [])].includes(path)) throw new Error('Installation asset outside permitted closure');
     if (await optionalFile(root, path) !== content) changes.set(path, content);
   }
   let ci = original;
