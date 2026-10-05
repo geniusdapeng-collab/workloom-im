@@ -121,6 +121,7 @@ export async function runReview(root = process.cwd(), { env = process.env, platf
   if (failure) throw failure;
   const output = combineBatchResults(manifest, results);
   await writeFile(manifest.output, JSON.stringify(output, null, 2));
+  console.log(`WorkLoom AI receipt: ${redactCredentials(JSON.stringify(output), env.CNB_TOKEN)}`);
   const current = await (platform ?? new Platform(env.CNB_REPO_SLUG, env.CNB_TOKEN)).snapshot(manifest.snapshot.number, { hash: manifest.policyHash }, { checks: false });
   if (current.headSha !== manifest.snapshot.headSha || current.mainSha !== manifest.snapshot.mainSha || current.pull.state !== 'open' || current.pull.is_wip || current.pull.body !== manifest.snapshot.pull.body || JSON.stringify([...current.files].sort()) !== JSON.stringify([...manifest.snapshot.files].sort())) throw new Error('AI review expired before its platform decision');
   // The official Bot posts a decision only after all batches and complete coverage have been checked.
@@ -158,7 +159,9 @@ async function publishReview(root) {
   if (!token) throw new Error('The official image did not provide a genuine AI Bot credential');
   const { PRCommentService } = require('/app/dist/pr-comment.js');
   const service = new PRCommentService(process.env.CNB_REPO_SLUG, String(manifest.snapshot.number), token);
-  const result = await service.processAndComment(JSON.stringify(output), 100, 'info', 'low', new Set(), 'auto');
+  // CNB accepts at most ten inline comments per review. The complete structured
+  // receipt above still contains every finding and keeps the gate blocked.
+  const result = await service.processAndComment(JSON.stringify(output), 10, 'info', 'low', new Set(), 'auto');
   if (!result) throw new Error('Genuine AI platform decision failed');
 }
 
