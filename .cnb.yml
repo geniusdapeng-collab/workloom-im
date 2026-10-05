@@ -407,6 +407,8 @@ include:
 
 .ui-release: &ui_release
   name: ui-release
+  # 页面手动/API 调用均须显式传 RELEASE_EXPECTED_SHA=<已审查并合入的准确 SHA>。
+  # 缺失时在任何构建/上传前失败；不再从当前 main 的 CNB_BRANCH_SHA 推测发布来源。
   lock:
     key: workloom-delivery-release-ui
     expires: 14400
@@ -645,6 +647,7 @@ include:
 
 .desktop-release-windows: &desktop_release_windows
   name: desktop-release-windows
+  # RELEASE_EXPECTED_SHA 来自整次触发的 env，所有 mac/Windows/finalize Job 共用；手动触发也必须显式传入。
   # 自托管 windows 构建节点（NSIS/Authenticode 需 Windows 工具链）；bash 步骤依赖 Git for Windows（CNB 文档列为自托管节点必装）
   runner:
     namespace: group
