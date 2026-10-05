@@ -1,6 +1,7 @@
 import { branchName, dependencyState, eligibility, hash, leaseOperation, sensitiveScopes, updateTask } from './queue-model.mjs';
 import { alignBranch, dispatchRecovery } from './queue-work.mjs';
 import { enqueueReleases } from './queue-release.mjs';
+import { performance } from 'node:perf_hooks';
 
 export function integratedDependency(pull, task) {
   return pull.is_merged === true || Boolean(task?.merge && task.merge.sourceSha === pull.head?.sha && ['integrated', 'release_pending', 'delivered'].includes(task.status));
@@ -215,9 +216,9 @@ export async function writeTaskReceipts({ platform, store, now = Date.now() }) {
 }
 
 /** A bad PR never stops scanning unrelated candidates. Unknown merge writes deliberately pause integration. */
-export async function reconcile({ platform, store, policy, now = Date.now(), dryRun = false, services = {}, deadlineMs = 240_000 }) {
+export async function reconcile({ platform, store, policy, now = Date.now(), dryRun = false, services = {}, deadlineMs = 240_000, elapsedClock = () => performance.now() }) {
   const report = { repo: platform.repo, dryRun, integrated: [], aligned: [], waiting: [], parked: [], releases: [], failed: [] };
-  const started = Date.now();
+  const started = elapsedClock();
   if (!dryRun) {
     const durable = await store.read();
     if (!durable.events.some(event => event.kind === 'activated')) {
@@ -237,7 +238,7 @@ export async function reconcile({ platform, store, policy, now = Date.now(), dry
   for (const pull of queue) {
     const number = Number(pull.number);
     if (branchName(pull.head?.ref).startsWith('delivery/candidate/')) continue;
-    if (Date.now() - started > deadlineMs) { report.waiting.push({ number, reason: 'Bounded runner time; next reconcile continues' }); continue; }
+    if (elapsedClock() - started > deadlineMs) { report.waiting.push({ number, reason: 'Bounded runner time; next reconcile continues' }); continue; }
     try {
       const snapshot = await platform.snapshot(number, policy);
       const stored = state.tasks[String(number)];

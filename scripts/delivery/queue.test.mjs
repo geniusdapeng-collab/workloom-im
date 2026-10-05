@@ -311,6 +311,12 @@ test('task receipt cannot close an unmerged task or a task with declared unverif
   updateTask(state, 1, { status: 'waiting_ci', intent: taskIntent }, now); updateTask(state, 2, { status: 'release_pending', intent: taskIntent, merge: { sha: mergedSha, sourceSha: head, mainSha: main } }, now);
   let writes = 0; await writeTaskReceipts({ store: memoryStore(state), platform: { list: async () => { writes++; return []; } }, now }); assert.equal(writes, 0);
 });
+test('runner deadline uses elapsed time independently of injected lease/calendar time and preserves the exact boundary', async () => {
+  const clocks = [0, 240000, 240001]; const scanned = [];
+  const platform = { repo, error: e => e.message, pulls: async () => [snapshot(1).pull, snapshot(2).pull], snapshot: async number => { scanned.push(number); return snapshot(number, { checkErrors: ['still pending'] }); } };
+  const report = await reconcile({ platform, store: memoryStore(), policy, now: 1, dryRun: true, elapsedClock: () => clocks.shift(), deadlineMs: 240000 });
+  assert.deepEqual(scanned, [1]); assert.equal(report.waiting.find(item => item.number === 2).reason, 'Bounded runner time; next reconcile continues');
+});
 test('release enqueue is idempotent by frozen source/kind/version and keeps integration separate', () => {
   const state = emptyState(repo); const task = { number: 1, merge: { sha: mergedSha }, intent: { releases: [{ kind: 'ui', version: 'v1.2.3' }] } };
   enqueueReleases(state, repo, task, now); enqueueReleases(state, repo, task, now); assert.equal(Object.keys(state.releases).length, 1); assert.equal(Object.values(state.releases)[0].version, '1.2.3');
