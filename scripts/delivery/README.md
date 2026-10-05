@@ -116,6 +116,12 @@ AI 使用固定官方镜像内的 SDK，按每批最多 30 个变化路径分批
 
 Git `automation/delivery-state` 保存任务、租约、事件、尝试、AI、集成和发布证明；普通 fast-forward push 是 CAS，transaction ID 处理丢失响应。没有强推。合并响应不明暂停集成，先正向回读；声明的 UI/桌面制品发布由独立的 delivery-releases 原生流水线与 workloom-delivery-release 锁处理，不占用合并执行器。发布固定 SHA/版本，回读构建 SN/source/event/准确意图、tag/manifest/实际 SHA-512 字节；失败不跳过无关集成，不生成发布成功回执。
 
-初次安装必须有真实 bootstrap AI 审查和原仓检查；合入以后由设置权限者一次安装不可修改候选/状态保护规则、回读 main 必需检查/评审并取消额外管理员批准及同属 NPC 批准限制、写 activation 事件。候选创建者与独立 CodeBuddy 评审进程分离，只有真实 Bot 的批准与完整回执共同满足才集成。云端只有 CNB 原生令牌，不保存会话凭据。隔离副本排除，平台秘密/实盘/客户动作不在研发自动授权内。
+初次安装必须有真实 bootstrap AI 审查和原仓检查；合入以后由设置权限者一次安装不可修改候选/状态保护规则、回读 main 必需检查/评审并取消额外管理员批准及同属 NPC 批准限制、写 activation 事件。候选创建者与独立 CodeBuddy 评审进程分离，只有真实 Bot 的批准与完整回执共同满足才集成。模型子进程不继承发布 Bot 的批准令牌，合并后的结构化回执通过校验和新鲜度检查后才交给独立发布步骤。云端只有 CNB 原生令牌，不保存会话凭据。两个隔离副本按产品所有者授权在各自仓独立安装同一研发机制，业务 base-sync 仍排除它们；平台秘密、实盘和客户动作不在研发自动授权内。
 
 验证：`node --test scripts/delivery/queue.test.mjs scripts/ci/protocol-rules.test.mjs sync/merge-sync-prs.test.mjs scripts/ui-release-registration.test.mjs`。包含真实本地 bare Git 的 CAS 并发、丢失 push 回执、主干对齐/语义冲突，与 AI 覆盖、权限、过期、依赖、失败隔离和冻结发布断言。云端上线另须真实平台检查、AI 和状态回读；本地模拟不算云端成功。
+
+### CNB 语义的实际验证
+
+[官方语法手册](https://docs.cnb.cool/zh/build/grammar.html)规定：退出码 78 表示任务成功并中断当前流水线；include 的数组追加，对象合并，本地配置覆盖引用配置。因此 bootstrap 在非安装分支退出 78 不跳过产品流水线，追加 include 保留既有数组门禁。[真实首装构建 cnb-dm0-1k4545ojq](https://cnb.cool/workloom-ai/workloom-im/-/build/logs/cnb-dm0-1k4545ojq)实际出现 bootstrap、static、db、ui 四条流水线，三条原有门禁成功，AI 失败独立阻断了安装；这证明解析和触发边界，不代表当时 AI 通过或已上线。
+
+CI 迁移判断还覆盖变化的 scripts/、sync/、governance/scripts/、本地 CI include 与依赖输入；每个条目的 id 绑定准确旧、新 Git ref 和路径。每项分配给唯一批次，再核对完整合集。流水线名称保持不变不能作为省略脚本迁移回执的理由。

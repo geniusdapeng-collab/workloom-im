@@ -130,11 +130,11 @@ pnpm 10.14 对 URL tarball 生成的 lockfile 只登记 `resolution.tarball`，�
 
 ## 自动化与凭据（当前 CNB 通道）
 
-当前有效执行器是 `.cnb.yml`：每 30 分钟调用 `fanout-cnb.mjs` 与 `merge-sync-prs.mjs`，新仓扫描与 OSS 扫描按该文件的 crontab。`.github/workflows/*` 留作历史模板和部分发布策略校验源，文件存在不代表 GitHub 通道仍在运行。
+当前有效执行器是 `.cnb.yml`：基座每 30 分钟调用 `fanout-cnb.mjs` 创建受控同步 PR；各仓 `scripts/delivery/cnb.yml` 按目标分支事件与每 5 分钟恢复。兼容入口 `merge-sync-prs.mjs` 只派发 trusted-main 执行器，fanout 失败不占用仓级集成或发布锁。新仓扫描与 OSS 扫描按相应流水线的 crontab。`.github/workflows/*` 留作历史模板和部分发布策略校验源，文件存在不代表 GitHub 通道仍在运行。
 
 - `@workloom/ui` 以同版本 CNB Release 的不可变 tarball 分发；rollout 对本地 pack、登记 SRI 和下载字节做三方比较。下载失败、同版本异内容或散列不匹配即阻断。
 - `fanout-cnb.mjs` 先固定基座 commit，逐仓生成同步分支和 PR；公共机制、行业资产与隔离副本边界由 `base-scope.json` 和 `child-repos.json` 执行。
-- `merge-sync-prs.mjs` 在合并前重新回读 source/base HEAD、完整路径、risk 标签、平台 mergeable 状态及非空状态检查。治理文件不进入无人值守合并白名单，必须获得当前任务的明确审查授权；普通 PR 仍受平台评审规则约束。
+- 同步 PR 与普通代码进入同一不可修改候选和独立 AI 审查通道；门禁绑定当前 source/main 双亲、完整范围、risk 标签与精确 CI 迁移回执。正常协议、治理和 CI 研发由真正 CodeBuddy Bot 批准，不等待用户逐 PR 点击；真实资金、秘密与不可逆经营动作仍需单独授权。没有免审白名单。
 - 根级 `base-sync.mjs pull --push` 和非 dry-run 的 `push` 模式已 fail-closed；所有远端落地都走任务分支和 PR，门禁全绿后串行合并，合后回读。
 - 同步计划、污染检查、只含白名单的暂存、秘密扫描和事务回滚仍由引擎执行；`--no-commit` 只把审查结果留在本地。
 - 凭据只进入需要认证的进程环境：限定 `https://cnb.cool/` 的一次性 HTTP header，不写 remote URL、Git config、脚本、日志或 PR。只读公开 GitHub 上游保持匿名。成功、失败及 dry-run 都清理临时 clone。
