@@ -16,6 +16,7 @@ import { batchEnvironment, batchSnapshot, combineBatchResults, reviewBatches, re
 import { ensureStateProtection, prepareInstallation, requireTrustedRunner, verifyInstallerChecks, verifyPreparedInstallation } from './queue-runner.mjs';
 import { verifyReleaseSource } from './release-source.mjs';
 import { modelGateway } from './model-gateway.mjs';
+import { randomUUID } from 'node:crypto';
 const repo = 'workloom-ai/test'; const head = 'a'.repeat(40); const main = 'b'.repeat(40); const mergedSha = 'c'.repeat(40); const testedSha = 'd'.repeat(40); const now = 10_000_000;
 const policy = { ...BASE_POLICY, hash: 'policy-1', requiredNames: ['static-gate'] };
 const intent = { ready: true, dependsOn: [], releases: [], taskId: null };
@@ -214,20 +215,20 @@ test('model tool subprocess excludes approval and unrelated secrets without muta
   assert.equal(env.CNB_TOKEN_FOR_CODEBUDDY, 'approve'); assert.equal(env.CNB_TOKEN_FOR_AI, 'approve2');
 });
 test('model broker streams only allowed AI routes and never reflects credentials or backend error bodies', async t => {
-  const calls = []; let fail = false;
-  const broker = await modelGateway({ repo, token: 'test-broker-only', request: async (url, options) => {
+  const calls = []; let fail = false; const fixtureToken = `test-only-${randomUUID()}`;
+  const broker = await modelGateway({ repo, token: fixtureToken, request: async (url, options) => {
     calls.push({ url, options });
-    return fail ? new Response('backend exposes test-broker-only', { status: 401 }) : new Response('data: model-output\n\n', { headers: { 'content-type': 'text/event-stream' } });
+    return fail ? new Response(`backend exposes ${fixtureToken}`, { status: 401 }) : new Response('data: model-output\n\n', { headers: { 'content-type': 'text/event-stream' } });
   } }); t.after(() => broker.close());
   const ask = path => fetch(broker.url + path, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer model-input' }, body: '{}' });
   assert.equal(await (await ask('/v1/messages?beta=true')).text(), 'data: model-output\n\n');
   assert.equal(calls[0].url, `https://api.cnb.cool/${repo}/-/ai/v1/messages?beta=true`);
-  assert.equal(calls[0].options.headers.authorization, 'Bearer test-broker-only');
+  assert.equal(calls[0].options.headers.authorization, `Bearer ${fixtureToken}`);
   assert.equal(calls[0].options.redirect, 'error');
   for (const path of ['/pulls/1/merge', '/git/branches', '/v1/messages%2f..%2fmerge']) assert.equal((await ask(path)).status, 403);
   assert.equal((await fetch(broker.url + '/v1/messages')).status, 403);
   assert.equal(calls.length, 1);
-  fail = true; const denied = await ask('/chat/completions'); assert.equal(denied.status, 401); assert.doesNotMatch(await denied.text(), /test-broker-only|backend exposes/);
+  fail = true; const denied = await ask('/chat/completions'); assert.equal(denied.status, 401); const errorBody = await denied.text(); assert.ok(!errorBody.includes(fixtureToken)); assert.doesNotMatch(errorBody, /backend exposes/);
   await assert.rejects(modelGateway({ repo, token: 'test-only', endpoint: 'https://elsewhere.example' }), /identity/);
 });
 test('CI review receipts are assigned to the responsible batch and collected without omission or duplication', () => {
