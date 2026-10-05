@@ -87,6 +87,7 @@ export async function finishReview({ platform, store, policy, root, stateless = 
     }
     const latest = await platform.snapshot(manifest.snapshot.number, policy, { checks: false });
     if (latest.headSha !== manifest.snapshot.headSha || latest.mainSha !== manifest.snapshot.mainSha || latest.pull.state !== 'open') throw new Error('Review result expired while AI was running');
+    if (stateless && !(await store.read()).events.some(event => event.kind === 'installation_prepared' && event.data.installer === latest.number && event.data.headSha === latest.headSha && event.data.mainSha === latest.mainSha)) throw new Error('Installer ledger must be prepared for the exact source/main before merge');
     const receipt = validateReview(output, latest, policy.hash);
     // Dependencies cannot be silently dropped by the model.
     receipt.dependsOn = [...new Set([...latest.intent.dependsOn, ...receipt.dependsOn])];

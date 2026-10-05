@@ -239,6 +239,9 @@ test('installer updates cancel only their own obsolete bootstrap review and do n
   const ordinary = YAML.parse(await readFile(new URL('./cnb.yml', import.meta.url), 'utf8'))['.delivery-review'];
   assert.equal(bootstrap.lock.key, 'workloom-delivery-bootstrap-$CNB_PULL_REQUEST_IID'); assert.equal(bootstrap.lock['cancel-in-progress'], true);
   assert.notEqual(bootstrap.lock.key, ordinary.lock.key); assert.notEqual(ordinary.lock['cancel-in-progress'], true);
+  const names = bootstrap.stages.map(stage => stage.name);
+  assert.ok(names.indexOf('Prepare protected ledger before installer approval') > names.indexOf('Snapshot exact source and main'));
+  assert.ok(names.indexOf('Prepare protected ledger before installer approval') < names.indexOf('Genuine independent CodeBuddy review'));
 });
 test('real review orchestration caps concurrent batches and withholds decisions on incomplete coverage or drift', async t => {
   const root = await temporary(t, 'delivery-batch-'); const directory = join(root, '.delivery-review/snapshot-x'); await mkdir(directory, { recursive: true });
