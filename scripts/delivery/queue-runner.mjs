@@ -122,14 +122,6 @@ export async function activate({ platform, store, root, installer }) {
   if (!installer || installer.is_merged !== true) throw new Error('Activation requires a real installer merge receipt');
   const installationState = await store.read();
   const policy = await loadPolicy(root);
-  if (command === 'admit') {
-    await requireTrustedRunner(platform, root, process.env, 'workloom-delivery-admission');
-    if (!(await store.read()).events.some(event => event.kind === 'activated')) { console.log(JSON.stringify({ waiting: 'Verified activation is required' })); return; }
-    const snapshot = await platform.snapshot(number, policy, { checks: false });
-    if (snapshot.pull.state !== 'open' || snapshot.checkErrors.length) throw new Error('Source admission requires a current PR and preserved required CI');
-    const result = await store.mutate(state => admitSource(state, snapshot), { id: `source-admit:${number}:${snapshot.headSha}:${snapshot.mainSha}` });
-    console.log(JSON.stringify({ number, headSha: snapshot.headSha, mainSha: snapshot.mainSha, revision: result.state.revision, admitted: true })); return;
-  }
   const statuses = await platform.call(`/-/pulls/${installer.number}/commit-statuses`);
   const tested = await platform.commit(statuses.sha);
   const preparation = verifyInstallerChecks({ state: installationState, installer, statuses, tested, requiredNames: policy.requiredNames });
@@ -188,6 +180,15 @@ export async function main() {
     console.log(JSON.stringify({ number, headSha: actual.head?.sha, handedOff: true, draft: actual.is_wip })); return;
   }
   const policy = await loadPolicy(root);
+  if (command === 'admit') {
+    if (!Number.isSafeInteger(number) || number <= 0) throw new Error('Source admission requires --pr');
+    await requireTrustedRunner(platform, root, process.env, 'workloom-delivery-admission');
+    if (!(await store.read()).events.some(event => event.kind === 'activated')) { console.log(JSON.stringify({ waiting: 'Verified activation is required' })); return; }
+    const snapshot = await platform.snapshot(number, policy, { checks: false });
+    if (snapshot.pull.state !== 'open' || snapshot.checkErrors.length) throw new Error('Source admission requires a current PR and preserved required CI');
+    const result = await store.mutate(state => admitSource(state, snapshot), { id: `source-admit:${number}:${snapshot.headSha}:${snapshot.mainSha}` });
+    console.log(JSON.stringify({ number, headSha: snapshot.headSha, mainSha: snapshot.mainSha, revision: result.state.revision, admitted: true })); return;
+  }
   if (command === 'prepare-install') {
     if (!Number.isSafeInteger(number) || number <= 0) throw new Error('Preparation requires installer --pr');
     console.log(JSON.stringify(await prepareInstallation({ platform, store, root, installer: await platform.pull(number) }), null, 2)); return;
@@ -227,7 +228,7 @@ export async function main() {
     if (report.some(item => ['parked', 'unknown', 'failed', 'timeout_running'].includes(item.status))) process.exitCode = 1;
     return;
   }
-  throw new Error('Usage: queue-runner.mjs status|lease|handoff|review-prepare|review-finish|prepare-install|verify-install|activate|reconcile|releases [--repo org/name]');
+  throw new Error('Usage: queue-runner.mjs status|lease|handoff|admit|review-prepare|review-finish|prepare-install|verify-install|activate|reconcile|releases [--repo org/name]');
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(error => { console.error(redactCredentials(error.message)); process.exitCode = 1; });

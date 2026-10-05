@@ -447,6 +447,48 @@ test('state preparation initializes a protected ledger before merge without acti
   rules[0].allow_master_force_pushes = true; await assert.rejects(ensureStateProtection(platform), /protection/);
   await assert.rejects(prepareInstallation({ platform, store, root, installer: { ...installer, head: { sha: head } } }), /checkout/);
 });
+test('actual activate and admit CLI routes write and read back the real Git ledger with exact API fixtures', async t => {
+  const root = await temporary(t, 'delivery-cli-contract-'); const remote = join(root, 'remote.git'); const checkout = join(root, 'checkout');
+  await mkdir(checkout); await mkdir(join(checkout, 'scripts/delivery'), { recursive: true });
+  const ci = 'include: scripts/delivery/cnb.yml\nmain:\n  pull_request:\n    - name: static-gate\n      stages: [{name: assertions, script: actual-check}]\n';
+  const included = 'main:\n  push: []\n';
+  await writeFile(join(checkout, '.cnb.yml'), ci); await writeFile(join(checkout, 'scripts/delivery/cnb.yml'), included);
+  await git(['init', '--quiet'], { cwd: checkout }); await git(['add', '.'], { cwd: checkout }); await git(['commit', '-m', 'initial main'], { cwd: checkout });
+  const preparedMain = await git(['rev-parse', 'HEAD'], { cwd: checkout });
+  await git(['commit', '--allow-empty', '-m', 'installer source'], { cwd: checkout }); const tip = await git(['rev-parse', 'HEAD'], { cwd: checkout });
+  await git(['init', '--bare', '--quiet', remote]); const store = new GitStateStore({ repo, remote });
+  await store.mutate(state => appendEvent(state, 'installation_prepared', { installer: 234, headSha: tip, mainSha: preparedMain }));
+  const { branchProtectionPayload } = await import('../tools/cnb-api.mjs');
+  const rules = [
+    { ...branchProtectionPayload({ requireReview: false }), id: 'main', allow_master_manual_merge: false },
+    { ...branchProtectionPayload({ rule: 'automation/delivery-state', requireReview: false }), id: 'state', allow_master_pushes: true, required_status_checks: false },
+    { ...branchProtectionPayload({ rule: 'delivery/candidate/**', requireReview: false }), id: 'candidate', required_status_checks: false },
+  ];
+  const installer = { number: '234', is_merged: true, author: { username: 'developer' }, head: { sha: tip } };
+  const admissionPull = { ...snapshot().pull, base: { ref: 'main', sha: tip } };
+  const fixture = {
+    tip, ci, included, rules, installer, admissionPull,
+    statuses: { sha: testedSha, statuses: ['static-gate', 'delivery-bootstrap-review'].map(name => ({ context: `cnb/pull_request/pipeline-1(${name})`, state: 'success' })) },
+    tested: { sha: testedSha, parents: [{ sha: preparedMain }, { sha: tip }] },
+    reviews: [{ id: 'genuine-fixture-review', state: 'approved', author: { username: 'CodeBuddy', is_npc: true }, created_at: new Date().toISOString() }],
+    compare: { base_commit: { sha: tip }, head_commit: { sha: head }, merge_base_commit: { sha: tip }, files: [{ path: 'scripts/ci/contract.mjs' }] },
+  };
+  const prelude = `const f=${JSON.stringify(fixture)};globalThis.fetch=async input=>{const u=new URL(String(input));const p=u.pathname;let v;if(p.endsWith('/git/branches/main'))v={commit:{sha:f.tip}};else if(p.endsWith('/pulls/234'))v=f.installer;else if(p.endsWith('/pulls/1'))v=f.admissionPull;else if(p.endsWith('/commit-statuses'))v=f.statuses;else if(p.includes('/settings/branch-protections'))v=f.rules;else if(p.endsWith('/reviews'))v=f.reviews;else if(p.includes('/git/compare/'))v=f.compare;else if(p.includes('/git/raw/'))v=p.endsWith('/.cnb.yml')?f.ci:f.included;else if(p.endsWith('/git/commits/${testedSha}'))v=f.tested;else if(p.includes('/git/commits/'))v={commit:{committer:{date:'2026-01-01T00:00:00Z'}}};else throw new Error('Unexpected CLI API fixture '+p);return new Response(JSON.stringify(v),{status:200});};`;
+  const configuration = join(root, 'gitconfig');
+  await writeFile(configuration, `[url "${remote}"]\n\tinsteadOf = https://cnb.cool/${repo}.git\n`);
+  const cli = fileURLToPath(new URL('./queue-runner.mjs', import.meta.url));
+  const run = (command, number, extra = {}) => spawnSync(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(prelude)}`, cli, command, '--repo', repo, '--root', checkout, '--pr', String(number)], {
+    cwd: checkout, env: { ...process.env, CNB_TOKEN: randomUUID(), GIT_CONFIG_GLOBAL: configuration, GIT_CONFIG_NOSYSTEM: '1', ...extra }, encoding: 'utf8', timeout: 30000,
+  });
+  const activated = run('activate', 234); assert.equal(activated.status, 0, activated.stderr); assert.equal(JSON.parse(activated.stdout).mainSha, tip);
+  assert.ok((await store.read()).events.some(event => event.kind === 'activated' && event.data.installer === 234 && event.data.mainSha === tip));
+  assert.equal((await store.read()).events.some(event => event.kind === 'source_admitted'), false);
+  const env = { CNB_BUILD_ID: 'fixture-build', CNB_EVENT: 'api_trigger_delivery_admit', DELIVERY_NATIVE_LOCK: 'workloom-delivery-admission' };
+  const rejected = run('admit', 0, env); assert.equal(rejected.status, 1); assert.match(rejected.stderr, /requires --pr/);
+  const admitted = run('admit', 1, env); assert.equal(admitted.status, 0, admitted.stderr); assert.equal(JSON.parse(admitted.stdout).admitted, true);
+  const actual = await store.read(); assert.deepEqual(admissionErrors(actual, { number: 1, headSha: head, mainSha: tip, files: ['scripts/ci/contract.mjs'] }), []);
+  assert.equal(actual.leases.protocol.owner, null);
+});
 test('frozen release requires exact checkout and positive main ancestry, without updating its source', async () => {
   const calls = []; const env = { CNB_TOKEN: 'test-only', CNB_REPO_SLUG: repo, RELEASE_EXPECTED_SHA: head };
   const run = async argv => { calls.push(argv); return argv[0] === 'rev-parse' ? head : ''; };
