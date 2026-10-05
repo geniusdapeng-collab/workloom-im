@@ -508,6 +508,21 @@ test('unknown merge acknowledgement pauses later integration; never repeats the 
   await assert.rejects(mergeCandidate({ platform, store, policy, snapshot: s, dependencies: new Map([[1, { pending: [] }]]), now }), /lost/); assert.equal(writes, 1); assert.equal((await store.read()).tasks['1'].status, 'merging');
   const report = await reconcile({ platform, store, policy, now, services: { reconcileReleases: async () => [] } }); assert.equal(report.failed[0].stage, 'recover-merge'); assert.equal(writes, 1);
 });
+test('an explicit 409 with positive unmerged readback releases integration while unreadable or changed readbacks stay unknown', async () => {
+  for (const mode of ['rejected', 'unreadable', 'changed']) {
+    const s = snapshot(11, { files: ['scripts/ci/protocol-rules.mjs'] }); s.originNumber = 1; s.pull.head.ref = 'delivery/candidate/test';
+    const state = activate(emptyState(repo)); updateTask(state, 1, { status: 'waiting_ci', headSha: head, mainSha: main, originalBody: '', intent, review: review(s) }, now);
+    const store = memoryStore(state); let writes = 0;
+    const platform = { repo, assertCandidateProtection: async () => {}, snapshot: async () => s, error: error => error.message,
+      pull: async number => { if (number === 1) return snapshot().pull; if (mode === 'unreadable') throw new Error('read denied'); return { ...s.pull, is_merged: false, head: { ...s.pull.head, sha: mode === 'changed' ? main : head } }; },
+      merge: async () => { writes++; throw Object.assign(new Error('platform rejected'), { status: 409 }); } };
+    await assert.rejects(mergeCandidate({ platform, store, policy, snapshot: s, dependencies: new Map(), now }), /platform rejected/);
+    const after = await store.read(); assert.equal(writes, 1);
+    assert.equal(after.tasks['1'].status, mode === 'rejected' ? 'waiting_ci' : 'merging');
+    assert.equal(after.leases.protocol.owner, mode === 'rejected' ? null : 'integration/pr-1');
+    assert.equal(after.events.some(event => event.kind === 'merge_rejected'), mode === 'rejected');
+  }
+});
 test('sensitive integration always acquires a fenced lease, even when developers did not opt in', async () => {
   const s = snapshot(11, { files: ['scripts/ci/protocol-rules.mjs'] }); s.originNumber = 1; s.pull.head.ref = 'delivery/candidate/test';
   const original = snapshot(1, { files: s.files }); const state = activate(emptyState(repo));

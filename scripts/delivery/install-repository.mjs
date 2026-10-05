@@ -116,6 +116,55 @@ export async function traceInstallerMerge(platform, snapshot) {
   throw new Error('Installation merge cannot be traced to its exact tested parents');
 }
 
+/** CNB retains creation-time PR policy. A reviewed first install can need a new PR under the verified AI policy. */
+export async function refreshInstallerPolicy({ platform, store, root, pull, preparation, approval, prepare = preparePropagated }) {
+  await configureAutomaticReviewPolicy(platform, { independentApproval: approval, preparation });
+  await freezeInstallerSource(platform, pull);
+  const current = await platform.pull(pull.number);
+  if (current.is_merged || current.head?.sha !== preparation.headSha || current.body !== pull.body || (await platform.main()).commit?.sha !== preparation.mainSha) throw new Error('Installation changed before policy refresh');
+  const branch = `chore/protocol-onboarding-delivery-policy-${hash({ number: pull.number, head: preparation.headSha, main: preparation.mainSha }).slice(0, 24)}`;
+  const path = `/-/git/branches/${encodeURIComponent(branch)}`;
+  let ref;
+  try { ref = await platform.call(path); } catch (error) { if (error.status !== 404) throw error; }
+  if (!ref) {
+    try { await platform.call('/-/git/branches', { method: 'POST', body: { name: branch, start_point: preparation.headSha } }); }
+    catch (error) { try { ref = await platform.call(path); } catch { throw error; } }
+  }
+  ref = await platform.call(path);
+  if (ref.commit?.sha !== preparation.headSha) throw new Error('Refreshed installation branch differs from the reviewed source');
+  await freezeInstallerSource(platform, { head: { sha: preparation.headSha, ref: branch } });
+  const marker = `installer-policy-refresh:${pull.number}:${preparation.headSha}:${preparation.mainSha}`;
+  const replacement = await createOnce({ list: () => platform.list('/-/pulls?state=all&base_ref=main'), match: item => branchName(item.head?.ref) === branch && String(item.body).includes(`<!-- ${marker} -->`),
+    create: () => platform.call('/-/pulls', { method: 'POST', body: { head: branch, base: 'main', title: pull.title, body: `${pull.body}\n\n<!-- ${marker} -->\n\n同一准确源码在现行 AI 交付规则下重新执行完整独立审查与原有门禁，真实合入后关闭被替代 #${pull.number}，源分支保留。` } }) });
+  const number = Number(replacement.number);
+  if (!Number.isSafeInteger(number) || number <= 0 || number === pull.number) throw new Error('Refreshed installer identity is invalid');
+  await prepare({ platform, store, root, number, expected: preparation.headSha });
+  await store.mutate(state => appendEvent(state, 'installer_replacement', { number: pull.number, replacement: number, headSha: preparation.headSha, mainSha: preparation.mainSha }), { id: `installer-replacement:${pull.number}:${number}` });
+  return { repo: platform.repo, number, supersededNumber: pull.number, status: 'waiting_checks', headSha: preparation.headSha };
+}
+
+export function pendingInstallerMerge(state, number) {
+  const request = state.events.findLast(event => event.kind === 'installer_merge_requested' && event.data.number === number);
+  if (!request) return null;
+  return state.events.some(event => event.sequence > request.sequence && event.kind === 'installer_merge_rejected' && event.data.number === number && event.data.headSha === request.data.snapshot.headSha && event.data.verifiedUnmerged === true) ? null : request;
+}
+
+async function closeReplacedInstallers(platform, store, number, receipt) {
+  const targets = new Set([number]); const events = (await store.read()).events.filter(event => event.kind === 'installer_replacement');
+  for (let depth = 0; depth < 3; depth++) for (const event of events) if (targets.has(event.data.replacement)) targets.add(event.data.number);
+  for (const event of events.filter(event => targets.has(event.data.replacement))) {
+    const original = await platform.pull(event.data.number);
+    if (original.is_merged || original.head?.sha !== receipt.sourceSha || event.data.headSha !== receipt.sourceSha) throw new Error('Superseded installation source differs from verified integration');
+    const marker = `installer-superseded:${original.number}:${receipt.sha}`;
+    if (original.state !== 'closed') {
+      if (!(await platform.list(`/-/pulls/${original.number}/comments`)).some(comment => String(comment.body).includes(marker))) await platform.comment(original.number, `准确源码已通过 #${number} 的真实 AI/门禁并合入 ${receipt.sha}，此安装 PR 被替代；源分支保留。\n\n<!-- ${marker} -->`);
+      await platform.call(`/-/pulls/${original.number}`, { method: 'PATCH', body: { state: 'closed' } });
+      if ((await platform.pull(original.number)).state !== 'closed') throw new Error('Superseded installer closure did not read back');
+    }
+    await store.mutate(state => appendEvent(state, 'installer_replacement_closed', { number: original.number, replacement: number, sha: receipt.sha }), { id: `installer-replacement-closed:${original.number}:${number}` });
+  }
+}
+
 export async function prepareRepository({ repo, token, sourceRoot, sourceSha, sourceRepo = SOURCE_REPO, checkout, platform = new Platform(repo, token), store = new GitStateStore({ repo, token }), assets, now = new Date() }) {
   if (!validRepoSlug(repo) || !SHA_RE.test(sourceSha ?? '') || !token) throw new Error('Invalid privileged installation identity');
   const remote = `https://cnb.cool/${repo}.git`;
@@ -137,9 +186,11 @@ export async function prepareRepository({ repo, token, sourceRoot, sourceSha, so
     const plan = await installationPlan({ root, assets: packageAssets, sourceRepo, sourceSha, repo });
     if (!plan.changes.size) {
       const state = await store.read();
-      return { repo, status: state.events.some(event => event.kind === 'activated') ? 'active' : 'prepared', mainSha, packageHash: plan.marker.packageHash };
+      const activation = state.events.findLast(event => event.kind === 'activated');
+      const pendingClosure = state.events.some(event => event.kind === 'installer_replacement' && !state.events.some(closed => closed.kind === 'installer_replacement_closed' && closed.data.number === event.data.number && closed.data.replacement === event.data.replacement));
+      return { repo, status: activation && !pendingClosure ? 'active' : activation ? 'merged_pending_activation' : 'prepared', ...(activation && pendingClosure ? { number: activation.data.installer } : {}), mainSha, packageHash: plan.marker.packageHash };
     }
-    const branch = `chore/protocol-onboarding-delivery-${plan.marker.packageHash.slice(0, 16)}`;
+    const branch = `chore/protocol-onboarding-delivery-${plan.marker.packageHash.slice(0, 16)}-${mainSha.slice(0, 12)}`;
     const marker = `delivery-install:${plan.marker.packageHash}`;
     const existingPulls = [...await platform.list('/-/pulls?state=open&base_ref=main'), ...await platform.list('/-/pulls?state=closed&base_ref=main')];
     const prior = existingPulls.filter(p => branchName(p.head?.ref) === branch && String(p.body).includes(marker));
@@ -198,9 +249,15 @@ export async function prepareRepository({ repo, token, sourceRoot, sourceSha, so
 }
 
 /** A first install uses genuine bootstrap CI/AI; a native candidate handles every later development merge. */
-export async function finishInstallation({ repo, token, number, root, platform = new Platform(repo, token), store = new GitStateStore({ repo, token }) }) {
+export async function finishInstallation({ repo, token, number, root, platform = new Platform(repo, token), store = new GitStateStore({ repo, token }), policyRefreshDepth = 0 }) {
+  if (policyRefreshDepth >= 3) throw new Error('Installation policy refresh exceeds the recovery budget');
   let pull = await platform.pull(number);
   const state = await store.read();
+  const replacement = state.events.findLast(event => event.kind === 'installer_replacement' && event.data.number === number);
+  if (replacement) {
+    if (replacement.data.headSha !== pull.head?.sha) throw new Error('Replacement belongs to another original source');
+    return finishInstallation({ repo, token, number: replacement.data.replacement, root, platform, store, policyRefreshDepth: policyRefreshDepth + 1 });
+  }
   if (state.events.some(event => event.kind === 'activated')) {
     const task = state.tasks[String(number)];
     if (!task?.merge || task.merge.sourceSha !== pull.head?.sha || !task.mergeSnapshot) return { repo, number, status: 'waiting_native_delivery' };
@@ -211,10 +268,11 @@ export async function finishInstallation({ repo, token, number, root, platform =
     const mainSha = (await platform.main()).commit?.sha;
     await git(['merge-base', '--is-ancestor', receipt.sha, mainSha], { cwd: root });
     await platform.assertCandidateProtection();
+    await closeReplacedInstallers(platform, store, number, receipt);
     await store.mutate(s => appendEvent(s, 'installation_updated', { installer: number, merge: receipt, mainSha }), { id: `install-updated:${number}:${receipt.sha}` });
     return { repo, number, status: 'active', mainSha, nativeHandled: true, integration: receipt };
   }
-  const pending = state.events.findLast(event => event.kind === 'installer_merge_requested' && event.data.number === number);
+  const pending = pendingInstallerMerge(state, number);
   if (pending && !state.tasks[String(number)]?.merge) {
     const receipt = await traceInstallerMerge(platform, pending.data.snapshot);
     await store.mutate(s => updateTask(s, number, { status: 'integrated', headSha: receipt.sourceSha, intent: parseIntent(pull), merge: receipt, mergeSnapshot: pending.data.snapshot }));
@@ -234,6 +292,8 @@ export async function finishInstallation({ repo, token, number, root, platform =
     if (mainSha !== tested.parents[0].sha || pull.base?.sha !== mainSha || pull.mergeable_state !== 'mergeable') return { repo, number, status: 'waiting_alignment' };
     if (await git(['rev-parse', 'HEAD'], { cwd: root }) !== pull.head.sha) throw new Error('Installation merge checkout differs from the exact reviewed source');
     if ((await store.read()).events.some(event => event.kind === 'activated')) throw new Error('An active repository must route subsequent updates through its native immutable candidate');
+    const mainRule = (await platform.protections()).find(rule => rule.rule === 'main');
+    if (mainRule?.required_pull_request_reviews === true || mainRule?.required_master_approve === true || state.events.some(event => event.kind === 'installer_merge_rejected' && event.data.number === number && event.data.headSha === pull.head.sha && event.data.verifiedUnmerged === true)) return refreshInstallerPolicy({ platform, store, root, pull, preparation, approval });
     await configureAutomaticReviewPolicy(platform, { independentApproval: approval, preparation });
     await freezeInstallerSource(platform, pull);
     const snapshot = { number, pull, headSha: pull.head.sha, mainSha, checkSha: statuses.sha };
@@ -244,7 +304,13 @@ export async function finishInstallation({ repo, token, number, root, platform =
     try { result = await platform.merge(snapshot); }
     catch (error) {
       pull = await platform.pull(number);
-      if (!pull.is_merged) throw error;
+      if (!pull.is_merged) {
+        if (error.status === 409 && pull.is_merged === false && pull.head?.sha === snapshot.headSha) {
+          await store.mutate(s => appendEvent(s, 'installer_merge_rejected', { number, headSha: snapshot.headSha, httpStatus: 409, verifiedUnmerged: true }));
+          return refreshInstallerPolicy({ platform, store, root, pull, preparation, approval });
+        }
+        throw error;
+      }
       const recovered = await traceInstallerMerge(platform, snapshot); result = { sha: recovered.sha };
     }
     const receipt = await platform.verifyMerge(snapshot, result);
@@ -258,6 +324,7 @@ export async function finishInstallation({ repo, token, number, root, platform =
   const activation = await activate({ platform, store, root, installer: pull });
   const after = await store.read();
   if (!after.events.some(event => event.kind === 'activated' && event.data.installer === number && event.data.mainSha === activation.mainSha)) throw new Error('Installation activation did not read back');
+  await closeReplacedInstallers(platform, store, number, completed.merge);
   return { ...activation, number, status: 'active' };
 }
 

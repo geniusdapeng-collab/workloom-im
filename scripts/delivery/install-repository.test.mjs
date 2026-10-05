@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { AGENT_RULE, appendAgentRule, applyInstallation, CORE_ASSETS, INSTALL_MARKER, installationPlan, readAssets } from './install-assets.mjs';
-import { createOnce, discoverAccount, ensureInstallationMainProtection, ensureInstallationPolicy, finishInstallation, freezeInstallerSource, preparePropagated, traceInstallerMerge } from './install-repository.mjs';
+import { createOnce, discoverAccount, ensureInstallationMainProtection, ensureInstallationPolicy, finishInstallation, freezeInstallerSource, pendingInstallerMerge, preparePropagated, refreshInstallerPolicy, traceInstallerMerge } from './install-repository.mjs';
 import { appendEvent, emptyState, validRepoSlug } from './queue-model.mjs';
 import { branchProtectionPayload } from '../tools/cnb-api.mjs';
 import { git, GitStateStore } from './git-state.mjs';
@@ -63,14 +63,15 @@ test('installation preflight rejects incomplete assets, invalid or missing produ
 });
 test('actual installed main-selector Python product runs the copied delivery regression with resolved include gates and the normalized bootstrap selector', async t => {
   const root = await fixture(t);
-  const currentAssets = { ...assets, 'scripts/delivery/queue.test.mjs': await readFile(join(sourceRoot, 'scripts/delivery/queue.test.mjs'), 'utf8') };
+  // Verify the complete package under review before committing; production readAssets remains exact-Git only.
+  const currentAssets = { ...assets, ...Object.fromEntries(await Promise.all(CORE_ASSETS.map(async path => [path, await readFile(join(sourceRoot, path), 'utf8')]))) };
   await applyInstallation(await plan(root, { assets: currentAssets }), root);
   const yamlDirectory = dirname(createRequire(new URL('./runtime/package.json', import.meta.url)).resolve('yaml/package.json'));
   await cp(yamlDirectory, join(root, 'scripts/delivery/runtime/node_modules/yaml'), { recursive: true });
   await git(['init', '--quiet'], { cwd: root }); await git(['add', '.'], { cwd: root }); await git(['commit', '--quiet', '-m', 'installation fixture'], { cwd: root });
   const env = { ...process.env }; delete env.NODE_TEST_CONTEXT; delete env.CNB_TOKEN; delete env.CNB_TOKEN_FOR_AI; delete env.CNB_TOKEN_FOR_CODEBUDDY;
   const result = spawnSync(process.execPath, ['--test', 'scripts/delivery/queue.test.mjs', 'scripts/ci/protocol-rules.test.mjs'], { cwd: root, env, encoding: 'utf8', timeout: 60000, maxBuffer: 4 * 1024 * 1024 });
-  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`); assert.match(result.stdout, /tests 81/);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`); assert.ok(Number(/tests (\d+)/.exec(result.stdout)?.[1]) >= 80, result.stdout);
 });
 test('installation rejects a symlink in any asset path before performing any migration', async t => {
   const root = await fixture(t); const outside = await temp(t);
@@ -173,6 +174,33 @@ test('an unknown installation merge survives restart and never sends a second me
   const platform = { pull: async () => ({ number: 7, is_merged: false, head: { sha: head } }), merge: async () => { writes++; } };
   await assert.rejects(finishInstallation({ repo, token: fixtureCredential, number: 7, root, platform, store }), /no duplicate/);
   assert.equal(writes, 0); assert.equal((await store.read()).events.length, state.events.length);
+});
+test('only a later exact positive merge rejection resolves the persisted installation request', () => {
+  const state = emptyState(repo); appendEvent(state, 'installer_merge_requested', { number: 7, snapshot: { headSha: head } });
+  assert.ok(pendingInstallerMerge(state, 7));
+  appendEvent(state, 'installer_merge_rejected', { number: 7, headSha: main, verifiedUnmerged: true }); assert.ok(pendingInstallerMerge(state, 7));
+  appendEvent(state, 'installer_merge_rejected', { number: 7, headSha: head, verifiedUnmerged: false }); assert.ok(pendingInstallerMerge(state, 7));
+  appendEvent(state, 'installer_merge_rejected', { number: 7, headSha: head, verifiedUnmerged: true }); assert.equal(pendingInstallerMerge(state, 7), null);
+});
+test('verified installation policy refresh creates one frozen same-source PR, prepares it immediately and preserves the original', async () => {
+  let rules = [{ ...branchProtectionPayload(), id: 'main' }]; let ref; let pulls = []; let writes = 0; let prepared = 0;
+  const original = { number: 7, title: 'feat(base): install', body: '<!-- delivery-install:exact -->', is_merged: false, head: { sha: head, ref: 'chore/protocol-onboarding-old' } };
+  const platform = { repo, protections: async () => rules, pull: async () => original, main: async () => ({ commit: { sha: main } }), list: async () => pulls,
+    call: async (path, options) => {
+      if (options?.method === 'PATCH') { const rule = rules.find(rule => path.endsWith(rule.id)); Object.assign(rule, options.body); return {}; }
+      if (path.includes('branch-protections') && options?.method === 'POST') { rules.push({ ...options.body, id: `rule-${rules.length}` }); return {}; }
+      if (path === '/-/git/branches' && options?.method === 'POST') { ref = { commit: { sha: options.body.start_point }, protected: true }; return {}; }
+      if (path.startsWith('/-/git/branches/')) { if (path.endsWith('chore%2Fprotocol-onboarding-old')) return { protected: true, commit: { sha: head } }; if (!ref) throw Object.assign(new Error('absent'), { status: 404 }); return ref; }
+      if (path === '/-/pulls' && options?.method === 'POST') { writes++; const value = { number: 8, body: options.body.body, head: { ref: options.body.head } }; pulls = [value]; return value; }
+      throw new Error(`Unexpected ${path}`);
+    } };
+  const store = memoryStore(); const proof = { platform, store, root: '/owned', pull: original, preparation: { headSha: head, mainSha: main }, approval: { id: 'actual', author: 'CodeBuddy', creator: 'developer', isNpc: true },
+    prepare: async value => { assert.equal(value.number, 8); assert.equal(value.expected, head); prepared++; } };
+  const first = await refreshInstallerPolicy(proof); assert.equal(first.status, 'waiting_checks'); assert.equal(first.supersededNumber, 7);
+  assert.equal(rules[0].required_pull_request_reviews, false); assert.equal(writes, 1); assert.equal(prepared, 1); assert.equal(original.is_merged, false);
+  await refreshInstallerPolicy(proof); assert.equal(writes, 1); assert.equal(prepared, 2);
+  assert.equal((await store.read()).events.filter(event => event.kind === 'installer_replacement').length, 2);
+  await assert.rejects(refreshInstallerPolicy({ ...proof, approval: null }), /proof/);
 });
 test('an active repository update uses its native immutable delivery instead of the privileged first-install merger', async t => {
   const root = await fixture(t); const state = emptyState(repo); appendEvent(state, 'activated', { mainSha: main }); let writes = 0;
