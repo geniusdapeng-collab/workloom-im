@@ -12,7 +12,7 @@ import {
   resolveLockOverlapMode,
   validateSubject,
 } from "./protocol-rules.mjs";
-import { activeLeaseConflicts, isPrEvent, isSelfPull, openPrFiles, readLeases, validatePrSnapshot, verifyPrFreshness } from "./verify-lock-conflict.mjs";
+import { activeLeaseConflicts, isPrEvent, isSelfPull, openPrFiles, readLeases, validatePrSnapshot, verifyPrFreshness, verifyPrLeases } from "./verify-lock-conflict.mjs";
 import { emptyState, leaseOperation, sensitiveScopes } from '../delivery/queue-model.mjs';
 
 describe("提交信息规则", () => {
@@ -100,13 +100,20 @@ describe('限时开发租约代替 open PR 永久占位', () => {
       assert.ok(sensitiveScopes([path]).length, path);
     }
   });
-  it('只阻止其他 owner 的有效敏感租约，普通文件和到期租约不阻止交付', () => {
+  it('敏感 PR 必须交接释放有效租约，普通文件和到期租约不阻止交付', () => {
     const state = emptyState('workloom-ai/workloom-im');
     leaseOperation(state, { action: 'acquire', scopes: ['protocol'], owner: 'T-2026-1005-9999', ttlMs: 60000 }, 0);
-    assert.deepEqual(activeLeaseConflicts(['scripts/ci/a.mjs'], state, 'other', 59000), ['protocol']);
-    assert.deepEqual(activeLeaseConflicts(['scripts/ci/a.mjs'], state, 'other', 60000), []);
-    assert.deepEqual(activeLeaseConflicts(['scripts/ci/a.mjs'], state, 'T-2026-1005-9999', 59000), []);
-    assert.deepEqual(activeLeaseConflicts(['apps/web/a.ts'], state, 'other', 59000), []);
+    assert.deepEqual(activeLeaseConflicts(['scripts/ci/a.mjs'], state, 59000), ['protocol']);
+    assert.deepEqual(activeLeaseConflicts(['scripts/ci/a.mjs'], state, 60000), []);
+    assert.deepEqual(activeLeaseConflicts(['apps/web/a.ts'], state, 59000), []);
+  });
+  it('未首装只阻断敏感路径；普通产品 PR 不读缺失账本', async () => {
+    let calls = 0;
+    const missing = async () => { calls++; throw Object.assign(new Error('not found'), { status: 404 }); };
+    await verifyPrLeases('workloom-ai/workloom-im', ['apps/web/product.ts'], missing);
+    assert.equal(calls, 0);
+    await assert.rejects(verifyPrLeases('workloom-ai/workloom-im', ['AGENTS.md'], missing), /DELIVERY_NOT_INSTALLED/);
+    assert.equal(calls, 2);
   });
   it('首装和已安装时缺失账本均阻断；权限/网络/账本损坏不能伪装成无占用', async () => {
     const absent = () => { throw Object.assign(new Error('not found'), { status: 404 }); };
@@ -214,7 +221,7 @@ describe("PR 锁冲突门禁的新鲜度与失败闭合", () => {
     const result = await verifyPrFreshness({ repoSlug: 'workloom-ai/workloom-im', number, branch: 'chore/protocol-onboarding-x', eventSourceSha: source, eventTargetSha: main, request });
     assert.equal(result.taskId, taskId);
     const state = emptyState('workloom-ai/workloom-im'); leaseOperation(state, { action: 'acquire', scopes: ['protocol'], owner: taskId, ttlMs: 60000 }, 0);
-    assert.deepEqual(activeLeaseConflicts(result.files, state, result.taskId, 59000), []);
+    assert.deepEqual(activeLeaseConflicts(result.files, state, 59000), ['protocol']);
     data.finalPull.body = ''; assert.match(validatePrSnapshot({ ...data, branch: 'chore/protocol-onboarding-x' }).errors.join(';'), /状态发生变化/);
   });
 

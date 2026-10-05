@@ -223,8 +223,16 @@ export async function openPrFiles(repoSlug, selfNumber, selfBranch, selfHeadSha,
 }
 
 /** Development occupation is a bounded lease, never the age or open state of a PR. */
-export function activeLeaseConflicts(files, state, owner, now = Date.now()) {
-  return sensitiveScopes(files).filter(scope => state.leases[scope]?.owner && state.leases[scope].expiresAt > now && state.leases[scope].owner !== owner);
+export function activeLeaseConflicts(files, state, now = Date.now()) {
+  // PR readiness is a handoff boundary, not a lease mutation. Even the same
+  // owner must release its live generation before CI; a reused task id grants no exemption.
+  return sensitiveScopes(files).filter(scope => state.leases[scope]?.owner && state.leases[scope].expiresAt > now);
+}
+
+export async function verifyPrLeases(repoSlug, files, request = apiJson, now = Date.now()) {
+  if (!sensitiveScopes(files).length) return;
+  const conflicts = activeLeaseConflicts(files, await readLeases(repoSlug, request), now);
+  if (conflicts.length) throw new Error(`敏感模块仍有有效开发租约：${conflicts.join(', ')}；持有者须交接释放或等待期限到期，不按 open PR 编号占锁`);
 }
 
 export async function readLeases(repoSlug, request = apiJson) {
@@ -238,9 +246,9 @@ export async function readLeases(repoSlug, request = apiJson) {
       await request(`${API}/${repoSlug}/-/git/branches/${encodeURIComponent(STATE_BRANCH)}`);
     } catch (branchError) {
       if (branchError.status !== 404) throw branchError;
-      throw new Error('租约账本缺失，拒绝按空租约放行；须先运行 prepare-install 建立受保护账本，再启用新门禁');
+      throw new Error('DELIVERY_NOT_INSTALLED：租约账本缺失，敏感改动拒绝按空租约放行；须先运行 prepare-install 建立受保护账本，再启用新门禁');
     }
-    throw new Error('租约控制分支存在但 state.json 缺失，拒绝放行');
+    throw new Error('DELIVERY_LEDGER_CORRUPT：租约控制分支存在但 state.json 缺失，拒绝放行');
   }
 }
 
@@ -330,7 +338,6 @@ async function main() {
   // PR 必须先验证实时源/目标/merge-base，再从 compare 取完整路径；不能因本地 diff 为空提前放行。
   let mine;
   let range;
-  let taskId;
   if (prEvent) {
     if (!repoSlug || !process.env.CNB_TOKEN) throw new Error("PR 事件缺少 CNB_REPO_SLUG 或 CNB_TOKEN，锁冲突门禁拒绝放行");
     const snapshot = await verifyPrFreshness({
@@ -343,7 +350,6 @@ async function main() {
     mine = snapshot.files;
     range = `${snapshot.mainSha.slice(0, 12)}...${snapshot.headSha.slice(0, 12)} (CNB compare)`;
     selfHeadSha = snapshot.headSha;
-    taskId = snapshot.taskId;
   } else {
     ({ files: mine, range } = changedFiles(base));
   }
@@ -365,8 +371,7 @@ async function main() {
 
   let others;
   if (prEvent) {
-    const conflicts = activeLeaseConflicts(mine, await readLeases(repoSlug), taskId);
-    if (conflicts.length) throw new Error(`敏感模块仍有有效开发租约：${conflicts.join(', ')}；等待期限到期或持有者交接，不按 open PR 编号占锁`);
+    await verifyPrLeases(repoSlug, mine);
   }
   try {
     const scanned = await openPrFiles(repoSlug, selfNumber, selfBranch, selfHeadSha);

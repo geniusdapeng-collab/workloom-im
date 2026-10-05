@@ -17,6 +17,7 @@ import { configureAutomaticReviewPolicy, ensureStateProtection, prepareInstallat
 import { verifyReleaseSource } from './release-source.mjs';
 import { modelGateway } from './model-gateway.mjs';
 import { randomUUID } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 const repo = 'workloom-ai/test'; const head = 'a'.repeat(40); const main = 'b'.repeat(40); const mergedSha = 'c'.repeat(40); const testedSha = 'd'.repeat(40); const now = 10_000_000;
 const policy = { ...BASE_POLICY, hash: 'policy-1', requiredNames: ['static-gate'] };
 const intent = { ready: true, dependsOn: [], releases: [], taskId: null };
@@ -134,8 +135,8 @@ test('installer activation binds tested main to the independent preparation rece
   assert.throws(() => verifyInstallerChecks({ ...input, state: emptyState(repo) }), /prepared/);
   assert.throws(() => verifyInstallerChecks({ ...input, installer: { ...installer, head: { sha: main } } }), /prepared/);
 });
-test('genuine exact AI replaces the human review counter while preserving all other main restrictions, including lost acknowledgement recovery', async () => {
-  const { branchProtectionPayload } = await import('../tools/cnb-api.mjs');
+test('genuine exact AI replaces the human review counter, removes the admin manual exception and preserves remaining restrictions including lost acknowledgement recovery', async () => {
+  const { branchProtectionPayload, validateBranchProtection } = await import('../tools/cnb-api.mjs');
   let rule = { ...branchProtectionPayload(), id: 'main-rule', required_master_approve: true }; let writes = 0;
   const platform = { protections: async () => [rule], call: async (_path, options) => { writes++; rule = { ...options.body, id: rule.id }; throw new Error('lost acknowledgement'); } };
   const proof = { independentApproval: { id: 'genuine-npc-review', author: 'CodeBuddy', creator: 'developer', isNpc: true }, preparation: { headSha: head, mainSha: main } };
@@ -143,7 +144,9 @@ test('genuine exact AI replaces the human review counter while preserving all ot
   await assert.rejects(configureAutomaticReviewPolicy(platform, { ...proof, independentApproval: { ...proof.independentApproval, creator: 'codebuddy' } }), /proof/); assert.equal(writes, 0);
   const before = { ...rule }; const after = await configureAutomaticReviewPolicy(platform, proof);
   assert.equal(after.required_pull_request_reviews, false); assert.equal(after.required_master_approve, false);
-  for (const [key, value] of Object.entries(before)) if (!['required_pull_request_reviews', 'required_master_approve'].includes(key)) assert.equal(after[key], value);
+  assert.equal(after.allow_master_manual_merge, false);
+  for (const [key, value] of Object.entries(before)) if (!['required_pull_request_reviews', 'required_master_approve', 'allow_master_manual_merge'].includes(key)) assert.equal(after[key], value);
+  assert.ok(validateBranchProtection({ ...after, allow_master_manual_merge: true }, { requireReview: false, forbidManualOverride: true }).some(error => error.includes('allow_master_manual_merge')));
   await configureAutomaticReviewPolicy(platform, proof); assert.equal(writes, 1);
   rule.allow_master_pushes = true; await assert.rejects(configureAutomaticReviewPolicy(platform, proof), /allow_master_pushes/); assert.equal(writes, 1);
 });
@@ -310,6 +313,51 @@ test('bootstrap and trusted-main AI image digests stay bound to the single polic
   const images = [trusted.main['pull_request.target'][0], prPipelines(bootstrap)[0]].flatMap(pipeline => pipeline.stages.filter(stage => stage.image).map(stage => stage.image));
   assert.deepEqual(images, [REVIEW_IMAGE, REVIEW_IMAGE]);
 });
+test('archived actual non-installer CNB run proves exit 78 preserves all independent product pipelines', async () => {
+  // Public API readback, observed 2026-10-05: all four pipelines at the exact tested parents.
+  const proof = {
+  "repo": "workloom-ai/workloom-im",
+  "number": 236,
+  "branch": "refs/heads/task/T-2026-1005-2000",
+  "sourceSha": "fd08fae3c81f3d8020cba004538fd572cec37880",
+  "mainSha": "e35625d856697ba95edf7cde8d294b35cea0de2f",
+  "testedCommit": "10f855ab502684e43135310a4d2f7de86d502727",
+  "parents": [
+    "e35625d856697ba95edf7cde8d294b35cea0de2f",
+    "fd08fae3c81f3d8020cba004538fd572cec37880"
+  ],
+  "observedAt": "2026-10-05T11:32:11.025Z",
+  "statuses": [
+    {
+      "state": "success",
+      "context": "cnb/pull_request/pipeline-1(delivery-bootstrap-review)",
+      "target_url": "https://cnb.cool/workloom-ai/workloom-im/-/build/logs/cnb-1v0-1k45smgj6#001"
+    },
+    {
+      "state": "success",
+      "context": "cnb/pull_request/pipeline-2(static-gate)",
+      "target_url": "https://cnb.cool/workloom-ai/workloom-im/-/build/logs/cnb-1v0-1k45smgj6#002"
+    },
+    {
+      "state": "success",
+      "context": "cnb/pull_request/pipeline-3(db-gate)",
+      "target_url": "https://cnb.cool/workloom-ai/workloom-im/-/build/logs/cnb-1v0-1k45smgj6#003"
+    },
+    {
+      "state": "success",
+      "context": "cnb/pull_request/pipeline-4(ui-gate)",
+      "target_url": "https://cnb.cool/workloom-ai/workloom-im/-/build/logs/cnb-1v0-1k45smgj6#004"
+    }
+  ]
+};
+  const YAML = await parser();
+  const bootstrap = YAML.parse(await readFile(new URL('./bootstrap-cnb.yml', import.meta.url), 'utf8'))['**'].pull_request[0];
+  const skipped = spawnSync('sh', ['-c', bootstrap.stages[0].script], { env: { CNB_PULL_REQUEST_BRANCH: proof.branch.replace(/^refs\/heads\//, '') }, encoding: 'utf8' });
+  assert.equal(skipped.status, 78);
+  assert.deepEqual(checksVerdict({ sha: proof.testedCommit, statuses: proof.statuses }, { sha: proof.testedCommit, parents: proof.parents.map(sha => ({ sha })) }, { headSha: proof.sourceSha, mainSha: proof.mainSha }, ['delivery-bootstrap-review', 'static-gate', 'db-gate', 'ui-gate']), []);
+  assert.equal(new Set(proof.statuses.map(status => status.target_url.split('#')[0])).size, 1);
+});
+
 test('installer updates cancel only their own obsolete bootstrap review and do not share the ordinary review lock', async () => {
   const YAML = await parser();
   const bootstrap = prPipelines(YAML.parse(await readFile(new URL('./bootstrap-cnb.yml', import.meta.url), 'utf8')))[0];

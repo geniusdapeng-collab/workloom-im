@@ -98,13 +98,13 @@ export async function configureAutomaticReviewPolicy(platform, { independentAppr
   const errors = validateBranchProtection(main, { requireReview: false });
   if (errors.length) throw new Error(errors.join('; '));
   const { id, ...prior } = main;
-  if (main.required_pull_request_reviews !== false || main.required_master_approve !== false || main.forbid_approve_pull_created_by_own_npc !== true) {
-    const expected = { ...prior, required_pull_request_reviews: false, required_master_approve: false, forbid_approve_pull_created_by_own_npc: true };
+  if (main.required_pull_request_reviews !== false || main.required_master_approve !== false || main.forbid_approve_pull_created_by_own_npc !== true || main.allow_master_manual_merge !== false) {
+    const expected = { ...prior, required_pull_request_reviews: false, required_master_approve: false, forbid_approve_pull_created_by_own_npc: true, allow_master_manual_merge: false };
     let failure;
     try { await platform.call(`/-/settings/branch-protections/${encodeURIComponent(id)}`, { method: 'PATCH', body: expected }); }
     catch (error) { failure = error; }
     const after = (await platform.protections()).find(rule => rule.id === id);
-    if (!after || Object.entries(expected).some(([key, value]) => after[key] !== value) || validateBranchProtection(after, { requireReview: false }).length) throw failure ?? new Error('Automatic AI review policy did not read back');
+    if (!after || Object.entries(expected).some(([key, value]) => after[key] !== value) || validateBranchProtection(after, { requireReview: false, forbidManualOverride: true }).length) throw failure ?? new Error('Automatic AI review policy did not read back');
     return after;
   }
   return main;
