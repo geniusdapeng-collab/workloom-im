@@ -2287,6 +2287,20 @@ export function findPcExtensionNavigationRisks(source, fileName = "client.tsx") 
   return risks;
 }
 
+/**
+ * `/dev` 组件矩阵路由必须以 `<UiDiagnosticsRoute />` 为渲染出口。
+ *
+ * 两种等价形态都要接受，否则门禁会因合法重构而误报、并诱导绕过：
+ *   ① 内联 JSX：`<Route path="/dev" element={<UiDiagnosticsRoute />} />`
+ *   ② 路由登记表：`{ path: "/dev", element: <UiDiagnosticsRoute /> }`（由 App 统一 map 渲染）
+ * 无论哪种形态，`/dev` 都绑定同一个受 DEV + 显式开关双重约束的守卫组件，语义不降级。
+ */
+function devRouteRendersDiagnostics(cleanApp) {
+  const inline = /<Route\b[^>]*path\s*=\s*["']\/dev["'][^>]*element\s*=\s*\{<UiDiagnosticsRoute\s*\/>\}/;
+  const registry = /\{\s*path\s*:\s*["']\/dev["']\s*,\s*element\s*:\s*<UiDiagnosticsRoute\s*\/>\s*,?\s*\}/;
+  return inline.test(cleanApp) || registry.test(cleanApp);
+}
+
 /** P25 可保留必要技术契约，但必须同时具备权限路由、醒目标识和审计说明。 */
 export function findDiagnosticIsolationRisks(pageSource, appSource, playwrightSource = "", industryRouteSource = "") {
   const risks = [];
@@ -2305,7 +2319,7 @@ export function findDiagnosticIsolationRisks(pageSource, appSource, playwrightSo
     risks.push("开发场域未通过行业扩展契约声明语义路由、能力权限与受控历史地址");
   }
   if (!/import\.meta\.env\.DEV\s*&&\s*import\.meta\.env\.VITE_ENABLE_UI_DIAGNOSTICS\s*===\s*["']true["']/.test(cleanApp)) risks.push("组件矩阵必须同时受开发环境与显式开关约束");
-  if (!/<Route\b[^>]*path\s*=\s*["']\/dev["'][^>]*element\s*=\s*\{<UiDiagnosticsRoute\s*\/>\}/.test(cleanApp)) risks.push("组件矩阵路由不得直接渲染诊断页面");
+  if (!devRouteRendersDiagnostics(cleanApp)) risks.push("组件矩阵路由不得直接渲染诊断页面");
   if (playwrightSource && !cleanPlaywright.includes("VITE_ENABLE_UI_DIAGNOSTICS=true")) risks.push("视觉测试未显式开启组件矩阵");
   return risks;
 }
@@ -2328,7 +2342,7 @@ export function findComponentMatrixIsolationRisks(matrixSource, appSource, playw
   if (!/return\s+enabled\s*\?\s*<Bridge>\s*<DevMatrix\s*\/>\s*<\/Bridge>\s*:\s*<NotFound\s*\/>/.test(cleanApp)) {
     risks.push("组件矩阵守卫必须实际消费双重开关并在关闭时返回未找到页");
   }
-  if (!/<Route\b[^>]*path\s*=\s*["']\/dev["'][^>]*element\s*=\s*\{<UiDiagnosticsRoute\s*\/>\}/.test(cleanApp)) {
+  if (!devRouteRendersDiagnostics(cleanApp)) {
     risks.push("组件矩阵路由不得直接渲染诊断页面");
   }
   if (playwrightSource && !cleanPlaywright.includes("VITE_ENABLE_UI_DIAGNOSTICS=true")) {

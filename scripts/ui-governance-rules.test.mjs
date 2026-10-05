@@ -579,6 +579,25 @@ test("开发诊断页面必须具备权限、显式开发开关、醒目标识�
   assert.ok(findDiagnosticIsolationRisks("<div>YAML</div>", '<Route path="/dev" element={<DevMatrix />} />').length >= 5);
 });
 
+test("/dev 矩阵路由的内联 JSX 与路由登记表两种等价形态都被接受，指向其它组件仍拒绝", () => {
+  const matrix = `<div data-wl-authorized-diagnostics="ui-component-matrix"><p>仅限本地开发环境并显式开启诊断开关后使用</p><p>DEV MATRIX</p></div>`;
+  const guard = `const enabled = import.meta.env.DEV && import.meta.env.VITE_ENABLE_UI_DIAGNOSTICS === "true";
+    function UiDiagnosticsRoute(){ return enabled ? <Bridge><DevMatrix /></Bridge> : <NotFound /> }`;
+  // ① 内联 JSX（既有形态）
+  const inline = `${guard}\n<Route path="/dev" element={<UiDiagnosticsRoute />} />`;
+  // ② 路由登记表（App 统一 map 渲染的等价形态）
+  const registry = `${guard}\nexport const BASE_ROUTE_REGISTRY = [{ path: "/dev", element: <UiDiagnosticsRoute /> }];`;
+  assert.deepEqual(findComponentMatrixIsolationRisks(matrix, inline, "VITE_ENABLE_UI_DIAGNOSTICS=true"), []);
+  assert.deepEqual(findComponentMatrixIsolationRisks(matrix, registry, "VITE_ENABLE_UI_DIAGNOSTICS=true"), []);
+  assert.deepEqual(findDiagnosticIsolationRisks(`<div data-wl-authorized-diagnostics="ai-pm.development"><strong>授权开发诊断</strong><span>仅限已获开发权限的管理员；操作写入开发事件、围栏审计与版本台账</span></div>`, registry, "VITE_ENABLE_UI_DIAGNOSTICS=true",
+    `export const industryRoutes = [{ path: "/development", legacyPaths: ["/p25"], capabilityId: "ai-pm.development", element: <P25 /> }];`), []);
+  // 指向未受 DEV + 显式开关约束的组件仍然拒绝，重构不能成为绕过口
+  const bypass = `${guard}\nexport const BASE_ROUTE_REGISTRY = [{ path: "/dev", element: <DevMatrix /> }];`;
+  assert.ok(findComponentMatrixIsolationRisks(matrix, bypass).some((risk) => risk.includes("组件矩阵路由不得直接渲染诊断页面")));
+  // 完全不声明 /dev 也拒绝
+  assert.ok(findComponentMatrixIsolationRisks(matrix, guard).some((risk) => risk.includes("组件矩阵路由不得直接渲染诊断页面")));
+});
+
 test("三端入口必须同时接入令牌、内容安全与基础组件样式", () => {
   const good = ["tokens.css", "content-safety.css", "components.css"]
     .map((name) => `import \"@workloom/ui/${name}\";`).join("\n");
