@@ -22,8 +22,8 @@ export async function verifyTaskCompletion(repo, number, taskId, { readPull = ge
   if (intent.taskId !== taskId) throw new Error('PR belongs to another task');
   const state = await (store ?? new GitStateStore({ repo, token: requireToken() })).read();
   const task = state.tasks[String(number)];
-  if (pull.is_merged === true && !intent.releases.length && !task?.intent?.releases?.length) return { number, integrated: true, releaseDeclared: false };
-  if (!task?.merge || task.merge.sourceSha !== pull.head?.sha || !['integrated', 'delivered'].includes(task.status) || task.intent?.taskId !== taskId) throw new Error('Task has no current verified integration/delivery receipt');
+  if (!task?.merge || task.merge.sourceSha !== pull.head?.sha || !['integrated', 'delivered'].includes(task.status) || task.intent?.taskId !== taskId ||
+    task.mergeSnapshot?.headSha !== task.merge.sourceSha || task.mergeSnapshot.mainSha !== task.merge.mainSha || task.mergeSnapshot.checkSha !== task.merge.checkSha) throw new Error('Task has no current verified integration/delivery receipt');
   await (platform ?? new Platform(repo, requireToken())).verifyMerge(task.mergeSnapshot, { sha: task.merge.sha });
   const declarations = [...new Map([...(task.intent?.releases ?? []), ...intent.releases].map(item => [`${item.kind}:${item.version.replace(/^v/, '')}`, item])).values()];
   for (const declaration of declarations) {
