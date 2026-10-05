@@ -812,6 +812,10 @@ $:
         FLEET_ORG: workloom-ai
         FLEET_BASE_REPO: workloom-ai/workloom-im
       stages:
+        - name: 安装锁定的交付解析器
+          script: |
+            set -eu
+            npm ci --prefix scripts/delivery/runtime --ignore-scripts --no-audit --no-fund
         - name: 扫描新仓并纳管
           script: |
             set -eu

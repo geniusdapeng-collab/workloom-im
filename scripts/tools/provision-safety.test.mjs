@@ -2,6 +2,22 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as api from './cnb-api.mjs';
 import * as provision from './provision-protocol.mjs';
+import { readFile } from 'node:fs/promises';
+import { resolvePipelineConfig } from '../delivery/queue-policy.mjs';
+
+test('bare fleet-scan container installs the locked parser before provisioning', async () => {
+  const root = new URL('../../', import.meta.url);
+  const config = await resolvePipelineConfig(await readFile(new URL('.cnb.yml', root), 'utf8'), {
+    readLocal: path => readFile(new URL(path, root), 'utf8'),
+  });
+  const scan = config.$['crontab: 0 9 * * *'].find(p => p.name === 'fleet-scan');
+  assert.ok(scan);
+  const provisionIndex = scan.stages.findIndex(s => s.script?.includes('fleet-scan.mjs --org'));
+  const installIndex = scan.stages.findIndex(s => /npm ci --prefix scripts\/delivery\/runtime --ignore-scripts --no-audit --no-fund/.test(s.script ?? ''));
+  assert.ok(installIndex >= 0 && installIndex < provisionIndex);
+  assert.equal(scan.stages[installIndex].allowFailure, undefined);
+  assert.match(scan.stages[installIndex].script, /set -eu/);
+});
 
 test('new branch policy requires review and removes admin push/force/deletion exceptions', () => {
   const p = api.branchProtectionPayload();
