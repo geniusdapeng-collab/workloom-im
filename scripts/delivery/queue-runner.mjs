@@ -77,11 +77,11 @@ export async function activate({ platform, store, root, installer }) {
   const main = rules.find(rule => rule.rule === 'main');
   const errors = validateBranchProtection(main, { requireReview: true });
   if (errors.length) throw new Error(errors.join('; '));
-  if (main.required_master_approve !== false || main.forbid_approve_pull_created_by_own_npc !== false) {
+  if (main.required_master_approve !== false) {
     const { id, ...current } = main;
-    await platform.call(`/-/settings/branch-protections/${encodeURIComponent(id)}`, { method: 'PATCH', body: { ...current, required_master_approve: false, forbid_approve_pull_created_by_own_npc: false } });
+    await platform.call(`/-/settings/branch-protections/${encodeURIComponent(id)}`, { method: 'PATCH', body: { ...current, required_master_approve: false } });
     const after = (await platform.protections()).find(rule => rule.id === id);
-    if (!after || after.required_master_approve !== false || after.forbid_approve_pull_created_by_own_npc !== false || after.required_status_checks !== true || validateBranchProtection(after).length) throw new Error('Automatic AI approval policy did not read back');
+    if (!after || after.required_master_approve !== false || after.forbid_approve_pull_created_by_own_npc !== true || after.required_status_checks !== true || validateBranchProtection(after).length) throw new Error('Automatic AI approval policy did not read back');
   }
   await ensureStateProtection(platform);
   await store.mutate(state => appendEvent(state, 'activated', { mainSha, installer: installer.number, policyHash: policy.hash, independentApproval, humanClickRequired: false }));

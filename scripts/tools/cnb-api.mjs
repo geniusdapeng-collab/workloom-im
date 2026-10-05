@@ -139,7 +139,7 @@ export function branchProtectionPayload({ rule = "main", requireReview = true } 
     allow_master_manual_merge: true,
     allow_master_pushes: false,
     allow_pushes: false,
-    forbid_approve_pull_created_by_own_npc: false,
+    forbid_approve_pull_created_by_own_npc: true,
     required_approved_review_count: 1,
     required_approved_review_ratio: 100,
     required_commit_signatures: false,
@@ -159,7 +159,10 @@ export function validateBranchProtection(rule, { requireReview = true } = {}) {
     allow_master_deletions: false, allow_master_force_pushes: false, allow_master_pushes: false,
     required_must_push_via_pull_request: true, required_status_checks: true,
   };
-  if (requireReview) expected.required_pull_request_reviews = true;
+  if (requireReview) {
+    expected.required_pull_request_reviews = true;
+    expected.forbid_approve_pull_created_by_own_npc = true;
+  }
   const errors = Object.entries(expected).filter(([name, value]) => rule?.[name] !== value).map(([name, value]) => `${name} 必须为 ${value}`);
   if (rule?.rule !== 'main') errors.push('分支保护目标必须为 main');
   if (requireReview && !(Number.isSafeInteger(rule?.required_approved_review_count) && rule.required_approved_review_count >= 1)) errors.push("required_approved_review_count 必须至少为1");

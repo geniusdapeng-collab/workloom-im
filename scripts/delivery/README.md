@@ -116,7 +116,7 @@ AI 使用固定官方镜像内的 SDK，按每批最多 30 个变化路径分批
 
 Git `automation/delivery-state` 保存任务、租约、事件、尝试、AI、集成和发布证明；普通 fast-forward push 是 CAS，transaction ID 处理丢失响应。没有强推。合并响应不明暂停集成，先正向回读；声明的 UI/桌面制品发布由独立的 delivery-releases 原生流水线与 workloom-delivery-release 锁处理，不占用合并执行器。发布固定 SHA/版本，回读构建 SN/source/event/准确意图、tag/manifest/实际 SHA-512 字节；失败不跳过无关集成，不生成发布成功回执。
 
-初次安装在准确安装分支执行 `node scripts/delivery/queue-runner.mjs prepare-install --repo <org/repo> --pr <number>`：由设置权限者创建并回读状态分支强保护、初始化账本，再合入经过真实 bootstrap AI 审查和原仓检查的安装 PR。main 安装后的缺账本不能被当作空租约。合入以后在当前 main 执行 activate，一次安装不可修改候选规则、回读 main 必需检查和独立 AI 评审身份、取消额外管理员批准及同属 NPC 批准限制并写 activation 事件。候选创建者与独立 CodeBuddy 评审进程分离，只有真实 Bot 的批准与完整回执共同满足才集成。模型子进程不继承发布 Bot 的批准令牌，合并后的结构化回执通过校验和新鲜度检查后才交给独立发布步骤。云端只有 CNB 原生令牌，不保存会话凭据。两个隔离副本按产品所有者授权在各自仓独立安装同一研发机制，业务 base-sync 仍排除它们；平台秘密、实盘和客户动作不在研发自动授权内。
+初次安装在准确安装分支执行 `node scripts/delivery/queue-runner.mjs prepare-install --repo <org/repo> --pr <number>`：由设置权限者创建并回读状态分支强保护、初始化账本，再合入经过真实 bootstrap AI 审查和原仓检查的安装 PR。main 安装后的缺账本不能被当作空租约。合入以后在当前 main 执行 activate，一次安装不可修改候选规则、回读 main 必需检查和独立 AI 评审身份、取消额外管理员批准，保留平台的自有 NPC PR 自批限制并写 activation 事件。候选创建者与独立 CodeBuddy 评审进程分离，只有真实 Bot 的批准与完整回执共同满足才集成。模型子进程不继承发布 Bot 的批准令牌，合并后的结构化回执通过校验和新鲜度检查后才交给独立发布步骤。云端只有 CNB 原生令牌，不保存会话凭据。两个隔离副本按产品所有者授权在各自仓独立安装同一研发机制，业务 base-sync 仍排除它们；平台秘密、实盘和客户动作不在研发自动授权内。
 
 验证：`node --test scripts/delivery/queue.test.mjs scripts/ci/protocol-rules.test.mjs sync/merge-sync-prs.test.mjs scripts/ui-release-registration.test.mjs`。包含真实本地 bare Git 的 CAS 并发、丢失 push 回执、主干对齐/语义冲突，与 AI 覆盖、权限、过期、依赖、失败隔离和冻结发布断言。云端上线另须真实平台检查、AI 和状态回读；本地模拟不算云端成功。
 

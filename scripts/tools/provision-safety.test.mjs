@@ -7,7 +7,7 @@ test('new branch policy requires review and removes admin push/force/deletion ex
   const p = api.branchProtectionPayload();
   assert.equal(p.required_pull_request_reviews, true);
   assert.equal(p.required_master_approve, false);
-  assert.equal(p.forbid_approve_pull_created_by_own_npc, false);
+  assert.equal(p.forbid_approve_pull_created_by_own_npc, true);
   assert.equal(p.allow_master_pushes, false);
   assert.equal(p.allow_master_force_pushes, false);
   assert.equal(p.allow_master_deletions, false);
@@ -17,6 +17,7 @@ test('a named main rule is insufficient: weak controls fail closed', () => {
   assert.ok(api.validateBranchProtection({ rule: 'main' }).length > 0);
   assert.deepEqual(api.validateBranchProtection(api.branchProtectionPayload()), []);
   assert.ok(api.validateBranchProtection({ ...api.branchProtectionPayload(), allow_master_force_pushes: true }).length > 0);
+  assert.ok(api.validateBranchProtection({ ...api.branchProtectionPayload(), forbid_approve_pull_created_by_own_npc: false }).length > 0);
 });
 test('git credentials are transient process environment, scoped to CNB, without command-line credentials', () => {
   assert.equal(typeof provision.gitAuthenticationEnvironment, 'function');
