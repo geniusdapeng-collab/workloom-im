@@ -230,7 +230,10 @@ export function activeLeaseConflicts(files, state, now = Date.now()) {
 }
 
 export function legacySensitiveConflict(installed, selfNumber, otherNumber) {
-  return installed === false && Number(selfNumber) > Number(otherNumber);
+  if (installed !== false) return false;
+  const self = Number(selfNumber); const other = Number(otherNumber);
+  if (!Number.isSafeInteger(self) || self <= 0 || !Number.isSafeInteger(other) || other <= 0) return true;
+  return self > other;
 }
 
 export async function verifyPrLeases(repoSlug, files, request = apiJson, now = Date.now(), identity = {}, { waitMs = 0, elapsedClock = Date.now, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {

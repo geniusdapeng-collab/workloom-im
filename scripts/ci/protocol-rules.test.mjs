@@ -94,6 +94,15 @@ describe("并发冲突规则", () => {
 });
 
 describe('限时开发租约代替 open PR 永久占位', () => {
+  it('未首装敏感重叠在任一 PR 编号缺失或无效时拒绝，已启用仓不使用编号永久占位', () => {
+    for (const invalid of [null, undefined, '', 'x', 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      assert.equal(legacySensitiveConflict(false, invalid, 1), true);
+      assert.equal(legacySensitiveConflict(false, 1, invalid), true);
+      assert.equal(legacySensitiveConflict(true, invalid, 1), false);
+    }
+    assert.equal(legacySensitiveConflict(false, '2', '1'), true);
+    assert.equal(legacySensitiveConflict(false, '1', '2'), false);
+  });
   it('原有互斥模块的每种路径都映射到敏感租约', () => {
     for (const path of ['sync/a.mjs', 'protocol/a.json', 'packages/db/migrations/a.sql', '.cnb.yml', 'AGENTS.md', 'docs/DEVELOPMENT-PROTOCOL.md', 'package.json']) {
       assert.ok(exclusiveModuleOf(path), path);
