@@ -96,3 +96,15 @@ test('unknown CI shape cannot be provisioned as a green protocol gate', () => {
   assert.equal(provision.injectGate('arbitrary: data\n').mode, 'unsupported');
   assert.ok(api.validateBranchProtection({ ...api.branchProtectionPayload(), rule: 'other' }).length > 0);
 });
+test('raw asset reads are bounded, never follow redirects and distinguish known absence from unreadable source', async t => {
+  const calls = []; let status = 200;
+  stubFetch(t, async (_url, options) => { calls.push(options); return new Response(status === 200 ? 'exact source bytes' : 'unreadable', { status }); });
+  assert.equal(await api.rawFile('workloom-ai/demo', 'main', '.cnb.yml'), 'exact source bytes');
+  assert.equal(calls[0].redirect, 'error'); assert.ok(calls[0].signal instanceof AbortSignal); assert.equal(calls[0].signal.aborted, false);
+  status = 404; assert.equal(await api.rawFile('workloom-ai/demo', 'main', '.cnb.yml'), null);
+  for (const code of [301, 403, 429, 500]) {
+    status = code; await assert.rejects(api.rawFile('workloom-ai/demo', 'main', '.cnb.yml'), error => error.status === code);
+  }
+  globalThis.fetch = async () => { throw new Error('network interrupted'); };
+  await assert.rejects(api.rawFile('workloom-ai/demo', 'main', '.cnb.yml'), /network interrupted/);
+});
