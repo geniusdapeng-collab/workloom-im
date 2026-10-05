@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { appendEvent, checksVerdict, dependencyState, eligibility, emptyState, hash, leaseOperation, parseIntent, releaseKey, updateTask, validateReview, validateState } from './queue-model.mjs';
+import { admissionErrors, admitSource, appendEvent, checksVerdict, dependencyState, eligibility, emptyState, hash, leaseOperation, parseIntent, releaseKey, updateTask, validateReview, validateState } from './queue-model.mjs';
 import { GitStateStore, git } from './git-state.mjs';
 import { alignBranch, independentCodeBuddyApproval } from './queue-work.mjs';
 import { Platform } from './queue-platform.mjs';
@@ -49,6 +49,19 @@ test('lease acquisition is atomic across scopes; TTL reclaim fences stale renewa
 });
 test('lease empty/oversized TTL and mismatched scope generation cannot silently succeed', () => {
   for (const spec of [{ scopes: [] }, { ttlMs: 59999 }, { ttlMs: 1800001 }, { owner: '' }, { scopes: [''] }]) assert.throws(() => leaseOperation(emptyState(repo), { action: 'acquire', owner: 'a', scopes: ['protocol'], ...spec }, 0));
+});
+test('automatic sensitive-source admission has exact positive owner/generation receipts, blocks live writers and permits released newer generations', () => {
+  const state = emptyState(repo); const identity = { number: 1, headSha: head, mainSha: main, files: ['scripts/ci/a.mjs'] };
+  assert.ok(admissionErrors(state, identity).length);
+  const live = leaseOperation(state, { action: 'acquire', owner: 'developer', scopes: ['protocol'] }, 0);
+  assert.throws(() => admitSource(state, identity, 1), /busy/); assert.equal(state.tasks['1'], undefined);
+  leaseOperation(state, { action: 'release', owner: 'developer', scopes: ['protocol'], generation: live }, 2);
+  admitSource(state, identity, 3); assert.deepEqual(admissionErrors(state, identity), []); assert.equal(state.leases.protocol.owner, null);
+  assert.ok(admissionErrors(state, { ...identity, headSha: main }).length); assert.ok(admissionErrors(state, { ...identity, files: ['scripts/ci/b.mjs'] }).length);
+  admitSource(state, { ...identity, number: 2 }, 4); assert.deepEqual(admissionErrors(state, identity), []);
+  const broken = structuredClone(state); broken.tasks['1'].admission.generation.protocol = 0; assert.ok(admissionErrors(broken, identity).length);
+  const missing = structuredClone(state); missing.events = []; assert.ok(admissionErrors(missing, identity).length);
+  validateState(state, repo);
 });
 test('state hash chain detects history tampering and incomplete/foreign snapshots', () => {
   const state = emptyState(repo); updateTask(state, 1, { status: 'waiting_ci' }, now); validateState(state, repo);
@@ -328,7 +341,9 @@ test('bootstrap and trusted-main AI image digests stay bound to the single polic
   const YAML = await parser();
   const trusted = YAML.parse(await readFile(new URL('./cnb.yml', import.meta.url), 'utf8'));
   const bootstrap = YAML.parse(await readFile(new URL('./bootstrap-cnb.yml', import.meta.url), 'utf8'));
-  const images = [trusted.main['pull_request.target'][0], prPipelines(bootstrap)[0]].flatMap(pipeline => pipeline.stages.filter(stage => stage.image).map(stage => stage.image));
+  const targetReview = trusted.main['pull_request.target'].find(pipeline => pipeline.name === 'delivery-ai-review');
+  assert.ok(targetReview);
+  const images = [targetReview, prPipelines(bootstrap)[0]].flatMap(pipeline => pipeline.stages.filter(stage => stage.image).map(stage => stage.image));
   assert.deepEqual(images, [REVIEW_IMAGE, REVIEW_IMAGE]);
 });
 test('archived actual non-installer CNB run proves exit 78 preserves all independent product pipelines', async () => {
@@ -411,18 +426,21 @@ test('mutation rejects local/PR-source runners, absent native lock and checkout 
   await assert.rejects(requireTrustedRunner({ main: async () => ({ commit: { sha: head } }) }, root, env), /trusted main/);
 });
 test('state preparation initializes a protected ledger before merge without activating it; lost settings ack is read back', async t => {
-  const root = await temporary(t, 'delivery-install-state-'); await git(['init', '--quiet'], { cwd: root }); await git(['commit', '--allow-empty', '-m', 'installer'], { cwd: root });
+  const root = await temporary(t, 'delivery-install-state-'); await git(['init', '--quiet'], { cwd: root }); await git(['commit', '--allow-empty', '-m', 'initial main'], { cwd: root });
+  const baseTip = await git(['rev-parse', 'HEAD'], { cwd: root });
+  await writeFile(join(root, 'AGENTS.md'), 'Installer rules\n'); await git(['add', 'AGENTS.md'], { cwd: root }); await git(['commit', '-m', 'installer'], { cwd: root });
   const tip = await git(['rev-parse', 'HEAD'], { cwd: root }); let rules = []; let writes = 0;
-  const platform = { repo, main: async () => ({ commit: { sha: main } }), protections: async () => rules, call: async (_path, options) => { writes++; rules = [{ ...options.body, id: 'state-rule' }]; throw new Error('lost acknowledgement'); } };
-  const installer = { number: 234, state: 'open', is_wip: false, head: { sha: tip }, base: { ref: 'main', sha: main } }; const store = memoryStore();
+  const platform = { repo, main: async () => ({ commit: { sha: baseTip } }), protections: async () => rules, call: async (_path, options) => { writes++; rules = [{ ...options.body, id: 'state-rule' }]; throw new Error('lost acknowledgement'); } };
+  const installer = { number: 234, state: 'open', is_wip: false, head: { sha: tip }, base: { ref: 'main', sha: baseTip } }; const store = memoryStore();
   const prepared = await prepareInstallation({ platform, store, root, installer }); assert.equal(prepared.activated, false); assert.equal(writes, 1);
+  assert.deepEqual(admissionErrors(await store.read(), { number: 234, headSha: tip, mainSha: baseTip, files: ['AGENTS.md'] }), []);
   assert.ok((await store.read()).events.some(event => event.kind === 'installation_prepared')); assert.equal((await store.read()).events.some(event => event.kind === 'activated'), false);
   await ensureStateProtection(platform); assert.equal(writes, 1);
   assert.equal((await verifyPreparedInstallation({ platform, store, root, installer })).verified, true); assert.equal(writes, 1);
   await assert.rejects(verifyPreparedInstallation({ platform, store: memoryStore(), root, installer }), /exact source/);
   const waiting = memoryStore(); let clock = 0; let sleeps = 0;
   await verifyPreparedInstallation({ platform, store: waiting, root, installer, waitMs: 10000, elapsedClock: () => clock, sleep: async ms => {
-    clock += ms; sleeps++; await waiting.mutate(current => appendEvent(current, 'installation_prepared', { installer: installer.number, headSha: tip, mainSha: main }));
+    clock += ms; sleeps++; await waiting.mutate(current => appendEvent(current, 'installation_prepared', { installer: installer.number, headSha: tip, mainSha: baseTip }));
   } });
   assert.equal(sleeps, 1); assert.equal(writes, 1);
   await assert.rejects(verifyPreparedInstallation({ platform, store: memoryStore(), root, installer, waitMs: 10000, elapsedClock: () => clock, sleep: async ms => { clock += ms; } }), /exact source/);

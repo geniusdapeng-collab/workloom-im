@@ -79,6 +79,36 @@ export function sensitiveScopes(files) {
   return [...result].sort();
 }
 
+/** Mandatory sensitive-source admission is automatic; its released generation is historical proof, not a CI-held lock. */
+export function admitSource(state, { number, headSha, mainSha, files }, now = Date.now()) {
+  if (!Number.isSafeInteger(number) || number <= 0 || !SHA_RE.test(headSha ?? '') || !SHA_RE.test(mainSha ?? '') || !Array.isArray(files) || files.some(path => typeof path !== 'string' || !path) || new Set(files).size !== files.length) throw new Error('Source admission identity/files are invalid');
+  const scopes = sensitiveScopes(files); const owner = `admission/pr-${number}`;
+  const generation = scopes.length ? leaseOperation(state, { action: 'acquire', owner, scopes }, now) : {};
+  if (scopes.length) leaseOperation(state, { action: 'release', owner, scopes, generation }, now);
+  const admission = { number, headSha, mainSha, filesHash: hash([...files].sort()), scopes, owner, generation };
+  appendEvent(state, 'source_admitted', admission, now);
+  updateTask(state, number, { admission }, now);
+  return admission;
+}
+
+export function admissionErrors(state, { number, headSha, mainSha, files }) {
+  const scopes = sensitiveScopes(files);
+  if (!scopes.length) return [];
+  const admission = state.tasks[String(number)]?.admission;
+  const expected = { number: Number(number), headSha, mainSha, filesHash: hash([...files].sort()), scopes, owner: `admission/pr-${Number(number)}` };
+  if (!admission || Object.entries(expected).some(([key, value]) => JSON.stringify(admission[key]) !== JSON.stringify(value))) return ['Sensitive source lacks exact trusted admission'];
+  const recorded = state.events.findLast(event => event.kind === 'source_admitted' && hash(event.data) === hash(admission));
+  if (!recorded) return ['Source admission has no append-only receipt'];
+  for (const scope of scopes) {
+    const generation = admission.generation?.[scope];
+    if (!Number.isSafeInteger(generation) || generation <= 0) return ['Source admission has no positive lease generation'];
+    const acquired = state.events.findLast(event => event.sequence < recorded.sequence && event.kind === 'lease_acquire' && event.data.owner === expected.owner && event.data.generation?.[scope] === generation && event.data.scopes.includes(scope));
+    const released = state.events.findLast(event => event.sequence < recorded.sequence && event.kind === 'lease_release' && event.data.owner === expected.owner && event.data.generation?.[scope] === generation && event.data.scopes.includes(scope));
+    if (!acquired || !released || acquired.sequence >= released.sequence) return ['Source admission lease acquisition/release cannot be verified'];
+  }
+  return [];
+}
+
 /** Explicit PR contract; platform blocked_on is authoritative too. Legacy PRs remain eligible after a cooldown. */
 export function parseIntent(pull) {
   const body = String(pull.body ?? '');

@@ -8,7 +8,7 @@ import { loadPolicy } from './queue-policy.mjs';
 import { prepareReview, finishReview, independentCodeBuddyApproval } from './queue-work.mjs';
 import { reconcile, writeTaskReceipts } from './queue-controller.mjs';
 import { reconcileReleases } from './queue-release.mjs';
-import { appendEvent, branchName, checksVerdict, leaseOperation, parseIntent, SHA_RE, STATE_BRANCH, updateTask } from './queue-model.mjs';
+import { admitSource, appendEvent, branchName, checksVerdict, leaseOperation, parseIntent, SHA_RE, STATE_BRANCH, updateTask } from './queue-model.mjs';
 import { branchProtectionPayload, redactCredentials, requireToken, validateBranchProtection } from '../tools/cnb-api.mjs';
 
 const arg = (name, fallback) => { const index = process.argv.indexOf(name); return index < 0 ? fallback : process.argv[index + 1]; };
@@ -66,12 +66,16 @@ export async function prepareInstallation({ platform, store, root, installer }) 
   const mainSha = await installerSource(platform, root, installer);
   await store.read(); // Existing malformed branches are corruption, never an empty ledger.
   await ensureStateProtection(platform);
-  const result = await store.mutate(state => appendEvent(state, 'installation_prepared', { installer: installer.number, headSha: installer.head.sha, mainSha }), { id: `install-state:${installer.number}:${installer.head.sha}` });
+  const files = (await git(['diff', '--name-only', '-z', `${mainSha}...${installer.head.sha}`], { cwd: root, raw: true })).split('\0').filter(Boolean);
+  const result = await store.mutate(state => {
+    admitSource(state, { number: installer.number, headSha: installer.head.sha, mainSha, files });
+    appendEvent(state, 'installation_prepared', { installer: installer.number, headSha: installer.head.sha, mainSha });
+  }, { id: `install-state:${installer.number}:${installer.head.sha}` });
   return { repo: platform.repo, installer: installer.number, headSha: installer.head.sha, mainSha, revision: result.state.revision, activated: false };
 }
 
 export async function requireTrustedRunner(platform, root, env = process.env, lock = 'workloom-delivery-merge') {
-  const allowed = new Set(['pull_request.target', 'pull_request.mergeable', 'pull_request.merged', 'api_trigger_delivery_review', 'api_trigger_delivery_reconcile', 'api_trigger_delivery_releases']);
+  const allowed = new Set(['pull_request.target', 'pull_request.mergeable', 'pull_request.merged', 'api_trigger_delivery_admit', 'api_trigger_delivery_review', 'api_trigger_delivery_reconcile', 'api_trigger_delivery_releases']);
   const event = String(env.CNB_EVENT ?? '');
   if (!env.CNB_BUILD_ID || (!allowed.has(event) && env.CNB_IS_CRONEVENT !== 'true')) throw new Error('Delivery mutation requires a trusted CNB main pipeline');
   if (env.DELIVERY_NATIVE_LOCK !== lock) throw new Error('Delivery mutation requires its native repository lock');
@@ -118,6 +122,14 @@ export async function activate({ platform, store, root, installer }) {
   if (!installer || installer.is_merged !== true) throw new Error('Activation requires a real installer merge receipt');
   const installationState = await store.read();
   const policy = await loadPolicy(root);
+  if (command === 'admit') {
+    await requireTrustedRunner(platform, root, process.env, 'workloom-delivery-admission');
+    if (!(await store.read()).events.some(event => event.kind === 'activated')) { console.log(JSON.stringify({ waiting: 'Verified activation is required' })); return; }
+    const snapshot = await platform.snapshot(number, policy, { checks: false });
+    if (snapshot.pull.state !== 'open' || snapshot.checkErrors.length) throw new Error('Source admission requires a current PR and preserved required CI');
+    const result = await store.mutate(state => admitSource(state, snapshot), { id: `source-admit:${number}:${snapshot.headSha}:${snapshot.mainSha}` });
+    console.log(JSON.stringify({ number, headSha: snapshot.headSha, mainSha: snapshot.mainSha, revision: result.state.revision, admitted: true })); return;
+  }
   const statuses = await platform.call(`/-/pulls/${installer.number}/commit-statuses`);
   const tested = await platform.commit(statuses.sha);
   const preparation = verifyInstallerChecks({ state: installationState, installer, statuses, tested, requiredNames: policy.requiredNames });

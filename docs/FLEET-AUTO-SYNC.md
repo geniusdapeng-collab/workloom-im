@@ -62,6 +62,8 @@ node sync/merge-sync-prs.mjs                             # 派发仓内 trusted-
 
 `base-sync` 只分发执行资产，**不会自动改子仓 `.cnb.yml`**。旧仓拿到脚本而没有 delivery include 时，`merge-sync-prs` 的派发会明确失败；这代表尚未安装，不能当作交付器已接管。首次舰队上线由具备仓库设置权限的授权安装端逐仓执行以下闭环，然后再把该仓纳入正常派发：
 
+分发的新锁门禁也不单靠文件存在启用：main 无 delivery include、控制分支确实不存在时，继续执行旧敏感重叠约束，避免脚本先到而首装准备未完成造成自锁。main 已显式启用后，账本缺失或损坏、权限/网络失败保持红灯。安装 prepare 同时留下准确 source/main 的敏感接纳证明；后续 trusted-main admission 自动领取并释放 generation，CI 要求正向历史回执，不能把空租约集当成已许可。
+
 1. 在目标当前 main 的独立 `chore/protocol-onboarding-*` 分支准备完整 delivery/CI 依赖闭包，追加 `scripts/delivery/cnb.yml` 与 `scripts/delivery/bootstrap-cnb.yml` include，保留原流水线、阶段、行业配置及隔离状态；开准确路径、四问、验收和回滚任务卡/安装 PR。只对共享研发资产升级，不用全量旧纳管器清理目标标签。
 2. 推送准确安装源码后，设置权限者在该源码工作树执行 `node scripts/delivery/queue-runner.mjs prepare-install --repo <org/repo> --pr <安装PR>`。此步骤创建并回读强保护状态分支、保存准确 source/main 的 installation_prepared；源 PR 原生令牌仅回读，bootstrap 的 verify-install 缺该证据就拒绝 AI 批准。
 3. 安装 PR 必须通过**目标仓全部原必需检查及真实 bootstrap AI**。回读完整覆盖与准确 source/main、当前独立 CodeBuddy Approve，才按平台保护普通 merge；不强制合并、不直推 main，不用本地通过替代云端通过。
