@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 182,
+  "revision": 184,
   "tasks": {
     "231": {
       "number": 231,
@@ -291,20 +291,20 @@
     },
     "236": {
       "number": 236,
-      "status": "waiting_ci",
+      "status": "developing",
       "firstSeen": 1791201701860,
       "attempts": {},
-      "headSha": "9eeee3cff589967bc4a1411758268422b4af033c",
+      "headSha": "ac65924a8af84792e33df8f1d5785610928cba8a",
       "branch": "task/T-2026-1005-2000",
       "intent": {
         "taskId": "T-2026-1005-2000",
-        "ready": true,
+        "ready": false,
         "dependsOn": [
-          238
+          239
         ],
         "releases": []
       },
-      "updatedAt": 1791201701860
+      "updatedAt": 1791242108737
     },
     "238": {
       "number": 238,
@@ -3647,6 +3647,38 @@
       },
       "previous": "d182edd77854959bcb84e654ae8d39f478fa67688f7ff7aa0f8b900066925a7a",
       "digest": "853e1cb743012b70221b8c57793a94843167ea748c1f26ca3ccdd2e23283beba"
+    },
+    {
+      "sequence": 183,
+      "at": "2026-10-05T23:15:08.737Z",
+      "kind": "task",
+      "data": {
+        "number": 236,
+        "patch": {
+          "status": "developing",
+          "headSha": "ac65924a8af84792e33df8f1d5785610928cba8a",
+          "intent": {
+            "taskId": "T-2026-1005-2000",
+            "ready": false,
+            "dependsOn": [
+              239
+            ],
+            "releases": []
+          }
+        }
+      },
+      "previous": "853e1cb743012b70221b8c57793a94843167ea748c1f26ca3ccdd2e23283beba",
+      "digest": "3ee049f47072fb7b0af1448d357af3b0db4c886c9291bf52fe3b7e93969306c2"
+    },
+    {
+      "sequence": 184,
+      "at": "2026-10-05T23:15:19.209Z",
+      "kind": "transaction",
+      "data": {
+        "id": "781cce7c-39f9-46d0-85c8-94b4e228258d"
+      },
+      "previous": "3ee049f47072fb7b0af1448d357af3b0db4c886c9291bf52fe3b7e93969306c2",
+      "digest": "15ae1d0301bb98513e9bb5df8edcb84b48ab7b0b57a19c75417d220419dafd4a"
     }
   ]
 }
