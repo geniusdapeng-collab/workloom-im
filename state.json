@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 50,
+  "revision": 52,
   "tasks": {},
   "leases": {},
   "releases": {},
@@ -617,6 +617,82 @@
       },
       "previous": "c9d16489c343239e670a42c61fc34518afb3cea86b295c4109e3edb08ae37401",
       "digest": "415ef20e20e4882ee6669667e4dd74f32f320bf5344c68400becb627407c8227"
+    },
+    {
+      "sequence": 51,
+      "at": "2026-10-05T11:53:51.734Z",
+      "kind": "installer_merge_requested",
+      "data": {
+        "number": 234,
+        "snapshot": {
+          "number": 234,
+          "pull": {
+            "number": 234,
+            "state": "open",
+            "title": "feat(ci): 持续研发交付与真实 AI 审查 [T-2026-1005-1001]",
+            "body": "多个开发会话因旧 PR 文件锁、主干漂移或等待人工 Approve 停住，原合并步骤还依赖 fanout 成功。本变更让开发交接后由持久交付器接管，失败 PR 保留分支并隔离，无关 PR 持续推进。\n\n普通重叠改为提示，敏感开发使用 owner/generation/TTL 租约；显式依赖 DAG；独立可信 main 每 5 分钟恢复并用 CNB 原生仓级锁串行集成。不可修改候选固定 source/main；官方 CodeBuddy SDK 分批审查完整变化文件并回读真实 Bot Approve，机器检查绑定准确双亲，禁止 force。合并、任务、固定 SHA 制品发布各有独立回执；丢失响应先回读，重试有预算。首装 bootstrap 受真实 AI 和原仓门禁约束。\n\n共享协议、分发闭包、纳管器与旧合并入口同步更新；保护行业资产、Andromeda 平台秘密及两个隔离副本。\n\n验证：387 项本地回归通过；最终定向 44 项通过；11 工作区 typecheck 通过；26 文件语法、41 文件 staged 秘密扫描、diff 与能力生成检查通过。真实 CNB CI、AI 审查和启用回读仍待本 PR 验证，未声明已上线。\n\n<!-- workloom-delivery\n{\"task_id\":\"T-2026-1005-1001\",\"ready\":true,\"depends_on\":[],\"releases\":[]}\n-->",
+            "author": {
+              "username": "cnb.dYiF05kxAGA",
+              "nickname": "Genius",
+              "email": "XYpmztfpCvez6l8z5BBAvJ+cnb.dYiF05kxAGA@noreply.cnb.cool",
+              "is_npc": false
+            },
+            "reviewers": [],
+            "labels": [],
+            "base": {
+              "ref": "refs/heads/main",
+              "sha": "e35625d856697ba95edf7cde8d294b35cea0de2f",
+              "repo": {
+                "id": "2100396957109968896",
+                "name": "workloom-im",
+                "path": "workloom-ai/workloom-im",
+                "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+              }
+            },
+            "head": {
+              "ref": "refs/heads/task/T-2026-1005-1001",
+              "sha": "6e9aee3733252f33532aa3cb72156e6a5b7f33c8",
+              "repo": {
+                "id": "2100396957109968896",
+                "name": "workloom-im",
+                "path": "workloom-ai/workloom-im",
+                "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+              }
+            },
+            "blocked_on": "waiting_review",
+            "merged_by": {
+              "is_npc": false
+            },
+            "mergeable_state": "mergeable",
+            "is_wip": false,
+            "is_merged": false,
+            "is_force_merged": false,
+            "statuses": {}
+          },
+          "headSha": "6e9aee3733252f33532aa3cb72156e6a5b7f33c8",
+          "mainSha": "e35625d856697ba95edf7cde8d294b35cea0de2f",
+          "checkSha": "820fe60a60b742a330cda97fa12b5bfaf43a18ef"
+        },
+        "approval": {
+          "id": "2107076632418881536",
+          "author": "CodeBuddy",
+          "creator": "cnb.dYiF05kxAGA",
+          "isNpc": true,
+          "createdAt": "2026-10-05T11:53:11Z"
+        }
+      },
+      "previous": "415ef20e20e4882ee6669667e4dd74f32f320bf5344c68400becb627407c8227",
+      "digest": "62ff3ed9fa90fbb8a2a08badaee30480db665a9ff23d4824a3a76df50fd2c3b5"
+    },
+    {
+      "sequence": 52,
+      "at": "2026-10-05T11:53:51.000Z",
+      "kind": "transaction",
+      "data": {
+        "id": "installer-merge:234:6e9aee3733252f33532aa3cb72156e6a5b7f33c8"
+      },
+      "previous": "62ff3ed9fa90fbb8a2a08badaee30480db665a9ff23d4824a3a76df50fd2c3b5",
+      "digest": "20afac629ca063a66f177e3de5526e2926bf179ed5ba9a1db66b359da552e23e"
     }
   ]
 }
