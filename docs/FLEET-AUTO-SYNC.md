@@ -12,7 +12,7 @@
 |---|---|---|---|---|
 | 云端 · 资产分发 | 根级资产 → 子仓 `sync/base-*` PR；保留行业配置 | `sync/fanout-cnb.mjs` | 每 30 分钟 cron / API | 正常研发无需逐 PR 人审 |
 | 云端 · 持续交付 | 完整 AI、必需检查、不可修改候选、准确集成和发布回执 | 各仓 `scripts/delivery/cnb.yml` | 目标分支事件 + 每 5 分钟 reconcile | 人保留叫停/回滚权 |
-| 云端 · 新仓纳管 | 扫描组织发现新 WorkLoom 仓 → 开扫描任务卡 + 纳管 PR（标签/分支保护/协议资产/门禁 stage）；隔离副本只单列报告、不纳管 | `scripts/tools/fleet-scan.mjs --issue --provision` | 每日 09:00（Asia/Shanghai）cron | 审合并 PR |
+| 云端 · 新仓纳管 | 扫描组织发现新 WorkLoom 仓 → 开扫描任务卡 + 纳管 PR（标签/分支保护/协议资产/门禁 stage）；隔离副本只单列报告、不纳管 | `scripts/tools/fleet-scan.mjs --issue --provision` | 每日 09:00（Asia/Shanghai）cron | 授权首装端完成真实 AI、原仓门禁、合并与激活 |
 | 云端 · 代码基线 | `packages/**`、`apps/**` 等运行时代码升级 | `sync/base-sync.mjs push` / fanout `--mode full` | AI/API 触发（默认不跑；升级批次由任务卡驱动） | AI 合并（门禁全绿 + 冷却期，协议 §1/§9.5） |
 | 本地 · 文档副本 | 全景认知 + 开发协议落到 `~/.codex/workloom-context/`，供 WorkLoom 会话直接引用 | `~/.codex/skills/workloom-context/scripts/sync-context.sh` | Codex automation `workloom`（每日 09:00）+ 手动 | 无需 |
 | 本地 · 代码克隆 | `~/WorkLoom-fleet/` 十个订阅仓 + 两个隔离副本都跟随各自云端 `main`；新订阅仓自动克隆 | `~/.codex/skills/workloom-context/scripts/sync-fleet-local.sh` | 同上 | 无需（脏树自动跳过） |
@@ -72,6 +72,12 @@ node sync/merge-sync-prs.mjs                             # 派发仓内 trusted-
 
 后续新仓也须先完成同一首装闭环；原生 CI 令牌只有仓库设置读权限，不能用它伪装首次保护安装成功。缺设置写权限时由当前任务授权的持续安装端负责，不将会话令牌保存为 CI 变量或文件。
 
+### 1.3.3 账本读取的 CNB 实测证据
+
+2026-10-05 在 `workloom-ai/workloom-im` 使用当前任务授权身份实测 `GET /-/git/raw/automation%2Fdelivery-state/state.json`，平台返回 HTTP 200，JSON 为 schemaVersion=1、repo=workloom-ai/workloom-im、revision=128。这里 `%2F` 是分支名斜杠的标准 URL 编码，真实服务已按完整 `automation/delivery-state` 分支处理；该结论来自线上回读，不是离线夹具推断。随后 `GET /-/git/branches/automation%2Fdelivery-state` 返回 protected=true、提交 `22195d4ae662a6625ea83e6d002d4afa89bcca60`（账本已推进到 revision=134）；同一提交的 `GET /-/git/raw/22195d4ae662a6625ea83e6d002d4afa89bcca60/state.json` 用于核对准确版本。
+
+fanout 只在读取结果通过完整身份与历史哈希链验证，且存在 installation_prepared 或 activated 后报告 ready。明确 404 是待首装；403、服务错误、网络异常和损坏账本不会被当作已就绪。若未来平台改变该 ref 路由，先通过已验证的分支查询解析提交 SHA，再读取该 SHA 的 state.json，并以同样的状态校验和门禁回归后发布。
+
 ### 1.4 权限模型（谁给谁开权限）
 
 | 通道 | 令牌 | 能力 | 备注 |
@@ -100,6 +106,7 @@ node sync/merge-sync-prs.mjs                             # 派发仓内 trusted-
 
 - 仓库根存在 `product.manifest.json#schemaVersion = workloom.product/*` → 判为 WorkLoom 仓；
   否则退化看 `.workloom-base-sync.json` / `bundles/*/bundle.json`；
+- 单仓权限、网络或内容读取失败单列为未核实，继续检查其余仓；失败仓不会被归为非 WorkLoom，也不参与新仓纳管。隔离登记表缺失、不可读或结构无效时整次纳管判断保持失败闭合；
 - 已纳管集合 = 基座 + `sync/child-repos.json#children`；差集里的新仓会被
   `--issue`（开 `src/auto` 扫描任务卡）与 `--provision`（建立标签/分支保护/协议资产/门禁 stage 并开纳管 PR）覆盖；
 - 实验车道新仓要按协议 §10.1 在清单里补 `lane/experimentNote/experimentPaths/industryExtensionPaths`，
