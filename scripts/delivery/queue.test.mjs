@@ -16,7 +16,7 @@ import { batchEnvironment, batchSnapshot, botApiEndpoint, combineBatchResults, r
 import { configureAutomaticReviewPolicy, ensureStateProtection, prepareInstallation, requireTrustedRunner, verifyInstallerChecks, verifyPreparedInstallation } from './queue-runner.mjs';
 import { verifyReleaseSource } from './release-source.mjs';
 import { modelGateway } from './model-gateway.mjs';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 const repo = 'workloom-ai/test'; const head = 'a'.repeat(40); const main = 'b'.repeat(40); const mergedSha = 'c'.repeat(40); const testedSha = 'd'.repeat(40); const now = 10_000_000;
 const policy = { ...BASE_POLICY, hash: 'policy-1', requiredNames: ['static-gate'] };
@@ -722,6 +722,32 @@ test('lost release launch cannot adopt a different manual build with the same so
   history.push({ sn: 'exact', sha: mergedSha, event: 'api_trigger_ui_release', title: `WorkLoom release ${item.key}` });
   assert.equal((await reconcileReleases({ platform, store, now }))[0].status, 'running');
   assert.equal((await store.read()).releases[item.key].build.sn, 'exact'); assert.equal(writes, 0);
+});
+test('UI release verifies the real Platform API JSON decoding contract and rejects unreadable registration or different bytes', async t => {
+  const previous = globalThis.fetch; t.after(() => { globalThis.fetch = previous; });
+  const version = '1.2.3'; const release = { sha: mergedSha, kind: 'ui', version, build: { sn: 'ui-build' } };
+  const key = releaseKey({ repo, sha: mergedSha, kind: 'ui', version });
+  const payload = Buffer.from('actual UI asset fixture'); const sri = `sha512-${createHash('sha512').update(payload).digest('base64')}`;
+  let registration = { ui: { latestStableVersion: version, distribution: { integrityByVersion: { [version]: sri } } } };
+  const requests = []; let downloaded = 0;
+  globalThis.fetch = async input => {
+    const path = new URL(String(input)).pathname; requests.push(path);
+    if (path.endsWith('/build/logs')) return Response.json({ total: 1, data: [{ sn: release.build.sn, sha: mergedSha, event: releaseEventFor('ui'), title: `WorkLoom release ${key}` }] });
+    if (path.endsWith('/releases/tags/ui-v1.2.3')) return Response.json({ id: 'release-ui', draft: false });
+    if (path.endsWith('/git/commits/ui-v1.2.3')) return Response.json({ sha: mergedSha });
+    if (path.endsWith(`/git/raw/${mergedSha}/sync/base-capabilities.json`)) return Response.json(registration);
+    throw new Error(`Unexpected UI release API path ${path}`);
+  };
+  const platform = new Platform(repo, 'test-only-ui-release');
+  const download = async (actualRepo, tag, name) => { downloaded++; assert.equal(actualRepo, repo); assert.equal(tag, 'ui-v1.2.3'); assert.equal(name, 'workloom-ui-1.2.3.tgz'); return { name, size: payload.length, sri }; };
+  const receipt = await verifyRelease(platform, release, download); assert.equal(receipt.assets[0].sri, sri); assert.equal(downloaded, 1);
+  assert.ok(requests.some(path => path.endsWith(`/git/raw/${mergedSha}/sync/base-capabilities.json`)));
+  for (const value of [null, [], 'not a JSON registration object']) { registration = value; await assert.rejects(verifyRelease(platform, release, download), /registration unreadable/); }
+  assert.equal(downloaded, 1);
+  registration = { ui: { latestStableVersion: version, distribution: { integrityByVersion: { [version]: 'sha512-different' } } } };
+  await assert.rejects(verifyRelease(platform, release, download), /bytes differ/);
+  registration.ui.latestStableVersion = '1.2.4'; registration.ui.distribution.integrityByVersion[version] = sri;
+  await assert.rejects(verifyRelease(platform, release, download), /bytes differ/);
 });
 test('release verifies actual tag source, manifest identity and every downloaded digest', async () => {
   const hex = 'a'.repeat(128); const names = ['WorkLoom-mac-arm64.dmg', 'WorkLoom-mac-x64.dmg', 'WorkLoom-win-x64.exe']; const release = { sha: mergedSha, kind: 'desktop', version: 'v1.2.3', build: { sn: 'run' } };
