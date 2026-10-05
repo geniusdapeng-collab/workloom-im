@@ -16,6 +16,21 @@ import {
   syncedChildren,
   syncDrift,
 } from "./fanout-rules.mjs";
+import { deliveryRolloutReady } from './fanout-cnb.mjs';
+import { appendEvent, emptyState } from '../scripts/delivery/queue-model.mjs';
+
+test('新租约门禁只下发到已准备账本的仓；权限、损坏或不同仓账本不能放行', async () => {
+  const repo = 'workloom-ai/workloom-hotel';
+  const absent = await deliveryRolloutReady(repo, async () => { throw Object.assign(new Error('not found'), { status: 404 }); });
+  assert.equal(absent.ready, false); assert.match(absent.reason, /先经首装/);
+  const state = emptyState(repo); assert.equal((await deliveryRolloutReady(repo, async () => state)).ready, false);
+  appendEvent(state, 'installation_prepared', { installer: 1 });
+  assert.equal((await deliveryRolloutReady(repo, async () => state)).ready, true);
+  for (const status of [403, 500]) await assert.rejects(deliveryRolloutReady(repo, async () => { throw Object.assign(new Error('unreadable'), { status }); }), /unreadable/);
+  await assert.rejects(deliveryRolloutReady(repo, async () => emptyState('foreign/repo')), /identity/);
+  const corrupted = structuredClone(state); corrupted.events[0].data.installer = 2;
+  await assert.rejects(deliveryRolloutReady(repo, async () => corrupted), /chain/);
+});
 
 const pull = (overrides = {}) => ({
   number: "7",
