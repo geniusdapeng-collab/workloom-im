@@ -301,14 +301,64 @@ test('model broker streams only allowed AI routes and never reflects credentials
 });
 test('CI review receipts are assigned to the responsible batch and collected without omission or duplication', () => {
   const files = Array.from({ length: 61 }, (_, index) => `source/${String(index).padStart(2, '0')}.ts`);
-  const ciPolicyChanges = [{ id: 'first', file: files[0] }, { id: 'last', file: files[60] }, { id: 'config' }, { id: 'unknown', file: 'outside-changed-paths/ci.yml' }];
+  const ciPolicyChanges = [{ id: 'first', file: files[0] }, { id: 'last', file: files[60] }, { id: 'config', file: files[30] }];
   const s = snapshot(1, { files, ciPolicyChanges });
   const manifest = { snapshot: s, policyHash: policy.hash };
   const results = reviewBatches(files).map((paths, index) => ({ status: 'passed', issues: [], reviewed_files: paths, head_sha: head, base_sha: main, policy_hash: policy.hash, depends_on: [], ci_policy_changes: batchSnapshot(s, index).ciPolicyChanges.map(change => ({ id: change.id, rationale: 'Exact old/new check remains required and has regression coverage.' })) }));
-  assert.deepEqual(batchSnapshot(s, 0).ciPolicyChanges.map(change => change.id), ['first', 'config', 'unknown']);
-  assert.deepEqual(combineBatchResults(manifest, results).ci_policy_changes.map(change => change.id).sort(), ['config', 'first', 'last', 'unknown']);
+  assert.deepEqual(batchSnapshot(s, 0).ciPolicyChanges.map(change => change.id), ['first']);
+  assert.deepEqual(batchSnapshot(s, 1).ciPolicyChanges.map(change => change.id), ['config']);
+  assert.deepEqual(batchSnapshot(s, 2).ciPolicyChanges.map(change => change.id), ['last']);
+  assert.deepEqual(combineBatchResults(manifest, results).ci_policy_changes.map(change => change.id).sort(), ['config', 'first', 'last']);
   const missing = structuredClone(results); missing[2].ci_policy_changes = []; assert.throws(() => combineBatchResults(manifest, missing), /migration/);
   const duplicate = structuredClone(results); duplicate[1].ci_policy_changes = [results[0].ci_policy_changes[0]]; assert.throws(() => combineBatchResults(manifest, duplicate), /migration/);
+  for (const change of [{ id: 'absent-owner' }, { id: 'outside-owner', file: 'outside-changed-paths/ci.yml' }]) {
+    assert.throws(() => batchSnapshot({ ...s, ciPolicyChanges: [...s.ciPolicyChanges, change] }, 0), /owner/);
+  }
+});
+test('structural included CI changes belong to the exact changed include, never an unrelated root-CI batch', async t => {
+  const root = await temporary(t, 'delivery-ci-origin-');
+  const file = 'policy/60.yml'; await mkdir(join(root, 'policy'));
+  const mainCi = 'include: policy/60.yml\n';
+  const before = 'main:\n  pull_request:\n    - name: static-gate\n      stages: [{name: compile, script: original-compile}]\n';
+  await writeFile(join(root, '.cnb.yml'), mainCi); await writeFile(join(root, file), before);
+  const trusted = await loadPolicy(root); const files = Array.from({ length: 61 }, (_, index) => `policy/${String(index).padStart(2, '0')}.yml`);
+  const report = await sourcePipelineReport(mainCi, trusted, { mainSha: main, headSha: head, changedFiles: files,
+    readLocal: async path => { assert.equal(path, file); return before.replace('original-compile', 'upgraded-compile'); } });
+  assert.deepEqual(report.errors, []); assert.equal(report.changes.length, 1);
+  assert.equal(report.changes[0].file, file); assert.equal(report.changes[0].before.path, file);
+  assert.equal(report.changes[0].before.ref, main); assert.equal(report.changes[0].after.ref, head);
+  const s = snapshot(1, { files, ciPolicyChanges: report.changes });
+  assert.equal(batchSnapshot(s, 0).ciPolicyChanges.length, 0);
+  assert.deepEqual(batchSnapshot(s, 2).ciPolicyChanges, report.changes);
+  const unbound = await sourcePipelineReport(mainCi, trusted, { mainSha: main, headSha: head, changedFiles: ['unrelated.ts'], readLocal: async () => before.replace('original-compile', 'changed') });
+  assert.match(unbound.errors.join(';'), /changed-file owner/); assert.deepEqual(unbound.changes, []);
+});
+test('a changed include edge owns structural changes from an unchanged leaf and inline YAML uses its physical file', async t => {
+  const root = await temporary(t, 'delivery-ci-edge-'); await mkdir(join(root, 'policy'));
+  const leaf = command => `main:\n  pull_request:\n    - name: static-gate\n      stages: [{name: compile, script: ${command}}]\n`;
+  const original = 'include: policy/edge.yml\n';
+  await writeFile(join(root, '.cnb.yml'), original); await writeFile(join(root, 'policy/edge.yml'), 'include: policy/old.yml\n');
+  await writeFile(join(root, 'policy/old.yml'), leaf('old-compile'));
+  const trusted = await loadPolicy(root);
+  const report = await sourcePipelineReport(original, trusted, { mainSha: main, headSha: head, changedFiles: ['policy/edge.yml'],
+    readLocal: async path => path === 'policy/edge.yml' ? 'include: policy/new.yml\n' : leaf('new-compile') });
+  assert.deepEqual(report.errors, []); assert.equal(report.changes[0].file, 'policy/edge.yml');
+  assert.deepEqual(report.changes[0].origins, { before: 'policy/old.yml', after: 'policy/new.yml' });
+  const inline = await sourcePipelineReport('include:\n  - config:\n      main:\n        pull_request:\n          - name: static-gate\n            stages: [{name: compile, script: inline-compile}]\n', trusted,
+    { mainSha: main, headSha: head, changedFiles: ['.cnb.yml'] });
+  assert.deepEqual(inline.errors, []); assert.equal(inline.changes[0].file, '.cnb.yml');
+  const moved = await sourcePipelineReport('include: policy/added.yml\n', trusted,
+    { mainSha: main, headSha: head, changedFiles: [{ path: '.cnb.yml', status: 'modify' }, { path: 'policy/added.yml', status: 'add' }], readLocal: async () => leaf('moved-compile') });
+  assert.deepEqual(moved.errors, []); assert.equal(moved.changes[0].file, 'policy/added.yml');
+  assert.equal(moved.changes[0].before.absent, true); assert.equal(moved.changes[0].after.absent, false);
+});
+test('CNB array/mapping collisions retain the array and the official fallback branch binds its product CI', async t => {
+  const root = await temporary(t, 'delivery-ci-array-');
+  const ci = 'include: included.yml\n$:\n  pull_request: {ignored: mapping}\n';
+  await writeFile(join(root, '.cnb.yml'), ci); await writeFile(join(root, 'included.yml'), '$:\n  pull_request:\n    - name: product-gate\n      stages: [{name: check, script: product-check}]\n');
+  const p = await loadPolicy(root); assert.deepEqual(p.requiredNames, ['product-gate']); assert.equal(p.prBranch, '$');
+  const report = await sourcePipelineReport(ci, p, { changedFiles: [], readLocal: path => readFile(join(root, path), 'utf8') });
+  assert.deepEqual(report.errors, []); assert.deepEqual(report.changes, []);
 });
 test('AI issue schema rejects incompatible severity/category/line data without dropping findings', () => {
   const issue = { severity: 'warning', category: 'bug', confidence: 'high', file: '.cnb.yml', start_line: 126, end_line: 126, problem: 'missing test file', suggestion: 'use the actual test file' };
