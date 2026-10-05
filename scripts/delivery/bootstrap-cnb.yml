@@ -35,9 +35,9 @@
             rules: REVIEW_RULES
             output: REVIEW_OUTPUT
             maxFiles: REVIEW_MAX_FILES
-        - name: Prepare protected ledger before installer approval
+        - name: Verify protected ledger before installer approval
           timeout: 180s
-          script: node scripts/delivery/queue-runner.mjs prepare-install --root "$REVIEW_CWD"
+          script: node scripts/delivery/queue-runner.mjs verify-install --root "$REVIEW_CWD"
         - name: Genuine independent CodeBuddy review
           image: cnbcool/code-review@sha256:c20b1e826d854738c807f4949859a6df5d58b95545ebefc96197369943a4bcce
           timeout: 25m

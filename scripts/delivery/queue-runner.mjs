@@ -14,10 +14,14 @@ import { branchProtectionPayload, redactCredentials, requireToken, validateBranc
 const arg = (name, fallback) => { const index = process.argv.indexOf(name); return index < 0 ? fallback : process.argv[index + 1]; };
 const ROOT = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 
+function stateProtectionPayload() {
+  return { ...branchProtectionPayload({ rule: STATE_BRANCH, requireReview: false }), allow_pushes: false, allow_master_pushes: true, required_must_push_via_pull_request: true, required_status_checks: false };
+}
+
 export async function ensureStateProtection(platform) {
   // CNB retains the PR requirement flag while granting the explicit admin-only
   // push exception. Verify the actual stored rule; never grant ordinary pushes.
-  const expected = { ...branchProtectionPayload({ rule: STATE_BRANCH, requireReview: false }), allow_pushes: false, allow_master_pushes: true, required_must_push_via_pull_request: true, required_status_checks: false };
+  const expected = stateProtectionPayload();
   const stateRule = (await platform.protections()).find(rule => rule.rule === STATE_BRANCH);
   if (!stateRule) {
     try { await platform.call('/-/settings/branch-protections', { method: 'POST', body: expected }); }
@@ -33,11 +37,26 @@ export async function ensureStateProtection(platform) {
 }
 
 /** Initialize the protected ledger before the installer can add its lease reader to main. */
-export async function prepareInstallation({ platform, store, root, installer }) {
+async function installerSource(platform, root, installer) {
   if (!Number.isSafeInteger(installer?.number) || installer.number <= 0 || installer.state !== 'open' || installer.is_wip !== false || branchName(installer.base?.ref) !== 'main' || !SHA_RE.test(installer.head?.sha ?? '')) throw new Error('Preparation requires a current open installer PR');
   if (await git(['rev-parse', 'HEAD'], { cwd: root }) !== installer.head.sha) throw new Error('Preparation checkout differs from installer source');
   const mainSha = (await platform.main()).commit?.sha;
   if (installer.base?.sha !== mainSha) throw new Error('Installer main changed before state preparation');
+  return mainSha;
+}
+
+export async function verifyPreparedInstallation({ platform, store, root, installer }) {
+  const mainSha = await installerSource(platform, root, installer);
+  const expected = stateProtectionPayload();
+  const actual = (await platform.protections()).find(rule => rule.rule === STATE_BRANCH);
+  if (!actual || Object.entries(expected).some(([key, value]) => actual[key] !== value)) throw new Error('Protected installer ledger must be prepared by the trusted installation writer');
+  const state = await store.read();
+  if (!state.events.some(event => event.kind === 'installation_prepared' && event.data.installer === installer.number && event.data.headSha === installer.head.sha && event.data.mainSha === mainSha)) throw new Error('Installer ledger is not prepared for the exact source/main');
+  return { repo: platform.repo, installer: installer.number, headSha: installer.head.sha, mainSha, revision: state.revision, verified: true };
+}
+
+export async function prepareInstallation({ platform, store, root, installer }) {
+  const mainSha = await installerSource(platform, root, installer);
   await store.read(); // Existing malformed branches are corruption, never an empty ledger.
   await ensureStateProtection(platform);
   const result = await store.mutate(state => appendEvent(state, 'installation_prepared', { installer: installer.number, headSha: installer.head.sha, mainSha }), { id: `install-state:${installer.number}:${installer.head.sha}` });
@@ -132,6 +151,10 @@ export async function main() {
     if (!Number.isSafeInteger(number) || number <= 0) throw new Error('Preparation requires installer --pr');
     console.log(JSON.stringify(await prepareInstallation({ platform, store, root, installer: await platform.pull(number) }), null, 2)); return;
   }
+  if (command === 'verify-install') {
+    if (!Number.isSafeInteger(number) || number <= 0) throw new Error('Verification requires installer --pr');
+    console.log(JSON.stringify(await verifyPreparedInstallation({ platform, store, root, installer: await platform.pull(number) }), null, 2)); return;
+  }
   if (command === 'review-prepare') {
     if (!Number.isSafeInteger(number) || number <= 0) throw new Error('Review requires a PR number');
     const result = await prepareReview({ platform, store, policy, root, number, stateless: process.env.DELIVERY_REVIEW_STATELESS === '1' });
@@ -163,7 +186,7 @@ export async function main() {
     if (report.some(item => ['parked', 'unknown', 'failed', 'timeout_running'].includes(item.status))) process.exitCode = 1;
     return;
   }
-  throw new Error('Usage: queue-runner.mjs status|lease|handoff|review-prepare|review-finish|prepare-install|activate|reconcile|releases [--repo org/name]');
+  throw new Error('Usage: queue-runner.mjs status|lease|handoff|review-prepare|review-finish|prepare-install|verify-install|activate|reconcile|releases [--repo org/name]');
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(error => { console.error(redactCredentials(error.message)); process.exitCode = 1; });

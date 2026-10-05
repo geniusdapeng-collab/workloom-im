@@ -13,7 +13,7 @@ import { dependencies, integratedDependency, mergeCandidate, reconcile, requestR
 import { enqueueReleases, reconcileReleases, verifyRelease } from './queue-release.mjs';
 import { injectDeliveryConfig } from './install-config.mjs';
 import { batchEnvironment, batchSnapshot, combineBatchResults, reviewBatches, reviewEnvironment, runReview, validateIssueSchema } from './review-plugin.mjs';
-import { ensureStateProtection, prepareInstallation, requireTrustedRunner } from './queue-runner.mjs';
+import { ensureStateProtection, prepareInstallation, requireTrustedRunner, verifyPreparedInstallation } from './queue-runner.mjs';
 import { verifyReleaseSource } from './release-source.mjs';
 const repo = 'workloom-ai/test'; const head = 'a'.repeat(40); const main = 'b'.repeat(40); const mergedSha = 'c'.repeat(40); const testedSha = 'd'.repeat(40); const now = 10_000_000;
 const policy = { ...BASE_POLICY, hash: 'policy-1', requiredNames: ['static-gate'] };
@@ -240,8 +240,8 @@ test('installer updates cancel only their own obsolete bootstrap review and do n
   assert.equal(bootstrap.lock.key, 'workloom-delivery-bootstrap-$CNB_PULL_REQUEST_IID'); assert.equal(bootstrap.lock['cancel-in-progress'], true);
   assert.notEqual(bootstrap.lock.key, ordinary.lock.key); assert.notEqual(ordinary.lock['cancel-in-progress'], true);
   const names = bootstrap.stages.map(stage => stage.name);
-  assert.ok(names.indexOf('Prepare protected ledger before installer approval') > names.indexOf('Snapshot exact source and main'));
-  assert.ok(names.indexOf('Prepare protected ledger before installer approval') < names.indexOf('Genuine independent CodeBuddy review'));
+  assert.ok(names.indexOf('Verify protected ledger before installer approval') > names.indexOf('Snapshot exact source and main'));
+  assert.ok(names.indexOf('Verify protected ledger before installer approval') < names.indexOf('Genuine independent CodeBuddy review'));
 });
 test('real review orchestration caps concurrent batches and withholds decisions on incomplete coverage or drift', async t => {
   const root = await temporary(t, 'delivery-batch-'); const directory = join(root, '.delivery-review/snapshot-x'); await mkdir(directory, { recursive: true });
@@ -275,6 +275,8 @@ test('state preparation initializes a protected ledger before merge without acti
   const prepared = await prepareInstallation({ platform, store, root, installer }); assert.equal(prepared.activated, false); assert.equal(writes, 1);
   assert.ok((await store.read()).events.some(event => event.kind === 'installation_prepared')); assert.equal((await store.read()).events.some(event => event.kind === 'activated'), false);
   await ensureStateProtection(platform); assert.equal(writes, 1);
+  assert.equal((await verifyPreparedInstallation({ platform, store, root, installer })).verified, true); assert.equal(writes, 1);
+  await assert.rejects(verifyPreparedInstallation({ platform, store: memoryStore(), root, installer }), /exact source/);
   rules[0].allow_master_force_pushes = true; await assert.rejects(ensureStateProtection(platform), /protection/);
   await assert.rejects(prepareInstallation({ platform, store, root, installer: { ...installer, head: { sha: head } } }), /checkout/);
 });
