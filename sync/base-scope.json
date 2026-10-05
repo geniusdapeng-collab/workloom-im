@@ -206,6 +206,7 @@
       "scripts/delivery/queue-release.mjs",
       "scripts/delivery/git-state.mjs",
       "scripts/delivery/review-plugin.mjs",
+      "scripts/delivery/model-gateway.mjs",
       "scripts/delivery/install-config.mjs",
       "scripts/delivery/cnb.yml",
       "scripts/delivery/bootstrap-cnb.yml",

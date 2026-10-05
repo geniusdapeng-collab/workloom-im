@@ -112,6 +112,8 @@ trusted main 的 `cnb.yml` 每 5 分钟恢复，原生仓级锁串行集成。�
 
 AI 使用固定官方镜像内的 SDK，按每批最多 30 个变化路径分批精读；每仓同时只有一条审查流水线、最多两个模型子进程。全部批次必须给出准确覆盖和身份回执，任一批缺失、失败或漂移不发布 Approve。审查失败按 source/main 限两次并退避；进程中断由原生 build SN 回读计数，丢失启动响应以唯一 title 查回，无正向回执不重复启动。未知结果只保留该任务，超出在途时限后无关任务仍可排入原生串行锁。
 
+模型批次剥离全部平台、批准和环境凭据；由 Linux 容器内不同 uid/gid 执行，源码与 trusted manifest 只读，仅能写本批 receipt 和独立 HOME。父进程的 loopback model-gateway 持有原生模型认证，只代理固定当前仓的 AI POST 路由，拒绝 Git/PR/构建/任意来源和重定向，不把后端错误体或凭据交回工具。原生镜像必须允许 root broker 降权，否则保持红灯。[CodeBuddy 环境变量说明](https://www.codebuddy.ai/docs/zh/cli/env-vars)支持配置模型 API key/base URL；平台批准仍由独立 publisher 持有真正 Bot 身份。bootstrap 与 trusted-main 镜像 digest 由 queue 测试对照 queue-policy 常量核验。
+
 既有必需 CI 的流水线与阶段名称、顺序必须保留，不能转成 allowFailure。调整既有检查的脚本、镜像或配置时，执行器从 trusted main 与确切 source 计算完整前后差异；AI 必须对每个差异给出准确 id 与保留/增强验证信号、回归和回滚的理由，机器再核对整份迁移回执。未覆盖、乱填 id、回执过期或降低门禁均不放行；常规检查实现升级通过独立 AI 和原仓检查自动交付，不等待人工批准。
 
 Git `automation/delivery-state` 保存任务、租约、事件、尝试、AI、集成和发布证明；普通 fast-forward push 是 CAS，transaction ID 处理丢失响应。没有强推。合并响应不明暂停集成，先正向回读；声明的 UI/桌面制品发布由独立的 delivery-releases 原生流水线与 workloom-delivery-release 锁处理，不占用合并执行器。发布固定 SHA/版本，回读构建 SN/source/event/准确意图、tag/manifest/实际 SHA-512 字节；失败不跳过无关集成，不生成发布成功回执。

@@ -8,13 +8,14 @@ import { appendEvent, checksVerdict, dependencyState, eligibility, emptyState, h
 import { GitStateStore, git } from './git-state.mjs';
 import { alignBranch, independentCodeBuddyApproval } from './queue-work.mjs';
 import { Platform } from './queue-platform.mjs';
-import { BASE_POLICY, ciImplementationChanges, loadPolicy, parser, resolvePipelineConfig, sourcePipelineReport, validateSourcePipeline } from './queue-policy.mjs';
+import { BASE_POLICY, REVIEW_IMAGE, ciImplementationChanges, loadPolicy, parser, resolvePipelineConfig, sourcePipelineReport, validateSourcePipeline } from './queue-policy.mjs';
 import { dependencies, integratedDependency, mergeCandidate, reconcile, requestReview, reviewSlotBusy, writeTaskReceipts } from './queue-controller.mjs';
 import { enqueueReleases, reconcileReleases, verifyRelease } from './queue-release.mjs';
 import { injectDeliveryConfig } from './install-config.mjs';
 import { batchEnvironment, batchSnapshot, combineBatchResults, reviewBatches, reviewEnvironment, runReview, validateIssueSchema } from './review-plugin.mjs';
 import { ensureStateProtection, prepareInstallation, requireTrustedRunner, verifyInstallerChecks, verifyPreparedInstallation } from './queue-runner.mjs';
 import { verifyReleaseSource } from './release-source.mjs';
+import { modelGateway } from './model-gateway.mjs';
 const repo = 'workloom-ai/test'; const head = 'a'.repeat(40); const main = 'b'.repeat(40); const mergedSha = 'c'.repeat(40); const testedSha = 'd'.repeat(40); const now = 10_000_000;
 const policy = { ...BASE_POLICY, hash: 'policy-1', requiredNames: ['static-gate'] };
 const intent = { ready: true, dependsOn: [], releases: [], taskId: null };
@@ -209,8 +210,25 @@ test('AI batch coverage cannot truncate, duplicate or reuse another source/main 
 });
 test('model tool subprocess excludes approval and unrelated secrets without mutating the publisher environment', () => {
   const env = { CNB_TOKEN: 'gateway', CNB_TOKEN_FOR_CODEBUDDY: 'approve', CNB_TOKEN_FOR_AI: 'approve2', NPM_TOKEN: 'npm', DATABASE_PASSWORD: 'db', PATH: '/bin', CNB_REPO_SLUG: repo };
-  assert.deepEqual(batchEnvironment(env), { CNB_TOKEN: 'gateway', PATH: '/bin', CNB_REPO_SLUG: repo });
+  assert.deepEqual(batchEnvironment(env), { PATH: '/bin', CNB_REPO_SLUG: repo });
   assert.equal(env.CNB_TOKEN_FOR_CODEBUDDY, 'approve'); assert.equal(env.CNB_TOKEN_FOR_AI, 'approve2');
+});
+test('model broker streams only allowed AI routes and never reflects credentials or backend error bodies', async t => {
+  const calls = []; let fail = false;
+  const broker = await modelGateway({ repo, token: 'test-broker-only', request: async (url, options) => {
+    calls.push({ url, options });
+    return fail ? new Response('backend exposes test-broker-only', { status: 401 }) : new Response('data: model-output\n\n', { headers: { 'content-type': 'text/event-stream' } });
+  } }); t.after(() => broker.close());
+  const ask = path => fetch(broker.url + path, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer model-input' }, body: '{}' });
+  assert.equal(await (await ask('/v1/messages?beta=true')).text(), 'data: model-output\n\n');
+  assert.equal(calls[0].url, `https://api.cnb.cool/${repo}/-/ai/v1/messages?beta=true`);
+  assert.equal(calls[0].options.headers.authorization, 'Bearer test-broker-only');
+  assert.equal(calls[0].options.redirect, 'error');
+  for (const path of ['/pulls/1/merge', '/git/branches', '/v1/messages%2f..%2fmerge']) assert.equal((await ask(path)).status, 403);
+  assert.equal((await fetch(broker.url + '/v1/messages')).status, 403);
+  assert.equal(calls.length, 1);
+  fail = true; const denied = await ask('/chat/completions'); assert.equal(denied.status, 401); assert.doesNotMatch(await denied.text(), /test-broker-only|backend exposes/);
+  await assert.rejects(modelGateway({ repo, token: 'test-only', endpoint: 'https://elsewhere.example' }), /identity/);
 });
 test('CI review receipts are assigned to the responsible batch and collected without omission or duplication', () => {
   const files = Array.from({ length: 61 }, (_, index) => `source/${String(index).padStart(2, '0')}.ts`);
@@ -243,6 +261,13 @@ test('required native node-test stages refer to existing repository files', asyn
     }
   }
   assert.ok(verified > 0);
+});
+test('bootstrap and trusted-main AI image digests stay bound to the single policy constant', async () => {
+  const YAML = await parser();
+  const trusted = YAML.parse(await readFile(new URL('./cnb.yml', import.meta.url), 'utf8'));
+  const bootstrap = YAML.parse(await readFile(new URL('./bootstrap-cnb.yml', import.meta.url), 'utf8'));
+  const images = [trusted.main['pull_request.target'][0], bootstrap['**'].pull_request[0]].flatMap(pipeline => pipeline.stages.filter(stage => stage.image).map(stage => stage.image));
+  assert.deepEqual(images, [REVIEW_IMAGE, REVIEW_IMAGE]);
 });
 test('installer updates cancel only their own obsolete bootstrap review and do not share the ordinary review lock', async () => {
   const YAML = await parser();

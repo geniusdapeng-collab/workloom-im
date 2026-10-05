@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** The pinned official image supplies the SDK and Bot identity; trusted policy controls complete batch review. */
-import { readFile, writeFile } from 'node:fs/promises';
+import { chmod, chown, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process';
 import { SHA_RE, validateReview } from './queue-model.mjs';
 import { reviewRules } from './queue-policy.mjs';
 import { Platform } from './queue-platform.mjs';
+import { modelGateway } from './model-gateway.mjs';
 import { redactCredentials } from '../tools/cnb-api.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
@@ -37,11 +38,11 @@ export async function reviewEnvironment(root, env = process.env) {
   };
 }
 
-/** Model tools must never inherit the independent platform approval identity. */
+/** Model tools inherit neither platform credentials nor repository-provided process configuration. */
 export function batchEnvironment(env) {
   const child = { ...env };
   for (const key of Object.keys(child)) {
-    if (key !== 'CNB_TOKEN' && /(?:TOKEN|SECRET|PASSWORD|CREDENTIAL|PRIVATE_KEY)/i.test(key)) delete child[key];
+    if (/(?:TOKEN|SECRET|PASSWORD|CREDENTIAL|PRIVATE_KEY|API_KEY|AUTH|ACC_PRODUCT_CONFIG|GIT_CONFIG|NODE_OPTIONS)/i.test(key)) delete child[key];
   }
   return child;
 }
@@ -108,8 +109,24 @@ function logStream(stream, destination, token) {
 }
 
 async function nativeChild(mode, root, index, deadline, env) {
+  let childEnv = env; let identity = {};
+  if (mode === '--batch') {
+    if (process.platform !== 'linux' || process.getuid?.() !== 0 || !env.DELIVERY_MODEL_PROXY) throw new Error('Native model review requires the isolated root broker in a Linux container');
+    const manifest = await trustedManifest(root); const uid = 63000 + index;
+    const home = join(manifest.directory, `home-${index}`);
+    await chmod(manifest.directory, 0o755);
+    await mkdir(join(home, '.codebuddy'), { recursive: true });
+    await writeFile(join(home, '.codebuddy/settings.json'), JSON.stringify({ trustedDirectories: [manifest.source] }));
+    for (const path of [home, join(home, '.codebuddy'), join(home, '.codebuddy/settings.json')]) await chown(path, uid, uid);
+    await chmod(home, 0o700);
+    const receipt = join(manifest.directory, `batch-${index}.json`);
+    await writeFile(receipt, ''); await chown(receipt, uid, uid); await chmod(receipt, 0o600);
+    childEnv = { ...batchEnvironment(env), HOME: home, PLUGIN_API_KEY: 'local-model-broker', PLUGIN_BASE_URL: env.DELIVERY_MODEL_PROXY,
+      GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'safe.directory', GIT_CONFIG_VALUE_0: manifest.source };
+    identity = { uid, gid: uid };
+  }
   await new Promise((accept, reject) => {
-    const child = spawn(process.execPath, [SELF, mode, String(index), root], { env: { ...(mode === '--batch' ? batchEnvironment(env) : env), DELIVERY_REVIEW_DEADLINE_MS: String(deadline) }, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(process.execPath, [SELF, mode, String(index), root], { ...identity, env: { ...childEnv, DELIVERY_REVIEW_DEADLINE_MS: String(deadline) }, stdio: ['ignore', 'pipe', 'pipe'] });
     const remaining = Math.max(1, deadline - Date.now());
     const timer = setTimeout(() => child.kill('SIGTERM'), remaining);
     const killTimer = setTimeout(() => child.kill('SIGKILL'), remaining + 10_000);
@@ -124,6 +141,8 @@ export async function runReview(root = process.cwd(), { env = process.env, platf
   const childEnv = await reviewEnvironment(root, env);
   const batches = reviewBatches(manifest.snapshot.files);
   const deadline = Date.now() + 24 * 60_000;
+  const gateway = runBatch ? null : await modelGateway({ repo: env.CNB_REPO_SLUG, token: env.CNB_TOKEN, endpoint: env.CNB_API_ENDPOINT });
+  if (gateway) childEnv.DELIVERY_MODEL_PROXY = gateway.url;
   const results = new Array(batches.length);
   let next = 0;
   const batch = runBatch ?? (async index => {
@@ -131,13 +150,13 @@ export async function runReview(root = process.cwd(), { env = process.env, platf
     return JSON.parse(await readFile(join(manifest.directory, `batch-${index}.json`), 'utf8'));
   });
   let failure;
-  await Promise.allSettled(Array.from({ length: Math.min(CONCURRENCY, batches.length) }, async () => {
+  try { await Promise.allSettled(Array.from({ length: Math.min(CONCURRENCY, batches.length) }, async () => {
     while (!failure && next < batches.length) {
       const index = next++;
       try { results[index] = await batch(index, batches[index], manifest); }
       catch (error) { failure ??= error; }
     }
-  }));
+  })); } finally { if (gateway) await gateway.close(); }
   if (failure) throw failure;
   let output;
   try { output = combineBatchResults(manifest, results); }
