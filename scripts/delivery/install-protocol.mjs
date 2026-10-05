@@ -15,8 +15,11 @@ const INPUTS = Object.freeze({
 });
 
 function lines(...rows) { return rows.join('\n'); }
+// This import exists in the generated target CI file, whose sibling is copied
+// in the same installation plan. Do not describe it as this generator's import.
+const admissionImport = 'import { verifyPrFreshness, verifyPrLeases } from ' + JSON.stringify('./' + ADMISSION.slice(PREFIX.length)) + ';';
 const LOCK_EDITS = [
-  ['const API = "https://api.cnb.cool";', lines(MARKER, 'import { verifyPrFreshness, verifyPrLeases } from "./verify-delivery-admission.mjs";', 'const API = "https://api.cnb.cool";')],
+  ['const API = "https://api.cnb.cool";', lines(MARKER, admissionImport, 'const API = "https://api.cnb.cool";')],
   ['async api(path, { repoSlug = this.repoSlug } = {})', 'async api(path, { repoSlug = this.repoSlug, raw = false } = {})'],
   ['function fail(code, message) {', 'function fail(code, message, status) {'],
   ['  error.code = code;', '  error.code = code;\n  if (status !== undefined) error.status = status;'],
