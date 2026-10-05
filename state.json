@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 178,
+  "revision": 180,
   "tasks": {
     "231": {
       "number": 231,
@@ -103,7 +103,7 @@
     },
     "232": {
       "number": 232,
-      "status": "waiting_ci",
+      "status": "aligning",
       "firstSeen": 1791242108737,
       "attempts": {},
       "headSha": "30ea1fc93f497804783ff2479e18ea53b842d815",
@@ -278,7 +278,14 @@
         "sync/base-scope.json"
       ],
       "ciSince": 1791242108737,
-      "updatedAt": 1791242108737
+      "updatedAt": 1791242108737,
+      "alignmentCount": 1,
+      "alignmentIntent": {
+        "headSha": "30ea1fc93f497804783ff2479e18ea53b842d815",
+        "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+        "at": 1791242108737
+      },
+      "review": null
     },
     "236": {
       "number": 236,
@@ -3576,6 +3583,36 @@
       },
       "previous": "420e09898a33eea52bd350cbf6f2c1bb80a59f62b8847336ad1e78391c3cb969",
       "digest": "7edceb664f617d6735f4cb9b7c0f8b92d997c38327dac9047c56420fbe7d4a07"
+    },
+    {
+      "sequence": 179,
+      "at": "2026-10-05T23:15:08.737Z",
+      "kind": "task",
+      "data": {
+        "number": 232,
+        "patch": {
+          "status": "aligning",
+          "alignmentCount": 1,
+          "alignmentIntent": {
+            "headSha": "30ea1fc93f497804783ff2479e18ea53b842d815",
+            "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+            "at": 1791242108737
+          },
+          "review": null
+        }
+      },
+      "previous": "7edceb664f617d6735f4cb9b7c0f8b92d997c38327dac9047c56420fbe7d4a07",
+      "digest": "e64fb849a89b4cf75a8fbf1e9978de706e3161a163f582bc34a8afe02c2171d2"
+    },
+    {
+      "sequence": 180,
+      "at": "2026-10-05T23:15:15.875Z",
+      "kind": "transaction",
+      "data": {
+        "id": "7c07ffca-0dfe-4430-b43f-f684f4858049"
+      },
+      "previous": "e64fb849a89b4cf75a8fbf1e9978de706e3161a163f582bc34a8afe02c2171d2",
+      "digest": "f08d4629e334c20744131f76a3370727d62fa823d5246c7a007abfbf0d70282f"
     }
   ]
 }
