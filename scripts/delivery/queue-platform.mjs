@@ -2,6 +2,13 @@ import { api, redactCredentials } from '../tools/cnb-api.mjs';
 import { SHA_RE, parseIntent, checksVerdict, hash } from './queue-model.mjs';
 import { ciImplementationChanges, sourcePipelineReport } from './queue-policy.mjs';
 
+function labelSignature(labels) {
+  if (!Array.isArray(labels)) throw new Error('Platform label set is unreadable');
+  const names = labels.map(label => typeof label === 'string' ? label : label?.name);
+  if (names.some(name => typeof name !== 'string' || !name) || new Set(names).size !== names.length) throw new Error('Platform label set is invalid');
+  return JSON.stringify(names.sort());
+}
+
 export class Platform {
   constructor(repo, token, request = api) {
     this.repo = repo; this.token = token; this.request = request;
@@ -75,7 +82,7 @@ export class Platform {
       else checkErrors.push(...checksVerdict(payload, await this.commit(checkSha), { headSha, mainSha }, policy.requiredNames));
     }
     const [finalPull, finalMain] = await Promise.all([this.pull(number), this.main()]);
-    if (finalPull.head?.sha !== headSha || finalPull.base?.sha !== pull.base?.sha || finalMain.commit?.sha !== mainSha || finalPull.state !== pull.state || finalPull.head?.ref !== pull.head?.ref || finalPull.base?.ref !== pull.base?.ref || JSON.stringify(finalPull.labels) !== JSON.stringify(pull.labels) || finalPull.is_wip !== pull.is_wip || finalPull.body !== pull.body) throw new Error('Platform snapshot changed while reading');
+    if (finalPull.head?.sha !== headSha || finalPull.base?.sha !== pull.base?.sha || finalMain.commit?.sha !== mainSha || finalPull.state !== pull.state || finalPull.head?.ref !== pull.head?.ref || finalPull.base?.ref !== pull.base?.ref || labelSignature(finalPull.labels) !== labelSignature(pull.labels) || finalPull.is_wip !== pull.is_wip || finalPull.body !== pull.body) throw new Error('Platform snapshot changed while reading');
     return { number: Number(number), pull: finalPull, headSha, mainSha, files, intent: parseIntent(finalPull), headTime: Date.parse(headCommit.commit?.committer?.date ?? headCommit.commit?.author?.date), mergeBase: compare.merge_base_commit?.sha, checkErrors, checkSha, hasFailedChecks, ciPolicyChanges };
   }
 

@@ -353,6 +353,22 @@ test('positive merge readback requires actual is_merged and exact tested parent 
   platform.commit = async () => ({ parents: [{ sha: head }, { sha: main }] }); await assert.rejects(platform.verifyMerge(snapshot(), { sha: mergedSha }), /parents/);
   platform.pull = async () => ({ state: 'closed', is_merged: false, head: { sha: head } }); await assert.rejects(platform.verifyMerge(snapshot(), { sha: mergedSha }), /receipt/);
 });
+test('snapshot accepts label reordering but rejects actual label changes and unreadable sets', async () => {
+  const initial = { ...snapshot().pull, labels: [{ name: 'protocol' }, { name: 'src/auto' }] };
+  let finalLabels = [{ name: 'src/auto' }, { name: 'protocol' }]; let reads = 0;
+  const platform = new Platform(repo, undefined, async (_repo, path) => {
+    if (path === '/-/pulls/1') return { ...initial, labels: ++reads % 2 ? initial.labels : finalLabels };
+    if (path === '/-/git/branches/main') return { commit: { sha: main } };
+    if (path.includes('/git/compare/')) return { base_commit: { sha: main }, head_commit: { sha: head }, merge_base_commit: { sha: main }, files: [{ path: 'apps/example.ts' }] };
+    if (path.includes('/git/commits/')) return { sha: head, commit: { committer: { date: new Date(now).toISOString() } } };
+    throw new Error(`Unexpected ${path}`);
+  });
+  assert.equal((await platform.snapshot(1, {}, { checks: false })).headSha, head);
+  finalLabels = [{ name: 'risk/block' }, { name: 'protocol' }];
+  await assert.rejects(platform.snapshot(1, {}, { checks: false }), /snapshot changed/);
+  finalLabels = undefined;
+  await assert.rejects(platform.snapshot(1, {}, { checks: false }), /unreadable/);
+});
 test('unknown merge acknowledgement pauses later integration; never repeats the write', async () => {
   const s = snapshot(11); s.originNumber = 1; s.pull.head.ref = 'delivery/candidate/test';
   const state = activate(emptyState(repo)); updateTask(state, 1, { status: 'waiting_ci', headSha: head, mainSha: main, originalBody: '', intent, review: review(s) }, now); const store = memoryStore(state); let writes = 0;
