@@ -21,7 +21,7 @@
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { findFileOverlaps, findModuleConflicts, parseChangedPaths, resolveLockOverlapMode } from "./protocol-rules.mjs";
-import { emptyState, parseIntent, sensitiveScopes, STATE_BRANCH, validateState } from '../delivery/queue-model.mjs';
+import { parseIntent, sensitiveScopes, STATE_BRANCH, validateState } from '../delivery/queue-model.mjs';
 
 const API = "https://api.cnb.cool";
 const SHA_RE = /^[0-9a-f]{40,64}$/i;
@@ -238,9 +238,7 @@ export async function readLeases(repoSlug, request = apiJson) {
       await request(`${API}/${repoSlug}/-/git/branches/${encodeURIComponent(STATE_BRANCH)}`);
     } catch (branchError) {
       if (branchError.status !== 404) throw branchError;
-      const cnb = await request(`${API}/${repoSlug}/-/git/raw/main/.cnb.yml`, { raw: true });
-      if (typeof cnb !== 'string' || cnb.includes('scripts/delivery/cnb.yml')) throw new Error('已安装交付机制但租约账本缺失，拒绝按空租约放行');
-      return emptyState(repoSlug);
+      throw new Error('租约账本缺失，拒绝按空租约放行；须先运行 prepare-install 建立受保护账本，再启用新门禁');
     }
     throw new Error('租约控制分支存在但 state.json 缺失，拒绝放行');
   }
