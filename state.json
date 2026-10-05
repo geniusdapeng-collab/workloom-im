@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 276,
+  "revision": 278,
   "tasks": {
     "231": {
       "number": 231,
@@ -349,7 +349,7 @@
         ],
         "releases": []
       },
-      "updatedAt": 1791243908028,
+      "updatedAt": 1791244209411,
       "admission": {
         "number": 236,
         "headSha": "39a95964f70eeb7093be45ec73f9172511097f96",
@@ -6822,6 +6822,61 @@
       },
       "previous": "506a3bd964ca761257811b82441e75e35131d4122506a20696d685692d6b14e1",
       "digest": "52393fedae96ac1527f79aabb05602871885711523080022ce314b2df14b2bd2"
+    },
+    {
+      "sequence": 277,
+      "at": "2026-10-05T23:50:09.411Z",
+      "kind": "task",
+      "data": {
+        "number": 236,
+        "patch": {
+          "headSha": "39a95964f70eeb7093be45ec73f9172511097f96",
+          "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+          "branch": "task/T-2026-1005-2000",
+          "intent": {
+            "taskId": "T-2026-1005-2000",
+            "ready": true,
+            "dependsOn": [
+              239
+            ],
+            "releases": []
+          },
+          "originalBody": "账户安装器在已激活的基座当前 main 上完整分页发现 Owner/active 仓，并逐仓安装研发交付机制。保留行业业务、隔离规则、冻结认知和原仓必需 CI；growthtest 的独立 Git/PR 来源与完整路径校验保留，仅将永久 PR 编号占锁迁移为有期限租约。任务卡 Issue #235。授权凭据只在安装进程内注入，首次准备、真实 AI/检查、普通 merge、激活与原生回执逐项回读。用户取消的 Codex chat 定时任务保持删除；本变更提供账户安装 CLI，不自行恢复该定时任务。\n\n本地验证：30 项安装器回归通过；实际 growthtest 安装副本 223 项通过、0 失败，1 项共享 UI 发布检查因该产品无此车道而跳过；重复安装 0 文件改动。 已对齐准确基座 main，交接为 ready。\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1005-2000\",\n  \"ready\": true,\n  \"depends_on\": [\n    239\n  ],\n  \"releases\": []\n}\n-->",
+          "files": [
+            "scripts/delivery/README.md",
+            "scripts/delivery/git-state.mjs",
+            "scripts/delivery/install-account.mjs",
+            "scripts/delivery/install-account.test.mjs",
+            "scripts/delivery/install-assets.mjs",
+            "scripts/delivery/install-protocol.mjs",
+            "scripts/delivery/install-repository.mjs",
+            "scripts/delivery/install-repository.test.mjs",
+            "scripts/delivery/model-gateway.mjs",
+            "scripts/delivery/queue-controller.mjs",
+            "scripts/delivery/queue-model.mjs",
+            "scripts/delivery/queue-platform.mjs",
+            "scripts/delivery/queue-policy.mjs",
+            "scripts/delivery/queue.test.mjs",
+            "sync/base-sync.test.mjs",
+            "sync/fanout-cnb.mjs",
+            "sync/fanout-rules.test.mjs"
+          ],
+          "status": "waiting_ci",
+          "ciSince": 1791243007261
+        }
+      },
+      "previous": "52393fedae96ac1527f79aabb05602871885711523080022ce314b2df14b2bd2",
+      "digest": "c353f00dac8128a65093e68e3b8c7d79bd84621e6058d23f84ef33c3baaa960a"
+    },
+    {
+      "sequence": 278,
+      "at": "2026-10-05T23:50:11.291Z",
+      "kind": "transaction",
+      "data": {
+        "id": "fbcbcf6f-fa42-456d-87b6-686892e30350"
+      },
+      "previous": "c353f00dac8128a65093e68e3b8c7d79bd84621e6058d23f84ef33c3baaa960a",
+      "digest": "55723eaeab4a47beac5dd475b1e5ac0b5d6e2a10c7aebed1e03a226983d9ede5"
     }
   ]
 }
