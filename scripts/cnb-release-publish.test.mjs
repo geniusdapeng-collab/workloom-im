@@ -1,11 +1,36 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, rm, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { publishRelease } from './cnb-release-publish.mjs';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { createHash, randomUUID } from 'node:crypto';
+import { parser } from './delivery/queue-policy.mjs';
 const sha = 'a'.repeat(40); const repo = 'workloom-ai/test'; const tag = 'v1.2.3';
-async function fixture(t) { const root = await mkdtemp(join(tmpdir(), 'delivery-release-publish-')); t.after(() => rm(root, { recursive: true, force: true })); const file = join(root, 'WorkLoom-test.exe'); await writeFile(file, 'actual bytes'); return { file, bytes: Buffer.from('actual bytes') }; }
+async function fixture(t) { const root = await mkdtemp(join(tmpdir(), 'delivery-release-publish-')); t.after(() => rm(root, { recursive: true, force: true })); const file = join(root, 'WorkLoom-test.exe'); await writeFile(file, 'actual bytes'); return { root, file, bytes: Buffer.from('actual bytes') }; }
+test('standalone publisher CLI rejects missing explicit SHA before Git or release APIs, even with a branch SHA', async t => {
+  const f = await fixture(t); const env = { ...process.env, CNB_BRANCH_SHA: sha, CNB_TOKEN: randomUUID() }; delete env.RELEASE_EXPECTED_SHA;
+  const script = fileURLToPath(new URL('./cnb-release-publish.mjs', import.meta.url));
+  const result = spawnSync(process.execPath, [script, '--tag', tag, '--create', f.file], { cwd: f.root, env, encoding: 'utf8' });
+  assert.equal(result.status, 1); assert.match(result.stderr, /requires explicit RELEASE_EXPECTED_SHA/);
+  assert.doesNotMatch(result.stderr, /not a git repository|CNB \d{3}/);
+});
+test('actual finalize manifest code requires the same explicit frozen SHA and never stamps current branch identity', async t => {
+  const f = await fixture(t); const YAML = await parser(); const config = YAML.parse(await readFile(new URL('../.cnb.yml', import.meta.url), 'utf8'), { maxAliasCount: 1000 });
+  const stage = config['.desktop-release-finalize'].stages.find(stage => stage.script?.includes('WorkLoom-release-manifest.json'));
+  const code = /node -e '([\s\S]*?)'\n/.exec(stage.script)?.[1]; assert.ok(code);
+  const names = ['WorkLoom-mac-arm64.dmg', 'WorkLoom-mac-x64.dmg', 'WorkLoom-win-x64.exe'];
+  const assets = [];
+  for (const name of names) { const bytes = Buffer.from(name); await writeFile(join(f.root, name), bytes); assets.push({ name, size: bytes.length, sha512: createHash('sha512').update(bytes).digest('hex') }); }
+  for (const [name, items] of [['desktop-macos-manifest.json', assets.slice(0, 2)], ['desktop-windows-manifest.json', assets.slice(2)]]) await writeFile(join(f.root, name), JSON.stringify({ schemaVersion: 1, tag, assets: items }));
+  const env = { ...process.env, VERSION: tag, CNB_BRANCH_SHA: 'b'.repeat(40) }; delete env.RELEASE_EXPECTED_SHA;
+  const missing = spawnSync(process.execPath, ['-e', code], { cwd: f.root, env, encoding: 'utf8' }); assert.equal(missing.status, 1); assert.match(missing.stderr, /显式 RELEASE_EXPECTED_SHA/);
+  await assert.rejects(access(join(f.root, 'WorkLoom-release-manifest.json')));
+  const result = spawnSync(process.execPath, ['-e', code], { cwd: f.root, env: { ...env, RELEASE_EXPECTED_SHA: sha }, encoding: 'utf8' }); assert.equal(result.status, 0, result.stderr);
+  const manifest = JSON.parse(await readFile(join(f.root, 'WorkLoom-release-manifest.json'), 'utf8')); assert.equal(manifest.sourceSha, sha); assert.deepEqual(manifest.assets, assets);
+});
 test('only known release 404 permits creation, bound to exact source instead of live main', async t => {
   const f = await fixture(t); const writes = []; let exists = false;
   const request = async (_repo, path, options) => {

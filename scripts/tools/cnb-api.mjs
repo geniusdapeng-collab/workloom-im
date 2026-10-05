@@ -88,15 +88,16 @@ export async function api(slug, path, options = {}) {
 
 /** 读取仓库内文件原文；不存在返回 null（而非抛错） */
 export async function rawFile(slug, ref, path, options = {}) {
-  try {
-    const response = await fetch(`${API_BASE}/${slug}/-/git/raw/${ref}/${path}`, {
-      headers: { Authorization: `Bearer ${options.token ?? requireToken()}` },
-    });
-    if (!response.ok) return null;
-    return await response.text();
-  } catch {
-    return null;
-  }
+  const token = options.token ?? requireToken();
+  const url = `${API_BASE}/${slug}/-/git/raw/${ref}/${path}`;
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(30000), redirect: 'error',
+  });
+  if (response.status === 404) return null;
+  const text = await response.text();
+  if (!response.ok) throw new CnbError(response.status, text, url, token);
+  return text;
 }
 
 export function listRepos(groupSlug, options = {}) {

@@ -142,6 +142,14 @@ pnpm 10.14 对 URL tarball 生成的 lockfile 只登记 `resolution.tarball`，�
 
 个人访问令牌可按 `AGENTS.md` §7 在当前任务授权内一次性使用。平台是否已应用强保护必须以 API 回读为准，源码中的默认 payload 不能替代平台状态。
 
+### 交付门禁的首次安装顺序
+
+fanout 的 waiting-installation 是后续更新的保护门禁；首次安装不依赖 fanout。安装端必须先从准确的基座提交取得完整运行闭包（含 scripts/delivery/runtime/package.json、package-lock.json、cnb.yml、bootstrap-cnb.yml 与 queue-runner 直接依赖），在独立安装分支落地并加入 CI include，再推送和创建安装 PR。PROTOCOL_ASSETS 明确包含这些根级文件；账户交付安装器同样直接复制闭包，不先读取 fanout 的 ready 状态，也不使用行业 pathPrefix。缺任一资产不得创建部分纳管 PR。
+
+首次安装端随后在该 PR 的准确 source 检出上运行 prepare-install：安装并回读账本保护，保存 source/main 接纳和 installation_prepared 事件。bootstrap 的 verify-install 等待这份准确准备回执，随后真实 AI 与原仓必需门禁共同验收；普通 merge 后在当前 main activate 并回读。直到这一步才是已启用。普通 fanout 在 installation_prepared 之后可以更新资产，但不能把这份准备事件称为 activation；已启用仓账本缺失保持失败闭合。
+
+因此新仓可以在没有 automation/delivery-state 时取得首次安装代码，fanout 不能阻断这一独立路径。CNB 原生令牌没有仓库设置写权限，账户新仓首装由本任务授权的 Codex 安装调度处理；权限失效明确保留待安装任务，不等待用户逐 PR 点 Approve。既有 provision-protocol 只生成安装 PR，单独执行它不等于完成上述准备、合并和启用步骤。
+
 ## 状态与验真语义
 
 根级 `.workloom-base-sync.json` 包含：

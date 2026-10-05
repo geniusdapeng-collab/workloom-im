@@ -57,8 +57,9 @@ export async function main(argv = process.argv.slice(2)) {
     else if (item.startsWith('--')) throw new Error(`Unknown option: ${item}`);
     else files.push(item);
   }
+  const expected = process.env.RELEASE_EXPECTED_SHA;
+  if (!/^[a-f0-9]{40,64}$/.test(expected ?? '')) throw new Error('Publisher requires explicit RELEASE_EXPECTED_SHA');
   const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', timeout: 30000 }).trim();
-  const expected = process.env.RELEASE_EXPECTED_SHA ?? process.env.CNB_BRANCH_SHA ?? head;
   if (head !== expected) throw new Error('Publisher checkout differs from frozen release source');
   console.log(JSON.stringify(await publishRelease({ repo: process.env.CNB_REPO ?? process.env.CNB_REPO_SLUG ?? 'workloom-ai/workloom-im', ...values, sha: expected, files, create, token: requireToken() })));
 }

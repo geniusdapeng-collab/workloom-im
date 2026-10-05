@@ -262,6 +262,11 @@ test('review child receives trusted identity and paths; inherited plugin overrid
   await assert.rejects(reviewEnvironment(root, {}), /escapes/);
 });
 test('AI batch coverage cannot truncate, duplicate or reuse another source/main result', () => {
+  for (const [count, lengths] of [[29, [29]], [30, [30]], [31, [30, 1]], [60, [30, 30]], [61, [30, 30, 1]]]) {
+    const files = Array.from({ length: count }, (_, index) => `source/${index}.ts`);
+    assert.deepEqual(reviewBatches(files).map(batch => batch.length), lengths);
+    assert.deepEqual(reviewBatches(files).flat(), [...files].sort());
+  }
   const s = snapshot(1, { files: Array.from({ length: 61 }, (_, index) => `source/${index}.ts`) });
   const manifest = { snapshot: s, policyHash: policy.hash };
   const batches = reviewBatches(s.files); assert.deepEqual(batches.map(files => files.length), [30, 30, 1]);
@@ -296,11 +301,12 @@ test('model broker streams only allowed AI routes and never reflects credentials
 });
 test('CI review receipts are assigned to the responsible batch and collected without omission or duplication', () => {
   const files = Array.from({ length: 61 }, (_, index) => `source/${String(index).padStart(2, '0')}.ts`);
-  const ciPolicyChanges = [{ id: 'first', file: files[0] }, { id: 'last', file: files[60] }, { id: 'config' }];
+  const ciPolicyChanges = [{ id: 'first', file: files[0] }, { id: 'last', file: files[60] }, { id: 'config' }, { id: 'unknown', file: 'outside-changed-paths/ci.yml' }];
   const s = snapshot(1, { files, ciPolicyChanges });
   const manifest = { snapshot: s, policyHash: policy.hash };
   const results = reviewBatches(files).map((paths, index) => ({ status: 'passed', issues: [], reviewed_files: paths, head_sha: head, base_sha: main, policy_hash: policy.hash, depends_on: [], ci_policy_changes: batchSnapshot(s, index).ciPolicyChanges.map(change => ({ id: change.id, rationale: 'Exact old/new check remains required and has regression coverage.' })) }));
-  assert.deepEqual(combineBatchResults(manifest, results).ci_policy_changes.map(change => change.id).sort(), ['config', 'first', 'last']);
+  assert.deepEqual(batchSnapshot(s, 0).ciPolicyChanges.map(change => change.id), ['first', 'config', 'unknown']);
+  assert.deepEqual(combineBatchResults(manifest, results).ci_policy_changes.map(change => change.id).sort(), ['config', 'first', 'last', 'unknown']);
   const missing = structuredClone(results); missing[2].ci_policy_changes = []; assert.throws(() => combineBatchResults(manifest, missing), /migration/);
   const duplicate = structuredClone(results); duplicate[1].ci_policy_changes = [results[0].ci_policy_changes[0]]; assert.throws(() => combineBatchResults(manifest, duplicate), /migration/);
 });
@@ -416,6 +422,26 @@ test('real review orchestration caps concurrent batches and withholds decisions 
   let started = 0;
   await assert.rejects(runReview(root, { ...options, runBatch: async () => { started++; throw new Error('SDK interrupted'); } }), /interrupted/);
   assert.ok(started <= 2); assert.equal(published, 1);
+});
+test('actual review failures retain missing receipt counts and genuine findings, including malformed array diagnostics', async t => {
+  const root = await temporary(t, 'delivery-review-diagnostics-'); const directory = join(root, '.delivery-review/snapshot-x'); await mkdir(directory, { recursive: true });
+  const files = Array.from({ length: 31 }, (_, index) => `source/${String(index).padStart(2, '0')}.ts`);
+  const s = snapshot(1, { files, ciPolicyChanges: [{ id: 'CI-FIRST', file: files[0] }, { id: 'CI-LAST', file: files.at(-1) }] });
+  const manifest = { snapshot: s, policyHash: policy.hash, directory, source: join(directory, 'source'), rules: join(directory, 'rules'), coverage: join(directory, 'coverage'), output: join(directory, 'output') };
+  await writeFile(join(root, '.delivery-review/manifest.json'), JSON.stringify(manifest)); let published = 0;
+  const base = (index, paths) => ({ status: 'passed', issues: [], reviewed_files: paths, head_sha: head, base_sha: main, policy_hash: policy.hash, depends_on: [], ci_policy_changes: batchSnapshot(s, index).ciPolicyChanges.map(change => ({ id: change.id, rationale: 'Read exact before and after assertions.' })) });
+  const options = { env: {}, platform: { snapshot: async () => s }, publish: async () => { published++; } };
+  await assert.rejects(runReview(root, { ...options, runBatch: async (index, paths) => ({ ...base(index, paths), ci_policy_changes: [] }) }), error => {
+    assert.match(error.message, /CI-FIRST/); assert.match(error.message, /CI-LAST/); assert.match(error.message, /"missingChangeCount":1/); assert.match(error.message, /fatal=AI CI migration receipt/); return true;
+  });
+  const issue = { severity: 'warning', file: files[0], start_line: 1, problem: 'Real retained finding', suggestion: 'Repair before approval' };
+  await assert.rejects(runReview(root, { ...options, runBatch: async (index, paths) => index === 0 ? { ...base(index, paths), status: 'needs_modification', issues: [issue], reviewed_files: [] } : base(index, paths) }), error => {
+    assert.match(error.message, /Real retained finding/); assert.match(error.message, /"missingFileCount":30/); assert.match(error.message, /omitted changed files/); return true;
+  });
+  await assert.rejects(runReview(root, { ...options, runBatch: async (index, paths) => ({ ...base(index, paths), ci_policy_changes: {} }) }), error => {
+    assert.match(error.message, /batch diagnostics=/); assert.match(error.message, /missingChangeCount/); assert.match(error.message, /fatal=Invalid AI migration receipt shape/); assert.doesNotMatch(error.message, /\.map is not a function/); return true;
+  });
+  assert.equal(published, 0);
 });
 test('mutation rejects local/PR-source runners, absent native lock and checkout main drift', async t => {
   const root = await temporary(t, 'delivery-runner-'); await git(['init', '--quiet'], { cwd: root }); await git(['commit', '--allow-empty', '-m', 'init'], { cwd: root });

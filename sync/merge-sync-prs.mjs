@@ -7,6 +7,7 @@ import { Platform } from '../scripts/delivery/queue-platform.mjs';
 import { redactCredentials, requireToken } from '../scripts/tools/cnb-api.mjs';
 
 export function targetsFor(fleet, { repo, only = [] } = {}) {
+  if (repo && only.length) throw new Error('--repo and --only cannot be combined');
   const subscribed = [fleet.baseRepo, ...fleet.children.map(child => child.repo)];
   const isolated = new Set((fleet.isolatedRepos ?? []).map(item => item.repo));
   const targets = repo ? [repo] : subscribed.filter(slug => !only.length || only.includes(slug));

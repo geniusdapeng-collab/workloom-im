@@ -6,6 +6,7 @@ test('fleet dispatch never enters isolated or unsubscribed repositories', () => 
   assert.deepEqual(targetsFor(fleet), ['w/base', 'w/hotel']);
   assert.deepEqual(targetsFor(fleet, { only: ['w/hotel'] }), ['w/hotel']);
   for (const repo of ['w/isolated', 'w/foreign']) assert.throws(() => targetsFor(fleet, { repo }), /subscribed/);
+  for (const only of [['w/base'], ['w/hotel']]) assert.throws(() => targetsFor(fleet, { repo: 'w/base', only }), /cannot be combined/);
 });
 test('old entry point dispatches trusted main and has no direct merge operation', async () => {
   const calls = []; const platform = { repo: 'w/hotel', main: async () => ({ commit: { sha: 'a'.repeat(40) } }), call: async (path, options) => { calls.push({ path, options }); return options ? { success: true, sn: 'build-1' } : 'include: [scripts/delivery/cnb.yml]'; } };
