@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 26,
+  "revision": 28,
   "tasks": {},
   "leases": {},
   "releases": {},
@@ -345,6 +345,36 @@
       },
       "previous": "2141242944acd41298ec66992ce8221d69c4b5001a22c4e21a6de288ed64de4a",
       "digest": "2989794c61360e61b3ed72dac6fb87daa4386bdaff41f60d112c5f177977147e"
+    },
+    {
+      "sequence": 27,
+      "at": "2026-10-05T10:30:45.600Z",
+      "kind": "independent_npc_policy_verified",
+      "data": {
+        "number": 234,
+        "headSha": "930c8da9f2e3b50009450f8e744cf32397c4edc3",
+        "approval": {
+          "id": "2107053747520311296",
+          "author": "CodeBuddy",
+          "creator": "cnb.dYiF05kxAGA",
+          "isNpc": true,
+          "createdAt": "2026-10-05T10:22:15Z"
+        },
+        "blockedBefore": "waiting_review",
+        "blockedAfter": "waiting_review"
+      },
+      "previous": "2989794c61360e61b3ed72dac6fb87daa4386bdaff41f60d112c5f177977147e",
+      "digest": "2fe2f9b4b683f9af835329fb996ea73902094209dc90bdcfa4af07215b3574bf"
+    },
+    {
+      "sequence": 28,
+      "at": "2026-10-05T10:30:44.899Z",
+      "kind": "transaction",
+      "data": {
+        "id": "b7a37a57-99e9-422a-9e8f-369fea377f13"
+      },
+      "previous": "2fe2f9b4b683f9af835329fb996ea73902094209dc90bdcfa4af07215b3574bf",
+      "digest": "a518fab024e5c0c32fc1d55543e972a5f9ae054786dcffd3096069fc18aef73d"
     }
   ]
 }
