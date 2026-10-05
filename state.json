@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 223,
+  "revision": 225,
   "tasks": {
     "231": {
       "number": 231,
@@ -351,7 +351,14 @@
       "reviewFailures": null,
       "blockedUntil": 0,
       "review": null,
-      "candidate": null,
+      "candidate": {
+        "number": 240,
+        "branch": "delivery/candidate/pr-236-991114bab338e3fefda4849c838fbec7",
+        "headSha": "d8f1f0e6df25c1a8992e37511fbe3ac7bc26a0f2",
+        "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+        "marker": "delivery-origin:236:d8f1f0e6df25c1a8992e37511fbe3ac7bc26a0f2:b2deb741ed16b9fa9d85986974930bcd10530075",
+        "at": 1791243308473
+      },
       "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
       "originalBody": "账户安装器在已激活的基座当前 main 上完整分页发现 Owner/active 仓，并逐仓安装研发交付机制。保留行业业务、隔离规则、冻结认知和原仓必需 CI；growthtest 的独立 Git/PR 来源与完整路径校验保留，仅将永久 PR 编号占锁迁移为有期限租约。任务卡 Issue #235。授权凭据只在安装进程内注入，首次准备、真实 AI/检查、普通 merge、激活与原生回执逐项回读。用户取消的 Codex chat 定时任务保持删除；本变更提供账户安装 CLI，不自行恢复该定时任务。\n\n本地验证：30 项安装器回归通过；实际 growthtest 安装副本 223 项通过、0 失败，1 项共享 UI 发布检查因该产品无此车道而跳过；重复安装 0 文件改动。 已对齐准确基座 main，交接为 ready。\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1005-2000\",\n  \"ready\": true,\n  \"depends_on\": [\n    239\n  ],\n  \"releases\": []\n}\n-->",
       "files": [
@@ -4716,6 +4723,36 @@
       },
       "previous": "bdef5c0c29419178518aedd1bb8a4124b8a6e3d8f9b7d2c605ea34028dcb2424",
       "digest": "2cda659cd8073d5174db86898135d225904215bff1bda470e0282976d4de7109"
+    },
+    {
+      "sequence": 224,
+      "at": "2026-10-05T23:35:08.473Z",
+      "kind": "task",
+      "data": {
+        "number": 236,
+        "patch": {
+          "candidate": {
+            "number": 240,
+            "branch": "delivery/candidate/pr-236-991114bab338e3fefda4849c838fbec7",
+            "headSha": "d8f1f0e6df25c1a8992e37511fbe3ac7bc26a0f2",
+            "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+            "marker": "delivery-origin:236:d8f1f0e6df25c1a8992e37511fbe3ac7bc26a0f2:b2deb741ed16b9fa9d85986974930bcd10530075",
+            "at": 1791243308473
+          }
+        }
+      },
+      "previous": "2cda659cd8073d5174db86898135d225904215bff1bda470e0282976d4de7109",
+      "digest": "a9f1148502bf652d6318f59ae5b7011deb13535d684fb4a4817c0399cd0cec8d"
+    },
+    {
+      "sequence": 225,
+      "at": "2026-10-05T23:35:11.277Z",
+      "kind": "transaction",
+      "data": {
+        "id": "7c440eea-817b-4bc2-8206-4eb18fdca805"
+      },
+      "previous": "a9f1148502bf652d6318f59ae5b7011deb13535d684fb4a4817c0399cd0cec8d",
+      "digest": "951ada4fafc4c9aec422fa1e90c8f943ba525ea3ec1e2f4da6fddfe83ec44037"
     }
   ]
 }
