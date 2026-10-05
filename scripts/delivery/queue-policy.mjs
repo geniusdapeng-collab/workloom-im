@@ -17,7 +17,7 @@ export async function parser() {
 
 export const REVIEW_IMAGE = 'cnbcool/code-review@sha256:c20b1e826d854738c807f4949859a6df5d58b95545ebefc96197369943a4bcce';
 export const BASE_POLICY = Object.freeze({
-  version: 3,
+  version: 4,
   cooldownMs: 10 * 60_000,
   maxAlignmentAttempts: 3,
   maxInfrastructureAttempts: 2,
@@ -164,6 +164,13 @@ export function ciImplementationChanges(files, mainSha, headSha) {
       const after = { ref: headSha, path, absent: file.status === 'delete' };
       return { id: hash({ file: path, before, after }), file: path, before, after };
     });
+}
+
+/** Readable identifiers are local to the exact review tuple; the full digest still binds every change. */
+export function readableCiChanges(changes) {
+  const sorted = changes.map(({ id, ...change }) => ({ ...change, digest: id })).sort((a, b) => a.digest.localeCompare(b.digest));
+  if (sorted.some(change => !/^[a-f0-9]{64}$/.test(change.digest ?? '')) || new Set(sorted.map(change => change.digest)).size !== sorted.length) throw new Error('CI change digest identity is invalid or duplicated');
+  return sorted.map((change, index) => ({ id: `CI-${String(index + 1).padStart(3, '0')}`, ...change }));
 }
 
 export function reviewRules(snapshot, policyHash) {
