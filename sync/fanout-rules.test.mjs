@@ -46,13 +46,36 @@ test('实际 fanout CLI 对既有订阅仓缺首装回执返回非零及可恢�
       '--only', 'workloom-ai/workloom-hotel', '--dry-run', '--json', '--tolerate-scope-error'],
     { cwd: root, env, encoding: 'utf8', timeout: 15000 });
     assert.ifError(result.error);
-    assert.equal(result.status, 1, result.stderr + result.stdout);
+    assert.equal(result.status, 78, result.stderr + result.stdout);
     const report = JSON.parse(result.stdout);
     assert.equal(report.waitingInstallation, 1);
+    assert.equal(report.outcome, 'waiting-installation'); assert.equal(report.exitCode, 78);
     assert.equal(report.aligned, 0); assert.equal(report.opened, 0);
     assert.equal(report.results[0].status, 'waiting-installation');
     assert.equal(report.results[0].action.repo, 'workloom-ai/workloom-hotel');
     assert.deepEqual(report.results[0].action.requiredReceipts, ['installation_prepared', 'activated', 'native-reconcile-state-write']);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('实际 fanout 的真实权限/传输错误优先于首装等待，不被 78 或容忍开关隐藏', () => {
+  const root = mkdtempSync(join(tmpdir(), 'fanout-mixed-failure-regression-'));
+  try {
+    const preload = join(root, 'offline-api.mjs');
+    writeFileSync(preload, 'globalThis.fetch = async url => { if (String(url).includes("workloom-hotel")) return new Response("{}", {status:404}); if (String(url).includes("panda-cineforge")) { if (process.env.FANOUT_OFFLINE_MODE === "transport") throw new Error("offline transport unavailable"); return new Response("{}", {status:403}); } throw new Error("Unexpected fixture API"); };\n');
+    const script = fileURLToPath(new URL('./fanout-cnb.mjs', import.meta.url)); const base = fileURLToPath(new URL('../', import.meta.url));
+    const env = { ...process.env, CNB_TOKEN: 'offline-fanout-fixture' }; delete env.NODE_TEST_CONTEXT;
+    for (const mode of ['scope', 'transport', 'tolerated-scope']) {
+      const tolerate = mode !== 'scope'; const code = mode === 'tolerated-scope' ? 78 : 1;
+      const result = spawnSync(process.execPath, ['--import', preload, script, '--base-dir', base, '--only',
+        'workloom-ai/workloom-hotel,workloom-ai/panda-cineforge', '--dry-run', '--json', ...(tolerate ? ['--tolerate-scope-error'] : [])],
+      { cwd: root, env: { ...env, FANOUT_OFFLINE_MODE: mode }, encoding: 'utf8', timeout: 15000 });
+      assert.ifError(result.error); assert.equal(result.status, code, result.stderr + result.stdout);
+      const report = JSON.parse(result.stdout);
+      assert.equal(report.waitingInstallation, 1); assert.equal(report.children, 2);
+      assert.equal(report.scopeDenied, mode === 'transport' ? 0 : 1); assert.equal(report.failed, mode === 'transport' ? 1 : 0);
+      assert.equal(report.outcome, code === 78 ? 'waiting-installation' : 'failed'); assert.equal(report.exitCode, code);
+      assert.equal(report.warnings.length, mode === 'tolerated-scope' ? 1 : 0);
+    }
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

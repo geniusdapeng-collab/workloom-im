@@ -88,8 +88,10 @@ export function batchSnapshot(snapshot, index) {
   const batches = reviewBatches(snapshot.files);
   if (!batches[index]) throw new Error('Unknown review batch');
   const owner = change => {
-    const located = batches.findIndex(files => files.includes(change.file ?? '.cnb.yml'));
-    return located < 0 ? 0 : located;
+    if (typeof change.file !== 'string' || !change.file) throw new Error('CI review change has no exact changed-file owner');
+    const located = batches.findIndex(files => files.includes(change.file));
+    if (located < 0) throw new Error('CI review change owner is outside the changed-file batches: ' + change.file);
+    return located;
   };
   return { ...snapshot, files: batches[index], ciPolicyChanges: (snapshot.ciPolicyChanges ?? []).filter(change => owner(change) === index) };
 }

@@ -15,7 +15,8 @@
  *                            [--no-pr] [--json] [--base-dir <基座工作树>] [--tolerate-scope-error]
  * 环境：
  *   CNB_TOKEN（CI 内自动注入；本地用个人访问令牌）——需具备子仓读 + 建 PR 的权限。
- * 退出码：0 全部齐平/已开 PR；1 存在失败项（--tolerate-scope-error 时跨仓权限不足只告警）。
+ * 退出码：0 已处理；78 仅有明确首装欠项（CNB 中断该流水线而不报故障）；
+ *         1 存在实际失败项（--tolerate-scope-error 时已识别跨仓权限不足只告警）。
  */
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -278,6 +279,9 @@ async function main() {
     }
   }
 
+  const waitingInstallation = results.filter((item) => item.status === 'waiting-installation').length;
+  // A genuine failure always wins over the expected first-install stop.
+  const exitCode = failed || (scopeError && !tolerateScopeError) ? 1 : waitingInstallation ? 78 : 0;
   const summary = {
     baseRepo,
     baseSha,
@@ -292,9 +296,12 @@ async function main() {
     opened: results.filter((item) => item.status === "pr-opened").length,
     drift: results.filter((item) => item.status === "drift" || item.status === "would-sync").length,
     branchExists: results.filter((item) => item.status === "branch-exists").length,
-    waitingInstallation: results.filter((item) => item.status === 'waiting-installation').length,
+    waitingInstallation,
+    outcome: exitCode === 1 ? 'failed' : waitingInstallation ? 'waiting-installation' : 'processed',
+    exitCode,
     failed,
     scopeDenied: scopeError,
+    warnings: scopeError && tolerateScopeError ? ['跨仓权限不足：请在 CNB 组织设置开启允许定时任务跨仓操作，或用带跨仓权限的令牌触发本流水线。'] : [],
     results,
   };
 
@@ -302,18 +309,14 @@ async function main() {
     console.log(JSON.stringify(summary, null, 2));
   } else {
     for (const item of results) {
-      const label = { aligned: "✅ 已对齐", "in-flight": "🕒 在途 PR", "pr-opened": "📦 已开 PR", "branch-exists": "🧷 分支已存在", drift: "⚠️ 漂移", "would-sync": "⚠️ [dry-run] 待同步", failed: "❌ 失败", "scope-denied": "🔒 权限不足", "waiting-installation": "❌ 首装未完成：需授权安装端处理" }[item.status] ?? item.status;
+      const label = { aligned: "✅ 已对齐", "in-flight": "🕒 在途 PR", "pr-opened": "📦 已开 PR", "branch-exists": "🧷 分支已存在", drift: "⚠️ 漂移", "would-sync": "⚠️ [dry-run] 待同步", failed: "❌ 失败", "scope-denied": "🔒 权限不足", "waiting-installation": "⏸ 首装未完成：需授权安装端处理" }[item.status] ?? item.status;
       console.log(`${label} ${item.repo}${item.pull ? ` #${item.pull}` : ""}${item.reasons.length ? `：${item.reasons.join("；")}` : ""}${item.error ? `：${item.error}` : ""}`);
     }
-    console.log(`\n基座 ${baseSha.slice(0, 8)}（模式 ${mode}${dryRun ? "，dry-run" : ""}）：对齐 ${summary.aligned} · 在途 ${summary.inFlight} · 新开 PR ${summary.opened} · 分支已存在 ${summary.branchExists} · 待同步 ${summary.drift} · 隔离副本 ${summary.isolatedDeclared.length}（不下发） · paused 波次 ${summary.skippedPaused.length}（不下发） · 失败 ${failed} · 权限不足 ${scopeError}`);
+    console.log(`\n基座 ${baseSha.slice(0, 8)}（模式 ${mode}${dryRun ? "，dry-run" : ""}）：对齐 ${summary.aligned} · 在途 ${summary.inFlight} · 新开 PR ${summary.opened} · 分支已存在 ${summary.branchExists} · 待同步 ${summary.drift} · 待首装 ${waitingInstallation} · 隔离副本 ${summary.isolatedDeclared.length}（不下发） · paused 波次 ${summary.skippedPaused.length}（不下发） · 失败 ${failed} · 权限不足 ${scopeError}`);
   }
 
-  if (failed) process.exitCode = 1;
-  // Known subscriptions without first-install receipts are actionable failures,
-  // not healthy skips. Other repositories still complete their own iteration.
-  if (summary.waitingInstallation) process.exitCode = 1;
-  if (scopeError && !tolerateScopeError) process.exitCode = 1;
-  if (scopeError && tolerateScopeError) {
+  process.exitCode = exitCode;
+  if (scopeError && tolerateScopeError && !json) {
     console.log("⚠️ 跨仓权限不足：请在 CNB「组织设置 → 仓库管控」开启「允许定时任务跨仓操作」，或改用带跨仓权限的令牌触发本流水线。");
   }
 }

@@ -17,7 +17,7 @@ export async function parser() {
 
 export const REVIEW_IMAGE = 'cnbcool/code-review@sha256:c20b1e826d854738c807f4949859a6df5d58b95545ebefc96197369943a4bcce';
 export const BASE_POLICY = Object.freeze({
-  version: 6,
+  version: 7,
   cooldownMs: 10 * 60_000,
   maxAlignmentAttempts: 3,
   maxInfrastructureAttempts: 2,
@@ -30,8 +30,9 @@ export const BASE_POLICY = Object.freeze({
   businessHoldPaths: ['platform-ops/secrets/', 'secrets/', 'trading/live/', 'broker/live/'],
 });
 
+function prBranch(config) { return ['main', '**', '$'].find(branch => config?.[branch]?.pull_request !== undefined); }
 export function prPipelines(config) {
-  return config?.main?.pull_request ?? config?.['**']?.pull_request ?? config?.$?.pull_request;
+  return config?.[prBranch(config)]?.pull_request;
 }
 function pipelines(config) {
   const list = prPipelines(config);
@@ -45,6 +46,9 @@ function pipelines(config) {
 const mapping = value => value && typeof value === 'object' && !Array.isArray(value);
 function mergeConfig(before, after) {
   if (Array.isArray(before) && Array.isArray(after)) return [...before, ...after];
+  // CNB retains the array when an array and a mapping occupy the same key.
+  if (Array.isArray(before) && mapping(after)) return structuredClone(before);
+  if (mapping(before) && Array.isArray(after)) return structuredClone(after);
   if (!mapping(before) || !mapping(after)) return structuredClone(after);
   const result = Object.fromEntries(Object.entries(before));
   for (const [key, value] of Object.entries(after)) {
@@ -55,20 +59,21 @@ function mergeConfig(before, after) {
 }
 
 /** CNB local includes are relative to the repository root; arrays append, objects merge. */
-export async function resolvePipelineConfig(sourceText, { readLocal } = {}) {
+export async function resolvePipelineConfig(sourceText, { readLocal, onConfig } = {}) {
   const YAML = await parser(); let count = 0;
   const visiting = new Set();
-  const load = async (text, path) => {
+  const load = async (text, path, file = path, ancestors = []) => {
     if (++count > 64 || visiting.has(path)) throw new Error('CI include limit/cycle');
     visiting.add(path);
     try {
       const config = YAML.parse(text, { maxAliasCount: 1000 });
       if (!mapping(config)) throw new Error('CI must be a mapping');
+      if (onConfig) onConfig({ config, file, ancestors });
       const includes = config.include === undefined ? [] : Array.isArray(config.include) ? config.include : [config.include];
       let result = {};
       for (const [index, entry] of includes.entries()) {
         let nested;
-        if (mapping(entry) && mapping(entry.config)) nested = await load(YAML.stringify(entry.config), `${path}:inline-${index}`);
+        if (mapping(entry) && mapping(entry.config)) nested = await load(YAML.stringify(entry.config), `${path}:inline-${index}`, file, ancestors);
         else {
           const value = typeof entry === 'string' ? entry : entry?.path;
           if (typeof value !== 'string' || !value || value.includes('\\') || value.includes('\0') || value.includes('$') || posix.isAbsolute(value) || value.split('/').includes('..') || /^[a-z][a-z0-9+.-]*:/i.test(value)) throw new Error('CI include must be a safe local path');
@@ -77,7 +82,7 @@ export async function resolvePipelineConfig(sourceText, { readLocal } = {}) {
           // ignoreError cannot hide a missing safety pipeline from the trusted comparison.
           const content = await readLocal(includePath);
           if (typeof content !== 'string') throw new Error(`CI include is unreadable: ${includePath}`);
-          nested = await load(content, includePath);
+          nested = await load(content, includePath, includePath, [...ancestors, file]);
         }
         result = mergeConfig(result, nested);
       }
@@ -86,6 +91,17 @@ export async function resolvePipelineConfig(sourceText, { readLocal } = {}) {
     } finally { visiting.delete(path); }
   };
   return load(sourceText, '.cnb.yml');
+}
+
+/** Arrays append without merging individual pipelines, so each pipeline has one physical YAML origin. */
+function collectOrigins({ config, file, ancestors }, result) {
+  for (const [branch, events] of Object.entries(config)) {
+    if (branch.startsWith('.') || !mapping(events)) continue;
+    for (const [event, entries] of Object.entries(events)) {
+      if (!Array.isArray(entries)) continue;
+      for (const pipeline of entries) if (typeof pipeline?.name === 'string' && pipeline.name) result.push({ branch, event, name: pipeline.name, file, ancestors });
+    }
+  }
 }
 
 function controlPipelines(config) {
@@ -106,6 +122,7 @@ function controlPipelines(config) {
 export async function loadPolicy(root) {
   const base = await realpath(root);
   const ciFiles = new Set(['.cnb.yml']);
+  const pipelineOrigins = [];
   const readLocal = async path => {
     ciFiles.add(path);
     const actual = await realpath(resolve(base, path));
@@ -113,9 +130,9 @@ export async function loadPolicy(root) {
     if (delta === '..' || delta.startsWith('../') || delta.startsWith('..\\')) throw new Error('CI include escapes repository');
     return readFile(actual, 'utf8');
   };
-  const config = await resolvePipelineConfig(await readFile(join(base, '.cnb.yml'), 'utf8'), { readLocal });
+  const config = await resolvePipelineConfig(await readFile(join(base, '.cnb.yml'), 'utf8'), { readLocal, onConfig: entry => collectOrigins(entry, pipelineOrigins) });
   const requiredPipelines = pipelines(config);
-  const source = { ...BASE_POLICY, reviewImage: REVIEW_IMAGE, ciFiles: [...ciFiles].sort(), requiredPipelines, requiredControlPipelines: controlPipelines(config) };
+  const source = { ...BASE_POLICY, reviewImage: REVIEW_IMAGE, ciFiles: [...ciFiles].sort(), prBranch: prBranch(config), pipelineOrigins, requiredPipelines, requiredControlPipelines: controlPipelines(config) };
   return { ...source, hash: hash(source), requiredNames: requiredPipelines.map(p => p.name) };
 }
 
@@ -123,12 +140,35 @@ export async function loadPolicy(root) {
 export async function sourcePipelineReport(sourceText, policy, options = {}) {
   const errors = [];
   const ciFiles = new Set(['.cnb.yml']);
+  const origins = [];
   let source; let config;
   const readLocal = typeof options.readLocal === 'function' ? path => { ciFiles.add(path); return options.readLocal(path); } : undefined;
-  try { config = await resolvePipelineConfig(sourceText, { ...options, readLocal }); source = pipelines(config); }
+  try { config = await resolvePipelineConfig(sourceText, { ...options, readLocal, onConfig: entry => collectOrigins(entry, origins) }); source = pipelines(config); }
   catch (error) { return { errors: [`Source CI is invalid: ${error.message}`], changes: [], ciFiles: [...ciFiles].sort() }; }
   const changes = [];
-  const changedPolicy = (pipeline, stage, before, after, binding) => changes.push({ id: hash({ pipeline, stage, before, after, binding }), pipeline, stage, before, after, ...(binding ? { binding } : {}) });
+  const changedMetadata = new Map((options.changedFiles ?? []).map(entry => typeof entry === 'string' ? [entry, {}] : [entry.path ?? entry.name, entry]));
+  const changedPaths = options.changedFiles === undefined ? null : new Set(changedMetadata.keys());
+  const changedPolicy = (pipeline, stage, before, after, binding) => {
+    const sourceBinding = binding ?? { branch: prBranch(config), event: 'pull_request' };
+    const targetBinding = binding ?? { branch: policy.prBranch ?? sourceBinding.branch, event: 'pull_request' };
+    const match = (rows, b) => rows.filter(entry => entry.branch === b.branch && entry.event === b.event && entry.name === pipeline);
+    const sourceOrigins = match(origins, sourceBinding);
+    const targetOrigins = match(policy.pipelineOrigins ?? [], targetBinding);
+    if (sourceOrigins.length !== 1 || (policy.pipelineOrigins && targetOrigins.length !== 1)) {
+      errors.push(`Structural CI origin is ambiguous: ${pipeline}/${stage ?? 'settings'}`); return;
+    }
+    const origin = sourceOrigins[0];
+    // A changed include edge may select an already-existing, unchanged leaf.
+    // Assign that change to its nearest changed include ancestor, whose batch
+    // must inspect the leaf as a concrete direct dependency.
+    const file = [origin.file, ...[...origin.ancestors].reverse()].find(path => !changedPaths || changedPaths.has(path));
+    if (!file) { errors.push(`Structural CI change has no changed-file owner: ${pipeline}/${stage ?? 'settings'}`); return; }
+    const status = changedMetadata.get(file)?.status;
+    const value = { pipeline, stage, file, before: { ref: options.mainSha ?? null, path: file, absent: ['add', 'added'].includes(status), definition: before },
+      after: { ref: options.headSha ?? null, path: file, absent: ['delete', 'deleted'].includes(status), definition: after },
+      origins: { before: targetOrigins[0]?.file ?? file, after: origin.file }, ...(binding ? { binding } : {}) };
+    changes.push({ id: hash(value), ...value });
+  };
   const comparePipelines = (trustedPipelines, source, binding) => {
   for (const trusted of trustedPipelines) {
     const matches = source.filter(p => p.name === trusted.name);
