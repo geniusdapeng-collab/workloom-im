@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { classifyRepo, diffFleet, isIsolated, isolatedFleet, knownFleet, layerForFleetRepo } from "./fleet-rules.mjs";
 import { injectGate } from "./provision-protocol.mjs";
+import { scan } from './fleet-scan.mjs';
 
 describe("WorkLoom 仓识别", () => {
   it("按 manifest schemaVersion 识别", () => {
@@ -18,6 +19,26 @@ describe("WorkLoom 仓识别", () => {
 });
 
 describe("舰队差分", () => {
+  it('单仓权限或网络失败保留未知状态，其余仓继续扫描；缺少可信隔离登记仍阻断纳管判断', async () => {
+    const baseRepo = 'workloom-ai/workloom-im'; const repos = ['workloom-ai/denied', 'workloom-ai/broken', 'workloom-ai/new-one', baseRepo, 'other/plain'];
+    const calls = []; const registry = { children: [], isolatedRepos: [] };
+    const read = async (repo, _ref, path) => {
+      calls.push(`${repo}/${path}`);
+      if (repo === 'workloom-ai/denied') throw Object.assign(new Error('raw read denied'), { status: 403 });
+      if (repo === 'workloom-ai/broken') throw new Error('network interrupted');
+      if (path === 'sync/child-repos.json') return JSON.stringify(registry);
+      if (repo.startsWith('workloom-ai/')) return JSON.stringify({ schemaVersion: 'workloom.product/v1', productId: repo });
+      return null;
+    };
+    const options = { org: 'workloom-ai', baseRepo, list: async () => repos.map(path => ({ path })), read };
+    const result = await scan(options);
+    assert.deepEqual(result.failed.map(item => item.repo), repos.slice(0, 2));
+    assert.equal(result.classifications[repos[0]].isWorkloom, null); assert.deepEqual(result.diff.unrelated, ['other/plain']);
+    assert.deepEqual(result.diff.newWorkloom.map(item => item.repo), ['workloom-ai/new-one']); assert.deepEqual(result.diff.known, [baseRepo]);
+    assert.ok(calls.includes(`${baseRepo}/sync/child-repos.json`));
+    await assert.rejects(scan({ ...options, read: async (repo, ref, path) => path === 'sync/child-repos.json' ? null : read(repo, ref, path) }), /隔离登记表不可读/);
+    await assert.rejects(scan({ ...options, read: async (repo, ref, path) => path === 'sync/child-repos.json' ? '{}' : read(repo, ref, path) }), /登记表结构无效/);
+  });
   it("区分已纳管 / 新仓 / 无关仓", () => {
     const known = knownFleet("workloom-ai/workloom-im", { children: [{ repo: "workloom-ai/workloom-hotel" }] });
     const diff = diffFleet({

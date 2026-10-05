@@ -1,50 +1,57 @@
-# WorkLoom 开发协作协议（轻量版 v1，2026-09-22 修订）
+# WorkLoom 开发协作协议（v2，2026-10-05 修订）
 
 > 生效范围：workloom-im 唯一定义，base-sync 分发各订阅仓只读副本（舰队清单见 `sync/child-repos.json`；新仓由每日舰队扫描自动纳管；隔离副本仓不适用，见 §11）。
-> 定位：**不新造系统**——用 CNB 原生能力（Issue / 分支保护 / 流水线 / PR）+ 三个校验脚本，管住"谁在改什么、别撞车、会话断了能接上"。
-> 优先级：十二条系统不变量（《产品与代码全景认知》§8）> 本协议 > 本仓 `AGENTS.md` > 会话内临时指令。
-> 与《WorkLoom 分布式 AI 开发 Agent 协作机制 v0.1》的关系：本文件是它的**最小可执行子集**；账本服务、租约看门狗、考试院、错题本、蜂群经验属"重装备"，触发条件见 §7，未触发前不建。
+> 定位：用 CNB 原生 Issue、保护分支、流水线、锁和 PR，配合 Git 持久化交付状态，完成开发占用、独立 AI 审查、集成恢复与真实发布回执。
+> 本协议适用默认研发规则；产品所有者对当前任务的明确授权优先。2026-10-05 明确授权正常研发由 AI 自动审查，不要求用户逐 PR 点击批准；真实资金、秘密、客户数据与不可逆经营动作仍须单独明确授权。
+> 交付器代码：`scripts/delivery/queue-*.mjs`；运行配置：`scripts/delivery/cnb.yml`；持久状态：`automation/delivery-state`。不引入客户业务数据库或新常驻服务。
 > 修订记录：2026-09-22 · 新增 §11「隔离副本车道」（growthtest / growthmatrix 双向不同步）；统一任务号书写为 `T-YYYY-MMDD-XXXX` 并同步提交门禁提示。
 
 ## 1. 五条硬规则
 
-1. **一任务一分支一 PR**：任务卡 = CNB Issue（标题 `[T-YYYY-MMDD-XXXX] 目标`），分支 = `task/T-YYYY-MMDD-XXXX`，一个会话同时只开一个任务。
-2. **任务号进提交信息**：`<type>(<layer>): <摘要> [T-YYYY-MMDD-XXXX]`，由 `scripts/ci/verify-commit-msg.mjs` 校验（正则 `\[T-\d{4}-\d{4}-\d{4}\]`）。
-3. **先声明后落笔**：PR 描述里写明本次改动的路径清单；`scripts/ci/verify-lock-conflict.mjs` 会与同仓其它 open PR 比对，**模块级互斥路径重叠即拒**。
-4. **合并在机器、串行执行、人保留叫停权**：AI 只提 PR；**门禁全绿且无冲突时，由 AI 按队列一次一个直接合并**（默认 squash）；合并后其余分支先 rebase 再继续。人不再承担逐 PR 合并操作，保留随时叫停、要求回滚与例外裁决的权利；涉及真实资金 / 实盘、生产秘密与生产配置、协议文本语义变更的 PR，必须在描述中显著标注并提供回滚路径。
-   - 在途 / 未完成的 PR 必须置为 **WIP（草稿）**——WIP PR 不参与任何合并；
-   - `risk/review` 标签的 PR 需人审放行（移除该标签，或 Issue / 会话里有明确指令）后由 AI 合并；`risk/block` 永不合并；
-   - 无人值守通道（`sync/merge-sync-prs.mjs`，每 30 分钟随 fanout 运行）只碰**门禁全绿、无风险标签、且不落在治理路径**的 PR；代码类 PR 另需最近提交过 10 分钟冷却期。其余 PR 仍由会话内 AI 在拿到放行后显式合并。
-5. **无回执不算完成**：任务收尾必须在 Issue 留 5 行回执——进展 / 决策 / 未完成 / 下一步 / 分支状态。
+1. **一任务一开发分支一原 PR**：任务卡为 CNB Issue（标题 `[T-YYYY-MMDD-XXXX]`），开发分支为 `task/T-YYYY-MMDD-XXXX`。交付器可以创建对应的不可修改候选 PR；这是同一任务的机器集成副本，不是新开发任务。
+2. **任务号进提交信息**：`<type>(<layer>): <摘要> [T-YYYY-MMDD-XXXX]`，由 `verify-commit-msg.mjs` 校验。
+3. **开发占用与等待分开**：独立工作树开发；普通文件重叠只告警。敏感模块开发前取得限时租约，交接或等待 CI/评审前释放。open/WIP/红灯 PR 本身不持锁。
+4. **独立 AI 审查与必需检查满足后，由机器串行合并**：正常研发包括协议、CI、迁移和信任要素代码的维护，使用真实 CodeBuddy 审查，不等待用户点击 Approve。平台 PR、状态检查和禁直推/强推仍保留；真实 AI 回执替代人工评审计数，取消管理员额外批准要求。`risk/block`、WIP 和真实经营执行/秘密路径不自动交付。`risk/review` 表示加强审查，不能作为跳过 AI 或检查的凭据。
+5. **无真实回执不算完成**：集成回执绑定 source/main/tested SHA；声明的发布还须构建、标签、清单和实际字节摘要回读。Issue 五行回执由交付器生成；缺发布证明不得写成已发布或关闭发布任务。
 
-## 2. 四问（每次落笔前必答，答案写进 Issue）
+## 2. 四问（落笔前写进 Issue）
 
 1. 改的是公共机制、平台运营机制，还是行业语义？
-2. 会不会动**租户边界 / 围栏 / 审批 / 事件 / 回执**这五个信任要素？（动了 → 升为 `review`，必须人审）
-3. 该进基座、Andromeda，还是行业包？同步影响面是什么？
-4. 如何测试、灰度、回滚？
+2. 是否涉及租户、围栏、审批、事件、回执；修改实现还是执行真实经营动作？
+3. 应进入基座、Andromeda 还是行业包；哪些订阅仓受影响？
+4. 如何测试、灰度和回滚；是否声明 UI/桌面制品发布？
 
-四问答不清 → 判定 `review`，停止落笔，转人工澄清。冲突时 `block > review > auto`。
+能根据代码和任务自行确定的事项自主完成。只有不可恢复的破坏性操作、方向性硬矛盾或无法获取的必要信息才需要用户澄清。业务红线 `block > review > auto` 不因研发自动评审而放宽。
 
-## 3. 目录围栏
+## 3. 目录与授权边界
 
-| 级别 | 规则 |
+| 类别 | 规则 |
 |---|---|
-| **block** | 子仓写 `platform-ops/**`、`bundles/platform/**`；基座写行业 bundle/种子/行业文档；Tiger 写真实券商/实盘/真实资金路径；秘密进任何文件；客户原始数据上行；mock/模拟回执未标识 |
-| **review**（人审后执行） | 修改五个信任要素实现；`protocol/**`、`sync/**`、`ROOT_AGENTS`/本文件、`.cnb.yml`；跨仓改动 >3 仓；删除/迁移目录；涉钱、群发、外部发布、Tiger 执行链路；凭证与 CI 配置 |
-| **auto** | 读操作、纯文档、测试补充，且不触及以上任一条 |
+| 禁止 | 子仓扩散 platform-ops/平台秘密；公共层污染行业语义；秘密落盘/外泄；客户原始数据上行；模拟回执伪装真实；Tiger 真实交易未获单独授权 |
+| 正常研发加强 AI 审查 | 租户/围栏/审批/事件/回执代码，protocol、sync、CI、迁移、共享文档和跨仓公共机制。必须精确绑定审查范围和必需检查，不能以“治理文件”为由永久等待人工点击 |
+| 真实经营/破坏性动作 | 资金、实盘、秘密轮换、客户外发或不可逆操作，需要产品所有者单独明确授权；自动研发交付授权不覆盖这些动作 |
 
-> 说明：基座内置示例 bundle（`bundles/ai-pm`、`bundles/hotel`、`bundles/platform`）是产品资产，**其正常维护不属于 block**；block 针对的是"把行业语义写进公共层"。
+代码中实现一个审批功能和用它执行真实转账是不同动作。交付器对 `platform-ops/secrets/`、`secrets/`、`trading/live/`、`broker/live/` 保持硬阻断；任何路径均需 AI 识别业务授权和租户边界。
 
-> 凭据纪律（2026-09-30 修订）：凭据**来源不设限**——受控秘密存储、本地环境配置，或当前任务中由产品所有者提供的会话令牌（含对话中给出的令牌）都可用于执行已授权操作；但**任何凭据的落盘与外发一律 block**（源码、提交、文档、提示词模板、日志、报告、Issue/PR 正文与评论、同步产物、Git remote URL、shell 历史）。会话凭据只在需要它的那条命令内注入、用完即弃，疑似外泄立即停止并轮换。完整条款见 `AGENTS.md` §7。
+凭据只在会话进程或平台原生 CI 环境内使用，禁止进入源码、文件、Git 配置/remote、PR/Issue、日志和 CI 自定义变量。用户会话令牌不能被写入持续执行器；云端使用 CNB 自动注入的原生令牌与 CodeBuddy 凭据。
 
-## 4. 锁：模块级互斥 + 路径重叠检测
+## 4. 三类互斥与依赖
 
-- **模块级互斥**（同一时刻全网仅一个任务可动）：`sync/**`、`protocol/**`、`**/migrations/**`、根 `package.json`、`AGENTS.md`、`.cnb.yml`、`docs/DEVELOPMENT-PROTOCOL.md`。
-- **普通路径**：同一文件被两个 open PR 同时修改 → 后到者拒（`LOCK_OVERLAP_MODE=warn` 可临时降级为告警）。
-- 检测由 `scripts/ci/verify-lock-conflict.mjs` 在 PR 流水线自动执行，无需手工维护锁表；脚本按「PR 编号 / 分支名 / 源分支提交 SHA」三重排除自身 PR。
-- 冲突处置：排队等待先到者合并；紧急任务转人工调度。
-- **事件语义（2026-09-27 修订）**：拦截只发生在 **PR 事件**（先到先得，后到者排队）；**push 事件**（main 上的合并提交）下重叠降级为**提醒**——合并已经发生，门禁拦不住任何东西，若仍判红则每次并发合并都会把 main 打红（实测：`workloom-growth` #211 合入后，因在途 #206/#209 同改 `bundles/ai-video/bundle.json` 被判红，同一内容 PR 门禁全绿）。需要 push 也按 fail 处理时用 `LOCK_OVERLAP_MODE=fail` 或 `--strict`。
+- **开发租约**：`sync`、`protocol`、`migrations`、`dependencies` 四个敏感范围，以 `queue-model.mjs#sensitiveScopes` 为准。默认 TTL 15 分钟，每 5 分钟续租；owner + generation 必须匹配，过期重领增加 generation，旧 owner 不能续租或释放新租约。一次多范围申请要么全成功，要么全失败。
+- **敏感源码正向接纳**：CI 不把“没有其他 holder”当成敏感源码已获准。trusted main 的独立 admission 流水线自动取得 `admission/pr-N` 的 scoped lease，保存准确 head/main、完整文件摘要和正 generation，再立即释放；源 CI 要核对只增 acquire→release→source_admitted 回执。更高的后续 generation 不否定旧源码的历史接纳证明，实际集成仍必须重新领取当前 generation。此接纳与模型审查使用不同原生锁，模型耗时不占住新 PR 的接纳。首装 prepare-install 同时准备这一证明。仅收到脚本而 main 尚无 delivery include、账本尚未初始化时，保留旧敏感重叠规则；显式安装后账本缺失、损坏、权限失败仍拒绝。
+- **集成互斥**：所有合并调用进入同一仓级 CNB 原生锁 `workloom-delivery-merge`。创建 `delivery/candidate/**` 保护分支时固定 source SHA；所有人含管理员禁止推送、强推和删除。真实候选 PR 上的 CI 与 AI 结果绑定相同 source/main，合并必须回读准确双亲。敏感候选在合并前由执行器强制取得 owner/generation 集成租约，在发出请求前再次核验；开发者未显式领租约也不能绕过此集成围栏。租约只覆盖集成短步骤，成功或未发出请求的失败立即释放，未知写结果先回读。普通 merge 主干进入开发分支，禁止 force/rebase 改写用户历史；语义冲突交给有上限的 CodeBuddy 工作模式修复。
+- **发布互斥**：UI/桌面按环境独立排队、固定已合入 SHA/版本，失败保持真实欠项，不能跳过无关代码集成；启动回执不明时先回读构建，不能重复部署。
+- **语义依赖**：PR 正文的 `workloom-delivery.depends_on`、平台 blocked_on 与 AI 识别出的前置 PR 合并为 DAG。只有真实合入的当前源码才满足前置条件；关闭但未合入不算完成；循环依赖停在相关任务，不堵全仓。
+- **普通路径重叠**：只提示协作和后续冲突；不按 PR 编号永久占位。`--strict` 是显式诊断模式。source/target/current-main/merge-base 的新鲜度仍为硬检查。
+
+```bash
+node scripts/delivery/queue-runner.mjs lease --repo workloom-ai/workloom-im --owner T-2026-1005-1001 --scopes protocol,sync
+# 使用上一步实际返回的 generation 续租/释放，不能手写假回执
+node scripts/delivery/queue-runner.mjs lease --repo workloom-ai/workloom-im --action renew --owner T-2026-1005-1001 --scopes protocol,sync --generation '{"protocol":1,"sync":1}'
+node scripts/delivery/queue-runner.mjs handoff --repo workloom-ai/workloom-im --pr 123 --depends-on 122
+```
+
+数字仅说明命令参数；实际 PR 和 generation 必须来自当前任务的回读。交接命令释放该任务有效租约，并将显式依赖写入 PR，不把草稿强改为可交付。
 
 ## 5. 提交规范（放宽版）
 
@@ -68,10 +75,10 @@ CNB 每仓**最多 10 个标签**（实测：创建第 11 个返回 201 但不�
 |---|---|
 | `t/draft` | 已建卡，四问未答全 |
 | `t/doing` | 已派发/已领/执行中（合并原 clarified/dispatched/leased/in-progress） |
-| `t/review` | 待人审或待评审 |
+| `t/review` | 待独立 AI 评审；真实经营动作另按授权处理 |
 | `t/done` | 已合并且有回执 |
 | `t/blocked` | 阻塞或取消（须在 Issue 写明原因） |
-| `risk/review` | 风险等级：人审 |
+| `risk/review` | 风险等级：加强评审（正常研发由 AI，真实经营动作按单独授权） |
 | `risk/block` | 风险等级：禁止（红线） |
 | `src/human` | 来源：人 |
 | `src/auto` | 来源：漂移报告 / 事故 / 考试失败（自动生成） |
@@ -86,11 +93,11 @@ CNB 每仓**最多 10 个标签**（实测：创建第 11 个返回 201 但不�
 - 存放：Issue 评论（首选）或 `docs/handoffs/H-<日期>-<序号>.json`（随 PR 提交）。
 - 恢复顺序：读 Issue 任务卡 → 读最近交接单 → `git log` 对账 → 继续；**交接单与 git/Issue 冲突时以 Issue + 代码为准**。
 
-## 7. 何时升级到"重装备"
+## 7. 交付器持久化与重试边界
 
-满足**任一**条件才评估（否则不建）：① 真实并行账号/人 ≥3；② 跨终端交接每周 >2 次；③ 出现"无回执导致返工"≥2 次；④ 并发任务 >10。
+`automation/delivery-state` 保存任务、租约、依赖、尝试、审查、集成与发布回执及只增事件链。普通 fast-forward Git push 是状态 CAS；写响应丢失按 transaction ID 回读，失败不能当完成。CI/评审阶段不持开发租约。
 
-届时再评估：事件账本服务、租约看门狗、协议考试院、错题本、多模型绩效路由、蜂群经验上行。
+每轮最多对齐两条、派发两条 AI 审查、派发两条修复；主干对齐每组源码/主干最多三次，修复最多两次，AI 同源码失败两次后停在该任务。真实外部合并响应不明会暂停后续集成直到正向回读，防止重复写。未就绪、权限错误、AI 超时和构建红灯保留原分支与失败证据，不能通过降低门禁消除阻塞。
 
 ## 10. 实验车道（fox / growth 等深度定制仓）
 
@@ -233,51 +240,34 @@ CNB 每仓**最多 10 个标签**（实测：创建第 11 个返回 201 但不�
 
 ## 9. 舰队维护与自动化（2026-09-18 新增）
 
-### 9.1 自动 vs 人工（边界写死）
+### 9.1 持续执行与人机边界
 
-| 环节 | 谁来做 | 怎么实现 |
-|---|---|---|
-| 提交规范校验 | **自动** | `.cnb.yml` 协议门禁 stage → `scripts/ci/verify-commit-msg.mjs` |
-| 并发冲突检测（同文件/同互斥模块） | **自动** | 同上 → `scripts/ci/verify-lock-conflict.mjs`（比对同仓 open PR） |
-| 合并前闸门（类型/测试/构建/迁移种子验链/视觉） | **自动** | 各仓 `.cnb.yml`（基座 static/db/ui 三道必需） |
-| 分支保护（禁直推/禁强推/必需状态检查/评审） | **平台强制 + API 回读** | 规则必须包含 PR、非空必需检查、评审与管理员推送/强推/删除限制；纳管时逐字段验证。隔离副本不参加公共分发，产品所有者明确授权的仓内安全修复可以收紧其本仓保护，不能改变隔离登记。 |
-| 新仓发现与纳管 | **自动** | 每日 cron：`scripts/tools/fleet-scan.mjs --issue --provision` → 开扫描卡 + 建纳管 PR（**隔离副本仓跳过**，见 §11） |
-| 基座资产分发（根级受控资产 → 各仓 `sync/base-*` PR） | **自动** | 每 30 分钟 cron + `api_trigger_base_sync`：`sync/fanout-cnb.mjs`（详见《FLEET-AUTO-SYNC.md》§1） |
-| 任务卡创建/回执/关单 | **半自动** | `scripts/tools/task.mjs new|receipt|close`（一条命令，不再手写 JSON） |
-| 分支创建、提交、提 PR | 由 AI/人执行 | 用任务号命名分支即可 |
-| **合并（代码类 PR）** | **AI / 流水线**（门禁全绿 + 串行，一次一个） | 协议 §1；会话内由 AI 直接合并，无人值守时由 `sync/merge-sync-prs.mjs` 按 §9.5 车道合并 |
-| **合并（纯同步 PR）** | **条件自动** | 仅 `sync/base-*` 且改动全在非执行性资产白名单、全部门禁 success 时由 `sync/merge-sync-prs.mjs` 合并；含治理资产则显式审查（协议 §9.4） |
-| 高风险裁决与叫停 / 回滚 | **人来** | 协议 §3；协议文本语义变更由 AI 按 §1 合并，人保留叫停权 |
+| 环节 | 执行方式 |
+|---|---|
+| 原 PR 检查 | 保留各仓原有必需流水线；原配置不能删除/改弱 trusted main 的检查阶段 |
+| 候选审查 | main 的 `pull_request.target` / API review 事件运行固定版本 CodeBuddy；完整文件覆盖、准确 SHA、policy hash、真实平台 NPC Approve 都要回读 |
+| 集成恢复 | `scripts/delivery/cnb.yml` 的目标分支事件与 5 分钟 reconcile cron；与 fanout 独立。旧 `merge-sync-prs.mjs` 只派发，不直接合并 |
+| 发布与回执 | 声明 UI/桌面发布时另排队；成功回读标签源码和资产摘要后才能完成相应任务 |
+| 资产分发 | 现有 fanout 继续创建受控同步 PR；`.cnb.yml` 只追加交付 include，不覆盖行业流水线/页面/种子。隔离副本排除 |
+| 人的职责 | 需求方向、真实经营动作的单独授权、叫停与新 revert PR 回滚；正常研发不等待逐 PR 点击批准 |
 
-结论：门禁、扫描、纳管与根级资产**开同步 PR**是自动的；非执行性资产和符合 §9.5 的普通代码可无人值守合并。治理资产同步 PR 须显式审查后由会话内 AI 合并，人保留高风险裁决、叫停与回滚权。
+真实 AI 评审和原仓必需状态检查必须同时成立。2026-10-05 基座安装 PR #234 已有真实 CodeBuddy approved 和四项成功检查，平台仍回报 blocked_on=waiting_review；给 CodeBuddy 添加评审人及仅调整自有 NPC 限制也未解除等待。因此首装执行端在核验准确 source/main 的真实 AI/CI 后，关闭平台人工评审计数（required_pull_request_reviews=false）及额外管理员批准，保留 PR、全部状态检查、禁直推/强推/删除和自有 NPC 自批限制。后续交付器仍强制回读独立 Bot Approve 和完整结构化覆盖证明。禁止伪造人工 Approve 或使用 force。初次安装先准备受保护账本，再完成真实 AI bootstrap 与原有流水线、合入并逐字段回读激活；配置文件存在不等于上线成功。
 
-平台要求评审时，自动合并器必须等待真实评审满足，不能用任务标签或 `force` 代替。当前会话授权代码修复与合并，也必须遵守平台的必需检查和评审结果；权限不足或红灯须保留 PR 和失败回执。
+### 9.4 同步 PR
 
-### 9.4 纯同步 PR 的自动合并（2026-09-19 新增）
+所有同步 PR 与普通代码使用同一真实 AI/检查/不可修改候选通道，不存在免审白名单。治理资产可自动交付，但必须完整独立审查；含运行时代码时运行相应仓必需测试。源分支保留，只有准确源码已合入才关闭原 PR。不能把“已开同步 PR”写成“已下发完成”。
 
-- 自动合并的判定逻辑在 `sync/fanout-rules.mjs#autoMergeEligibility`（纯函数、有单测），执行器是
-  `sync/merge-sync-prs.mjs`；两者与 fanout（`sync/fanout-cnb.mjs`）共同构成"基座改一次、
-  舰队跟一次"的闭环，机制说明见 `docs/FLEET-AUTO-SYNC.md`。
-- 免审白名单只含非执行性根级资产：`WORKLOOM_PRODUCT_CONTEXT.md`、`AI-AUTONOMOUS-OPERATIONS.md`、`.workloom-base-sync.json`。
-  `sync/**`、`AGENTS.md`、本协议、验收规范/执行器和工作流均可改变治理行为，**即使位于 `sync/base-*` 分支也不得由无人值守通道合并**；需按 §3 显式审查后由会话内 AI 合并。
-- 门禁仍然先行：PR 必须全部门禁 success、平台状态明确为 `mergeable`、非 WIP、无 `risk/review` / `risk/block` 标签；**缺少状态检查、风险标签清单或可合并状态时不自动合并**。入队后、实际合并前重读源分支 HEAD、目标 `main`、路径、门禁、标签和 WIP；变化则退出本轮并重新判定。
-- 白名单外的普通代码按 §9.5 进入代码车道；治理路径不因从同步车道回落而获得免审资格。一次同步 PR 同时包含普通资产和治理文件时，整条 PR 等待显式审查，不能把“已开 PR”写成“已下发完成”。
+### 9.5 开发交接契约
 
-### 9.5 代码类 PR 的机器合并（2026-09-19 修订）
+PR 正文可附：
 
-- 判定逻辑：`sync/fanout-rules.mjs#codeMergeEligibility`（纯函数、有单测），执行器同样是
-  `sync/merge-sync-prs.mjs`——同一脚本先跑纯同步车道（§9.4），再跑代码车道。
-- 代码车道准入（全部满足）：分支在任务/行业/实验/维护车道（`task/ industry/ experiment/ chore/ docs/ fix/ audit/ rescue/`）；
-  全部门禁 success；平台 `mergeable_state=mergeable`；非 WIP；无 `risk/review`、`risk/block` 标签；
-  分支最近一次提交已过 **10 分钟冷却期**（避免合并"会话仍在写"的 PR）；改动不落在治理/高风险路径
-  （`platform-ops/**`、`bundles/platform/**`、`protocol/**`、`sync/**`、`docs/DEVELOPMENT-PROTOCOL.md`、
-  `AGENTS.md`、`.cnb.yml`、`.github/**`、`**/migrations/**`、验收规范与执行器——只有 §9.4 的非执行性资产在同步波次里放行）。
-- 串行约束：**同一仓库每轮最多合并一条代码类 PR**；其余候选项留待下一轮（先 rebase 再合），
-  与 §1 规则 4 的"合并后其余分支先 rebase 再继续"一致。
-- 非纯同步的 `sync/base-*-full` 波次（携带运行时代码的基座升级）同样走代码车道：门禁全绿 + 冷却期
-  已过才由机器合并；若混有 §9.4 的治理路径则停在显式审查队列。任何一个条件不满足都只报告、不合并。
-- 治理路径（协议文本、`.cnb.yml`、迁移、平台工程等）永远不进无人值守通道：由会话内 AI 在
-  获得明确指令/放行后显式合并，人保留叫停权。
+```html
+<!-- workloom-delivery
+{"task_id":"T-2026-1005-1001","ready":true,"depends_on":[],"releases":[]}
+-->
+```
+
+`ready:false` 保持开发态；WIP 始终不合。旧 PR 未声明 ready 时按 10 分钟提交冷却期接管，仍需完整 AI 与 CI。发布可声明 `{"kind":"ui","version":"1.2.3"}` 或 desktop；制品构建/签名环境未就绪会留下发布欠项，不生成虚假成功回执。两项声明按各自版本和环境验证。
 
 ### 9.2 工具用法
 
@@ -287,7 +277,7 @@ node scripts/tools/task.mjs new --repo workloom-ai/workloom-hotel --title "修�
   --q1 industry --q3 workloom-hotel --q4 "单测+打包门禁；回滚=revert"
 # 任务卡：回执 + 关单
 node scripts/tools/task.mjs receipt --repo workloom-ai/workloom-hotel --id T-2026-0919-0001 \
-  --progress "..." --decisions "..." --next "..." --close
+  --progress "..." --decisions "..." --next "..." --pr 123 --close
 
 # 舰队扫描：列出组织内所有 WorkLoom 仓，标出未纳管的新仓
 node scripts/tools/fleet-scan.mjs                 # 人读报告
@@ -303,10 +293,10 @@ node scripts/tools/experiment-guard.mjs [--check]
 
 纳管判定规则（`scripts/tools/fleet-rules.mjs`）：仓库根 `product.manifest.json` 的 `schemaVersion` 以 `workloom.product/` 开头 → WorkLoom 仓；缺失时退化为 `.workloom-base-sync.json` 或 `bundles/*/bundle.json` 的 schema 标记。已纳管集合 = 基座仓 + `sync/child-repos.json` 的 children + `isolatedRepos`（隔离副本计入"已知"，但永不进入纳管/分发通道）。
 
-### 9.3 新仓纳管后的三件事（自动完成，人工只需审 PR）
+### 9.3 新仓纳管后的三件事（自动创建 PR 并进入 AI 交付）
 
 1. 标签体系（10 个）+ `main` 分支保护（强制 PR + 必需状态检查 + 禁强推/删除）；
-2. 协议资产副本 + `.cnb.yml` 协议门禁 stage；
+2. 协议/交付器完整依赖副本 + `.cnb.yml` 追加协议门禁与 trusted-main delivery include；
 3. 本仓写入 `sync/child-repos.json`（舰队清单），后续 base-sync 波次照常覆盖。
 
 > 注意：新仓若与既有仓同 `productId`（例如 `WorkLoom-growth` 与 `workloom` 都是 `workloom-ai-acquisition`），说明它是同一产品的第二实例或副本——纳管只保证协议一致，**产品身份（productId/端口/演示工作区）需要人确认后统一**。
@@ -316,9 +306,9 @@ node scripts/tools/experiment-guard.mjs [--check]
 ## 8. 落地检查（每周一次，1 分钟）
 
 - 进行中的对话是否都有任务卡？（应 100%）
-- 是否有两个 open PR 改了同一文件/同一互斥模块？（应 0）
-- 是否有门禁全绿却超过 24h 未合并的 PR？（应 0——由 AI 按 §1/§9.5 直接合并，或已在 Issue 说明阻塞原因）
-- `risk/review` PR 是否都在拿到放行后由 AI 执行了合并（而不是等人来点）？（应「是」）
+- 是否存在无 owner/generation 或等待 CI 仍续租的敏感开发占用？（应 0）；普通文件重叠仅为协作提示
+- 是否有门禁全绿却超过 24h 未合并的 PR？（应 0——由仓级交付器按 §1/§9.5 审查和集成，或已在 Issue 说明阻塞原因）
+- `risk/review` 的正常研发 PR 是否有完整 AI/CI 回执并继续交付（不等待人工点击）？（应「是」）
 - 合并是否严格串行？（应「是」）
 
 ## 12. 交付排雷机制（MCD v1.0，2026-09-29 新增）
@@ -335,4 +325,4 @@ node scripts/tools/experiment-guard.mjs [--check]
 4. **P0（突破核心不变量 / 安全）未闭环** → 不得进入 RDAS 验收，不得并入发布分支；
 5. **M6 交接**必须用 `mine-clear.mjs handoff`（未闭环项逐条给回归路径），验收结论只许三档：完全通过 / 有条件通过 / 不通过。
 
-**风险分级**：MCD 本体是规范 + 台账 schema/模板 + 本地编排脚本（`scripts/delivery/**`），不改产品运行时；一旦排雷结论落到运行时代码改动，按 §3 目录围栏照常判 `auto / review / block`，治理路径仍需人审放行。
+**风险分级**：MCD 本体是规范 + 台账 schema/模板 + 本地编排脚本（`scripts/delivery/**`），不改产品运行时；一旦排雷结论落到运行时代码改动，按 §3 目录围栏照常判 `auto / review / block`，正常治理代码使用独立 AI 审查；真实经营/不可逆动作仍需单独明确授权。

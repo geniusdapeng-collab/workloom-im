@@ -12,8 +12,10 @@
  * 隔离副本（sync/child-repos.json#isolatedRepos）只登记、不纳管：扫描报告单列，--issue/--provision 一律跳过。
  */
 import { classifyRepo, diffFleet, isolatedFleet, knownFleet } from "./fleet-rules.mjs";
-import { createIssue, listRepos, rawFile, requireToken } from "./cnb-api.mjs";
+import { createIssue, listRepos, rawFile, redactCredentials, requireToken } from "./cnb-api.mjs";
 import { provisionProtocol } from "./provision-protocol.mjs";
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const DEFAULT_ORG = "workloom-ai";
 const DEFAULT_BASE_REPO = "workloom-ai/workloom-im";
@@ -69,29 +71,39 @@ function selfTest() {
   console.log("✓ fleet-scan self-test 通过（分类 5 例 + 差分 2 例：新仓 / 隔离副本）");
 }
 
-async function scan({ org, baseRepo, log = () => {} }) {
-  const repos = (await listRepos(org)).map((repo) => repo.path ?? `${org}/${repo.name}`);
+export async function scan({ org, baseRepo, log = () => {}, list = listRepos, read = rawFile }) {
+  const repos = (await list(org)).map((repo) => repo.path ?? `${org}/${repo.name}`);
   const classifications = {};
+  const failed = [];
   for (const slug of repos) {
-    const manifestText = await rawFile(slug, "main", "product.manifest.json");
-    let baseSyncText = null;
-    let bundleText = null;
-    if (!manifestText) baseSyncText = await rawFile(slug, "main", ".workloom-base-sync.json");
-    if (!manifestText && !baseSyncText) {
-      const root = await rawFile(slug, "main", "package.json");
-      if (root) {
-        const name = JSON.parse(root).name ?? "";
-        if (name.startsWith("workloom")) classifications[slug] = { isWorkloom: true, role: "unknown", reason: "package.json name" };
+    try {
+      const manifestText = await read(slug, "main", "product.manifest.json");
+      let baseSyncText = null;
+      let bundleText = null;
+      if (!manifestText) baseSyncText = await read(slug, "main", ".workloom-base-sync.json");
+      if (!manifestText && !baseSyncText) {
+        const root = await read(slug, "main", "package.json");
+        if (root) {
+          const name = JSON.parse(root).name ?? "";
+          if (name.startsWith("workloom")) classifications[slug] = { isWorkloom: true, role: "unknown", reason: "package.json name" };
+        }
       }
+      classifications[slug] = classifications[slug] ?? classifyRepo({ manifestText, baseSyncText, bundleText });
+      log(`  · ${slug} → ${classifications[slug].isWorkloom ? "WorkLoom" : "非 WorkLoom"}（${classifications[slug].reason}）`);
+    } catch (error) {
+      const failure = { repo: slug, status: 'unreadable', error: redactCredentials(error.message).slice(0, 1200) };
+      failed.push(failure); classifications[slug] = { isWorkloom: null, reason: '仓库不可读', error: failure.error };
+      log(`  · ${slug} → 未核实（${failure.error}）`);
     }
-    classifications[slug] = classifications[slug] ?? classifyRepo({ manifestText, baseSyncText, bundleText });
-    log(`  · ${slug} → ${classifications[slug].isWorkloom ? "WorkLoom" : "非 WorkLoom"}（${classifications[slug].reason}）`);
   }
-  const childReposJson = await rawFile(baseRepo, "main", "sync/child-repos.json");
+  const childReposJson = await read(baseRepo, "main", "sync/child-repos.json");
+  if (!childReposJson) throw new Error('舰队隔离登记表不可读；不能推断新仓或执行纳管');
+  const registry = JSON.parse(childReposJson);
+  if (!Array.isArray(registry.children) || !Array.isArray(registry.isolatedRepos)) throw new Error('舰队隔离登记表结构无效');
   const known = knownFleet(baseRepo, childReposJson);
   const isolated = isolatedFleet(childReposJson);
-  const diff = diffFleet({ repos, classifications, known, isolated });
-  return { repos, classifications, known: [...known], isolated: [...isolated], diff };
+  const diff = diffFleet({ repos: repos.filter(slug => classifications[slug].isWorkloom !== null), classifications, known, isolated });
+  return { repos, classifications, failed, known: [...known], isolated: [...isolated], diff };
 }
 
 async function main() {
@@ -113,6 +125,7 @@ async function main() {
     isolated: result.diff.isolated,
     newWorkloom: result.diff.newWorkloom,
     unrelated: result.diff.unrelated,
+    failed: result.failed,
   };
   if (json) console.log(JSON.stringify(summary, null, 2));
   else {
@@ -121,6 +134,7 @@ async function main() {
     console.log(`  隔离副本仓（登记但不纳管、不下发）：${summary.isolated.length}${summary.isolated.length ? " → " + summary.isolated.join(", ") : ""}`);
     console.log(`  新发现 WorkLoom 仓：${summary.newWorkloom.length}${summary.newWorkloom.length ? " → " + summary.newWorkloom.map((item) => item.repo).join(", ") : ""}`);
     console.log(`  非 WorkLoom 仓：${summary.unrelated.length}`);
+    console.log(`  未核实仓：${summary.failed.length}`);
   }
 
   if (summary.isolated.length && (issue || provision)) {
@@ -149,14 +163,15 @@ async function main() {
 
   if (provision && summary.newWorkloom.length) {
     for (const item of summary.newWorkloom) {
-      await provisionProtocol(item.repo, { baseRepo, log: console.log });
+      try { await provisionProtocol(item.repo, { baseRepo, log: console.log }); }
+      catch (error) { console.error(`  纳管失败 ${item.repo}：${redactCredentials(error.message)}`); process.exitCode = 1; }
     }
   }
 
-  if (check && summary.newWorkloom.length) process.exit(1);
+  if (summary.failed.length || check && summary.newWorkloom.length) process.exitCode = 1;
 }
 
-main().catch((error) => {
-  console.error(`舰队扫描失败：${error?.message ?? error}`);
-  process.exit(1);
+if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) main().catch((error) => {
+  console.error(`舰队扫描失败：${redactCredentials(error?.message ?? error)}`);
+  process.exitCode = 1;
 });

@@ -15,7 +15,8 @@
  *                            [--no-pr] [--json] [--base-dir <基座工作树>] [--tolerate-scope-error]
  * 环境：
  *   CNB_TOKEN（CI 内自动注入；本地用个人访问令牌）——需具备子仓读 + 建 PR 的权限。
- * 退出码：0 全部齐平/已开 PR；1 存在失败项（--tolerate-scope-error 时跨仓权限不足只告警）。
+ * 退出码：0 已处理；78 仅有明确首装欠项（CNB 中断该流水线而不报故障）；
+ *         1 存在实际失败项（--tolerate-scope-error 时已识别跨仓权限不足只告警）。
  */
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -28,7 +29,8 @@ import {
   hasInFlightSyncPull, pausedWaveChildren, requiredAssetDigests, syncDrift, syncedChildren, SYNC_BRANCH_PREFIX,
 } from "./fanout-rules.mjs";
 import { isolatedFleet } from "../scripts/tools/fleet-rules.mjs";
-import { addPullLabels, createPull, gitAuthenticationEnvironment, listPulls, rawFile, redactCredentials, requireToken } from "../scripts/tools/cnb-api.mjs";
+import { addPullLabels, api, createPull, gitAuthenticationEnvironment, listPulls, rawFile, redactCredentials, requireToken } from "../scripts/tools/cnb-api.mjs";
+import { STATE_BRANCH, validateState } from '../scripts/delivery/queue-model.mjs';
 
 const SCRIPT_DIR = fileURLToPath(new URL(".", import.meta.url));
 const DEFAULT_BASE_DIR = resolve(SCRIPT_DIR, "..");
@@ -111,11 +113,24 @@ function pullBody({ mode, baseSha, baseRepo, files }) {
     "## 处理规则",
     "",
     mode === 'required-only' ? "- 本 PR 覆盖根级受控资产及其执行依赖，不覆盖行业业务实现；" : "- 本 PR 覆盖受控清单内的公共基座资产，行业身份和声明的扩展路径由本仓保留；",
-    "- 门禁由本仓 `.cnb.yml` 执行；无人值守合并仅限非执行性白名单。协议、规则、执行器、同步器与发布器即使全绿，也须已授权的会话显式审查并串行合并；",
+    "- 门禁由本仓 `.cnb.yml` 执行；原仓必需检查、独立真实 AI 审查与准确 source/main 回执通过后，由本仓交付器串行合并，不等待人逐 PR 点批准；",
     "- 需要暂缓时：关掉本 PR 即可，fanout 在存在在途同步 PR 时不会重复开门。",
     "",
     `> 相关：${baseRepo} sync/fanout-cnb.mjs`,
   ].join("\n");
+}
+
+/** First installation prepares the lease ledger before fanout can distribute its required reader. */
+export async function deliveryRolloutReady(repo, request = api) {
+  let state;
+  try { state = await request(repo, `/-/git/raw/${encodeURIComponent(STATE_BRANCH)}/state.json`); }
+  catch (error) {
+    if (error.status === 404) return { ready: false, reason: 'DELIVERY_NOT_INSTALLED：先经首装准备受保护账本，再接收交付门禁资产' };
+    throw error;
+  }
+  validateState(state, repo);
+  if (!state.events.some(event => event.kind === 'installation_prepared' || event.kind === 'activated')) return { ready: false, reason: '交付账本未有首装准备回执，暂缓门禁资产下发' };
+  return { ready: true };
 }
 
 async function main() {
@@ -166,6 +181,17 @@ async function main() {
     const record = { repo: child.repo, status: "unknown", mode, reasons: [] };
     let workdir = "";
     try {
+      const delivery = await deliveryRolloutReady(child.repo);
+      if (!delivery.ready) {
+        record.status = 'waiting-installation';
+        record.reasons = [delivery.reason];
+        record.action = {
+          kind: 'delivery-first-install', repo: child.repo,
+          contract: 'docs/FLEET-AUTO-SYNC.md#132-既有仓的首装顺序不能把文件分发当作启用',
+          requiredReceipts: ['installation_prepared', 'activated', 'native-reconcile-state-write'],
+        };
+        results.push(record); continue;
+      }
       const stateText = await rawFile(child.repo, "main", ".workloom-base-sync.json");
       const state = stateText ? JSON.parse(stateText) : null;
       const drift = syncDrift({ state, mode, baseSha, digests });
@@ -253,6 +279,9 @@ async function main() {
     }
   }
 
+  const waitingInstallation = results.filter((item) => item.status === 'waiting-installation').length;
+  // A genuine failure always wins over the expected first-install stop.
+  const exitCode = failed || (scopeError && !tolerateScopeError) ? 1 : waitingInstallation ? 78 : 0;
   const summary = {
     baseRepo,
     baseSha,
@@ -267,8 +296,12 @@ async function main() {
     opened: results.filter((item) => item.status === "pr-opened").length,
     drift: results.filter((item) => item.status === "drift" || item.status === "would-sync").length,
     branchExists: results.filter((item) => item.status === "branch-exists").length,
+    waitingInstallation,
+    outcome: exitCode === 1 ? 'failed' : waitingInstallation ? 'waiting-installation' : 'processed',
+    exitCode,
     failed,
     scopeDenied: scopeError,
+    warnings: scopeError && tolerateScopeError ? ['跨仓权限不足：请在 CNB 组织设置开启允许定时任务跨仓操作，或用带跨仓权限的令牌触发本流水线。'] : [],
     results,
   };
 
@@ -276,15 +309,14 @@ async function main() {
     console.log(JSON.stringify(summary, null, 2));
   } else {
     for (const item of results) {
-      const label = { aligned: "✅ 已对齐", "in-flight": "🕒 在途 PR", "pr-opened": "📦 已开 PR", "branch-exists": "🧷 分支已存在", drift: "⚠️ 漂移", "would-sync": "⚠️ [dry-run] 待同步", failed: "❌ 失败", "scope-denied": "🔒 权限不足" }[item.status] ?? item.status;
+      const label = { aligned: "✅ 已对齐", "in-flight": "🕒 在途 PR", "pr-opened": "📦 已开 PR", "branch-exists": "🧷 分支已存在", drift: "⚠️ 漂移", "would-sync": "⚠️ [dry-run] 待同步", failed: "❌ 失败", "scope-denied": "🔒 权限不足", "waiting-installation": "⏸ 首装未完成：需授权安装端处理" }[item.status] ?? item.status;
       console.log(`${label} ${item.repo}${item.pull ? ` #${item.pull}` : ""}${item.reasons.length ? `：${item.reasons.join("；")}` : ""}${item.error ? `：${item.error}` : ""}`);
     }
-    console.log(`\n基座 ${baseSha.slice(0, 8)}（模式 ${mode}${dryRun ? "，dry-run" : ""}）：对齐 ${summary.aligned} · 在途 ${summary.inFlight} · 新开 PR ${summary.opened} · 分支已存在 ${summary.branchExists} · 待同步 ${summary.drift} · 隔离副本 ${summary.isolatedDeclared.length}（不下发） · paused 波次 ${summary.skippedPaused.length}（不下发） · 失败 ${failed} · 权限不足 ${scopeError}`);
+    console.log(`\n基座 ${baseSha.slice(0, 8)}（模式 ${mode}${dryRun ? "，dry-run" : ""}）：对齐 ${summary.aligned} · 在途 ${summary.inFlight} · 新开 PR ${summary.opened} · 分支已存在 ${summary.branchExists} · 待同步 ${summary.drift} · 待首装 ${waitingInstallation} · 隔离副本 ${summary.isolatedDeclared.length}（不下发） · paused 波次 ${summary.skippedPaused.length}（不下发） · 失败 ${failed} · 权限不足 ${scopeError}`);
   }
 
-  if (failed) process.exitCode = 1;
-  if (scopeError && !tolerateScopeError) process.exitCode = 1;
-  if (scopeError && tolerateScopeError) {
+  process.exitCode = exitCode;
+  if (scopeError && tolerateScopeError && !json) {
     console.log("⚠️ 跨仓权限不足：请在 CNB「组织设置 → 仓库管控」开启「允许定时任务跨仓操作」，或改用带跨仓权限的令牌触发本流水线。");
   }
 }
