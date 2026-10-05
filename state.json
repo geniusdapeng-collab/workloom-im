@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 246,
+  "revision": 248,
   "tasks": {
     "231": {
       "number": 231,
@@ -334,20 +334,20 @@
     },
     "236": {
       "number": 236,
-      "status": "waiting_ci",
+      "status": "developing",
       "firstSeen": 1791201701860,
       "attempts": {},
-      "headSha": "d8f1f0e6df25c1a8992e37511fbe3ac7bc26a0f2",
+      "headSha": "047418a047aff1be78ecca447b21d63306b0ebe2",
       "branch": "task/T-2026-1005-2000",
       "intent": {
         "taskId": "T-2026-1005-2000",
-        "ready": true,
+        "ready": false,
         "dependsOn": [
           239
         ],
         "releases": []
       },
-      "updatedAt": 1791243423829,
+      "updatedAt": 1791243608552,
       "admission": {
         "number": 236,
         "headSha": "047418a047aff1be78ecca447b21d63306b0ebe2",
@@ -5496,6 +5496,38 @@
       },
       "previous": "aeafa9a9ebc565ea067e8624df9f0352858717e4754cb7175c3dfd296b77c1aa",
       "digest": "25967a25cd310cc8e2900c2df2c0e1911b87b173af99ed32d7261d59ac4a0959"
+    },
+    {
+      "sequence": 247,
+      "at": "2026-10-05T23:40:08.552Z",
+      "kind": "task",
+      "data": {
+        "number": 236,
+        "patch": {
+          "status": "developing",
+          "headSha": "047418a047aff1be78ecca447b21d63306b0ebe2",
+          "intent": {
+            "taskId": "T-2026-1005-2000",
+            "ready": false,
+            "dependsOn": [
+              239
+            ],
+            "releases": []
+          }
+        }
+      },
+      "previous": "25967a25cd310cc8e2900c2df2c0e1911b87b173af99ed32d7261d59ac4a0959",
+      "digest": "3094702888fc86d13b11050c302a422f3b018c5c3038995f18a287648dd65e2f"
+    },
+    {
+      "sequence": 248,
+      "at": "2026-10-05T23:40:10.062Z",
+      "kind": "transaction",
+      "data": {
+        "id": "8d352ce5-ed0a-4d99-af72-4581b149ec9f"
+      },
+      "previous": "3094702888fc86d13b11050c302a422f3b018c5c3038995f18a287648dd65e2f",
+      "digest": "efe489ea311628de3c68f88ed81100f4448588d0e1363d737f225c9983d9b403"
     }
   ]
 }
