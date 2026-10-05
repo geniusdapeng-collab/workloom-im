@@ -10,7 +10,7 @@ import { alignBranch, independentCodeBuddyApproval } from './queue-work.mjs';
 import { Platform } from './queue-platform.mjs';
 import { BASE_POLICY, REVIEW_IMAGE, ciImplementationChanges, loadPolicy, parser, prPipelines, readableCiChanges, resolvePipelineConfig, sourcePipelineReport, validateSourcePipeline } from './queue-policy.mjs';
 import { dependencies, integratedDependency, mergeCandidate, reconcile, requestReview, reviewSlotBusy, writeTaskReceipts } from './queue-controller.mjs';
-import { enqueueReleases, reconcileReleases, verifyRelease } from './queue-release.mjs';
+import { enqueueReleases, reconcileReleases, releaseEventFor, verifyRelease } from './queue-release.mjs';
 import { injectDeliveryConfig } from './install-config.mjs';
 import { batchEnvironment, batchSnapshot, botApiEndpoint, combineBatchResults, reviewBatches, reviewEnvironment, runReview, validateIssueSchema } from './review-plugin.mjs';
 import { configureAutomaticReviewPolicy, ensureStateProtection, prepareInstallation, requireTrustedRunner, verifyInstallerChecks, verifyPreparedInstallation } from './queue-runner.mjs';
@@ -555,6 +555,18 @@ test('new candidates reserve actual AI parent capacity; failed, stale and comple
 test('release enqueue is idempotent by frozen source/kind/version and keeps integration separate', () => {
   const state = emptyState(repo); const task = { number: 1, merge: { sha: mergedSha }, intent: { releases: [{ kind: 'ui', version: 'v1.2.3' }] } };
   enqueueReleases(state, repo, task, now); enqueueReleases(state, repo, task, now); assert.equal(Object.keys(state.releases).length, 1); assert.equal(Object.values(state.releases)[0].version, '1.2.3');
+});
+test('manual UI event and delivery dispatch use the same actual publishing job and native lock; the scheduler only launches and observes', async t => {
+  const YAML = await parser(); const root = YAML.parse(await readFile(new URL('../../.cnb.yml', import.meta.url), 'utf8'), { maxAliasCount: 1000 });
+  assert.equal(releaseEventFor('ui'), 'api_trigger_ui_release'); assert.equal(releaseEventFor('desktop'), 'api_trigger_desktop_release');
+  assert.throws(() => releaseEventFor('unknown'), /Unknown/);
+  if (!root['.ui-release']) { t.skip('This product has no shared UI publishing lane'); return; }
+  const jobs = root.$?.[releaseEventFor('ui')] ?? root.main?.[releaseEventFor('ui')];
+  assert.deepEqual(jobs, [root['.ui-release']]);
+  assert.equal(jobs[0].lock.key, 'workloom-delivery-release-ui'); assert.equal(jobs[0].lock.wait, true);
+  const scheduler = YAML.parse(await readFile(new URL('./cnb.yml', import.meta.url), 'utf8'))['.delivery-releases'];
+  assert.notEqual(scheduler.lock.key, jobs[0].lock.key);
+  assert.ok(!scheduler.stages.some(stage => String(stage.script).includes('cnb-release-publish')));
 });
 test('release launch intent survives lost acknowledgement and forbids duplicate publication', async () => {
   const state = emptyState(repo); const task = { number: 1, merge: { sha: mergedSha }, intent: { releases: [{ kind: 'ui', version: '1.2.3' }] } }; enqueueReleases(state, repo, task, now); const store = memoryStore(state); let launches = 0;

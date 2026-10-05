@@ -2,7 +2,10 @@
 import { createHash } from 'node:crypto';
 import { appendEvent, releaseKey, SHA_RE, updateTask } from './queue-model.mjs';
 
-const eventFor = kind => kind === 'ui' ? 'api_trigger_ui_release' : 'api_trigger_desktop_release';
+export function releaseEventFor(kind) {
+  if (!['ui', 'desktop'].includes(kind)) throw new Error('Unknown release kind');
+  return kind === 'ui' ? 'api_trigger_ui_release' : 'api_trigger_desktop_release';
+}
 export function enqueueReleases(state, repo, task, now = Date.now()) {
   for (const intent of task.intent?.releases ?? []) {
     const version = intent.kind === 'ui' ? intent.version.replace(/^v/, '') : `v${intent.version.replace(/^v/, '')}`;
@@ -31,7 +34,7 @@ async function bytes(repo, tag, name, { maximum = 1024 * 1024 * 1024, json = fal
 export async function verifyRelease(platform, release, download = bytes) {
   if (!release.build?.sn) throw new Error('Release has no actual build receipt');
   const key = release.key ?? releaseKey({ repo: platform.repo, sha: release.sha, kind: release.kind, version: release.version });
-  const actualBuild = (await releaseBuilds(platform, release)).filter(build => build.sn === release.build.sn && build.sha === release.sha && build.event === eventFor(release.kind) && build.title === `WorkLoom release ${key}`);
+  const actualBuild = (await releaseBuilds(platform, release)).filter(build => build.sn === release.build.sn && build.sha === release.sha && build.event === releaseEventFor(release.kind) && build.title === `WorkLoom release ${key}`);
   if (actualBuild.length !== 1) throw new Error('Release build source/event/intent did not read back');
   const tag = release.kind === 'ui' ? `ui-v${release.version}` : release.version;
   const metadata = await platform.call(`/-/releases/tags/${encodeURIComponent(tag)}`);
@@ -62,7 +65,7 @@ export async function verifyRelease(platform, release, download = bytes) {
 }
 
 async function releaseBuilds(platform, release) {
-  const data = await platform.call(`/-/build/logs?event=${eventFor(release.kind)}&sha=${release.sha}&page_size=100`);
+  const data = await platform.call(`/-/build/logs?event=${releaseEventFor(release.kind)}&sha=${release.sha}&page_size=100`);
   if (!Array.isArray(data?.data) || !Number.isSafeInteger(data.total)) throw new Error('Release build history unreadable');
   if (data.total > 100) throw new Error('Release build history is too large to reconcile safely');
   return data.data;
@@ -78,7 +81,7 @@ export async function reconcileReleases({ platform, store, now = Date.now(), ver
     const item = queue[0];
     try {
       if (item.status === 'launching' || item.status === 'unknown') {
-        const matches = (await releaseBuilds(platform, item)).filter(build => !item.knownBuilds.includes(build.sn) && build.sha === item.sha && build.event === eventFor(item.kind) && build.title === `WorkLoom release ${item.key}`);
+        const matches = (await releaseBuilds(platform, item)).filter(build => !item.knownBuilds.includes(build.sn) && build.sha === item.sha && build.event === releaseEventFor(item.kind) && build.title === `WorkLoom release ${item.key}`);
         if (matches.length !== 1 || !matches[0].sn) {
           report.push({ kind, status: 'unknown', key: item.key, reason: 'Launch acknowledgement cannot be resolved; no duplicate launch' });
           continue;
@@ -121,7 +124,7 @@ export async function reconcileReleases({ platform, store, now = Date.now(), ver
         appendEvent(current, 'release_launch_intent', { key: item.key, sha: release.sha, attempt: release.attempts + 1 }, now);
       });
       const build = await platform.call('/-/build/start', { method: 'POST', body: {
-        branch: 'main', sha: release.sha, event: eventFor(kind), sync: 'false', title: `WorkLoom release ${item.key}`,
+        branch: 'main', sha: release.sha, event: releaseEventFor(kind), sync: 'false', title: `WorkLoom release ${item.key}`,
         env: { DELIVERY_RELEASE_ID: item.key, RELEASE_EXPECTED_SHA: release.sha, CNB_REPO: platform.repo, ...(kind === 'ui' ? { UI_VERSION: release.version } : { DESKTOP_RELEASE_VERSION: release.version }) },
       } });
       if (!build?.success || !build.sn) throw new Error('Release start has no real build acknowledgement');
