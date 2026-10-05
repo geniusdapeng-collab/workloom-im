@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 213,
+  "revision": 215,
   "tasks": {
     "231": {
       "number": 231,
@@ -313,7 +313,7 @@
       "status": "waiting_ci",
       "firstSeen": 1791201701860,
       "attempts": {},
-      "headSha": "3429d3a936790b808dd5e65fb8c1f5f7d40eead6",
+      "headSha": "d8f1f0e6df25c1a8992e37511fbe3ac7bc26a0f2",
       "branch": "task/T-2026-1005-2000",
       "intent": {
         "taskId": "T-2026-1005-2000",
@@ -323,7 +323,7 @@
         ],
         "releases": []
       },
-      "updatedAt": 1791242844693,
+      "updatedAt": 1791243007261,
       "admission": {
         "number": 236,
         "headSha": "d8f1f0e6df25c1a8992e37511fbe3ac7bc26a0f2",
@@ -338,9 +338,9 @@
         }
       },
       "alignmentCount": 0,
-      "recoveryCount": 1,
+      "recoveryCount": 0,
       "reviewFailures": null,
-      "blockedUntil": 1791243010476,
+      "blockedUntil": 0,
       "review": null,
       "candidate": null,
       "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
@@ -361,7 +361,7 @@
         "scripts/delivery/queue-policy.mjs",
         "scripts/delivery/queue.test.mjs"
       ],
-      "ciSince": 1791242410476,
+      "ciSince": 1791243007261,
       "recoveryIntent": null,
       "error": "检查/评审阻断：Required check static-gate missing/failed/ambiguous; No current complete AI review",
       "recovery": {
@@ -4343,6 +4343,64 @@
       },
       "previous": "3eb3c91c8f7e9833ba11fcc9004459fe85bb00ee8101b05e84b7a2b971cfea18",
       "digest": "903ede67abe1739654715b8c642d474617176e1e00e2070aa75e2d5daef69c6e"
+    },
+    {
+      "sequence": 214,
+      "at": "2026-10-05T23:30:07.261Z",
+      "kind": "task",
+      "data": {
+        "number": 236,
+        "patch": {
+          "alignmentCount": 0,
+          "recoveryCount": 0,
+          "reviewFailures": null,
+          "blockedUntil": 0,
+          "review": null,
+          "candidate": null,
+          "headSha": "d8f1f0e6df25c1a8992e37511fbe3ac7bc26a0f2",
+          "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+          "branch": "task/T-2026-1005-2000",
+          "intent": {
+            "taskId": "T-2026-1005-2000",
+            "ready": true,
+            "dependsOn": [
+              239
+            ],
+            "releases": []
+          },
+          "originalBody": "账户安装器在已激活的基座当前 main 上完整分页发现 Owner/active 仓，并逐仓安装研发交付机制。保留行业业务、隔离规则、冻结认知和原仓必需 CI；growthtest 的独立 Git/PR 来源与完整路径校验保留，仅将永久 PR 编号占锁迁移为有期限租约。任务卡 Issue #235。授权凭据只在安装进程内注入，首次准备、真实 AI/检查、普通 merge、激活与原生回执逐项回读。用户取消的 Codex chat 定时任务保持删除；本变更提供账户安装 CLI，不自行恢复该定时任务。\n\n本地验证：30 项安装器回归通过；实际 growthtest 安装副本 223 项通过、0 失败，1 项共享 UI 发布检查因该产品无此车道而跳过；重复安装 0 文件改动。 已对齐准确基座 main，交接为 ready。\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1005-2000\",\n  \"ready\": true,\n  \"depends_on\": [\n    239\n  ],\n  \"releases\": []\n}\n-->",
+          "files": [
+            "scripts/delivery/README.md",
+            "scripts/delivery/git-state.mjs",
+            "scripts/delivery/install-account.mjs",
+            "scripts/delivery/install-account.test.mjs",
+            "scripts/delivery/install-assets.mjs",
+            "scripts/delivery/install-protocol.mjs",
+            "scripts/delivery/install-repository.mjs",
+            "scripts/delivery/install-repository.test.mjs",
+            "scripts/delivery/model-gateway.mjs",
+            "scripts/delivery/queue-controller.mjs",
+            "scripts/delivery/queue-model.mjs",
+            "scripts/delivery/queue-platform.mjs",
+            "scripts/delivery/queue-policy.mjs",
+            "scripts/delivery/queue.test.mjs"
+          ],
+          "status": "waiting_ci",
+          "ciSince": 1791243007261
+        }
+      },
+      "previous": "903ede67abe1739654715b8c642d474617176e1e00e2070aa75e2d5daef69c6e",
+      "digest": "c43c77793906dfc0581109dc7f23efc254d8566adee8e40c04f4bb35ad39b048"
+    },
+    {
+      "sequence": 215,
+      "at": "2026-10-05T23:30:08.697Z",
+      "kind": "transaction",
+      "data": {
+        "id": "d393460e-7266-465d-a7ab-6f8de35257ed"
+      },
+      "previous": "c43c77793906dfc0581109dc7f23efc254d8566adee8e40c04f4bb35ad39b048",
+      "digest": "9e1603c8429a4a39fc51597fd86e657c39dd94682ee050a7219819e4e43ee47d"
     }
   ]
 }
