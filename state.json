@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 244,
+  "revision": 246,
   "tasks": {
     "231": {
       "number": 231,
@@ -518,12 +518,12 @@
     },
     "240": {
       "number": 240,
-      "status": "waiting_review",
+      "status": "waiting_ci",
       "firstSeen": 1791243308473,
       "attempts": {},
       "headSha": "d8f1f0e6df25c1a8992e37511fbe3ac7bc26a0f2",
       "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
-      "updatedAt": 1791243319228,
+      "updatedAt": 1791243532647,
       "admission": {
         "number": 240,
         "headSha": "d8f1f0e6df25c1a8992e37511fbe3ac7bc26a0f2",
@@ -554,7 +554,161 @@
         "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
         "at": 1791243319228
       },
-      "reviewDispatch": null
+      "reviewDispatch": null,
+      "review": {
+        "id": "76e87821-6310-41fd-8a48-2f53f371ab4a",
+        "number": 240,
+        "headSha": "d8f1f0e6df25c1a8992e37511fbe3ac7bc26a0f2",
+        "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+        "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+        "filesHash": "f30c9258b285b4ad59a7672109bd466fa3da22af2663586d08569af360915b08",
+        "resultHash": "1ef3bfa3f71557849523662c6033566e39986de1375953436e0efc79fe324518",
+        "dependsOn": [
+          239
+        ],
+        "ciPolicyChangesHash": "bcce239081c810cba4183dedfe3b7a1bcf346e7ce8b2927244367ab6aa9d7455",
+        "passed": true,
+        "platformReview": {
+          "id": "2107254217413136384",
+          "author": "CodeBuddy",
+          "creator": "OCI",
+          "isNpc": true,
+          "createdAt": "2026-10-05T23:38:50Z"
+        },
+        "result": {
+          "status": "passed",
+          "issues": [],
+          "reviewed_files": [
+            "scripts/delivery/README.md",
+            "scripts/delivery/git-state.mjs",
+            "scripts/delivery/install-account.mjs",
+            "scripts/delivery/install-account.test.mjs",
+            "scripts/delivery/install-assets.mjs",
+            "scripts/delivery/install-protocol.mjs",
+            "scripts/delivery/install-repository.mjs",
+            "scripts/delivery/install-repository.test.mjs",
+            "scripts/delivery/model-gateway.mjs",
+            "scripts/delivery/queue-controller.mjs",
+            "scripts/delivery/queue-model.mjs",
+            "scripts/delivery/queue-platform.mjs",
+            "scripts/delivery/queue-policy.mjs",
+            "scripts/delivery/queue.test.mjs"
+          ],
+          "head_sha": "d8f1f0e6df25c1a8992e37511fbe3ac7bc26a0f2",
+          "base_sha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+          "policy_hash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+          "depends_on": [
+            239
+          ],
+          "ci_policy_changes": [
+            {
+              "id": "CI-001",
+              "rationale": "新增 scripts/delivery/install-account.mjs（before absent）。这是账户级新增仓安装端：先做精确 main 校验、账本激活回执校验与 concurrency/身份校验，再逐仓检查现有 CI、幂等恢复任务卡/分支/PR，并在真正 merge、准确双亲、activation 回读成功后才计 active；failure 逐仓隔离且不停止其他仓，最终基座读取失败仍保存已完成回执并置非零退出。凭据仅经进程注入、redactCredentials 脱敏，无落盘。保留了既有 fail-closed 与只增账本契约，未削弱任何必需检查。"
+            },
+            {
+              "id": "CI-002",
+              "rationale": "queue-policy.mjs 抽取并导出 prPipelines(config)，pipelines() 改为复用同一函数。选取顺序仍为 main→**→$（prBranch），required 流水线与 stages 的非空、名称唯一校验原样保留；仅暴露访问器供 queue.test.mjs 复用同一选择逻辑，未放宽门禁或移除校验。"
+            },
+            {
+              "id": "CI-003",
+              "rationale": "新增 install-account.test.mjs（before absent）。覆盖并发上界（maximum==2）、逐仓失败隔离与 token 脱敏、frozen/pending_main 保留、重复发现的幂等恢复与新仓安装、激活/精确 main/concurrency 前置校验、源前进上报、最终源读取失败仍保留回执、存活声明互斥与失效声明回收、symlink 与外部远端保留。测试由既有必需门禁 .cnb.yml:118 的 `node --test scripts/delivery/*.test.mjs` 执行，为新装目录提供真实机器回归信号，未移除任何断言。"
+            },
+            {
+              "id": "CI-004",
+              "rationale": "queue-controller.mjs 在 merge 已发起（issued）且平台返回 409 时，新增正向回读：仅当平台 pull 返回 is_merged===false 且 head.sha===snapshot.headSha 时判为已验证拒绝，释放集成租约、追加只增 merge_rejected 事件并将任务回落 waiting_ci；回读不可用或源码已变时保持 unknown（不释放、不改状态、不重复合并），错误信息附加回读失败原因。这是对原先仅记录错误的增强：把“未知合并”与“确认拒绝”分开，杜绝重复外部动作，未削弱必需检查或租约围栏。"
+            },
+            {
+              "id": "CI-005",
+              "rationale": "新增 scripts/delivery/install-protocol.mjs（before absent）。以精确摘要校验目标仓既有硬化协议输入，未知或部分适配的变体一律拒绝（不静默降级其 Git/身份证明），只按锚点做等量替换并在生成测试中追加租约/接纳回归断言。保留了目标仓自有硬化代码与绑定证明，属于迁移输入而非放宽。"
+            },
+            {
+              "id": "CI-006",
+              "rationale": "queue-model.mjs 新增导出 validRepoSlug：要求字符串、至少两段、拒绝 . / .. 等遍历段。作为共享身份校验器，比原正则更严格，供 git-state/queue-platform/model-gateway 复用，收紧而非放宽仓库身份边界。"
+            },
+            {
+              "id": "CI-007",
+              "rationale": "新增 scripts/delivery/install-repository.mjs（before absent）。首装协调器：discoverAccount 全分页发现 Owner/active 仓库并对身份歧义失败；ensureInstallationMainProtection/ensureInstallationPolicy 保留既有保护字段、仅在激活前补强、激活后拒绝恢复人工计数；freezeInstallerSource 冻结精确安装源并回读 commit/protected；traceInstallerMerge 仅凭真实 first-parent 祖先恢复合入；refreshInstallerPolicy 在被替代时创建同一精确源码的新 PR 并保留原 PR；finishInstallation 要求激活回读与持久集成回执。真正 AI/原仓检查/准确双亲/激活回读均保留，敏感集成仍走 fenced 租约，未引入 bypass。"
+            },
+            {
+              "id": "CI-008",
+              "rationale": "git-state.mjs 将内联 slug 正则替换为 queue-model.validRepoSlug。该校验支持嵌套组织且仍拒绝遍历/非法字符；token 目标校验、state 分支正则、CAS 与只增事件语义不变，属于收紧身份校验的等价替换。"
+            },
+            {
+              "id": "CI-009",
+              "rationale": "新增 install-repository.test.mjs（before absent）。覆盖执行闭包保留产品 CI/行业身份/隔离/冻结 AGENTS 文本、不完整资产与不安全 include 预检拒绝、未知硬化协议拒绝且不写盘、实际安装后运行复制进来的 queue.test/协议回归、symlink 拒绝、稀疏 checkout 读取受控 include、Tiger 仅改三条协议命令、discovery 分页与歧义失败、嵌套组织身份与外部来源拒绝、对象创建的丢失确认恢复、弱保护收紧回读、精确安装源冻结、激活后保留 AI 策略、merge 祖先追踪、未知合并不重复请求、政策刷新幂等。测试经 .cnb.yml:118 门禁执行，为安装器提供真实回归信号。"
+            },
+            {
+              "id": "CI-010",
+              "rationale": "queue-platform.mjs 在 Platform 构造器新增 validRepoSlug 校验，早期拒绝非法仓库身份，避免后续调用携带错误身份访问平台。其余 snapshot/verifyMerge/assertCandidateProtection 的精确 source/main 与双亲校验不变，属于收紧。"
+            },
+            {
+              "id": "CI-011",
+              "rationale": "model-gateway.mjs 将内联正则改为 queue-model.validRepoSlug，收紧为拒绝非字符串与遍历段；token 必填与 endpoint origin 必须为 https://api.cnb.cool 的约束保留，未放宽代理身份边界。"
+            },
+            {
+              "id": "CI-012",
+              "rationale": "新增 scripts/delivery/install-assets.mjs（before absent）。定义 CORE_ASSETS 执行闭包、安装标记与 AGENTS 受控块，installationPlan 在写任何文件前完成预检：要求既有可解析 main PR CI 与不可 allowFailure 的必需流水线、断言保留既有必需检查名并新增 delivery-bootstrap-review/delivery-regression、禁止闭包外资产写入、对 symlink/不安全路径 fail-closed、对未变化包保持无写入。产物不含 product.manifest/WORKLOOM_PRODUCT_CONTEXT/隔离登记/fanout，租户与隔离边界保留。"
+            },
+            {
+              "id": "CI-013",
+              "rationale": "queue.test.mjs 增加 409 正向回读用例（rejected/unreadable/changed 三分支，断言任务状态、租约 owner 与 merge_rejected 事件），并把三处原生 CI 断言从裸 YAML 解析改为 resolvePipelineConfig + prPipelines 以覆盖 include 解析后的同一选择逻辑。断言未被削弱，新增了对拒绝/未知路径的机器回归。"
+            }
+          ],
+          "notes": [
+            {
+              "category": "other",
+              "file": "scripts/delivery/install-account.mjs",
+              "start_line": 38,
+              "end_line": 51,
+              "problem": "withAccountLock 的唯一文件名 + 先创建后扫描不变量可防止两个存活进程同时进入 operation（读目录前的 open('wx') 保证 readdir 能看到已存在声明）。但若多个进程在任何一个 readdir 之前全部完成创建，则每个都会看到别人的存活声明并全部返回 busy，导致本轮无进程执行 operation。这是活性空缺而非安全缺陷：不会出现双跑，下次重跑可恢复。",
+              "suggestion": "如需消除该活性边缘，可在删除失效声明的循环之后、返回前对目录做一次线性化重扫并仅在仍无可执行项时执行；当前实现对安全契约是 fail-closed 的，可作为后续硬化项。"
+            },
+            {
+              "category": "other",
+              "file": "scripts/delivery/README.md",
+              "start_line": 139,
+              "end_line": 139,
+              "problem": "README 新增段落描述 Codex chat 账户安装 heartbeat“每 15 分钟运行同一安装端”，这是对操作侧外部调度行为的陈述，仓库内没有对应调度工件可核对（grep install-account 仅命中 README、测试与 install-assets.mjs）。DELIVERY_DOC 又声明“本机制不自行创建 Codex chat 定时任务”，两者受众不同但读者容易混淆。",
+              "suggestion": "在 README 该段显式标注该 heartbeat 属于外部操作员环境（依赖本机 Codex 与短期凭据），仓库不提供调度工件，避免把外部调度当成仓内已交付能力。"
+            },
+            {
+              "category": "other",
+              "file": "scripts/delivery/install-assets.mjs",
+              "start_line": 38,
+              "end_line": 38,
+              "problem": "生成的 docs/AUTOMATIC-RD-DELIVERY.md（DELIVERY_DOC）第 7 条给出 `node scripts/delivery/install-account.mjs ...` 命令，但 install-account.mjs / install-assets.mjs 均不在 CORE_ASSETS 闭包内，不会被安装进目标仓，目标仓执行该命令会失败。",
+              "suggestion": "在该条注明该命令只在基座/安装端仓库运行，或改为指向目标仓实际可用的 queue-runner.mjs 命令。"
+            }
+          ],
+          "batches": [
+            {
+              "index": 0,
+              "files": [
+                "scripts/delivery/README.md",
+                "scripts/delivery/git-state.mjs",
+                "scripts/delivery/install-account.mjs",
+                "scripts/delivery/install-account.test.mjs",
+                "scripts/delivery/install-assets.mjs",
+                "scripts/delivery/install-protocol.mjs",
+                "scripts/delivery/install-repository.mjs",
+                "scripts/delivery/install-repository.test.mjs",
+                "scripts/delivery/model-gateway.mjs",
+                "scripts/delivery/queue-controller.mjs",
+                "scripts/delivery/queue-model.mjs",
+                "scripts/delivery/queue-platform.mjs",
+                "scripts/delivery/queue-policy.mjs",
+                "scripts/delivery/queue.test.mjs"
+              ],
+              "status": "passed",
+              "toolUseCount": 56,
+              "turnCount": 91
+            }
+          ]
+        },
+        "approvedAt": 1791243532647
+      },
+      "error": null,
+      "blockedUntil": 0
     }
   },
   "leases": {
@@ -5155,6 +5309,193 @@
       },
       "previous": "299d7f6ef0b5b49392d092b88e0df70e412fcaa4ccf42bd7342f7fc446a14914",
       "digest": "63a734aa86e7705e22ff64af5eeea0da9680c84c5ba9fb909a0a9927d35df9da"
+    },
+    {
+      "sequence": 245,
+      "at": "2026-10-05T23:38:52.647Z",
+      "kind": "task",
+      "data": {
+        "number": 240,
+        "patch": {
+          "status": "waiting_ci",
+          "review": {
+            "id": "76e87821-6310-41fd-8a48-2f53f371ab4a",
+            "number": 240,
+            "headSha": "d8f1f0e6df25c1a8992e37511fbe3ac7bc26a0f2",
+            "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+            "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+            "filesHash": "f30c9258b285b4ad59a7672109bd466fa3da22af2663586d08569af360915b08",
+            "resultHash": "1ef3bfa3f71557849523662c6033566e39986de1375953436e0efc79fe324518",
+            "dependsOn": [
+              239
+            ],
+            "ciPolicyChangesHash": "bcce239081c810cba4183dedfe3b7a1bcf346e7ce8b2927244367ab6aa9d7455",
+            "passed": true,
+            "platformReview": {
+              "id": "2107254217413136384",
+              "author": "CodeBuddy",
+              "creator": "OCI",
+              "isNpc": true,
+              "createdAt": "2026-10-05T23:38:50Z"
+            },
+            "result": {
+              "status": "passed",
+              "issues": [],
+              "reviewed_files": [
+                "scripts/delivery/README.md",
+                "scripts/delivery/git-state.mjs",
+                "scripts/delivery/install-account.mjs",
+                "scripts/delivery/install-account.test.mjs",
+                "scripts/delivery/install-assets.mjs",
+                "scripts/delivery/install-protocol.mjs",
+                "scripts/delivery/install-repository.mjs",
+                "scripts/delivery/install-repository.test.mjs",
+                "scripts/delivery/model-gateway.mjs",
+                "scripts/delivery/queue-controller.mjs",
+                "scripts/delivery/queue-model.mjs",
+                "scripts/delivery/queue-platform.mjs",
+                "scripts/delivery/queue-policy.mjs",
+                "scripts/delivery/queue.test.mjs"
+              ],
+              "head_sha": "d8f1f0e6df25c1a8992e37511fbe3ac7bc26a0f2",
+              "base_sha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+              "policy_hash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+              "depends_on": [
+                239
+              ],
+              "ci_policy_changes": [
+                {
+                  "id": "CI-001",
+                  "rationale": "新增 scripts/delivery/install-account.mjs（before absent）。这是账户级新增仓安装端：先做精确 main 校验、账本激活回执校验与 concurrency/身份校验，再逐仓检查现有 CI、幂等恢复任务卡/分支/PR，并在真正 merge、准确双亲、activation 回读成功后才计 active；failure 逐仓隔离且不停止其他仓，最终基座读取失败仍保存已完成回执并置非零退出。凭据仅经进程注入、redactCredentials 脱敏，无落盘。保留了既有 fail-closed 与只增账本契约，未削弱任何必需检查。"
+                },
+                {
+                  "id": "CI-002",
+                  "rationale": "queue-policy.mjs 抽取并导出 prPipelines(config)，pipelines() 改为复用同一函数。选取顺序仍为 main→**→$（prBranch），required 流水线与 stages 的非空、名称唯一校验原样保留；仅暴露访问器供 queue.test.mjs 复用同一选择逻辑，未放宽门禁或移除校验。"
+                },
+                {
+                  "id": "CI-003",
+                  "rationale": "新增 install-account.test.mjs（before absent）。覆盖并发上界（maximum==2）、逐仓失败隔离与 token 脱敏、frozen/pending_main 保留、重复发现的幂等恢复与新仓安装、激活/精确 main/concurrency 前置校验、源前进上报、最终源读取失败仍保留回执、存活声明互斥与失效声明回收、symlink 与外部远端保留。测试由既有必需门禁 .cnb.yml:118 的 `node --test scripts/delivery/*.test.mjs` 执行，为新装目录提供真实机器回归信号，未移除任何断言。"
+                },
+                {
+                  "id": "CI-004",
+                  "rationale": "queue-controller.mjs 在 merge 已发起（issued）且平台返回 409 时，新增正向回读：仅当平台 pull 返回 is_merged===false 且 head.sha===snapshot.headSha 时判为已验证拒绝，释放集成租约、追加只增 merge_rejected 事件并将任务回落 waiting_ci；回读不可用或源码已变时保持 unknown（不释放、不改状态、不重复合并），错误信息附加回读失败原因。这是对原先仅记录错误的增强：把“未知合并”与“确认拒绝”分开，杜绝重复外部动作，未削弱必需检查或租约围栏。"
+                },
+                {
+                  "id": "CI-005",
+                  "rationale": "新增 scripts/delivery/install-protocol.mjs（before absent）。以精确摘要校验目标仓既有硬化协议输入，未知或部分适配的变体一律拒绝（不静默降级其 Git/身份证明），只按锚点做等量替换并在生成测试中追加租约/接纳回归断言。保留了目标仓自有硬化代码与绑定证明，属于迁移输入而非放宽。"
+                },
+                {
+                  "id": "CI-006",
+                  "rationale": "queue-model.mjs 新增导出 validRepoSlug：要求字符串、至少两段、拒绝 . / .. 等遍历段。作为共享身份校验器，比原正则更严格，供 git-state/queue-platform/model-gateway 复用，收紧而非放宽仓库身份边界。"
+                },
+                {
+                  "id": "CI-007",
+                  "rationale": "新增 scripts/delivery/install-repository.mjs（before absent）。首装协调器：discoverAccount 全分页发现 Owner/active 仓库并对身份歧义失败；ensureInstallationMainProtection/ensureInstallationPolicy 保留既有保护字段、仅在激活前补强、激活后拒绝恢复人工计数；freezeInstallerSource 冻结精确安装源并回读 commit/protected；traceInstallerMerge 仅凭真实 first-parent 祖先恢复合入；refreshInstallerPolicy 在被替代时创建同一精确源码的新 PR 并保留原 PR；finishInstallation 要求激活回读与持久集成回执。真正 AI/原仓检查/准确双亲/激活回读均保留，敏感集成仍走 fenced 租约，未引入 bypass。"
+                },
+                {
+                  "id": "CI-008",
+                  "rationale": "git-state.mjs 将内联 slug 正则替换为 queue-model.validRepoSlug。该校验支持嵌套组织且仍拒绝遍历/非法字符；token 目标校验、state 分支正则、CAS 与只增事件语义不变，属于收紧身份校验的等价替换。"
+                },
+                {
+                  "id": "CI-009",
+                  "rationale": "新增 install-repository.test.mjs（before absent）。覆盖执行闭包保留产品 CI/行业身份/隔离/冻结 AGENTS 文本、不完整资产与不安全 include 预检拒绝、未知硬化协议拒绝且不写盘、实际安装后运行复制进来的 queue.test/协议回归、symlink 拒绝、稀疏 checkout 读取受控 include、Tiger 仅改三条协议命令、discovery 分页与歧义失败、嵌套组织身份与外部来源拒绝、对象创建的丢失确认恢复、弱保护收紧回读、精确安装源冻结、激活后保留 AI 策略、merge 祖先追踪、未知合并不重复请求、政策刷新幂等。测试经 .cnb.yml:118 门禁执行，为安装器提供真实回归信号。"
+                },
+                {
+                  "id": "CI-010",
+                  "rationale": "queue-platform.mjs 在 Platform 构造器新增 validRepoSlug 校验，早期拒绝非法仓库身份，避免后续调用携带错误身份访问平台。其余 snapshot/verifyMerge/assertCandidateProtection 的精确 source/main 与双亲校验不变，属于收紧。"
+                },
+                {
+                  "id": "CI-011",
+                  "rationale": "model-gateway.mjs 将内联正则改为 queue-model.validRepoSlug，收紧为拒绝非字符串与遍历段；token 必填与 endpoint origin 必须为 https://api.cnb.cool 的约束保留，未放宽代理身份边界。"
+                },
+                {
+                  "id": "CI-012",
+                  "rationale": "新增 scripts/delivery/install-assets.mjs（before absent）。定义 CORE_ASSETS 执行闭包、安装标记与 AGENTS 受控块，installationPlan 在写任何文件前完成预检：要求既有可解析 main PR CI 与不可 allowFailure 的必需流水线、断言保留既有必需检查名并新增 delivery-bootstrap-review/delivery-regression、禁止闭包外资产写入、对 symlink/不安全路径 fail-closed、对未变化包保持无写入。产物不含 product.manifest/WORKLOOM_PRODUCT_CONTEXT/隔离登记/fanout，租户与隔离边界保留。"
+                },
+                {
+                  "id": "CI-013",
+                  "rationale": "queue.test.mjs 增加 409 正向回读用例（rejected/unreadable/changed 三分支，断言任务状态、租约 owner 与 merge_rejected 事件），并把三处原生 CI 断言从裸 YAML 解析改为 resolvePipelineConfig + prPipelines 以覆盖 include 解析后的同一选择逻辑。断言未被削弱，新增了对拒绝/未知路径的机器回归。"
+                }
+              ],
+              "notes": [
+                {
+                  "category": "other",
+                  "file": "scripts/delivery/install-account.mjs",
+                  "start_line": 38,
+                  "end_line": 51,
+                  "problem": "withAccountLock 的唯一文件名 + 先创建后扫描不变量可防止两个存活进程同时进入 operation（读目录前的 open('wx') 保证 readdir 能看到已存在声明）。但若多个进程在任何一个 readdir 之前全部完成创建，则每个都会看到别人的存活声明并全部返回 busy，导致本轮无进程执行 operation。这是活性空缺而非安全缺陷：不会出现双跑，下次重跑可恢复。",
+                  "suggestion": "如需消除该活性边缘，可在删除失效声明的循环之后、返回前对目录做一次线性化重扫并仅在仍无可执行项时执行；当前实现对安全契约是 fail-closed 的，可作为后续硬化项。"
+                },
+                {
+                  "category": "other",
+                  "file": "scripts/delivery/README.md",
+                  "start_line": 139,
+                  "end_line": 139,
+                  "problem": "README 新增段落描述 Codex chat 账户安装 heartbeat“每 15 分钟运行同一安装端”，这是对操作侧外部调度行为的陈述，仓库内没有对应调度工件可核对（grep install-account 仅命中 README、测试与 install-assets.mjs）。DELIVERY_DOC 又声明“本机制不自行创建 Codex chat 定时任务”，两者受众不同但读者容易混淆。",
+                  "suggestion": "在 README 该段显式标注该 heartbeat 属于外部操作员环境（依赖本机 Codex 与短期凭据），仓库不提供调度工件，避免把外部调度当成仓内已交付能力。"
+                },
+                {
+                  "category": "other",
+                  "file": "scripts/delivery/install-assets.mjs",
+                  "start_line": 38,
+                  "end_line": 38,
+                  "problem": "生成的 docs/AUTOMATIC-RD-DELIVERY.md（DELIVERY_DOC）第 7 条给出 `node scripts/delivery/install-account.mjs ...` 命令，但 install-account.mjs / install-assets.mjs 均不在 CORE_ASSETS 闭包内，不会被安装进目标仓，目标仓执行该命令会失败。",
+                  "suggestion": "在该条注明该命令只在基座/安装端仓库运行，或改为指向目标仓实际可用的 queue-runner.mjs 命令。"
+                }
+              ],
+              "batches": [
+                {
+                  "index": 0,
+                  "files": [
+                    "scripts/delivery/README.md",
+                    "scripts/delivery/git-state.mjs",
+                    "scripts/delivery/install-account.mjs",
+                    "scripts/delivery/install-account.test.mjs",
+                    "scripts/delivery/install-assets.mjs",
+                    "scripts/delivery/install-protocol.mjs",
+                    "scripts/delivery/install-repository.mjs",
+                    "scripts/delivery/install-repository.test.mjs",
+                    "scripts/delivery/model-gateway.mjs",
+                    "scripts/delivery/queue-controller.mjs",
+                    "scripts/delivery/queue-model.mjs",
+                    "scripts/delivery/queue-platform.mjs",
+                    "scripts/delivery/queue-policy.mjs",
+                    "scripts/delivery/queue.test.mjs"
+                  ],
+                  "status": "passed",
+                  "toolUseCount": 56,
+                  "turnCount": 91
+                }
+              ]
+            },
+            "approvedAt": 1791243532647
+          },
+          "headSha": "d8f1f0e6df25c1a8992e37511fbe3ac7bc26a0f2",
+          "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+          "intent": {
+            "taskId": "T-2026-1005-2000",
+            "ready": true,
+            "dependsOn": [
+              239
+            ],
+            "releases": []
+          },
+          "error": null,
+          "blockedUntil": 0
+        }
+      },
+      "previous": "63a734aa86e7705e22ff64af5eeea0da9680c84c5ba9fb909a0a9927d35df9da",
+      "digest": "aeafa9a9ebc565ea067e8624df9f0352858717e4754cb7175c3dfd296b77c1aa"
+    },
+    {
+      "sequence": 246,
+      "at": "2026-10-05T23:38:52.366Z",
+      "kind": "transaction",
+      "data": {
+        "id": "2f6690e0-7842-49b8-b54e-bfd89c657c92"
+      },
+      "previous": "aeafa9a9ebc565ea067e8624df9f0352858717e4754cb7175c3dfd296b77c1aa",
+      "digest": "25967a25cd310cc8e2900c2df2c0e1911b87b173af99ed32d7261d59ac4a0959"
     }
   ]
 }
