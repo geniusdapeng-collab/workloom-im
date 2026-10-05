@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 180,
+  "revision": 182,
   "tasks": {
     "231": {
       "number": 231,
@@ -103,10 +103,10 @@
     },
     "232": {
       "number": 232,
-      "status": "aligning",
+      "status": "waiting_ci",
       "firstSeen": 1791242108737,
       "attempts": {},
-      "headSha": "30ea1fc93f497804783ff2479e18ea53b842d815",
+      "headSha": "9705852b0dc1fdfb54d87a22c473bbb10e2ebc20",
       "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
       "branch": "task/T-2026-1002-0001",
       "intent": {
@@ -280,12 +280,14 @@
       "ciSince": 1791242108737,
       "updatedAt": 1791242108737,
       "alignmentCount": 1,
-      "alignmentIntent": {
-        "headSha": "30ea1fc93f497804783ff2479e18ea53b842d815",
+      "alignmentIntent": null,
+      "review": null,
+      "alignment": {
+        "sha": "9705852b0dc1fdfb54d87a22c473bbb10e2ebc20",
+        "previousHead": "30ea1fc93f497804783ff2479e18ea53b842d815",
         "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
-        "at": 1791242108737
-      },
-      "review": null
+        "verifiedAt": "2026-10-05T23:15:18.187Z"
+      }
     },
     "236": {
       "number": 236,
@@ -3613,6 +3615,38 @@
       },
       "previous": "e64fb849a89b4cf75a8fbf1e9978de706e3161a163f582bc34a8afe02c2171d2",
       "digest": "f08d4629e334c20744131f76a3370727d62fa823d5246c7a007abfbf0d70282f"
+    },
+    {
+      "sequence": 181,
+      "at": "2026-10-05T23:15:08.737Z",
+      "kind": "task",
+      "data": {
+        "number": 232,
+        "patch": {
+          "status": "waiting_ci",
+          "alignment": {
+            "sha": "9705852b0dc1fdfb54d87a22c473bbb10e2ebc20",
+            "previousHead": "30ea1fc93f497804783ff2479e18ea53b842d815",
+            "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+            "verifiedAt": "2026-10-05T23:15:18.187Z"
+          },
+          "alignmentIntent": null,
+          "headSha": "9705852b0dc1fdfb54d87a22c473bbb10e2ebc20",
+          "ciSince": 1791242108737
+        }
+      },
+      "previous": "f08d4629e334c20744131f76a3370727d62fa823d5246c7a007abfbf0d70282f",
+      "digest": "d182edd77854959bcb84e654ae8d39f478fa67688f7ff7aa0f8b900066925a7a"
+    },
+    {
+      "sequence": 182,
+      "at": "2026-10-05T23:15:18.224Z",
+      "kind": "transaction",
+      "data": {
+        "id": "b534ddcc-3ddd-424d-8538-3701bc65c755"
+      },
+      "previous": "d182edd77854959bcb84e654ae8d39f478fa67688f7ff7aa0f8b900066925a7a",
+      "digest": "853e1cb743012b70221b8c57793a94843167ea748c1f26ca3ccdd2e23283beba"
     }
   ]
 }
