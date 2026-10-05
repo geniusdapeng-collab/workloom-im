@@ -8,7 +8,7 @@ import { appendEvent, checksVerdict, dependencyState, eligibility, emptyState, h
 import { GitStateStore, git } from './git-state.mjs';
 import { alignBranch, independentCodeBuddyApproval } from './queue-work.mjs';
 import { Platform } from './queue-platform.mjs';
-import { BASE_POLICY, ciImplementationChanges, parser, sourcePipelineReport, validateSourcePipeline } from './queue-policy.mjs';
+import { BASE_POLICY, ciImplementationChanges, loadPolicy, parser, resolvePipelineConfig, sourcePipelineReport, validateSourcePipeline } from './queue-policy.mjs';
 import { dependencies, integratedDependency, mergeCandidate, reconcile, requestReview, reviewSlotBusy, writeTaskReceipts } from './queue-controller.mjs';
 import { enqueueReleases, reconcileReleases, verifyRelease } from './queue-release.mjs';
 import { injectDeliveryConfig } from './install-config.mjs';
@@ -149,6 +149,24 @@ test('unchanged YAML cannot hide edits to required check implementations and dep
   const output = { status: 'passed', issues: [], reviewed_files: s.files, head_sha: head, base_sha: main, policy_hash: policy.hash, depends_on: [] };
   assert.throws(() => validateReview(output, s, policy.hash), /migration/);
   assert.equal(validateReview({ ...output, ci_policy_changes: changes.map(change => ({ id: change.id, rationale: 'Read exact old/new Git source and verified retained assertions.' })) }, s, policy.hash).passed, true);
+});
+test('local include graph preserves product arrays and structurally pins delivery events and stage order', async t => {
+  const root = await temporary(t, 'delivery-policy-'); const YAML = await parser();
+  const gate = { name: 'static-gate', stages: [{ name: 'check', script: 'check' }] };
+  const delivery = { name: 'delivery-ai-review', stages: [{ name: 'snapshot', script: 'snapshot' }, { name: 'review', script: 'review' }] };
+  const source = YAML.stringify({ include: 'local.yml', main: { pull_request: [gate] } });
+  const included = YAML.stringify({ main: { pull_request: [{ name: 'included-gate', stages: [{ name: 'extra', script: 'extra' }] }], 'pull_request.target': [delivery] } });
+  await writeFile(join(root, '.cnb.yml'), source); await writeFile(join(root, 'local.yml'), included);
+  const p = await loadPolicy(root); assert.deepEqual(p.requiredNames, ['included-gate', 'static-gate']);
+  assert.deepEqual((await sourcePipelineReport(source, p, { readLocal: async () => included })).errors, []);
+  for (const stages of [delivery.stages.slice(1), [...delivery.stages].reverse()]) {
+    const changed = YAML.stringify({ main: { pull_request: [{ name: 'included-gate', stages: [{ name: 'extra', script: 'extra' }] }], 'pull_request.target': [{ ...delivery, stages }] } });
+    assert.ok((await sourcePipelineReport(source, p, { readLocal: async () => changed })).errors.length);
+  }
+  assert.ok((await sourcePipelineReport(YAML.stringify({ main: { pull_request: [gate] } }), p)).errors.length);
+  await assert.rejects(resolvePipelineConfig('include: ../escape.yml\n', { readLocal: async () => included }), /safe local/);
+  await assert.rejects(resolvePipelineConfig('include: local.yml\n', { readLocal: async () => 'include: local.yml\n' }), /cycle/);
+  await assert.rejects(resolvePipelineConfig(source, { readLocal: async () => { throw new Error('denied'); } }), /denied/);
 });
 test('CI installation is idempotent and preserves every existing product event/stage', async () => {
   const input = '# existing\nmain:\n  push:\n    - name: product\n      stages: [keep]\ninclude: old.yml\n'; const YAML = await parser();

@@ -1,5 +1,5 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { readFile, realpath } from 'node:fs/promises';
+import { join, resolve, relative, posix } from 'node:path';
 import { createRequire } from 'node:module';
 import { hash } from './queue-model.mjs';
 let yaml;
@@ -39,40 +39,113 @@ function pipelines(config) {
   return required;
 }
 
+const mapping = value => value && typeof value === 'object' && !Array.isArray(value);
+function mergeConfig(before, after) {
+  if (Array.isArray(before) && Array.isArray(after)) return [...before, ...after];
+  if (!mapping(before) || !mapping(after)) return structuredClone(after);
+  const result = Object.fromEntries(Object.entries(before));
+  for (const [key, value] of Object.entries(after)) {
+    if (['__proto__', 'prototype', 'constructor'].includes(key)) throw new Error('Unsafe CI mapping key');
+    result[key] = key in result ? mergeConfig(result[key], value) : structuredClone(value);
+  }
+  return result;
+}
+
+/** CNB local includes are relative to the repository root; arrays append, objects merge. */
+export async function resolvePipelineConfig(sourceText, { readLocal } = {}) {
+  const YAML = await parser(); let count = 0;
+  const visiting = new Set();
+  const load = async (text, path) => {
+    if (++count > 64 || visiting.has(path)) throw new Error('CI include limit/cycle');
+    visiting.add(path);
+    try {
+      const config = YAML.parse(text, { maxAliasCount: 1000 });
+      if (!mapping(config)) throw new Error('CI must be a mapping');
+      const includes = config.include === undefined ? [] : Array.isArray(config.include) ? config.include : [config.include];
+      let result = {};
+      for (const [index, entry] of includes.entries()) {
+        let nested;
+        if (mapping(entry) && mapping(entry.config)) nested = await load(YAML.stringify(entry.config), `${path}:inline-${index}`);
+        else {
+          const value = typeof entry === 'string' ? entry : entry?.path;
+          if (typeof value !== 'string' || !value || value.includes('\\') || value.includes('\0') || value.includes('$') || posix.isAbsolute(value) || value.split('/').includes('..') || /^[a-z][a-z0-9+.-]*:/i.test(value)) throw new Error('CI include must be a safe local path');
+          const includePath = posix.normalize(value);
+          if (typeof readLocal !== 'function') throw new Error(`CI include cannot be read: ${includePath}`);
+          // ignoreError cannot hide a missing safety pipeline from the trusted comparison.
+          const content = await readLocal(includePath);
+          if (typeof content !== 'string') throw new Error(`CI include is unreadable: ${includePath}`);
+          nested = await load(content, includePath);
+        }
+        result = mergeConfig(result, nested);
+      }
+      const { include: ignored, ...own } = config;
+      return mergeConfig(result, own);
+    } finally { visiting.delete(path); }
+  };
+  return load(sourceText, '.cnb.yml');
+}
+
+function controlPipelines(config) {
+  const result = [];
+  for (const [branch, events] of Object.entries(config)) {
+    if (!mapping(events) || branch.startsWith('.')) continue;
+    for (const [event, entries] of Object.entries(events)) {
+      if (!Array.isArray(entries)) continue;
+      const required = entries.filter(p => p?.name?.startsWith('delivery-') && p.allowFailure !== true && p.name !== 'delivery-bootstrap-review');
+      if (!required.length) continue;
+      if (required.some(p => !Array.isArray(p.stages) || !p.stages.length) || new Set(required.map(p => p.name)).size !== required.length) throw new Error('Delivery pipeline configuration is incomplete/ambiguous');
+      result.push({ branch, event, pipelines: required });
+    }
+  }
+  return result;
+}
+
 export async function loadPolicy(root) {
-  const YAML = await parser();
-  const config = YAML.parse(await readFile(join(root, '.cnb.yml'), 'utf8'), { maxAliasCount: 1000 });
+  const base = await realpath(root);
+  const readLocal = async path => {
+    const actual = await realpath(resolve(base, path));
+    const delta = relative(base, actual);
+    if (delta === '..' || delta.startsWith('../') || delta.startsWith('..\\')) throw new Error('CI include escapes repository');
+    return readFile(actual, 'utf8');
+  };
+  const config = await resolvePipelineConfig(await readFile(join(base, '.cnb.yml'), 'utf8'), { readLocal });
   const requiredPipelines = pipelines(config);
-  const source = { ...BASE_POLICY, reviewImage: REVIEW_IMAGE, requiredPipelines };
+  const source = { ...BASE_POLICY, reviewImage: REVIEW_IMAGE, requiredPipelines, requiredControlPipelines: controlPipelines(config) };
   return { ...source, hash: hash(source), requiredNames: requiredPipelines.map(p => p.name) };
 }
 
 /** Structural checks remain required; changes to their implementation need an explicit, exact AI migration receipt. */
-export async function sourcePipelineReport(sourceText, policy) {
-  const YAML = await parser();
+export async function sourcePipelineReport(sourceText, policy, options = {}) {
   const errors = [];
-  let source;
-  try { source = pipelines(YAML.parse(sourceText, { maxAliasCount: 1000 })); }
+  let source; let config;
+  try { config = await resolvePipelineConfig(sourceText, options); source = pipelines(config); }
   catch (error) { return { errors: [`Source CI is invalid: ${error.message}`], changes: [] }; }
   const changes = [];
-  const changedPolicy = (pipeline, stage, before, after) => changes.push({ id: hash({ pipeline, stage, before, after }), pipeline, stage, before, after });
-  for (const trusted of policy.requiredPipelines) {
+  const changedPolicy = (pipeline, stage, before, after, binding) => changes.push({ id: hash({ pipeline, stage, before, after, binding }), pipeline, stage, before, after, ...(binding ? { binding } : {}) });
+  const comparePipelines = (trustedPipelines, source, binding) => {
+  for (const trusted of trustedPipelines) {
     const matches = source.filter(p => p.name === trusted.name);
     if (matches.length !== 1) { errors.push(`Required pipeline changed/missing: ${trusted.name}`); continue; }
     const candidate = matches[0];
     const { stages: baseline, ...settings } = trusted;
     const { stages: changed, ...changedSettings } = candidate;
-    if (hash(settings) !== hash(changedSettings)) changedPolicy(trusted.name, null, settings, changedSettings);
+    if (hash(settings) !== hash(changedSettings)) changedPolicy(trusted.name, null, settings, changedSettings, binding);
     const names = changed.map(stage => typeof stage === 'string' ? stage : stage.name);
     if (new Set(names).size !== names.length) errors.push(`Duplicate stages: ${trusted.name}`);
     for (const stage of baseline) {
       const name = typeof stage === 'string' ? stage : stage.name;
       const after = changed.find(value => (typeof value === 'string' ? value : value.name) === name);
       if (!after) errors.push(`Trusted check removed: ${trusted.name}/${name}`);
-      else if (hash(after) !== hash(stage)) changedPolicy(trusted.name, name, stage, after);
+      else if (hash(after) !== hash(stage)) changedPolicy(trusted.name, name, stage, after, binding);
     }
     const positions = baseline.map(stage => changed.findIndex(value => (typeof value === 'string' ? value : value.name) === (typeof stage === 'string' ? stage : stage.name)));
     if (positions.some((p, i) => i && p <= positions[i - 1])) errors.push(`Trusted check order changed: ${trusted.name}`);
+  }
+  };
+  comparePipelines(policy.requiredPipelines, source);
+  for (const binding of policy.requiredControlPipelines ?? []) {
+    const entries = config[binding.branch]?.[binding.event];
+    comparePipelines(binding.pipelines, Array.isArray(entries) ? entries.filter(p => p.allowFailure !== true) : [], { branch: binding.branch, event: binding.event });
   }
   return { errors, changes };
 }
