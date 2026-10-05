@@ -375,7 +375,7 @@ async function main() {
     others = scanned.prs;
     if (scanned.selfNumber) {
       selfNumber = scanned.selfNumber;
-      console.log(`  自身 PR 编号：#${selfNumber}（先到先得判定依据）`);
+      console.log(`  自身 PR 编号：#${selfNumber}（排除自身比对）`);
     }
   } catch (error) {
     if (prEvent || strict) throw new Error(`查询 open PR 失败：${error?.message ?? error}`);
@@ -389,27 +389,22 @@ async function main() {
     const moduleConflicts = findModuleConflicts(mine, other.paths);
     const overlaps = findFileOverlaps(mine, other.paths);
     // Explicit strict diagnostics can reject overlap; normal CI never leases by PR number.
-    const iAmLater = true;
     if (moduleConflicts.length) {
       if (advisory) {
         console.warn(`! 与 PR #${other.number}「${other.title}」同改互斥模块：${moduleConflicts.join(", ")}（push 事件提醒：该 PR 需 rebase）`);
-      } else if (iAmLater) {
+      } else {
         failed += 1;
         console.error(`✗ 与 PR #${other.number}「${other.title}」互斥模块冲突：${moduleConflicts.join(", ")}`);
         console.error("   显式 strict 诊断拒绝重叠；正常开发互斥以有效租约为准（协议 §4）。");
-      } else {
-        console.warn(`! 与 PR #${other.number}「${other.title}」同改互斥模块 ${moduleConflicts.join(", ")}：该 PR 编号更大（后到），由它排队。`);
       }
     }
     if (overlaps.length) {
       const head = `PR #${other.number}「${other.title}」同时修改：${overlaps.slice(0, 5).join(", ")}${overlaps.length > 5 ? " …" : ""}`;
       if (advisory) {
         console.warn(`! ${head}（push 事件提醒：该 PR 需 rebase 后重跑门禁）`);
-      } else if (iAmLater) {
+      } else {
         failed += 1;
         console.error(`✗ ${head}`);
-      } else {
-        console.warn(`! ${head}（该 PR 后到，由它排队）`);
       }
     }
   }

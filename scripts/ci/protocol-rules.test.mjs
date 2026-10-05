@@ -13,7 +13,7 @@ import {
   validateSubject,
 } from "./protocol-rules.mjs";
 import { activeLeaseConflicts, isPrEvent, isSelfPull, openPrFiles, readLeases, validatePrSnapshot, verifyPrFreshness } from "./verify-lock-conflict.mjs";
-import { emptyState, leaseOperation } from '../delivery/queue-model.mjs';
+import { emptyState, leaseOperation, sensitiveScopes } from '../delivery/queue-model.mjs';
 
 describe("提交信息规则", () => {
   it("接受合法提交并拒绝缺任务号", () => {
@@ -83,7 +83,7 @@ describe("并发冲突规则", () => {
 
   it("push 事件降级为提醒：合并已发生，跨 PR 重叠不再判红（回归 2026-09-27 main 误报）", () => {
     assert.equal(resolveLockOverlapMode({ event: "push" }), "warn");
-    // PR 事件保持先到先得拦截
+    // PR 重叠提醒与实际限时租约约束分开。
     assert.equal(resolveLockOverlapMode({ event: "pull_request" }), "warn");
     assert.equal(resolveLockOverlapMode({ event: null }), "warn");
     // 显式覆盖与人工严格模式优先
@@ -94,6 +94,12 @@ describe("并发冲突规则", () => {
 });
 
 describe('限时开发租约代替 open PR 永久占位', () => {
+  it('原有互斥模块的每种路径都映射到敏感租约', () => {
+    for (const path of ['sync/a.mjs', 'protocol/a.json', 'packages/db/migrations/a.sql', '.cnb.yml', 'AGENTS.md', 'docs/DEVELOPMENT-PROTOCOL.md', 'package.json']) {
+      assert.ok(exclusiveModuleOf(path), path);
+      assert.ok(sensitiveScopes([path]).length, path);
+    }
+  });
   it('只阻止其他 owner 的有效敏感租约，普通文件和到期租约不阻止交付', () => {
     const state = emptyState('workloom-ai/workloom-im');
     leaseOperation(state, { action: 'acquire', scopes: ['protocol'], owner: 'T-2026-1005-9999', ttlMs: 60000 }, 0);
