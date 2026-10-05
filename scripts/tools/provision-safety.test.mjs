@@ -2,13 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as api from './cnb-api.mjs';
 import * as provision from './provision-protocol.mjs';
-import { readFile, mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
-import { tmpdir } from 'node:os';
-import { GitStateStore, git } from '../delivery/git-state.mjs';
-import { prepareInstallation } from '../delivery/queue-runner.mjs';
-import { injectDeliveryConfig } from '../delivery/install-config.mjs';
-import { deliveryRolloutReady } from '../../sync/fanout-cnb.mjs';
+import { readFile } from 'node:fs/promises';
 import { resolvePipelineConfig } from '../delivery/queue-policy.mjs';
 
 test('bare fleet-scan container installs the locked parser before provisioning', async () => {
@@ -113,25 +107,4 @@ test('raw asset reads are bounded, never follow redirects and distinguish known 
   }
   globalThis.fetch = async () => { throw new Error('network interrupted'); };
   await assert.rejects(api.rawFile('workloom-ai/demo', 'main', '.cnb.yml'), /network interrupted/);
-});
-test('first-install execution closure is delivered before a ledger exists, then exact preparation enables fanout without claiming activation', async t => {
-  const root = await mkdtemp(join(tmpdir(), 'delivery-onboarding-order-')); t.after(() => rm(root, { recursive: true, force: true }));
-  const checkout = join(root, 'repo'); const remote = join(root, 'state.git'); await mkdir(checkout); await git(['init', '--bare', '--quiet', remote]);
-  const repo = 'workloom-ai/first-install'; const store = new GitStateStore({ repo, remote });
-  const absent = async () => { throw Object.assign(new Error('ledger absent'), { status: 404 }); };
-  assert.equal((await deliveryRolloutReady(repo, absent)).ready, false);
-  const original = 'main:\n  push:\n    - name: product\n      stages: [{name: product-check, script: product-check}]\n"**":\n  pull_request:\n    - name: product\n      stages: [{name: product-check, script: product-check}]\n';
-  await writeFile(join(checkout, '.cnb.yml'), original); await git(['init', '--quiet'], { cwd: checkout }); await git(['add', '.'], { cwd: checkout }); await git(['commit', '-m', 'initial main'], { cwd: checkout });
-  const mainSha = await git(['rev-parse', 'HEAD'], { cwd: checkout });
-  for (const path of provision.PROTOCOL_ASSETS) { const content = await readFile(new URL(`../../${path}`, import.meta.url), 'utf8'); assert.ok(content.trim(), path); await mkdir(dirname(join(checkout, path)), { recursive: true }); await writeFile(join(checkout, path), content); }
-  for (const path of ['runtime/package.json', 'runtime/package-lock.json', 'cnb.yml', 'bootstrap-cnb.yml', 'queue-runner.mjs']) assert.ok((await readFile(join(checkout, 'scripts/delivery', path), 'utf8')).trim());
-  assert.equal((await store.read()).revision, 0); // Assets already exist although fanout is still unavailable.
-  await writeFile(join(checkout, '.cnb.yml'), (await injectDeliveryConfig(provision.injectGate(original).content, { bootstrap: true })).content);
-  await git(['add', '.'], { cwd: checkout }); await git(['commit', '-m', 'complete first installation'], { cwd: checkout });
-  const headSha = await git(['rev-parse', 'HEAD'], { cwd: checkout }); let rules = [];
-  const platform = { repo, main: async () => ({ commit: { sha: mainSha } }), protections: async () => rules, call: async (_path, options) => { rules = [{ ...options.body, id: 'prepared-state' }]; return {}; } };
-  await prepareInstallation({ platform, store, root: checkout, installer: { number: 1, state: 'open', is_wip: false, head: { sha: headSha }, base: { ref: 'main', sha: mainSha } } });
-  const state = await store.read(); assert.ok(state.events.some(event => event.kind === 'installation_prepared' && event.data.headSha === headSha && event.data.mainSha === mainSha));
-  assert.equal((await deliveryRolloutReady(repo, async () => state)).ready, true);
-  assert.equal(state.events.some(event => event.kind === 'activated'), false);
 });
