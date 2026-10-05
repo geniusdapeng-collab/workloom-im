@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 312,
+  "revision": 317,
   "tasks": {
     "231": {
       "number": 231,
@@ -297,7 +297,7 @@
         "sync/base-scope.json"
       ],
       "ciSince": 1791244227207,
-      "updatedAt": 1791244227207,
+      "updatedAt": 1791244254214,
       "alignmentCount": 1,
       "alignmentIntent": null,
       "review": null,
@@ -309,8 +309,8 @@
       },
       "admission": {
         "number": 232,
-        "headSha": "9705852b0dc1fdfb54d87a22c473bbb10e2ebc20",
-        "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+        "headSha": "9771c7c9ad00821daf4ae432a39b64c1baac5e6b",
+        "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
         "filesHash": "7ad8a41481593389a4ad2e0dd41289f4e4949c6cb72d9df5ace5999585149e3d",
         "scopes": [
           "dependencies",
@@ -320,10 +320,10 @@
         ],
         "owner": "admission/pr-232",
         "generation": {
-          "dependencies": 1,
-          "migrations": 1,
-          "protocol": 17,
-          "sync": 17
+          "dependencies": 4,
+          "migrations": 2,
+          "protocol": 25,
+          "sync": 24
         }
       },
       "recoveryCount": 0,
@@ -1465,27 +1465,27 @@
   "leases": {
     "protocol": {
       "owner": null,
-      "generation": 24,
-      "acquiredAt": 1791244209411,
-      "expiresAt": 1791244209411
+      "generation": 25,
+      "acquiredAt": 1791244254214,
+      "expiresAt": 1791244254214
     },
     "sync": {
       "owner": null,
-      "generation": 23,
-      "acquiredAt": 1791244239887,
-      "expiresAt": 1791244239887
+      "generation": 24,
+      "acquiredAt": 1791244254214,
+      "expiresAt": 1791244254214
     },
     "dependencies": {
       "owner": null,
-      "generation": 3,
-      "acquiredAt": 1791244239887,
-      "expiresAt": 1791244239887
+      "generation": 4,
+      "acquiredAt": 1791244254214,
+      "expiresAt": 1791244254214
     },
     "migrations": {
       "owner": null,
-      "generation": 1,
-      "acquiredAt": 1791242125892,
-      "expiresAt": 1791242125892
+      "generation": 2,
+      "acquiredAt": 1791244254214,
+      "expiresAt": 1791244254214
     }
   },
   "releases": {},
@@ -8688,6 +8688,117 @@
       },
       "previous": "de367aec5f97ab887cac748a7e1ef6ab2960e8322aa1643f689e05688bb1e08c",
       "digest": "43b430a4d7be9109476edd0c33b19a6b56d17075bdee9c643ac8926a13724b16"
+    },
+    {
+      "sequence": 313,
+      "at": "2026-10-05T23:50:54.214Z",
+      "kind": "lease_acquire",
+      "data": {
+        "scopes": [
+          "dependencies",
+          "migrations",
+          "protocol",
+          "sync"
+        ],
+        "owner": "admission/pr-232",
+        "generation": {
+          "dependencies": 4,
+          "migrations": 2,
+          "protocol": 25,
+          "sync": 24
+        }
+      },
+      "previous": "43b430a4d7be9109476edd0c33b19a6b56d17075bdee9c643ac8926a13724b16",
+      "digest": "b64209c2215b3f06bbf195f4be764afdb90d59a46109b57cdcf05414f5c37fa4"
+    },
+    {
+      "sequence": 314,
+      "at": "2026-10-05T23:50:54.214Z",
+      "kind": "lease_release",
+      "data": {
+        "scopes": [
+          "dependencies",
+          "migrations",
+          "protocol",
+          "sync"
+        ],
+        "owner": "admission/pr-232",
+        "generation": {
+          "dependencies": 4,
+          "migrations": 2,
+          "protocol": 25,
+          "sync": 24
+        }
+      },
+      "previous": "b64209c2215b3f06bbf195f4be764afdb90d59a46109b57cdcf05414f5c37fa4",
+      "digest": "16e02822cf82677cf47d45e38aeff4e50cfa270e26b7ad9d51bc7a668f96ef5d"
+    },
+    {
+      "sequence": 315,
+      "at": "2026-10-05T23:50:54.214Z",
+      "kind": "source_admitted",
+      "data": {
+        "number": 232,
+        "headSha": "9771c7c9ad00821daf4ae432a39b64c1baac5e6b",
+        "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+        "filesHash": "7ad8a41481593389a4ad2e0dd41289f4e4949c6cb72d9df5ace5999585149e3d",
+        "scopes": [
+          "dependencies",
+          "migrations",
+          "protocol",
+          "sync"
+        ],
+        "owner": "admission/pr-232",
+        "generation": {
+          "dependencies": 4,
+          "migrations": 2,
+          "protocol": 25,
+          "sync": 24
+        }
+      },
+      "previous": "16e02822cf82677cf47d45e38aeff4e50cfa270e26b7ad9d51bc7a668f96ef5d",
+      "digest": "5c6a185a8ac441fcb300954e7777206ab47e24ecf7936b64025bbee2be3485d4"
+    },
+    {
+      "sequence": 316,
+      "at": "2026-10-05T23:50:54.214Z",
+      "kind": "task",
+      "data": {
+        "number": 232,
+        "patch": {
+          "admission": {
+            "number": 232,
+            "headSha": "9771c7c9ad00821daf4ae432a39b64c1baac5e6b",
+            "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+            "filesHash": "7ad8a41481593389a4ad2e0dd41289f4e4949c6cb72d9df5ace5999585149e3d",
+            "scopes": [
+              "dependencies",
+              "migrations",
+              "protocol",
+              "sync"
+            ],
+            "owner": "admission/pr-232",
+            "generation": {
+              "dependencies": 4,
+              "migrations": 2,
+              "protocol": 25,
+              "sync": 24
+            }
+          }
+        }
+      },
+      "previous": "5c6a185a8ac441fcb300954e7777206ab47e24ecf7936b64025bbee2be3485d4",
+      "digest": "776b0583ea29f1665c6d7d9f43f60a90c408688f0dfbdf183d9b17baa94462c2"
+    },
+    {
+      "sequence": 317,
+      "at": "2026-10-05T23:50:53.883Z",
+      "kind": "transaction",
+      "data": {
+        "id": "source-admit:232:9771c7c9ad00821daf4ae432a39b64c1baac5e6b:b949346721360f3c20f10c628d5c7b214bc2b95e"
+      },
+      "previous": "776b0583ea29f1665c6d7d9f43f60a90c408688f0dfbdf183d9b17baa94462c2",
+      "digest": "ddac862162747b8cece17ab46d781b473198d908d94bbf17f4ddce2e22a25814"
     }
   ]
 }
