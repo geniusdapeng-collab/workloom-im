@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeAllPools } from "@workloom/db";
+import { runWithServiceScope, type ServiceScope } from "./scope.js";
 import {
   assignWizardDraft,
   completeWizardDraft,
@@ -31,6 +32,10 @@ describe.runIf(RUN_DB)("Onboarding PostgreSQL 集成", () => {
   const ownerIdentity: OnboardingIdentity = { memberId: ownerId, memberNo: `IT-OWNER-${suffix}`, role: "owner" };
   const managerIdentity: OnboardingIdentity = { memberId: managerId, memberNo: `IT-MANAGER-${suffix}`, role: "manager" };
   const viewerIdentity: OnboardingIdentity = { memberId: viewerId, memberNo: `IT-VIEWER-${suffix}`, role: "readonly" };
+  // 直连服务层（非 HTTP）没有认证链注入的双作用域；本套件显式绑定自己的租户/工作区作用域，
+  // 既满足 requireServiceScope 的可信作用域要求，也验证作用域不匹配时 fail closed（见下）。
+  const scope: ServiceScope = { tenantId, workspaceId };
+  const inScope = <T>(fn: () => T): T => runWithServiceScope(scope, fn);
   let owner: pg.Pool;
 
   beforeAll(async () => {
@@ -74,29 +79,29 @@ describe.runIf(RUN_DB)("Onboarding PostgreSQL 集成", () => {
   });
 
   it("欢迎进度真实落库，并按账号、角色与工作区隔离后可重播", async () => {
-    const saved = await saveWelcomeProgress(workspaceId, ownerIdentity, {
+    const saved = await inScope(() => saveWelcomeProgress(workspaceId, ownerIdentity, {
       status: "paused",
       currentStep: "team",
-    });
+    }));
     expect(saved).toMatchObject({ persisted: true, status: "paused", currentStep: "team", shouldShow: true });
-    await expect(welcomeProgress(workspaceId, ownerIdentity)).resolves.toMatchObject({
+    await expect(inScope(() => welcomeProgress(workspaceId, ownerIdentity))).resolves.toMatchObject({
       persisted: true,
       status: "paused",
       currentStep: "team",
     });
     // 同一账号但角色不同，不能继承所有者旅程完成态。
-    await expect(welcomeProgress(workspaceId, managerIdentity)).resolves.toMatchObject({
+    await expect(inScope(() => welcomeProgress(workspaceId, managerIdentity))).resolves.toMatchObject({
       persisted: false,
       status: "not_started",
       shouldShow: true,
     });
 
-    await saveWelcomeProgress(workspaceId, ownerIdentity, { status: "completed", currentStep: "done" });
-    await expect(welcomeProgress(workspaceId, ownerIdentity)).resolves.toMatchObject({
+    await inScope(() => saveWelcomeProgress(workspaceId, ownerIdentity, { status: "completed", currentStep: "done" }));
+    await expect(inScope(() => welcomeProgress(workspaceId, ownerIdentity))).resolves.toMatchObject({
       status: "completed",
       shouldShow: false,
     });
-    await expect(replayWelcome(workspaceId, ownerIdentity)).resolves.toMatchObject({
+    await expect(inScope(() => replayWelcome(workspaceId, ownerIdentity))).resolves.toMatchObject({
       status: "not_started",
       currentStep: "start",
       replayCount: 1,
@@ -110,7 +115,7 @@ describe.runIf(RUN_DB)("Onboarding PostgreSQL 集成", () => {
   });
 
   it("草稿真实续办、乐观锁、责任人交接与秘密白名单均生效", async () => {
-    await expect(getWizardDraft(workspaceId)).resolves.toBeNull();
+    await expect(inScope(() => getWizardDraft(workspaceId))).resolves.toBeNull();
     const unsafePayload: WizardDraftPayload & Record<string, unknown> = {
       provider: "deepseek",
       model: "deepseek-chat",
@@ -118,11 +123,11 @@ describe.runIf(RUN_DB)("Onboarding PostgreSQL 集成", () => {
       apiKey: "sk-never-store",
       documentBody: "不应写入草稿的正文",
     };
-    const first = await saveWizardDraft(workspaceId, ownerIdentity, {
+    const first = await inScope(() => saveWizardDraft(workspaceId, ownerIdentity, {
       expectedVersion: 0,
       currentStep: 2,
       payload: unsafePayload,
-    });
+    }));
     expect(first).toMatchObject({ version: 1, currentStep: 2, responsible: { memberId: ownerId } });
     expect(first.payload).toEqual({
       provider: "deepseek",
@@ -136,31 +141,36 @@ describe.runIf(RUN_DB)("Onboarding PostgreSQL 集成", () => {
     expect(stored.rows[0]?.payload).not.toHaveProperty("apiKey");
     expect(stored.rows[0]?.payload).not.toHaveProperty("documentBody");
 
-    await expect(saveWizardDraft(workspaceId, ownerIdentity, {
+    await expect(inScope(() => saveWizardDraft(workspaceId, ownerIdentity, {
       expectedVersion: 0,
       currentStep: 3,
       payload: first.payload,
-    })).rejects.toThrow(/当前版本 1/);
-    await expect(saveWizardDraft(workspaceId, viewerIdentity, {
+    }))).rejects.toThrow(/当前版本 1/);
+    await expect(inScope(() => saveWizardDraft(workspaceId, viewerIdentity, {
       expectedVersion: 1,
       currentStep: 3,
       payload: first.payload,
-    })).rejects.toThrow(/其他成员负责/);
+    }))).rejects.toThrow(/其他成员负责/);
 
-    const assigned = await assignWizardDraft(workspaceId, ownerIdentity, {
+    const assigned = await inScope(() => assignWizardDraft(workspaceId, ownerIdentity, {
       memberId: managerId,
       expectedVersion: 1,
-    });
+    }));
     expect(assigned).toMatchObject({ version: 2, responsible: { memberId: managerId, role: "manager" } });
-    const continued = await saveWizardDraft(workspaceId, managerIdentity, {
+    const continued = await inScope(() => saveWizardDraft(workspaceId, managerIdentity, {
       expectedVersion: 2,
       currentStep: 4,
       payload: { ...assigned.payload, siteUrl: "https://example.com" },
-    });
+    }));
     expect(continued).toMatchObject({ version: 3, currentStep: 4 });
-    const completed = await completeWizardDraft(workspaceId, managerIdentity, 3);
+    const completed = await inScope(() => completeWizardDraft(workspaceId, managerIdentity, 3));
     expect(completed).toMatchObject({ version: 4, status: "completed", currentStep: 4 });
-    await expect(getWizardDraft(workspaceId)).resolves.toMatchObject({ version: 4, status: "completed" });
+    await expect(inScope(() => getWizardDraft(workspaceId))).resolves.toMatchObject({ version: 4, status: "completed" });
+
+    // 作用域不匹配必须 fail closed：他人租户/工作区组合不能借本套件作用域写入。
+    await expect(
+      runWithServiceScope({ tenantId, workspaceId: `${workspaceId}-other` }, () => getWizardDraft(workspaceId)),
+    ).rejects.toThrow(/service scope/);
   });
 
   it("RLS 隔离错误工作区读取，且 0030 从数据库层拒绝双 active", async () => {

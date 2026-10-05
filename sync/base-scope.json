@@ -347,11 +347,11 @@
       "reason": "H5 正式鉴权负向测试使用明确标记为 production-test 的固定夹具，不是运行凭据。"
     },
     "apps/server/src/service/onboarding-continuity.pg.test.ts": {
-      "sha256": "bdb9d9abdf7c309fe28ee92c093e82e4f27bfbd8ffa2564edd971a74c7119026",
+      "sha256": "413e6424c2892052373ce372f5f9d254d8803b65214ec3069a9150a56d7db1de",
       "findings": [
         {
           "rule": "literal-sensitive-assignment",
-          "line": 118
+          "line": 123
         }
       ],
       "reason": "落地向导秘密不落库测试使用 sk-never-store 负向哨兵，验证该字段会被剔除。"
@@ -579,7 +579,16 @@
     "core.*",
     "PREVIEW_CHECKLIST.md",
     ".github/workflows/**",
-    "sync/**"
+    "sync/**",
+    "scripts/generate-pc-page-registry.mjs",
+    "scripts/generate-pc-page-registry.test.mjs",
+    "scripts/pc-page-registry-cli.mjs",
+    "scripts/vite-pc-page-registry.mjs",
+    "scripts/vite-pc-page-registry.d.mts",
+    "scripts/fixtures/**",
+    "apps/server/src/service/aipm.github.test.ts",
+    "apps/server/src/service/aipm.snapshot.pg.test.ts",
+    "apps/server/src/service/kb-publish.pg.test.ts"
   ],
   "anchorMerge": {
     "packages/base/package.json": {

@@ -222,7 +222,13 @@ include:
 
     - name: server 契约与 E2E
       env:
+        # 双作用域契约用例需要显式工作区/租户（来自同阶段迁移 + 种子）；缺失时这些用例会
+        # 主动 fail closed（而非静默跳过），因此必须与种子实际写入的 workspace/tenant 对齐：
+        # ws-yunqi → tenant-demo（酒店示例）、ws-aipm-demo → demo（ai-pm 示例）。
         SERVICE_C_TEST_WORKSPACE_ID: ws-yunqi
+        SERVICE_C_TEST_TENANT_ID: tenant-demo
+        RELEASE_WORKSPACE_ID: ws-aipm-demo
+        RELEASE_TENANT_ID: demo
       script: |
         set -a; . ./.env; set +a
         set -eu
