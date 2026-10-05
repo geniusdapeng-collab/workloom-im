@@ -153,7 +153,7 @@ export function branchProtectionPayload({ rule = "main", requireReview = true } 
 }
 
 /** 规则存在不等于保护有效；只接受可回读的实际强约束。 */
-export function validateBranchProtection(rule, { requireReview = true } = {}) {
+export function validateBranchProtection(rule, { requireReview = true, forbidManualOverride = false } = {}) {
   const expected = {
     allow_deletions: false, allow_force_pushes: false, allow_pushes: false,
     allow_master_deletions: false, allow_master_force_pushes: false, allow_master_pushes: false,
@@ -163,6 +163,7 @@ export function validateBranchProtection(rule, { requireReview = true } = {}) {
     expected.required_pull_request_reviews = true;
     expected.forbid_approve_pull_created_by_own_npc = true;
   }
+  if (forbidManualOverride) expected.allow_master_manual_merge = false;
   const errors = Object.entries(expected).filter(([name, value]) => rule?.[name] !== value).map(([name, value]) => `${name} 必须为 ${value}`);
   if (rule?.rule !== 'main') errors.push('分支保护目标必须为 main');
   if (requireReview && !(Number.isSafeInteger(rule?.required_approved_review_count) && rule.required_approved_review_count >= 1)) errors.push("required_approved_review_count 必须至少为1");

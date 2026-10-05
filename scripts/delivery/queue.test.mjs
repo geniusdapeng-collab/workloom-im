@@ -134,8 +134,8 @@ test('installer activation binds tested main to the independent preparation rece
   assert.throws(() => verifyInstallerChecks({ ...input, state: emptyState(repo) }), /prepared/);
   assert.throws(() => verifyInstallerChecks({ ...input, installer: { ...installer, head: { sha: main } } }), /prepared/);
 });
-test('genuine exact AI replaces the human review counter while preserving all other main restrictions, including lost acknowledgement recovery', async () => {
-  const { branchProtectionPayload } = await import('../tools/cnb-api.mjs');
+test('genuine exact AI replaces the human review counter, removes the admin manual exception and preserves remaining restrictions including lost acknowledgement recovery', async () => {
+  const { branchProtectionPayload, validateBranchProtection } = await import('../tools/cnb-api.mjs');
   let rule = { ...branchProtectionPayload(), id: 'main-rule', required_master_approve: true }; let writes = 0;
   const platform = { protections: async () => [rule], call: async (_path, options) => { writes++; rule = { ...options.body, id: rule.id }; throw new Error('lost acknowledgement'); } };
   const proof = { independentApproval: { id: 'genuine-npc-review', author: 'CodeBuddy', creator: 'developer', isNpc: true }, preparation: { headSha: head, mainSha: main } };
@@ -143,7 +143,9 @@ test('genuine exact AI replaces the human review counter while preserving all ot
   await assert.rejects(configureAutomaticReviewPolicy(platform, { ...proof, independentApproval: { ...proof.independentApproval, creator: 'codebuddy' } }), /proof/); assert.equal(writes, 0);
   const before = { ...rule }; const after = await configureAutomaticReviewPolicy(platform, proof);
   assert.equal(after.required_pull_request_reviews, false); assert.equal(after.required_master_approve, false);
-  for (const [key, value] of Object.entries(before)) if (!['required_pull_request_reviews', 'required_master_approve'].includes(key)) assert.equal(after[key], value);
+  assert.equal(after.allow_master_manual_merge, false);
+  for (const [key, value] of Object.entries(before)) if (!['required_pull_request_reviews', 'required_master_approve', 'allow_master_manual_merge'].includes(key)) assert.equal(after[key], value);
+  assert.ok(validateBranchProtection({ ...after, allow_master_manual_merge: true }, { requireReview: false, forbidManualOverride: true }).some(error => error.includes('allow_master_manual_merge')));
   await configureAutomaticReviewPolicy(platform, proof); assert.equal(writes, 1);
   rule.allow_master_pushes = true; await assert.rejects(configureAutomaticReviewPolicy(platform, proof), /allow_master_pushes/); assert.equal(writes, 1);
 });
