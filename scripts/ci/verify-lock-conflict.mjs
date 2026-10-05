@@ -21,7 +21,7 @@
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { findFileOverlaps, findModuleConflicts, parseChangedPaths, resolveLockOverlapMode } from "./protocol-rules.mjs";
-import { parseIntent, sensitiveScopes, STATE_BRANCH, validateState } from '../delivery/queue-model.mjs';
+import { admissionErrors, parseIntent, sensitiveScopes, STATE_BRANCH, validateState } from '../delivery/queue-model.mjs';
 
 const API = "https://api.cnb.cool";
 const SHA_RE = /^[0-9a-f]{40,64}$/i;
@@ -229,10 +229,24 @@ export function activeLeaseConflicts(files, state, now = Date.now()) {
   return sensitiveScopes(files).filter(scope => state.leases[scope]?.owner && state.leases[scope].expiresAt > now);
 }
 
-export async function verifyPrLeases(repoSlug, files, request = apiJson, now = Date.now()) {
-  if (!sensitiveScopes(files).length) return;
-  const conflicts = activeLeaseConflicts(files, await readLeases(repoSlug, request), now);
-  if (conflicts.length) throw new Error(`敏感模块仍有有效开发租约：${conflicts.join(', ')}；持有者须交接释放或等待期限到期，不按 open PR 编号占锁`);
+export function legacySensitiveConflict(installed, selfNumber, otherNumber) {
+  return installed === false && Number(selfNumber) > Number(otherNumber);
+}
+
+export async function verifyPrLeases(repoSlug, files, request = apiJson, now = Date.now(), identity = {}, { waitMs = 0, elapsedClock = Date.now, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
+  if (!sensitiveScopes(files).length) return { installed: true };
+  if (!Number.isSafeInteger(waitMs) || waitMs < 0 || waitMs > 180000) throw new Error('Invalid admission wait');
+  const started = elapsedClock();
+  for (;;) {
+    const state = await readLeases(repoSlug, request);
+    if (state === null) return { installed: false }; // A distributed file does not activate the new gate.
+    const conflicts = activeLeaseConflicts(files, state, now + elapsedClock() - started);
+    if (conflicts.length) throw new Error(`敏感模块仍有有效开发租约：${conflicts.join(', ')}；持有者须交接释放或等待期限到期，不按 open PR 编号占锁`);
+    const errors = admissionErrors(state, { ...identity, files });
+    if (!errors.length) return { installed: true, admitted: true };
+    if (elapsedClock() - started >= waitMs) throw new Error(`敏感源码缺少受信接纳回执：${errors.join('; ')}；由 main admission 执行器自动取得并释放 owner/generation 后重跑，不依赖开发者自愿占锁`);
+    await sleep(Math.min(5000, waitMs - (elapsedClock() - started)));
+  }
 }
 
 export async function readLeases(repoSlug, request = apiJson) {
@@ -248,9 +262,8 @@ export async function readLeases(repoSlug, request = apiJson) {
       if (branchError.status !== 404) throw branchError;
       const ci = await request(`${API}/${repoSlug}/-/git/raw/main/.cnb.yml`, { raw: true });
       if (typeof ci !== 'string') throw new Error('DELIVERY_STATE_UNKNOWN：无法读取 main 交付配置，拒绝将缺失账本当成空租约');
-      // Both paths reject sensitive changes. The reviewed main include only improves the diagnostic.
       if (ci.includes('scripts/delivery/cnb.yml')) throw new Error('DELIVERY_LEDGER_CORRUPT：main 已启用交付配置，但租约控制分支缺失，拒绝放行');
-      throw new Error('DELIVERY_NOT_INSTALLED：租约账本缺失，敏感改动拒绝按空租约放行；须先运行 prepare-install 建立受保护账本，再启用新门禁');
+      return null; // Retain the legacy sensitive overlap gate until explicit installation/preparation.
     }
     throw new Error('DELIVERY_LEDGER_CORRUPT：租约控制分支存在但 state.json 缺失，拒绝放行');
   }
@@ -342,6 +355,7 @@ async function main() {
   // PR 必须先验证实时源/目标/merge-base，再从 compare 取完整路径；不能因本地 diff 为空提前放行。
   let mine;
   let range;
+  let prSnapshot;
   if (prEvent) {
     if (!repoSlug || !process.env.CNB_TOKEN) throw new Error("PR 事件缺少 CNB_REPO_SLUG 或 CNB_TOKEN，锁冲突门禁拒绝放行");
     const snapshot = await verifyPrFreshness({
@@ -354,6 +368,7 @@ async function main() {
     mine = snapshot.files;
     range = `${snapshot.mainSha.slice(0, 12)}...${snapshot.headSha.slice(0, 12)} (CNB compare)`;
     selfHeadSha = snapshot.headSha;
+    prSnapshot = snapshot;
   } else {
     ({ files: mine, range } = changedFiles(base));
   }
@@ -374,8 +389,10 @@ async function main() {
   }
 
   let others;
+  let legacySensitive = false;
   if (prEvent) {
-    await verifyPrLeases(repoSlug, mine);
+    const leases = await verifyPrLeases(repoSlug, mine, apiJson, Date.now(), { number: Number(selfNumber), headSha: prSnapshot.headSha, mainSha: prSnapshot.mainSha }, { waitMs: 180000 });
+    legacySensitive = leases.installed === false;
   }
   try {
     const scanned = await openPrFiles(repoSlug, selfNumber, selfBranch, selfHeadSha);
@@ -397,7 +414,7 @@ async function main() {
     const overlaps = findFileOverlaps(mine, other.paths);
     // Explicit strict diagnostics can reject overlap; normal CI never leases by PR number.
     if (moduleConflicts.length) {
-      if (advisory) {
+      if (advisory && !legacySensitiveConflict(!legacySensitive, selfNumber, other.number)) {
         console.warn(`! 与 PR #${other.number}「${other.title}」同改互斥模块：${moduleConflicts.join(", ")}（push 事件提醒：该 PR 需 rebase）`);
       } else {
         failed += 1;

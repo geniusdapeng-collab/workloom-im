@@ -1,4 +1,23 @@
 # Repository-local, trusted-main delivery. No customer data or platform secrets.
+.delivery-admission: &delivery_admission
+  name: delivery-source-admission
+  docker:
+    image: node:24.19.0-bookworm
+  lock:
+    key: workloom-delivery-admission
+    expires: 600
+    wait: true
+    timeout: 60
+  env:
+    DELIVERY_NATIVE_LOCK: workloom-delivery-admission
+  stages:
+    - name: Install locked delivery parser
+      timeout: 120s
+      script: npm ci --prefix scripts/delivery/runtime --ignore-scripts --no-audit --no-fund
+    - name: Record exact source admission and release its fenced generation before CI
+      timeout: 180s
+      script: node scripts/delivery/queue-runner.mjs admit
+
 .delivery-review: &delivery_review
   name: delivery-ai-review
   docker:
@@ -71,7 +90,10 @@
 
 main:
   pull_request.target:
+    - *delivery_admission
     - *delivery_review
+  api_trigger_delivery_admit:
+    - *delivery_admission
   pull_request.mergeable:
     - *delivery_reconcile
   pull_request.merged:
