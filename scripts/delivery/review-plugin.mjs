@@ -16,6 +16,13 @@ const require = createRequire(import.meta.url);
 const BATCH_SIZE = BASE_POLICY.reviewBatchSize;
 const CONCURRENCY = BASE_POLICY.reviewBatchConcurrency;
 
+export function botApiEndpoint(env = process.env) {
+  const value = env.CNB_API_ENDPOINT;
+  try { if (typeof value === 'string' && value && new URL(value).origin === 'https://api.cnb.cool') return value; }
+  catch { /* Report the same actionable configuration failure for absent or malformed input. */ }
+  throw new Error('Genuine AI publisher requires CNB_API_ENDPOINT=https://api.cnb.cool');
+}
+
 async function trustedManifest(root) {
   const manifest = JSON.parse(await readFile(resolve(root, '.delivery-review/manifest.json'), 'utf8'));
   if (!SHA_RE.test(manifest.snapshot?.headSha ?? '') || !SHA_RE.test(manifest.snapshot?.mainSha ?? '') || !Number.isSafeInteger(manifest.snapshot?.number) || !Array.isArray(manifest.snapshot?.files) || !manifest.snapshot.files.length) throw new Error('Invalid trusted review manifest');
@@ -200,7 +207,7 @@ async function publishReview(root) {
   const output = JSON.parse(await readFile(manifest.output, 'utf8'));
   validateIssueSchema(output);
   if (output.status === 'passed') validateReview(output, manifest.snapshot, manifest.policyHash);
-  if (new URL(process.env.CNB_API_ENDPOINT).origin !== 'https://api.cnb.cool') throw new Error('Unexpected Bot API destination');
+  botApiEndpoint();
   const token = process.env.CNB_TOKEN_FOR_CODEBUDDY || process.env.CNB_TOKEN_FOR_AI;
   if (!token) throw new Error('The official image did not provide a genuine AI Bot credential');
   const { PRCommentService } = require('/app/dist/pr-comment.js');

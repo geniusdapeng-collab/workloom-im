@@ -12,7 +12,7 @@ import { BASE_POLICY, REVIEW_IMAGE, ciImplementationChanges, loadPolicy, parser,
 import { dependencies, integratedDependency, mergeCandidate, reconcile, requestReview, reviewSlotBusy, writeTaskReceipts } from './queue-controller.mjs';
 import { enqueueReleases, reconcileReleases, verifyRelease } from './queue-release.mjs';
 import { injectDeliveryConfig } from './install-config.mjs';
-import { batchEnvironment, batchSnapshot, combineBatchResults, reviewBatches, reviewEnvironment, runReview, validateIssueSchema } from './review-plugin.mjs';
+import { batchEnvironment, batchSnapshot, botApiEndpoint, combineBatchResults, reviewBatches, reviewEnvironment, runReview, validateIssueSchema } from './review-plugin.mjs';
 import { ensureStateProtection, prepareInstallation, requireTrustedRunner, verifyInstallerChecks, verifyPreparedInstallation } from './queue-runner.mjs';
 import { verifyReleaseSource } from './release-source.mjs';
 import { modelGateway } from './model-gateway.mjs';
@@ -20,6 +20,10 @@ import { randomUUID } from 'node:crypto';
 const repo = 'workloom-ai/test'; const head = 'a'.repeat(40); const main = 'b'.repeat(40); const mergedSha = 'c'.repeat(40); const testedSha = 'd'.repeat(40); const now = 10_000_000;
 const policy = { ...BASE_POLICY, hash: 'policy-1', requiredNames: ['static-gate'] };
 const intent = { ready: true, dependsOn: [], releases: [], taskId: null };
+test('genuine AI endpoint configuration has a clear closed failure for absent, malformed and foreign values', () => {
+  assert.equal(botApiEndpoint({ CNB_API_ENDPOINT: 'https://api.cnb.cool' }), 'https://api.cnb.cool');
+  for (const value of [undefined, '', 'invalid', 'http://api.cnb.cool', 'https://example.com']) assert.throws(() => botApiEndpoint({ CNB_API_ENDPOINT: value }), /requires CNB_API_ENDPOINT/);
+});
 function snapshot(number = 1, patch = {}) {
   return { number, headSha: head, mainSha: main, headTime: 0, mergeBase: main, files: ['apps/example.ts'], checkErrors: [], checkSha: testedSha, intent,
     pull: { number, title: 'fix(base): useful change', body: '', state: 'open', is_wip: false, mergeable_state: 'mergeable', labels: [], head: { sha: head, ref: `task/test-${number}`, repo: { path: repo } }, base: { sha: main, ref: 'main' } }, ...patch };
