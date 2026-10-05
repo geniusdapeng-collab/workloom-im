@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 259,
+  "revision": 261,
   "tasks": {
     "231": {
       "number": 231,
@@ -369,12 +369,12 @@
       "blockedUntil": 0,
       "review": null,
       "candidate": {
-        "number": 240,
-        "branch": "delivery/candidate/pr-236-991114bab338e3fefda4849c838fbec7",
-        "headSha": "d8f1f0e6df25c1a8992e37511fbe3ac7bc26a0f2",
+        "number": 241,
+        "branch": "delivery/candidate/pr-236-eca0ea51108f9fd97719b68e191fe52b",
+        "headSha": "39a95964f70eeb7093be45ec73f9172511097f96",
         "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
-        "marker": "delivery-origin:236:d8f1f0e6df25c1a8992e37511fbe3ac7bc26a0f2:b2deb741ed16b9fa9d85986974930bcd10530075",
-        "at": 1791243308473
+        "marker": "delivery-origin:236:39a95964f70eeb7093be45ec73f9172511097f96:b2deb741ed16b9fa9d85986974930bcd10530075",
+        "at": 1791243908028
       },
       "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
       "originalBody": "账户安装器在已激活的基座当前 main 上完整分页发现 Owner/active 仓，并逐仓安装研发交付机制。保留行业业务、隔离规则、冻结认知和原仓必需 CI；growthtest 的独立 Git/PR 来源与完整路径校验保留，仅将永久 PR 编号占锁迁移为有期限租约。任务卡 Issue #235。授权凭据只在安装进程内注入，首次准备、真实 AI/检查、普通 merge、激活与原生回执逐项回读。用户取消的 Codex chat 定时任务保持删除；本变更提供账户安装 CLI，不自行恢复该定时任务。\n\n本地验证：30 项安装器回归通过；实际 growthtest 安装副本 223 项通过、0 失败，1 项共享 UI 发布检查因该产品无此车道而跳过；重复安装 0 文件改动。 已对齐准确基座 main，交接为 ready。\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1005-2000\",\n  \"ready\": true,\n  \"depends_on\": [\n    239\n  ],\n  \"releases\": []\n}\n-->",
@@ -5909,6 +5909,36 @@
       },
       "previous": "e9c5c5b4b6830b3d15c584b3d5af1dc8370f0d31e006a1a56d2a6215fd7aa7a4",
       "digest": "0ff14f566e22a6e7f06f54926e3ee8aa0f701a9edb774faebc24525fb9b76d13"
+    },
+    {
+      "sequence": 260,
+      "at": "2026-10-05T23:45:08.028Z",
+      "kind": "task",
+      "data": {
+        "number": 236,
+        "patch": {
+          "candidate": {
+            "number": 241,
+            "branch": "delivery/candidate/pr-236-eca0ea51108f9fd97719b68e191fe52b",
+            "headSha": "39a95964f70eeb7093be45ec73f9172511097f96",
+            "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+            "marker": "delivery-origin:236:39a95964f70eeb7093be45ec73f9172511097f96:b2deb741ed16b9fa9d85986974930bcd10530075",
+            "at": 1791243908028
+          }
+        }
+      },
+      "previous": "0ff14f566e22a6e7f06f54926e3ee8aa0f701a9edb774faebc24525fb9b76d13",
+      "digest": "d8cf5e775917b67ae63932088696641e9c291cf249ec9083ed346d4293a1bcc1"
+    },
+    {
+      "sequence": 261,
+      "at": "2026-10-05T23:45:11.282Z",
+      "kind": "transaction",
+      "data": {
+        "id": "ffe0d4c9-fcb4-4488-a676-c73287389b84"
+      },
+      "previous": "d8cf5e775917b67ae63932088696641e9c291cf249ec9083ed346d4293a1bcc1",
+      "digest": "c06d31cca113dba66fcd7d71717db06884d49a97a31c86ec5a84e325e7699970"
     }
   ]
 }
