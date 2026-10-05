@@ -246,6 +246,10 @@ export async function readLeases(repoSlug, request = apiJson) {
       await request(`${API}/${repoSlug}/-/git/branches/${encodeURIComponent(STATE_BRANCH)}`);
     } catch (branchError) {
       if (branchError.status !== 404) throw branchError;
+      const ci = await request(`${API}/${repoSlug}/-/git/raw/main/.cnb.yml`, { raw: true });
+      if (typeof ci !== 'string') throw new Error('DELIVERY_STATE_UNKNOWN：无法读取 main 交付配置，拒绝将缺失账本当成空租约');
+      // Both paths reject sensitive changes. The reviewed main include only improves the diagnostic.
+      if (ci.includes('scripts/delivery/cnb.yml')) throw new Error('DELIVERY_LEDGER_CORRUPT：main 已启用交付配置，但租约控制分支缺失，拒绝放行');
       throw new Error('DELIVERY_NOT_INSTALLED：租约账本缺失，敏感改动拒绝按空租约放行；须先运行 prepare-install 建立受保护账本，再启用新门禁');
     }
     throw new Error('DELIVERY_LEDGER_CORRUPT：租约控制分支存在但 state.json 缺失，拒绝放行');

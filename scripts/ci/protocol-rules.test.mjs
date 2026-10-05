@@ -109,19 +109,19 @@ describe('限时开发租约代替 open PR 永久占位', () => {
   });
   it('未首装只阻断敏感路径；普通产品 PR 不读缺失账本', async () => {
     let calls = 0;
-    const missing = async () => { calls++; throw Object.assign(new Error('not found'), { status: 404 }); };
+    const missing = async url => { calls++; if (url.endsWith('/git/raw/main/.cnb.yml')) return 'main:\n  push: []\n'; throw Object.assign(new Error('not found'), { status: 404 }); };
     await verifyPrLeases('workloom-ai/workloom-im', ['apps/web/product.ts'], missing);
     assert.equal(calls, 0);
     await assert.rejects(verifyPrLeases('workloom-ai/workloom-im', ['AGENTS.md'], missing), /DELIVERY_NOT_INSTALLED/);
-    assert.equal(calls, 2);
+    assert.equal(calls, 3);
   });
   it('首装和已安装时缺失账本均阻断；权限/网络/账本损坏不能伪装成无占用', async () => {
     const absent = () => { throw Object.assign(new Error('not found'), { status: 404 }); };
     const preInstall = async url => url.endsWith('/git/raw/main/.cnb.yml') ? 'main:\n  push: []\n' : absent();
     await assert.rejects(readLeases('workloom-ai/workloom-im', preInstall), /账本缺失.*prepare-install/);
     await assert.rejects(readLeases('workloom-ai/workloom-im', async url => url.includes('/git/branches/') ? { name: 'automation/delivery-state' } : absent()), /state.json 缺失/);
-    await assert.rejects(readLeases('workloom-ai/workloom-im', async url => url.endsWith('/git/raw/main/.cnb.yml') ? 'include: scripts/delivery/cnb.yml' : absent()), /账本缺失/);
-    await assert.rejects(readLeases('workloom-ai/workloom-im', absent), /账本缺失/);
+    await assert.rejects(readLeases('workloom-ai/workloom-im', async url => url.endsWith('/git/raw/main/.cnb.yml') ? 'include: scripts/delivery/cnb.yml' : absent()), /DELIVERY_LEDGER_CORRUPT.*控制分支缺失/);
+    await assert.rejects(readLeases('workloom-ai/workloom-im', absent), /not found/);
     for (const status of [403, 429, 500]) await assert.rejects(readLeases('workloom-ai/workloom-im', async () => { throw Object.assign(new Error('unreadable'), { status }); }), /unreadable/);
     await assert.rejects(readLeases('workloom-ai/workloom-im', async () => ({ schemaVersion: 1 })), /state/);
   });
