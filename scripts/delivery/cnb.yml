@@ -20,6 +20,8 @@
 
 .delivery-review: &delivery_review
   name: delivery-ai-review
+  env:
+    CNB_API_ENDPOINT: https://api.cnb.cool
   docker:
     image: node:24.19.0-bookworm
   lock:

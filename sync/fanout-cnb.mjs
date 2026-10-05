@@ -182,7 +182,14 @@ async function main() {
     try {
       const delivery = await deliveryRolloutReady(child.repo);
       if (!delivery.ready) {
-        record.status = 'waiting-installation'; record.reasons = [delivery.reason]; results.push(record); continue;
+        record.status = 'waiting-installation';
+        record.reasons = [delivery.reason];
+        record.action = {
+          kind: 'delivery-first-install', repo: child.repo,
+          contract: 'docs/FLEET-AUTO-SYNC.md#132-既有仓的首装顺序不能把文件分发当作启用',
+          requiredReceipts: ['installation_prepared', 'activated', 'native-reconcile-state-write'],
+        };
+        results.push(record); continue;
       }
       const stateText = await rawFile(child.repo, "main", ".workloom-base-sync.json");
       const state = stateText ? JSON.parse(stateText) : null;
@@ -295,13 +302,16 @@ async function main() {
     console.log(JSON.stringify(summary, null, 2));
   } else {
     for (const item of results) {
-      const label = { aligned: "✅ 已对齐", "in-flight": "🕒 在途 PR", "pr-opened": "📦 已开 PR", "branch-exists": "🧷 分支已存在", drift: "⚠️ 漂移", "would-sync": "⚠️ [dry-run] 待同步", failed: "❌ 失败", "scope-denied": "🔒 权限不足" }[item.status] ?? item.status;
+      const label = { aligned: "✅ 已对齐", "in-flight": "🕒 在途 PR", "pr-opened": "📦 已开 PR", "branch-exists": "🧷 分支已存在", drift: "⚠️ 漂移", "would-sync": "⚠️ [dry-run] 待同步", failed: "❌ 失败", "scope-denied": "🔒 权限不足", "waiting-installation": "❌ 首装未完成：需授权安装端处理" }[item.status] ?? item.status;
       console.log(`${label} ${item.repo}${item.pull ? ` #${item.pull}` : ""}${item.reasons.length ? `：${item.reasons.join("；")}` : ""}${item.error ? `：${item.error}` : ""}`);
     }
     console.log(`\n基座 ${baseSha.slice(0, 8)}（模式 ${mode}${dryRun ? "，dry-run" : ""}）：对齐 ${summary.aligned} · 在途 ${summary.inFlight} · 新开 PR ${summary.opened} · 分支已存在 ${summary.branchExists} · 待同步 ${summary.drift} · 隔离副本 ${summary.isolatedDeclared.length}（不下发） · paused 波次 ${summary.skippedPaused.length}（不下发） · 失败 ${failed} · 权限不足 ${scopeError}`);
   }
 
   if (failed) process.exitCode = 1;
+  // Known subscriptions without first-install receipts are actionable failures,
+  // not healthy skips. Other repositories still complete their own iteration.
+  if (summary.waitingInstallation) process.exitCode = 1;
   if (scopeError && !tolerateScopeError) process.exitCode = 1;
   if (scopeError && tolerateScopeError) {
     console.log("⚠️ 跨仓权限不足：请在 CNB「组织设置 → 仓库管控」开启「允许定时任务跨仓操作」，或改用带跨仓权限的令牌触发本流水线。");

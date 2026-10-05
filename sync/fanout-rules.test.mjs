@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 import {
   autoMergeEligibility,
@@ -30,6 +32,28 @@ test('新租约门禁只下发到已准备账本的仓；权限、损坏或不�
   await assert.rejects(deliveryRolloutReady(repo, async () => emptyState('foreign/repo')), /identity/);
   const corrupted = structuredClone(state); corrupted.events[0].data.installer = 2;
   await assert.rejects(deliveryRolloutReady(repo, async () => corrupted), /chain/);
+});
+
+test('实际 fanout CLI 对既有订阅仓缺首装回执返回非零及可恢复动作，不把跳过计为健康', () => {
+  const root = mkdtempSync(join(tmpdir(), 'fanout-first-install-regression-'));
+  try {
+    const preload = join(root, 'offline-api.mjs');
+    writeFileSync(preload, 'globalThis.fetch = async url => { if (String(url) !== "https://api.cnb.cool/workloom-ai/workloom-hotel/-/git/raw/automation%2Fdelivery-state/state.json") throw new Error("Unexpected API in first-install fixture"); return new Response(JSON.stringify({errcode:404}), {status:404}); };\n');
+    const script = fileURLToPath(new URL('./fanout-cnb.mjs', import.meta.url));
+    const base = fileURLToPath(new URL('../', import.meta.url));
+    const env = { ...process.env, CNB_TOKEN: 'offline-fanout-fixture' }; delete env.NODE_TEST_CONTEXT;
+    const result = spawnSync(process.execPath, ['--import', preload, script, '--base-dir', base,
+      '--only', 'workloom-ai/workloom-hotel', '--dry-run', '--json', '--tolerate-scope-error'],
+    { cwd: root, env, encoding: 'utf8', timeout: 15000 });
+    assert.ifError(result.error);
+    assert.equal(result.status, 1, result.stderr + result.stdout);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.waitingInstallation, 1);
+    assert.equal(report.aligned, 0); assert.equal(report.opened, 0);
+    assert.equal(report.results[0].status, 'waiting-installation');
+    assert.equal(report.results[0].action.repo, 'workloom-ai/workloom-hotel');
+    assert.deepEqual(report.results[0].action.requiredReceipts, ['installation_prepared', 'activated', 'native-reconcile-state-write']);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 const pull = (overrides = {}) => ({

@@ -13,6 +13,7 @@
         timeout: 60
       env:
         DELIVERY_REVIEW_STATELESS: "1"
+        CNB_API_ENDPOINT: https://api.cnb.cool
       stages:
         - name: Bootstrap installer only
           timeout: 60s
