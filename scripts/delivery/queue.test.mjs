@@ -13,7 +13,7 @@ import { dependencies, integratedDependency, mergeCandidate, reconcile, requestR
 import { enqueueReleases, reconcileReleases, verifyRelease } from './queue-release.mjs';
 import { injectDeliveryConfig } from './install-config.mjs';
 import { batchEnvironment, batchSnapshot, combineBatchResults, reviewBatches, reviewEnvironment, runReview, validateIssueSchema } from './review-plugin.mjs';
-import { requireTrustedRunner } from './queue-runner.mjs';
+import { ensureStateProtection, prepareInstallation, requireTrustedRunner } from './queue-runner.mjs';
 import { verifyReleaseSource } from './release-source.mjs';
 const repo = 'workloom-ai/test'; const head = 'a'.repeat(40); const main = 'b'.repeat(40); const mergedSha = 'c'.repeat(40); const testedSha = 'd'.repeat(40); const now = 10_000_000;
 const policy = { ...BASE_POLICY, hash: 'policy-1', requiredNames: ['static-gate'] };
@@ -238,6 +238,17 @@ test('mutation rejects local/PR-source runners, absent native lock and checkout 
   await requireTrustedRunner(platform, root, env);
   for (const patch of [{ CNB_BUILD_ID: '' }, { CNB_EVENT: 'pull_request' }, { DELIVERY_NATIVE_LOCK: '' }]) await assert.rejects(requireTrustedRunner(platform, root, { ...env, ...patch }));
   await assert.rejects(requireTrustedRunner({ main: async () => ({ commit: { sha: head } }) }, root, env), /trusted main/);
+});
+test('state preparation initializes a protected ledger before merge without activating it; lost settings ack is read back', async t => {
+  const root = await temporary(t, 'delivery-install-state-'); await git(['init', '--quiet'], { cwd: root }); await git(['commit', '--allow-empty', '-m', 'installer'], { cwd: root });
+  const tip = await git(['rev-parse', 'HEAD'], { cwd: root }); let rules = []; let writes = 0;
+  const platform = { repo, main: async () => ({ commit: { sha: main } }), protections: async () => rules, call: async (_path, options) => { writes++; rules = [{ ...options.body, id: 'state-rule' }]; throw new Error('lost acknowledgement'); } };
+  const installer = { number: 234, state: 'open', is_wip: false, head: { sha: tip }, base: { ref: 'main', sha: main } }; const store = memoryStore();
+  const prepared = await prepareInstallation({ platform, store, root, installer }); assert.equal(prepared.activated, false); assert.equal(writes, 1);
+  assert.ok((await store.read()).events.some(event => event.kind === 'installation_prepared')); assert.equal((await store.read()).events.some(event => event.kind === 'activated'), false);
+  await ensureStateProtection(platform); assert.equal(writes, 1);
+  rules[0].allow_master_force_pushes = true; await assert.rejects(ensureStateProtection(platform), /protection/);
+  await assert.rejects(prepareInstallation({ platform, store, root, installer: { ...installer, head: { sha: head } } }), /checkout/);
 });
 test('frozen release requires exact checkout and positive main ancestry, without updating its source', async () => {
   const calls = []; const env = { CNB_TOKEN: 'test-only', CNB_REPO_SLUG: repo, RELEASE_EXPECTED_SHA: head };

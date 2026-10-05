@@ -8,11 +8,39 @@ import { loadPolicy } from './queue-policy.mjs';
 import { prepareReview, finishReview, independentCodeBuddyApproval } from './queue-work.mjs';
 import { reconcile, writeTaskReceipts } from './queue-controller.mjs';
 import { reconcileReleases } from './queue-release.mjs';
-import { appendEvent, branchName, checksVerdict, leaseOperation, parseIntent, STATE_BRANCH, updateTask } from './queue-model.mjs';
+import { appendEvent, branchName, checksVerdict, leaseOperation, parseIntent, SHA_RE, STATE_BRANCH, updateTask } from './queue-model.mjs';
 import { branchProtectionPayload, redactCredentials, requireToken, validateBranchProtection } from '../tools/cnb-api.mjs';
 
 const arg = (name, fallback) => { const index = process.argv.indexOf(name); return index < 0 ? fallback : process.argv[index + 1]; };
 const ROOT = resolve(fileURLToPath(new URL('../../', import.meta.url)));
+
+export async function ensureStateProtection(platform) {
+  const expected = { ...branchProtectionPayload({ rule: STATE_BRANCH, requireReview: false }), allow_pushes: false, allow_master_pushes: true, required_must_push_via_pull_request: false, required_status_checks: false };
+  const stateRule = (await platform.protections()).find(rule => rule.rule === STATE_BRANCH);
+  if (!stateRule) {
+    try { await platform.call('/-/settings/branch-protections', { method: 'POST', body: expected }); }
+    catch (error) {
+      // A settings write may have succeeded before its acknowledgement was lost.
+      const recovered = (await platform.protections()).find(rule => rule.rule === STATE_BRANCH);
+      if (!recovered || Object.entries(expected).some(([key, value]) => recovered[key] !== value)) throw error;
+    }
+  }
+  const actual = (await platform.protections()).find(rule => rule.rule === STATE_BRANCH);
+  if (!actual || Object.entries(expected).some(([key, value]) => actual[key] !== value)) throw new Error('Durable state protection did not read back');
+  return actual;
+}
+
+/** Initialize the protected ledger before the installer can add its lease reader to main. */
+export async function prepareInstallation({ platform, store, root, installer }) {
+  if (!Number.isSafeInteger(installer?.number) || installer.number <= 0 || installer.state !== 'open' || installer.is_wip !== false || branchName(installer.base?.ref) !== 'main' || !SHA_RE.test(installer.head?.sha ?? '')) throw new Error('Preparation requires a current open installer PR');
+  if (await git(['rev-parse', 'HEAD'], { cwd: root }) !== installer.head.sha) throw new Error('Preparation checkout differs from installer source');
+  const mainSha = (await platform.main()).commit?.sha;
+  if (installer.base?.sha !== mainSha) throw new Error('Installer main changed before state preparation');
+  await store.read(); // Existing malformed branches are corruption, never an empty ledger.
+  await ensureStateProtection(platform);
+  const result = await store.mutate(state => appendEvent(state, 'installation_prepared', { installer: installer.number, headSha: installer.head.sha, mainSha }), { id: `install-state:${installer.number}:${installer.head.sha}` });
+  return { repo: platform.repo, installer: installer.number, headSha: installer.head.sha, mainSha, revision: result.state.revision, activated: false };
+}
 
 export async function requireTrustedRunner(platform, root, env = process.env, lock = 'workloom-delivery-merge') {
   const allowed = new Set(['pull_request.target', 'pull_request.mergeable', 'pull_request.merged', 'api_trigger_delivery_review', 'api_trigger_delivery_reconcile', 'api_trigger_delivery_releases']);
@@ -29,6 +57,7 @@ export async function activate({ platform, store, root, installer }) {
   const mainSha = (await platform.main()).commit?.sha;
   if (await git(['rev-parse', 'HEAD'], { cwd: root }) !== mainSha) throw new Error('Activation requires current main');
   if (!installer || installer.is_merged !== true) throw new Error('Activation requires a real installer merge receipt');
+  if (!(await store.read()).events.some(event => event.kind === 'installation_prepared' && event.data.installer === installer.number && event.data.headSha === installer.head?.sha)) throw new Error('Installer ledger was not prepared for the exact source before merge');
   const policy = await loadPolicy(root);
   const statuses = await platform.call(`/-/pulls/${installer.number}/commit-statuses`);
   const tested = await platform.commit(statuses.sha);
@@ -52,11 +81,7 @@ export async function activate({ platform, store, root, installer }) {
     const after = (await platform.protections()).find(rule => rule.id === id);
     if (!after || after.required_master_approve !== false || after.forbid_approve_pull_created_by_own_npc !== false || after.required_status_checks !== true || validateBranchProtection(after).length) throw new Error('Automatic AI approval policy did not read back');
   }
-  const stateRule = (await platform.protections()).find(rule => rule.rule === STATE_BRANCH);
-  const expected = { ...branchProtectionPayload({ rule: STATE_BRANCH, requireReview: false }), allow_pushes: false, allow_master_pushes: true, required_must_push_via_pull_request: false, required_status_checks: false };
-  if (!stateRule) await platform.call('/-/settings/branch-protections', { method: 'POST', body: expected });
-  const actual = (await platform.protections()).find(rule => rule.rule === STATE_BRANCH);
-  if (!actual || Object.entries(expected).some(([key, value]) => actual[key] !== value)) throw new Error('Durable state protection did not read back');
+  await ensureStateProtection(platform);
   await store.mutate(state => appendEvent(state, 'activated', { mainSha, installer: installer.number, policyHash: policy.hash, independentApproval, humanClickRequired: false }));
   return { repo: platform.repo, mainSha, policyHash: policy.hash, humanClickRequired: false };
 }
@@ -101,6 +126,10 @@ export async function main() {
     console.log(JSON.stringify({ number, headSha: actual.head?.sha, handedOff: true, draft: actual.is_wip })); return;
   }
   const policy = await loadPolicy(root);
+  if (command === 'prepare-install') {
+    if (!Number.isSafeInteger(number) || number <= 0) throw new Error('Preparation requires installer --pr');
+    console.log(JSON.stringify(await prepareInstallation({ platform, store, root, installer: await platform.pull(number) }), null, 2)); return;
+  }
   if (command === 'review-prepare') {
     if (!Number.isSafeInteger(number) || number <= 0) throw new Error('Review requires a PR number');
     const result = await prepareReview({ platform, store, policy, root, number, stateless: process.env.DELIVERY_REVIEW_STATELESS === '1' });
@@ -132,7 +161,7 @@ export async function main() {
     if (report.some(item => ['parked', 'unknown', 'failed', 'timeout_running'].includes(item.status))) process.exitCode = 1;
     return;
   }
-  throw new Error('Usage: queue-runner.mjs status|lease|handoff|review-prepare|review-finish|activate|reconcile|releases [--repo org/name]');
+  throw new Error('Usage: queue-runner.mjs status|lease|handoff|review-prepare|review-finish|prepare-install|activate|reconcile|releases [--repo org/name]');
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(error => { console.error(redactCredentials(error.message)); process.exitCode = 1; });
