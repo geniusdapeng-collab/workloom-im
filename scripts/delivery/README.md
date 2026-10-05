@@ -122,6 +122,8 @@ Git `automation/delivery-state` 保存任务、租约、事件、尝试、AI、�
 
 UI 真正发布的唯一串行点是根 .cnb.yml 的 .ui-release / workloom-delivery-release-ui 锁。页面手动与交付器都触发同一个 api_trigger_ui_release，进入同一 ui-release job；没有第二个直接上传通道。delivery-releases / workloom-delivery-release 只串行持久化队列意图、异步启动和回读，不上传资产，也不持锁等待 ui-release 结束；两把不同职责的锁避免父调度和发布子构建互相等待。queue 测试直接对照 API event→原有 YAML alias→实际 publisher lock，不能把队列调度锁冒充资产写入锁。
 
+UI/桌面页面手动触发和 API 调用均必须显式传入 RELEASE_EXPECTED_SHA，值为已经审查并合入的准确源码。release-source 不从当前 main/tag 的 CNB_BRANCH_SHA 推测冻结来源；缺该变量或原生仓库身份，任何打包/上传前即失败。交付器在 build/start 的整次构建 env 传入相同 SHA，macOS、Windows 与 finalize 阶段均继承这一触发值。[CNB 默认变量官方契约](https://docs.cnb.cool/en/build/build-in-env.html#usage)规定 CNB_REPO_SLUG 等只读身份自动注入每个 Job；代码不覆盖它们。Linux PR 门禁不能证明自托管 mac/Windows 节点在线；桌面发布只有实际各平台构建和最终制品回读成功才记 delivered，节点/签名环境缺失保留失败待恢复，不关任务。
+
 初次安装由具备写权限的安装执行端在准确安装分支执行 `node scripts/delivery/queue-runner.mjs prepare-install --repo <org/repo> --pr <number>`：由设置权限者创建并回读状态分支强保护、初始化账本。源分支 PR 令牌实测只读；bootstrap 的 verify-install 只回读强保护和准确 source/main 的准备事件，在真正 AI 批准前执行，缺任一证据保持红灯。然后再合入经过真实 bootstrap AI 审查和原仓检查的安装 PR。main 安装后的缺账本不能被当作空租约。安装执行端核验准确 AI/CI 后，用 configureAutomaticReviewPolicy 取消平台人工评审计数及额外管理员批准；PR、必需状态检查、禁直推/强推/删除与自有 NPC 自批限制保留。合入以后在当前 main 执行 activate，一次安装不可修改候选规则，再回读 main 必需检查和独立 AI 评审身份，写 activation 事件。候选创建者与独立 CodeBuddy 评审进程分离，只有真实 Bot 的批准与完整回执共同满足才集成。模型子进程不继承发布 Bot 的批准令牌，合并后的结构化回执通过校验和新鲜度检查后才交给独立发布步骤。云端只有 CNB 原生令牌，不保存会话凭据。两个隔离副本按产品所有者授权在各自仓独立安装同一研发机制，业务 base-sync 仍排除它们；平台秘密、实盘和客户动作不在研发自动授权内。
 
 真实安装 PR #234 在 CodeBuddy approved 与四项检查 success 后仍被平台阻断为 waiting_review；仅调整自有 NPC 限制或添加 CodeBuddy 评审人无效。这个实测结果决定取消人工计数，而非把 Bot 评论冒充人的批准。configureAutomaticReviewPolicy 要求准确准备的 source/main 和独立 AI 身份；设置丢失响应必须完整回读，其他保护字段不能变化。

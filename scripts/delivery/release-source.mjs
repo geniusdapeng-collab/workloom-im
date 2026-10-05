@@ -6,7 +6,7 @@ import { git } from './git-state.mjs';
 import { SHA_RE } from './queue-model.mjs';
 import { requireToken, redactCredentials } from '../tools/cnb-api.mjs';
 export async function verifyReleaseSource({ root = process.cwd(), env = process.env, run = git } = {}) {
-  const expected = env.RELEASE_EXPECTED_SHA ?? env.CNB_BRANCH_SHA;
+  const expected = env.RELEASE_EXPECTED_SHA;
   const repo = env.CNB_REPO_SLUG;
   if (!SHA_RE.test(expected ?? '') || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo ?? '')) throw new Error('Release source/repository identity required');
   const head = await run(['rev-parse', 'HEAD'], { cwd: root });

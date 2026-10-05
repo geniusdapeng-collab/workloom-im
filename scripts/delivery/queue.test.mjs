@@ -494,6 +494,10 @@ test('frozen release requires exact checkout and positive main ancestry, without
   const run = async argv => { calls.push(argv); return argv[0] === 'rev-parse' ? head : ''; };
   assert.equal((await verifyReleaseSource({ env, run })).sha, head); assert.deepEqual(calls.at(-1), ['merge-base', '--is-ancestor', head, 'FETCH_HEAD']);
   await assert.rejects(verifyReleaseSource({ env: { ...env, RELEASE_EXPECTED_SHA: main }, run }), /checkout/);
+  const before = calls.length;
+  await assert.rejects(verifyReleaseSource({ env: { ...env, RELEASE_EXPECTED_SHA: undefined, CNB_BRANCH_SHA: head }, run }), /identity required/);
+  await assert.rejects(verifyReleaseSource({ env: { ...env, CNB_REPO_SLUG: undefined }, run }), /identity required/);
+  assert.equal(calls.length, before); // An implicit manual main/tag identity never reaches Git or publishing.
 });
 
 test('actual bare Git CAS preserves simultaneous updates and append-only history', async t => {
@@ -633,6 +637,21 @@ test('new candidates reserve actual AI parent capacity; failed, stale and comple
 test('release enqueue is idempotent by frozen source/kind/version and keeps integration separate', () => {
   const state = emptyState(repo); const task = { number: 1, merge: { sha: mergedSha }, intent: { releases: [{ kind: 'ui', version: 'v1.2.3' }] } };
   enqueueReleases(state, repo, task, now); enqueueReleases(state, repo, task, now); assert.equal(Object.keys(state.releases).length, 1); assert.equal(Object.values(state.releases)[0].version, '1.2.3');
+});
+test('both UI and desktop dispatch pass the explicit frozen SHA to the whole build, independently of current branch SHA', async () => {
+  for (const kind of ['ui', 'desktop']) {
+    const state = emptyState(repo); enqueueReleases(state, repo, { number: 1, merge: { sha: mergedSha }, intent: { releases: [{ kind, version: '1.2.3' }] } }, now);
+    let request;
+    const platform = { repo, error: error => error.message, call: async (path, options) => {
+      if (path.includes('/build/logs')) return { total: 0, data: [] };
+      if (path === '/-/build/start') { request = options.body; return { success: true, sn: `actual-${kind}` }; }
+      throw new Error(`Unexpected release dispatch ${path}`);
+    } };
+    assert.equal((await reconcileReleases({ platform, store: memoryStore(state), now }))[0].status, 'running');
+    assert.equal(request.sha, mergedSha); assert.equal(request.env.RELEASE_EXPECTED_SHA, mergedSha);
+    assert.equal(request.event, releaseEventFor(kind)); assert.equal(request.env.CNB_REPO_SLUG, undefined);
+    assert.equal(request.env.CNB_BRANCH_SHA, undefined); // Native readonly identities are never overridden.
+  }
 });
 test('manual UI event and delivery dispatch use the same actual publishing job and native lock; the scheduler only launches and observes', async t => {
   const YAML = await parser(); const root = YAML.parse(await readFile(new URL('../../.cnb.yml', import.meta.url), 'utf8'), { maxAliasCount: 1000 });
