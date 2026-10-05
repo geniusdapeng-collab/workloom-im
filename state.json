@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 196,
+  "revision": 198,
   "tasks": {
     "231": {
       "number": 231,
@@ -310,7 +310,7 @@
     },
     "236": {
       "number": 236,
-      "status": "waiting_ci",
+      "status": "parked",
       "firstSeen": 1791201701860,
       "attempts": {},
       "headSha": "3429d3a936790b808dd5e65fb8c1f5f7d40eead6",
@@ -338,9 +338,9 @@
         }
       },
       "alignmentCount": 0,
-      "recoveryCount": 0,
+      "recoveryCount": 1,
       "reviewFailures": null,
-      "blockedUntil": 0,
+      "blockedUntil": 1791243010476,
       "review": null,
       "candidate": null,
       "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
@@ -361,7 +361,13 @@
         "scripts/delivery/queue-policy.mjs",
         "scripts/delivery/queue.test.mjs"
       ],
-      "ciSince": 1791242410476
+      "ciSince": 1791242410476,
+      "recoveryIntent": {
+        "headSha": "3429d3a936790b808dd5e65fb8c1f5f7d40eead6",
+        "reason": "检查/评审阻断：Required check static-gate missing/failed/ambiguous; No current complete AI review",
+        "at": 1791242410476
+      },
+      "error": "检查/评审阻断：Required check static-gate missing/failed/ambiguous; No current complete AI review"
     },
     "238": {
       "number": 238,
@@ -4004,6 +4010,37 @@
       },
       "previous": "ccd6f03afb445c9127db737d427514289936027c3ea39b93c1d48b385607e462",
       "digest": "1b5347683fce5b294b348a9c3e87f945d1941824a6c0a32c7ad8228bf68e4cb0"
+    },
+    {
+      "sequence": 197,
+      "at": "2026-10-05T23:20:10.476Z",
+      "kind": "task",
+      "data": {
+        "number": 236,
+        "patch": {
+          "status": "parked",
+          "recoveryCount": 1,
+          "recoveryIntent": {
+            "headSha": "3429d3a936790b808dd5e65fb8c1f5f7d40eead6",
+            "reason": "检查/评审阻断：Required check static-gate missing/failed/ambiguous; No current complete AI review",
+            "at": 1791242410476
+          },
+          "error": "检查/评审阻断：Required check static-gate missing/failed/ambiguous; No current complete AI review",
+          "blockedUntil": 1791243010476
+        }
+      },
+      "previous": "1b5347683fce5b294b348a9c3e87f945d1941824a6c0a32c7ad8228bf68e4cb0",
+      "digest": "81436098c9ba9bf702f018d69654bd9b347abd677274f253da88fb6c8a0d454b"
+    },
+    {
+      "sequence": 198,
+      "at": "2026-10-05T23:20:12.526Z",
+      "kind": "transaction",
+      "data": {
+        "id": "e3afaf15-00e2-4ee0-a85f-2b5a7e32337b"
+      },
+      "previous": "81436098c9ba9bf702f018d69654bd9b347abd677274f253da88fb6c8a0d454b",
+      "digest": "4b6a5073b6edaabf90e5b5a7786dd1e3c1fcec6beb5534a6155c72d283cfad10"
     }
   ]
 }
