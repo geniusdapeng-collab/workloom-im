@@ -130,7 +130,14 @@ export async function runReview(root = process.cwd(), { env = process.env, platf
     }
   }));
   if (failure) throw failure;
-  const output = combineBatchResults(manifest, results);
+  let output;
+  try { output = combineBatchResults(manifest, results); }
+  catch (error) {
+    // Preserve genuine findings before an invalid coverage/migration receipt aborts publication.
+    for (const [index, result] of results.entries()) console.log(`WorkLoom AI batch receipt ${index}: ${redactCredentials(JSON.stringify(result), env.CNB_TOKEN)}`);
+    const missing = results.map((result, index) => ({ batch: index, status: result?.status, expected: batchSnapshot(manifest.snapshot, index).ciPolicyChanges.map(change => change.id), actual: (result?.ci_policy_changes ?? []).map(change => change.id), issues: (result?.issues ?? []).map(issue => `${issue.file}:${issue.start_line} ${issue.problem}`) }));
+    throw new Error(`${error.message}; batch diagnostics=${JSON.stringify(missing)}`);
+  }
   await writeFile(manifest.output, JSON.stringify(output, null, 2));
   console.log(`WorkLoom AI receipt: ${redactCredentials(JSON.stringify(output), env.CNB_TOKEN)}`);
   const current = await (platform ?? new Platform(env.CNB_REPO_SLUG, env.CNB_TOKEN)).snapshot(manifest.snapshot.number, { hash: manifest.policyHash }, { checks: false });
