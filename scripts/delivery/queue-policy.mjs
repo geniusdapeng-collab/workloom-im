@@ -30,8 +30,11 @@ export const BASE_POLICY = Object.freeze({
   businessHoldPaths: ['platform-ops/secrets/', 'secrets/', 'trading/live/', 'broker/live/'],
 });
 
+export function prPipelines(config) {
+  return config?.main?.pull_request ?? config?.['**']?.pull_request ?? config?.$?.pull_request;
+}
 function pipelines(config) {
-  const list = config?.main?.pull_request ?? config?.['**']?.pull_request;
+  const list = prPipelines(config);
   if (!Array.isArray(list) || !list.length) throw new Error('Trusted main has no PR pipelines');
   const required = list.filter(pipeline => pipeline.allowFailure !== true);
   if (!required.length || required.some(pipeline => !pipeline.name || !Array.isArray(pipeline.stages) || !pipeline.stages.length)) throw new Error('Required PR pipeline configuration is incomplete');

@@ -8,7 +8,7 @@ import { appendEvent, checksVerdict, dependencyState, eligibility, emptyState, h
 import { GitStateStore, git } from './git-state.mjs';
 import { alignBranch, independentCodeBuddyApproval } from './queue-work.mjs';
 import { Platform } from './queue-platform.mjs';
-import { BASE_POLICY, REVIEW_IMAGE, ciImplementationChanges, loadPolicy, parser, resolvePipelineConfig, sourcePipelineReport, validateSourcePipeline } from './queue-policy.mjs';
+import { BASE_POLICY, REVIEW_IMAGE, ciImplementationChanges, loadPolicy, parser, prPipelines, resolvePipelineConfig, sourcePipelineReport, validateSourcePipeline } from './queue-policy.mjs';
 import { dependencies, integratedDependency, mergeCandidate, reconcile, requestReview, reviewSlotBusy, writeTaskReceipts } from './queue-controller.mjs';
 import { enqueueReleases, reconcileReleases, verifyRelease } from './queue-release.mjs';
 import { injectDeliveryConfig } from './install-config.mjs';
@@ -267,7 +267,7 @@ test('required native node-test stages refer to existing repository files', asyn
   const root = new URL('../../', import.meta.url); const YAML = await parser();
   const config = YAML.parse(await readFile(new URL('.cnb.yml', root), 'utf8'), { maxAliasCount: 1000 });
   let verified = 0;
-  for (const pipeline of (config.main?.pull_request ?? config['**']?.pull_request ?? []).filter(value => value.allowFailure !== true)) {
+  for (const pipeline of (prPipelines(config) ?? []).filter(value => value.allowFailure !== true)) {
     for (const stage of pipeline.stages) {
       for (const line of String(stage.script ?? '').split('\n').filter(value => /node --test /.test(value))) {
         for (const path of line.trim().split(/\s+/).slice(2).filter(value => value.endsWith('.mjs'))) {
@@ -284,12 +284,12 @@ test('bootstrap and trusted-main AI image digests stay bound to the single polic
   const YAML = await parser();
   const trusted = YAML.parse(await readFile(new URL('./cnb.yml', import.meta.url), 'utf8'));
   const bootstrap = YAML.parse(await readFile(new URL('./bootstrap-cnb.yml', import.meta.url), 'utf8'));
-  const images = [trusted.main['pull_request.target'][0], bootstrap['**'].pull_request[0]].flatMap(pipeline => pipeline.stages.filter(stage => stage.image).map(stage => stage.image));
+  const images = [trusted.main['pull_request.target'][0], prPipelines(bootstrap)[0]].flatMap(pipeline => pipeline.stages.filter(stage => stage.image).map(stage => stage.image));
   assert.deepEqual(images, [REVIEW_IMAGE, REVIEW_IMAGE]);
 });
 test('installer updates cancel only their own obsolete bootstrap review and do not share the ordinary review lock', async () => {
   const YAML = await parser();
-  const bootstrap = YAML.parse(await readFile(new URL('./bootstrap-cnb.yml', import.meta.url), 'utf8'))['**'].pull_request[0];
+  const bootstrap = prPipelines(YAML.parse(await readFile(new URL('./bootstrap-cnb.yml', import.meta.url), 'utf8')))[0];
   const ordinary = YAML.parse(await readFile(new URL('./cnb.yml', import.meta.url), 'utf8'))['.delivery-review'];
   assert.equal(bootstrap.lock.key, 'workloom-delivery-bootstrap-$CNB_PULL_REQUEST_IID'); assert.equal(bootstrap.lock['cancel-in-progress'], true);
   assert.notEqual(bootstrap.lock.key, ordinary.lock.key); assert.notEqual(ordinary.lock['cancel-in-progress'], true);
