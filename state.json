@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 280,
+  "revision": 282,
   "tasks": {
     "231": {
       "number": 231,
@@ -369,7 +369,176 @@
       "recoveryCount": 0,
       "reviewFailures": null,
       "blockedUntil": 0,
-      "review": null,
+      "review": {
+        "id": "c09e506b-c02b-4063-9ffb-a7ff0f1e8117",
+        "number": 241,
+        "headSha": "39a95964f70eeb7093be45ec73f9172511097f96",
+        "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+        "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+        "filesHash": "c9260e3c73cc7510da3c672768e0dc96efd8ed9c836ea4d2dba5afefa541344d",
+        "resultHash": "e26b42a4d8abbf3f560868cc2ded4e79f3fab83e78db04b2b95e2d9bc69712d0",
+        "dependsOn": [
+          239
+        ],
+        "ciPolicyChangesHash": "d80df23a849fc2ba333483ef61ea9f3f03d25d411dc2e671e3113a6d58879a33",
+        "passed": true,
+        "platformReview": {
+          "id": "2107256616219480064",
+          "author": "CodeBuddy",
+          "creator": "OCI",
+          "isNpc": true,
+          "createdAt": "2026-10-05T23:48:22Z"
+        },
+        "result": {
+          "status": "passed",
+          "issues": [],
+          "reviewed_files": [
+            "scripts/delivery/README.md",
+            "scripts/delivery/git-state.mjs",
+            "scripts/delivery/install-account.mjs",
+            "scripts/delivery/install-account.test.mjs",
+            "scripts/delivery/install-assets.mjs",
+            "scripts/delivery/install-protocol.mjs",
+            "scripts/delivery/install-repository.mjs",
+            "scripts/delivery/install-repository.test.mjs",
+            "scripts/delivery/model-gateway.mjs",
+            "scripts/delivery/queue-controller.mjs",
+            "scripts/delivery/queue-model.mjs",
+            "scripts/delivery/queue-platform.mjs",
+            "scripts/delivery/queue-policy.mjs",
+            "scripts/delivery/queue.test.mjs",
+            "sync/base-sync.test.mjs",
+            "sync/fanout-cnb.mjs",
+            "sync/fanout-rules.test.mjs"
+          ],
+          "head_sha": "39a95964f70eeb7093be45ec73f9172511097f96",
+          "base_sha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+          "policy_hash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+          "depends_on": [
+            239
+          ],
+          "ci_policy_changes": [
+            {
+              "id": "CI-001",
+              "rationale": "queue-policy.mjs only extracts the existing selector lookup into the exported prPipelines(config) helper and routes the internal pipelines() through it; pipelines() still throws 'Trusted main has no PR pipelines' on an empty/absent list, still requires at least one non-allowFailure pipeline with named stages, and still rejects duplicate required names. No required pipeline or stage identity is removed or weakened; the export merely lets tests resolve the same trusted selector deterministically, so validation is preserved."
+            },
+            {
+              "id": "CI-002",
+              "rationale": "queue.test.mjs switches the 'required native node-test stages' assertion from raw YAML.parse of .cnb.yml to resolvePipelineConfig with a real readLocal, which now also walks includes (e.g. scripts/delivery/cnb.yml and the install gates), so the check verifies strictly more node --test paths against git ls-files than before. The two AI-image bootstrap assertions and the archived-run pipelines are re-expressed through prPipelines, which returns the identical list the removed inline selector produced; verified>0 and the delivery-config lock key/cancel-in-progress inequalities remain enforced. Coverage is strengthened, not relaxed."
+            },
+            {
+              "id": "CI-003",
+              "rationale": "install-repository.test.mjs is newly added and exercises the privileged first-install path: closure preservation (23 CORE_ASSETS), product/industry/isolation/AGENTS.md non-modification, preflight rejection of incomplete assets, non-regular CI includes, symlinks and unknown hardened protocol variants before any write, idempotent exact-package no-op, exact-source freezing with readback, weak-rule tightening, merge ancestry tracing, 409 rejection resolution, policy refresh, and propagation timeout. It also spawns the installed queue.test.mjs + protocol-rules.test.mjs through real git, proving the copied closure is executable. This adds required validation and removes none."
+            },
+            {
+              "id": "CI-004",
+              "rationale": "install-account.test.mjs is newly added and locks down the account-wide installer: full pagination with ambiguous/unreadable identity rejection, concurrency bound (max 2), per-repo error isolation with credential redaction, frozen/pending_main preservation, post-merge prepared recovery, source activation + exact current-main + concurrency verification before any write, main-advance reporting, final-read failure preserving receipts, live/stale claim exclusion and symlink/unowned-clone/unknown-remote preservation. It adds assertions for the new privileged surface without dropping any existing check."
+            },
+            {
+              "id": "CI-005",
+              "rationale": "install-repository.mjs is the new coordinator (covered by CI-003) and is not itself a pipeline identity. It strictly tightens execution-time invariants: exact current-main checkout (never resets a user branch), immutable-source freeze with readback, createOnce single-object recovery without blind retry, first-parent ancestry tracing for merge recovery, budgeted policy-refresh recursion, and fail-closed handling of unknown 409 readbacks. No required stage is removed."
+            },
+            {
+              "id": "CI-006",
+              "rationale": "install-protocol.mjs is newly added to migrate the independently hardened target PR/Git contract to the bounded-lease contract while retaining the target's own hardened code: it digests the exact prior inputs and throws 'explicit reviewed migration' on any unknown variant, and re-injects the same verifyPrFreshness/verifyPrLeases admission proof (exact Git compare path equality plus fenced lease checks), so PR-number occupation is bounded without dropping identity/Git proof. It carries no pipeline identity but is a required migration input; the replacement preserves the prior validation."
+            },
+            {
+              "id": "CI-007",
+              "rationale": "queue-model.mjs adds the shared validRepoSlug export used by the delivery identity gates. It rejects '.', '..', empty segments and characters that could escape a repo path while permitting nested CNB groups, which the previous per-call regexes either forbade or omitted entirely (queue-platform and model-gateway had no guard). This is a consolidation and hardening of the identity check, not a removal of a required check."
+            },
+            {
+              "id": "CI-008",
+              "rationale": "model-gateway.mjs replaces its inlined origin/slug regex with validRepoSlug(repo) plus the unchanged api.cnb.cool origin and non-empty-token requirement. The new guard is strictly stronger (blocks traversal and nested-host tricks the old one-slash regex accepted) while remaining byte-compatible for legitimate org/repo and nested slugs; the endpoint pinning to https://api.cnb.cool is retained, so no credential-destination check is weakened."
+            },
+            {
+              "id": "CI-009",
+              "rationale": "git-state.mjs swaps its local one-slash slug regex for the shared validRepoSlug. GitStateStore still enforces the credential-destination invariant (token allowed only when remote is exactly the matching cnb.cool HTTPS URL) and the automation/ branch-name shape; the slug check is widened to nested groups and hardened against traversal. No required validation is removed."
+            },
+            {
+              "id": "CI-010",
+              "rationale": "queue-controller.mjs adds the verified-409 rejection path to mergeCandidate. It stays on the safe side: the lease is released and the task returned to waiting_ci only when a positive readback proves is_merged===false and the head still equals the frozen snapshot head; an unreadable/contradicting readback keeps status 'merging' so reconcile pauses (exactly-once preserved), and the verified branch emits an append-only merge_rejected event and relies on the existing parking/backoff. This replaces blind permanent pausing with a bounded, evidence-gated retry without weakening any required check."
+            },
+            {
+              "id": "CI-011",
+              "rationale": "install-account.mjs is newly added with no pipeline identity of its own (CI-004 covers it). It enforces fail-closed account semantics: rejection of invalid source slug/main/concurrency, source activation-receipt requirement before any write, unique-claim locking with dead-pid reclamation only, symlink-safe directories, marked dedicated checkouts that never reset user trees, credential redaction on every error, and a non-zero exit plus preserved receipts when the final source read fails. No existing required check is touched."
+            },
+            {
+              "id": "CI-012",
+              "rationale": "queue-platform.mjs adds constructor validation that repo is a well-formed slug before any platform call, closing a path where a malformed or foreign repo could be used as an API slug. All existing behavior (pull identity checks, 100-page pagination, protections/compare/commit integrity assertions) is unchanged, so this strictly tightens identity trust without removing a check."
+            },
+            {
+              "id": "CI-013",
+              "rationale": "base-sync.test.mjs adds a regression asserting the base's own distributed surface (dependencyClosureViolations(REAL_BASE, loadScope(REAL_BASE))) has zero violations, so a broken relative dependency in the base is caught at the base instead of failing once per child. This adds a required guard that per-child failures previously only surfaced indirectly; nothing is removed or relaxed."
+            },
+            {
+              "id": "CI-014",
+              "rationale": "fanout-cnb.mjs extracts baseSyncOutcome and tightens per-child success to require exitCode===0 AND a complete parsed JSON object, with non-zero exit, signal termination, truncated JSON, arrays and non-JSON all treated as failure regardless of a plausible-looking report. It preserves the outer 78-vs-1 exit semantics (78 remains reserved for the outer waiting-installation stop; the base-sync child has no successful-stop contract) and keeps credential redaction on the error detail. This converts an implicit assumption into an explicit, tested invariant; per-child isolation via the existing try/catch is unchanged."
+            },
+            {
+              "id": "CI-015",
+              "rationale": "install-assets.mjs is newly added (CI-003 covers it). installationPlan preflights the entire migration before writing (SHA_RE/validRepoSlug identity, complete CORE_ASSETS closure, valid existing main PR checks), enforces a permitted-closure whitelist, preserves the target's own hardened protocol via preserveBoundProtocol, resolves includes and re-checks that every existing required product check plus delivery-bootstrap-review and delivery-regression survive, applies symlink-safe path checks, and makes the marker/asset digests exact and idempotent. This adds required validation without removing any stage identity."
+            },
+            {
+              "id": "CI-016",
+              "rationale": "fanout-rules.test.mjs adds regression coverage for baseSyncOutcome: healthy and prefixed-JSON success, and failure for exit 1/78, null-exit SIGKILL, truncated JSON, non-object JSON and non-JSON stdout, plus credential redaction of the reason. This pins the new fail-closed per-child contract and the redaction guarantee; no existing assertion is weakened."
+            }
+          ],
+          "notes": [
+            {
+              "file": "scripts/delivery/install-account.mjs",
+              "start_line": 103,
+              "end_line": 118,
+              "note": "runAccount selects every Owner/active repo except the source and does not consult sync/child-repos.json#isolatedRepos, so the two isolated copies (workloom-growthtest, workloom-growthmatrix) will each receive the RD delivery mechanism. This matches the explicit product-owner authorization in the embedded DELIVERY_DOC and AGENTS.md section 3 (mechanism fixes are executed inside each isolated repo, which must not lift isolation): the installer writes only RD assets plus isolationChanged:false and never touches .workloom-base-sync.json or child-repos.json, so cross-repo fanout isolation is preserved. Behavioural note only, no defect."
+            },
+            {
+              "file": "scripts/delivery/install-repository.mjs",
+              "start_line": 198,
+              "end_line": 208,
+              "note": "When a prior installation PR for the deterministic branch (packageHash+mainSha) exists but is closed-unmerged, prepareRepository returns status 'closed_unmerged' and never creates a replacement PR for the same main; runAccount then leaves the repo pending. Because the branch name embeds mainSha, a later main advance regenerates a fresh branch and self-heals, so this is a bounded resilience gap rather than a correctness defect. No operator-facing retry hint is emitted for the closed_unmerged case."
+            },
+            {
+              "file": "scripts/delivery/queue-controller.mjs",
+              "start_line": 154,
+              "end_line": 165,
+              "note": "Verified-409 downgrade is well contained: the positive readback (is_merged===false && head.sha===snapshot.headSha) gates the release, an unreadable or contradicting readback leaves status 'merging' so the reconcile catch pauses integration via the 'merging' break, and the verified branch parks the task for 10 minutes through the outer catch. Exactly-once external action and fail-safe default are preserved; only mergeable_state/base are not re-asserted, which re-eligibility on retry covers."
+            },
+            {
+              "file": "scripts/delivery/queue-model.mjs",
+              "start_line": 8,
+              "end_line": 8,
+              "note": "validRepoSlug widened the slug grammar from exactly one '/' to one-or-more segments while explicitly rejecting '.'/'..' and any '?'/'#'/':'/blank characters, and is now the single shared gate used by GitStateStore, Platform, model-gateway, install-assets and install-account. This is a consolidation and hardening (previously queue-platform and model-gateway carried no traversal guard) rather than a loosening."
+            }
+          ],
+          "batches": [
+            {
+              "index": 0,
+              "files": [
+                "scripts/delivery/README.md",
+                "scripts/delivery/git-state.mjs",
+                "scripts/delivery/install-account.mjs",
+                "scripts/delivery/install-account.test.mjs",
+                "scripts/delivery/install-assets.mjs",
+                "scripts/delivery/install-protocol.mjs",
+                "scripts/delivery/install-repository.mjs",
+                "scripts/delivery/install-repository.test.mjs",
+                "scripts/delivery/model-gateway.mjs",
+                "scripts/delivery/queue-controller.mjs",
+                "scripts/delivery/queue-model.mjs",
+                "scripts/delivery/queue-platform.mjs",
+                "scripts/delivery/queue-policy.mjs",
+                "scripts/delivery/queue.test.mjs",
+                "sync/base-sync.test.mjs",
+                "sync/fanout-cnb.mjs",
+                "sync/fanout-rules.test.mjs"
+              ],
+              "status": "passed",
+              "toolUseCount": 53,
+              "turnCount": 85
+            }
+          ]
+        },
+        "approvedAt": 1791244104231
+      },
       "candidate": {
         "number": 241,
         "branch": "delivery/candidate/pr-236-eca0ea51108f9fd97719b68e191fe52b",
@@ -6907,6 +7076,198 @@
       },
       "previous": "0e331ee78f868d1baa60b2f24628b95fbf99e340ad1eee39f8fed53a1fad0752",
       "digest": "45f2de372e71a21fb5bd8550e244639a103fc7dbe23cd649c3d3c86952535f86"
+    },
+    {
+      "sequence": 281,
+      "at": "2026-10-05T23:50:09.411Z",
+      "kind": "task",
+      "data": {
+        "number": 236,
+        "patch": {
+          "review": {
+            "id": "c09e506b-c02b-4063-9ffb-a7ff0f1e8117",
+            "number": 241,
+            "headSha": "39a95964f70eeb7093be45ec73f9172511097f96",
+            "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+            "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+            "filesHash": "c9260e3c73cc7510da3c672768e0dc96efd8ed9c836ea4d2dba5afefa541344d",
+            "resultHash": "e26b42a4d8abbf3f560868cc2ded4e79f3fab83e78db04b2b95e2d9bc69712d0",
+            "dependsOn": [
+              239
+            ],
+            "ciPolicyChangesHash": "d80df23a849fc2ba333483ef61ea9f3f03d25d411dc2e671e3113a6d58879a33",
+            "passed": true,
+            "platformReview": {
+              "id": "2107256616219480064",
+              "author": "CodeBuddy",
+              "creator": "OCI",
+              "isNpc": true,
+              "createdAt": "2026-10-05T23:48:22Z"
+            },
+            "result": {
+              "status": "passed",
+              "issues": [],
+              "reviewed_files": [
+                "scripts/delivery/README.md",
+                "scripts/delivery/git-state.mjs",
+                "scripts/delivery/install-account.mjs",
+                "scripts/delivery/install-account.test.mjs",
+                "scripts/delivery/install-assets.mjs",
+                "scripts/delivery/install-protocol.mjs",
+                "scripts/delivery/install-repository.mjs",
+                "scripts/delivery/install-repository.test.mjs",
+                "scripts/delivery/model-gateway.mjs",
+                "scripts/delivery/queue-controller.mjs",
+                "scripts/delivery/queue-model.mjs",
+                "scripts/delivery/queue-platform.mjs",
+                "scripts/delivery/queue-policy.mjs",
+                "scripts/delivery/queue.test.mjs",
+                "sync/base-sync.test.mjs",
+                "sync/fanout-cnb.mjs",
+                "sync/fanout-rules.test.mjs"
+              ],
+              "head_sha": "39a95964f70eeb7093be45ec73f9172511097f96",
+              "base_sha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+              "policy_hash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+              "depends_on": [
+                239
+              ],
+              "ci_policy_changes": [
+                {
+                  "id": "CI-001",
+                  "rationale": "queue-policy.mjs only extracts the existing selector lookup into the exported prPipelines(config) helper and routes the internal pipelines() through it; pipelines() still throws 'Trusted main has no PR pipelines' on an empty/absent list, still requires at least one non-allowFailure pipeline with named stages, and still rejects duplicate required names. No required pipeline or stage identity is removed or weakened; the export merely lets tests resolve the same trusted selector deterministically, so validation is preserved."
+                },
+                {
+                  "id": "CI-002",
+                  "rationale": "queue.test.mjs switches the 'required native node-test stages' assertion from raw YAML.parse of .cnb.yml to resolvePipelineConfig with a real readLocal, which now also walks includes (e.g. scripts/delivery/cnb.yml and the install gates), so the check verifies strictly more node --test paths against git ls-files than before. The two AI-image bootstrap assertions and the archived-run pipelines are re-expressed through prPipelines, which returns the identical list the removed inline selector produced; verified>0 and the delivery-config lock key/cancel-in-progress inequalities remain enforced. Coverage is strengthened, not relaxed."
+                },
+                {
+                  "id": "CI-003",
+                  "rationale": "install-repository.test.mjs is newly added and exercises the privileged first-install path: closure preservation (23 CORE_ASSETS), product/industry/isolation/AGENTS.md non-modification, preflight rejection of incomplete assets, non-regular CI includes, symlinks and unknown hardened protocol variants before any write, idempotent exact-package no-op, exact-source freezing with readback, weak-rule tightening, merge ancestry tracing, 409 rejection resolution, policy refresh, and propagation timeout. It also spawns the installed queue.test.mjs + protocol-rules.test.mjs through real git, proving the copied closure is executable. This adds required validation and removes none."
+                },
+                {
+                  "id": "CI-004",
+                  "rationale": "install-account.test.mjs is newly added and locks down the account-wide installer: full pagination with ambiguous/unreadable identity rejection, concurrency bound (max 2), per-repo error isolation with credential redaction, frozen/pending_main preservation, post-merge prepared recovery, source activation + exact current-main + concurrency verification before any write, main-advance reporting, final-read failure preserving receipts, live/stale claim exclusion and symlink/unowned-clone/unknown-remote preservation. It adds assertions for the new privileged surface without dropping any existing check."
+                },
+                {
+                  "id": "CI-005",
+                  "rationale": "install-repository.mjs is the new coordinator (covered by CI-003) and is not itself a pipeline identity. It strictly tightens execution-time invariants: exact current-main checkout (never resets a user branch), immutable-source freeze with readback, createOnce single-object recovery without blind retry, first-parent ancestry tracing for merge recovery, budgeted policy-refresh recursion, and fail-closed handling of unknown 409 readbacks. No required stage is removed."
+                },
+                {
+                  "id": "CI-006",
+                  "rationale": "install-protocol.mjs is newly added to migrate the independently hardened target PR/Git contract to the bounded-lease contract while retaining the target's own hardened code: it digests the exact prior inputs and throws 'explicit reviewed migration' on any unknown variant, and re-injects the same verifyPrFreshness/verifyPrLeases admission proof (exact Git compare path equality plus fenced lease checks), so PR-number occupation is bounded without dropping identity/Git proof. It carries no pipeline identity but is a required migration input; the replacement preserves the prior validation."
+                },
+                {
+                  "id": "CI-007",
+                  "rationale": "queue-model.mjs adds the shared validRepoSlug export used by the delivery identity gates. It rejects '.', '..', empty segments and characters that could escape a repo path while permitting nested CNB groups, which the previous per-call regexes either forbade or omitted entirely (queue-platform and model-gateway had no guard). This is a consolidation and hardening of the identity check, not a removal of a required check."
+                },
+                {
+                  "id": "CI-008",
+                  "rationale": "model-gateway.mjs replaces its inlined origin/slug regex with validRepoSlug(repo) plus the unchanged api.cnb.cool origin and non-empty-token requirement. The new guard is strictly stronger (blocks traversal and nested-host tricks the old one-slash regex accepted) while remaining byte-compatible for legitimate org/repo and nested slugs; the endpoint pinning to https://api.cnb.cool is retained, so no credential-destination check is weakened."
+                },
+                {
+                  "id": "CI-009",
+                  "rationale": "git-state.mjs swaps its local one-slash slug regex for the shared validRepoSlug. GitStateStore still enforces the credential-destination invariant (token allowed only when remote is exactly the matching cnb.cool HTTPS URL) and the automation/ branch-name shape; the slug check is widened to nested groups and hardened against traversal. No required validation is removed."
+                },
+                {
+                  "id": "CI-010",
+                  "rationale": "queue-controller.mjs adds the verified-409 rejection path to mergeCandidate. It stays on the safe side: the lease is released and the task returned to waiting_ci only when a positive readback proves is_merged===false and the head still equals the frozen snapshot head; an unreadable/contradicting readback keeps status 'merging' so reconcile pauses (exactly-once preserved), and the verified branch emits an append-only merge_rejected event and relies on the existing parking/backoff. This replaces blind permanent pausing with a bounded, evidence-gated retry without weakening any required check."
+                },
+                {
+                  "id": "CI-011",
+                  "rationale": "install-account.mjs is newly added with no pipeline identity of its own (CI-004 covers it). It enforces fail-closed account semantics: rejection of invalid source slug/main/concurrency, source activation-receipt requirement before any write, unique-claim locking with dead-pid reclamation only, symlink-safe directories, marked dedicated checkouts that never reset user trees, credential redaction on every error, and a non-zero exit plus preserved receipts when the final source read fails. No existing required check is touched."
+                },
+                {
+                  "id": "CI-012",
+                  "rationale": "queue-platform.mjs adds constructor validation that repo is a well-formed slug before any platform call, closing a path where a malformed or foreign repo could be used as an API slug. All existing behavior (pull identity checks, 100-page pagination, protections/compare/commit integrity assertions) is unchanged, so this strictly tightens identity trust without removing a check."
+                },
+                {
+                  "id": "CI-013",
+                  "rationale": "base-sync.test.mjs adds a regression asserting the base's own distributed surface (dependencyClosureViolations(REAL_BASE, loadScope(REAL_BASE))) has zero violations, so a broken relative dependency in the base is caught at the base instead of failing once per child. This adds a required guard that per-child failures previously only surfaced indirectly; nothing is removed or relaxed."
+                },
+                {
+                  "id": "CI-014",
+                  "rationale": "fanout-cnb.mjs extracts baseSyncOutcome and tightens per-child success to require exitCode===0 AND a complete parsed JSON object, with non-zero exit, signal termination, truncated JSON, arrays and non-JSON all treated as failure regardless of a plausible-looking report. It preserves the outer 78-vs-1 exit semantics (78 remains reserved for the outer waiting-installation stop; the base-sync child has no successful-stop contract) and keeps credential redaction on the error detail. This converts an implicit assumption into an explicit, tested invariant; per-child isolation via the existing try/catch is unchanged."
+                },
+                {
+                  "id": "CI-015",
+                  "rationale": "install-assets.mjs is newly added (CI-003 covers it). installationPlan preflights the entire migration before writing (SHA_RE/validRepoSlug identity, complete CORE_ASSETS closure, valid existing main PR checks), enforces a permitted-closure whitelist, preserves the target's own hardened protocol via preserveBoundProtocol, resolves includes and re-checks that every existing required product check plus delivery-bootstrap-review and delivery-regression survive, applies symlink-safe path checks, and makes the marker/asset digests exact and idempotent. This adds required validation without removing any stage identity."
+                },
+                {
+                  "id": "CI-016",
+                  "rationale": "fanout-rules.test.mjs adds regression coverage for baseSyncOutcome: healthy and prefixed-JSON success, and failure for exit 1/78, null-exit SIGKILL, truncated JSON, non-object JSON and non-JSON stdout, plus credential redaction of the reason. This pins the new fail-closed per-child contract and the redaction guarantee; no existing assertion is weakened."
+                }
+              ],
+              "notes": [
+                {
+                  "file": "scripts/delivery/install-account.mjs",
+                  "start_line": 103,
+                  "end_line": 118,
+                  "note": "runAccount selects every Owner/active repo except the source and does not consult sync/child-repos.json#isolatedRepos, so the two isolated copies (workloom-growthtest, workloom-growthmatrix) will each receive the RD delivery mechanism. This matches the explicit product-owner authorization in the embedded DELIVERY_DOC and AGENTS.md section 3 (mechanism fixes are executed inside each isolated repo, which must not lift isolation): the installer writes only RD assets plus isolationChanged:false and never touches .workloom-base-sync.json or child-repos.json, so cross-repo fanout isolation is preserved. Behavioural note only, no defect."
+                },
+                {
+                  "file": "scripts/delivery/install-repository.mjs",
+                  "start_line": 198,
+                  "end_line": 208,
+                  "note": "When a prior installation PR for the deterministic branch (packageHash+mainSha) exists but is closed-unmerged, prepareRepository returns status 'closed_unmerged' and never creates a replacement PR for the same main; runAccount then leaves the repo pending. Because the branch name embeds mainSha, a later main advance regenerates a fresh branch and self-heals, so this is a bounded resilience gap rather than a correctness defect. No operator-facing retry hint is emitted for the closed_unmerged case."
+                },
+                {
+                  "file": "scripts/delivery/queue-controller.mjs",
+                  "start_line": 154,
+                  "end_line": 165,
+                  "note": "Verified-409 downgrade is well contained: the positive readback (is_merged===false && head.sha===snapshot.headSha) gates the release, an unreadable or contradicting readback leaves status 'merging' so the reconcile catch pauses integration via the 'merging' break, and the verified branch parks the task for 10 minutes through the outer catch. Exactly-once external action and fail-safe default are preserved; only mergeable_state/base are not re-asserted, which re-eligibility on retry covers."
+                },
+                {
+                  "file": "scripts/delivery/queue-model.mjs",
+                  "start_line": 8,
+                  "end_line": 8,
+                  "note": "validRepoSlug widened the slug grammar from exactly one '/' to one-or-more segments while explicitly rejecting '.'/'..' and any '?'/'#'/':'/blank characters, and is now the single shared gate used by GitStateStore, Platform, model-gateway, install-assets and install-account. This is a consolidation and hardening (previously queue-platform and model-gateway carried no traversal guard) rather than a loosening."
+                }
+              ],
+              "batches": [
+                {
+                  "index": 0,
+                  "files": [
+                    "scripts/delivery/README.md",
+                    "scripts/delivery/git-state.mjs",
+                    "scripts/delivery/install-account.mjs",
+                    "scripts/delivery/install-account.test.mjs",
+                    "scripts/delivery/install-assets.mjs",
+                    "scripts/delivery/install-protocol.mjs",
+                    "scripts/delivery/install-repository.mjs",
+                    "scripts/delivery/install-repository.test.mjs",
+                    "scripts/delivery/model-gateway.mjs",
+                    "scripts/delivery/queue-controller.mjs",
+                    "scripts/delivery/queue-model.mjs",
+                    "scripts/delivery/queue-platform.mjs",
+                    "scripts/delivery/queue-policy.mjs",
+                    "scripts/delivery/queue.test.mjs",
+                    "sync/base-sync.test.mjs",
+                    "sync/fanout-cnb.mjs",
+                    "sync/fanout-rules.test.mjs"
+                  ],
+                  "status": "passed",
+                  "toolUseCount": 53,
+                  "turnCount": 85
+                }
+              ]
+            },
+            "approvedAt": 1791244104231
+          }
+        }
+      },
+      "previous": "45f2de372e71a21fb5bd8550e244639a103fc7dbe23cd649c3d3c86952535f86",
+      "digest": "916b8b7782702fc6e7900d289bb644e8501c1da5973bf3a50000e57bef106565"
+    },
+    {
+      "sequence": 282,
+      "at": "2026-10-05T23:50:13.705Z",
+      "kind": "transaction",
+      "data": {
+        "id": "08ccbeda-548d-48cb-bd07-b0af07c3866c"
+      },
+      "previous": "916b8b7782702fc6e7900d289bb644e8501c1da5973bf3a50000e57bef106565",
+      "digest": "b3519ce0d06f9319fce328bf9ed0dab16b6da12c2dd47a45506ec4d17644afff"
     }
   ]
 }
