@@ -42,9 +42,9 @@ export async function verifyRelease(platform, release, download = bytes) {
   if (!metadata?.id || metadata.draft === true || source.sha !== release.sha) throw new Error('Release tag/source identity mismatch');
   let assets;
   if (release.kind === 'ui') {
-    const raw = await platform.call(`/-/git/raw/${release.sha}/sync/base-capabilities.json`);
-    if (typeof raw !== 'string') throw new Error('UI registration unreadable');
-    const registration = JSON.parse(raw);
+    // Platform.call uses the API transport, which already decodes successful JSON responses.
+    const registration = await platform.call(`/-/git/raw/${release.sha}/sync/base-capabilities.json`);
+    if (!registration || typeof registration !== 'object' || Array.isArray(registration)) throw new Error('UI registration unreadable');
     const asset = await download(platform.repo, tag, `workloom-ui-${release.version}.tgz`);
     if (registration.ui?.latestStableVersion !== release.version || registration.ui?.distribution?.integrityByVersion?.[release.version] !== asset.sri) throw new Error('Published UI bytes differ from reviewed registration');
     assets = [asset];
