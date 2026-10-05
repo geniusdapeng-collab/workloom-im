@@ -183,6 +183,24 @@ test('unchanged YAML cannot hide edits to required check implementations and dep
   assert.throws(() => validateReview(output, s, policy.hash), /migration/);
   assert.equal(validateReview({ ...output, ci_policy_changes: changes.map(change => ({ id: change.id, rationale: 'Read exact old/new Git source and verified retained assertions.' })) }, s, policy.hash).passed, true);
 });
+test('root CI and every actual old/new local include require exact receipts even for additive non-required pipelines', async t => {
+  const root = await temporary(t, 'delivery-ci-inputs-');
+  const before = 'include: old-policy.conf\nmain:\n  pull_request:\n    - name: static-gate\n      stages: [{name: check, script: check}]\n';
+  await writeFile(join(root, '.cnb.yml'), before); await writeFile(join(root, 'old-policy.conf'), 'main:\n  push: []\n');
+  const trusted = await loadPolicy(root);
+  const after = before.replace('old-policy.conf', 'new-policy.conf') + '  push:\n    - name: extra\n      stages: [{name: new action, script: added}]\n';
+  const report = await sourcePipelineReport(after, trusted, { readLocal: async path => { assert.equal(path, 'new-policy.conf'); return 'main:\n  push: []\n'; } });
+  assert.deepEqual(report.errors, []); assert.deepEqual(report.changes, []);
+  assert.deepEqual(trusted.ciFiles, ['.cnb.yml', 'old-policy.conf']); assert.deepEqual(report.ciFiles, ['.cnb.yml', 'new-policy.conf']);
+  const paths = ['.cnb.yml', 'old-policy.conf', 'new-policy.conf'];
+  const changes = readableCiChanges(ciImplementationChanges(paths.map(path => ({ path, status: 'modify' })), main, head, [...trusted.ciFiles, ...report.ciFiles]));
+  assert.deepEqual(changes.map(change => change.file).sort(), paths.sort());
+  assert.deepEqual(ciImplementationChanges([{ path: '.cnb.yml', status: 'modify' }], main, head).map(change => change.file), ['.cnb.yml']);
+  const s = snapshot(1, { files: paths, ciPolicyChanges: changes });
+  const output = { status: 'passed', issues: [], reviewed_files: paths, head_sha: head, base_sha: main, policy_hash: policy.hash, depends_on: [] };
+  for (const ci_policy_changes of [[], changes.slice(1).map(change => ({ id: change.id, rationale: 'reviewed' }))]) assert.throws(() => validateReview({ ...output, ci_policy_changes }, s, policy.hash), /migration/);
+  assert.equal(validateReview({ ...output, ci_policy_changes: changes.map(change => ({ id: change.id, rationale: 'Exact old/new CI input read; product assertions and revert retained.' })) }, s, policy.hash).passed, true);
+});
 test('short AI migration identifiers are deterministic but retain complete digest binding, even when two snapshots reuse the same ordinal', () => {
   const changes = ciImplementationChanges([{ path: 'scripts/ci/check.mjs', status: 'modify' }, { path: 'scripts/delivery/queue-model.mjs', status: 'modify' }], main, head);
   const readable = readableCiChanges(changes);

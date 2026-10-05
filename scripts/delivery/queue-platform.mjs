@@ -73,7 +73,7 @@ export class Platform {
       const sourceYaml = await this.call(`/-/git/raw/${headSha}/.cnb.yml`);
       if (typeof sourceYaml !== 'string') throw new Error('Source CI configuration is unreadable');
       const report = await sourcePipelineReport(sourceYaml, policy, { readLocal: path => this.call(`/-/git/raw/${headSha}/${path}`) });
-      checkErrors.push(...report.errors); ciPolicyChanges = readableCiChanges([...report.changes, ...ciImplementationChanges(compare.files, mainSha, headSha)]);
+      checkErrors.push(...report.errors); ciPolicyChanges = readableCiChanges([...report.changes, ...ciImplementationChanges(compare.files, mainSha, headSha, [...(policy.ciFiles ?? []), ...(report.ciFiles ?? [])])]);
     }
     if (checks) {
       const payload = await this.call(`/-/pulls/${number}/commit-statuses`);
