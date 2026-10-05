@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 204,
+  "revision": 206,
   "tasks": {
     "231": {
       "number": 231,
-      "status": "parked",
+      "status": "aligning",
       "firstSeen": 1791242108737,
       "attempts": {},
       "headSha": "c716c86fa4711570f8c03880006cb50f958085f0",
@@ -84,11 +84,11 @@
       ],
       "ciSince": 1791242108737,
       "updatedAt": 1791242708795,
-      "alignmentCount": 1,
+      "alignmentCount": 2,
       "alignmentIntent": {
         "headSha": "c716c86fa4711570f8c03880006cb50f958085f0",
         "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
-        "at": 1791242108737
+        "at": 1791242708795
       },
       "review": null,
       "error": "主干对齐失败：Command failed: git merge --no-ff --no-edit b2deb741ed16b9fa9d85986974930bcd10530075\n",
@@ -4201,6 +4201,36 @@
       },
       "previous": "36ea1429bcda251da62dd83ab7639b4d6f6a77a5909dbfa132dad0965a91d967",
       "digest": "86fe494d68758ba506b7945d05ce30777fd5edec71972ca622f5d8a336971987"
+    },
+    {
+      "sequence": 205,
+      "at": "2026-10-05T23:25:08.795Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "status": "aligning",
+          "alignmentCount": 2,
+          "alignmentIntent": {
+            "headSha": "c716c86fa4711570f8c03880006cb50f958085f0",
+            "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+            "at": 1791242708795
+          },
+          "review": null
+        }
+      },
+      "previous": "86fe494d68758ba506b7945d05ce30777fd5edec71972ca622f5d8a336971987",
+      "digest": "3e7e535407bf9ed60df0c4e2fd3d5fe73447f2d9741c2dc88a7bc2eea229f823"
+    },
+    {
+      "sequence": 206,
+      "at": "2026-10-05T23:25:11.258Z",
+      "kind": "transaction",
+      "data": {
+        "id": "be527ab0-4f81-4a69-aeba-8a04f5e5978e"
+      },
+      "previous": "3e7e535407bf9ed60df0c4e2fd3d5fe73447f2d9741c2dc88a7bc2eea229f823",
+      "digest": "b35ee81affbc538257c2ee01893921f45260296be98e6894f13b5f2b771637ef"
     }
   ]
 }
