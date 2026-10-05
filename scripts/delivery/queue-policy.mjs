@@ -31,8 +31,11 @@ export const BASE_POLICY = Object.freeze({
 });
 
 function prBranch(config) { return ['main', '**', '$'].find(branch => config?.[branch]?.pull_request !== undefined); }
+export function prPipelines(config) {
+  return config?.[prBranch(config)]?.pull_request;
+}
 function pipelines(config) {
-  const list = config?.[prBranch(config)]?.pull_request;
+  const list = prPipelines(config);
   if (!Array.isArray(list) || !list.length) throw new Error('Trusted main has no PR pipelines');
   const required = list.filter(pipeline => pipeline.allowFailure !== true);
   if (!required.length || required.some(pipeline => !pipeline.name || !Array.isArray(pipeline.stages) || !pipeline.stages.length)) throw new Error('Required PR pipeline configuration is incomplete');

@@ -1,5 +1,5 @@
 import { api, redactCredentials } from '../tools/cnb-api.mjs';
-import { SHA_RE, parseIntent, checksVerdict, hash } from './queue-model.mjs';
+import { SHA_RE, parseIntent, checksVerdict, hash, validRepoSlug } from './queue-model.mjs';
 import { ciImplementationChanges, readableCiChanges, sourcePipelineReport } from './queue-policy.mjs';
 
 function labelSignature(labels) {
@@ -11,6 +11,7 @@ function labelSignature(labels) {
 
 export class Platform {
   constructor(repo, token, request = api) {
+    if (!validRepoSlug(repo)) throw new Error('Invalid repository slug');
     this.repo = repo; this.token = token; this.request = request;
   }
   call(path, options = {}) { return this.request(this.repo, path, { token: this.token, retries: options.method && options.method !== 'GET' ? 0 : 2, ...options }); }

@@ -8,7 +8,7 @@ import { admissionErrors, admitSource, appendEvent, checksVerdict, dependencySta
 import { GitStateStore, git } from './git-state.mjs';
 import { alignBranch, independentCodeBuddyApproval } from './queue-work.mjs';
 import { Platform } from './queue-platform.mjs';
-import { BASE_POLICY, REVIEW_IMAGE, ciImplementationChanges, loadPolicy, parser, readableCiChanges, resolvePipelineConfig, sourcePipelineReport, validateSourcePipeline } from './queue-policy.mjs';
+import { BASE_POLICY, REVIEW_IMAGE, ciImplementationChanges, loadPolicy, parser, prPipelines, readableCiChanges, resolvePipelineConfig, sourcePipelineReport, validateSourcePipeline } from './queue-policy.mjs';
 import { dependencies, integratedDependency, mergeCandidate, reconcile, requestReview, reviewSlotBusy, writeTaskReceipts } from './queue-controller.mjs';
 import { enqueueReleases, reconcileReleases, releaseEventFor, verifyRelease } from './queue-release.mjs';
 import { injectDeliveryConfig } from './install-config.mjs';
@@ -378,9 +378,9 @@ test('genuine rejected batches retain findings without an approval migration rec
 });
 test('required native node-test stages refer to existing repository files', async () => {
   const root = new URL('../../', import.meta.url); const YAML = await parser();
-  const config = YAML.parse(await readFile(new URL('.cnb.yml', root), 'utf8'), { maxAliasCount: 1000 });
+  const config = await resolvePipelineConfig(await readFile(new URL('.cnb.yml', root), 'utf8'), { readLocal: path => readFile(new URL(path, root), 'utf8') });
   let verified = 0;
-  for (const pipeline of (config.main?.pull_request ?? config['**']?.pull_request ?? []).filter(value => value.allowFailure !== true)) {
+  for (const pipeline of (prPipelines(config) ?? []).filter(value => value.allowFailure !== true)) {
     for (const stage of pipeline.stages) {
       for (const line of String(stage.script ?? '').split('\n').filter(value => /node --test /.test(value))) {
         for (const path of line.trim().split(/\s+/).slice(2).filter(value => value.endsWith('.mjs'))) {
@@ -399,7 +399,7 @@ test('bootstrap and trusted-main AI image digests stay bound to the single polic
   const bootstrap = YAML.parse(await readFile(new URL('./bootstrap-cnb.yml', import.meta.url), 'utf8'));
   const targetReview = trusted.main['pull_request.target'].find(pipeline => pipeline.name === 'delivery-ai-review');
   assert.ok(targetReview);
-  const images = [targetReview, bootstrap['**'].pull_request[0]].flatMap(pipeline => pipeline.stages.filter(stage => stage.image).map(stage => stage.image));
+  const images = [targetReview, prPipelines(bootstrap)[0]].flatMap(pipeline => pipeline.stages.filter(stage => stage.image).map(stage => stage.image));
   assert.deepEqual(images, [REVIEW_IMAGE, REVIEW_IMAGE]);
 });
 test('archived actual non-installer CNB run proves exit 78 preserves all independent product pipelines', async () => {
@@ -440,7 +440,7 @@ test('archived actual non-installer CNB run proves exit 78 preserves all indepen
   ]
 };
   const YAML = await parser();
-  const bootstrap = YAML.parse(await readFile(new URL('./bootstrap-cnb.yml', import.meta.url), 'utf8'))['**'].pull_request[0];
+  const bootstrap = prPipelines(YAML.parse(await readFile(new URL('./bootstrap-cnb.yml', import.meta.url), 'utf8')))[0];
   const skipped = spawnSync('sh', ['-c', bootstrap.stages[0].script], { env: { CNB_PULL_REQUEST_BRANCH: proof.branch.replace(/^refs\/heads\//, '') }, encoding: 'utf8' });
   assert.equal(skipped.status, 78);
   assert.deepEqual(checksVerdict({ sha: proof.testedCommit, statuses: proof.statuses }, { sha: proof.testedCommit, parents: proof.parents.map(sha => ({ sha })) }, { headSha: proof.sourceSha, mainSha: proof.mainSha }, ['delivery-bootstrap-review', 'static-gate', 'db-gate', 'ui-gate']), []);
@@ -449,7 +449,7 @@ test('archived actual non-installer CNB run proves exit 78 preserves all indepen
 
 test('installer updates cancel only their own obsolete bootstrap review and do not share the ordinary review lock', async () => {
   const YAML = await parser();
-  const bootstrap = YAML.parse(await readFile(new URL('./bootstrap-cnb.yml', import.meta.url), 'utf8'))['**'].pull_request[0];
+  const bootstrap = prPipelines(YAML.parse(await readFile(new URL('./bootstrap-cnb.yml', import.meta.url), 'utf8')))[0];
   const ordinary = YAML.parse(await readFile(new URL('./cnb.yml', import.meta.url), 'utf8'))['.delivery-review'];
   assert.equal(bootstrap.lock.key, 'workloom-delivery-bootstrap-$CNB_PULL_REQUEST_IID'); assert.equal(bootstrap.lock['cancel-in-progress'], true);
   assert.notEqual(bootstrap.lock.key, ordinary.lock.key); assert.notEqual(ordinary.lock['cancel-in-progress'], true);
@@ -647,6 +647,21 @@ test('unknown merge acknowledgement pauses later integration; never repeats the 
   const platform = { repo, assertCandidateProtection: async () => {}, snapshot: async () => s, pull: async number => number === 1 ? snapshot().pull : s.pull, merge: async () => { writes++; throw new Error('network lost response'); }, error: e => e.message };
   await assert.rejects(mergeCandidate({ platform, store, policy, snapshot: s, dependencies: new Map([[1, { pending: [] }]]), now }), /lost/); assert.equal(writes, 1); assert.equal((await store.read()).tasks['1'].status, 'merging');
   const report = await reconcile({ platform, store, policy, now, services: { reconcileReleases: async () => [] } }); assert.equal(report.failed[0].stage, 'recover-merge'); assert.equal(writes, 1);
+});
+test('an explicit 409 with positive unmerged readback releases integration while unreadable or changed readbacks stay unknown', async () => {
+  for (const mode of ['rejected', 'unreadable', 'changed']) {
+    const s = snapshot(11, { files: ['scripts/ci/protocol-rules.mjs'] }); s.originNumber = 1; s.pull.head.ref = 'delivery/candidate/test';
+    const state = activate(emptyState(repo)); updateTask(state, 1, { status: 'waiting_ci', headSha: head, mainSha: main, originalBody: '', intent, review: review(s) }, now);
+    const store = memoryStore(state); let writes = 0;
+    const platform = { repo, assertCandidateProtection: async () => {}, snapshot: async () => s, error: error => error.message,
+      pull: async number => { if (number === 1) return snapshot().pull; if (mode === 'unreadable') throw new Error('read denied'); return { ...s.pull, is_merged: false, head: { ...s.pull.head, sha: mode === 'changed' ? main : head } }; },
+      merge: async () => { writes++; throw Object.assign(new Error('platform rejected'), { status: 409 }); } };
+    await assert.rejects(mergeCandidate({ platform, store, policy, snapshot: s, dependencies: new Map(), now }), /platform rejected/);
+    const after = await store.read(); assert.equal(writes, 1);
+    assert.equal(after.tasks['1'].status, mode === 'rejected' ? 'waiting_ci' : 'merging');
+    assert.equal(after.leases.protocol.owner, mode === 'rejected' ? null : 'integration/pr-1');
+    assert.equal(after.events.some(event => event.kind === 'merge_rejected'), mode === 'rejected');
+  }
 });
 test('sensitive integration always acquires a fenced lease, even when developers did not opt in', async () => {
   const s = snapshot(11, { files: ['scripts/ci/protocol-rules.mjs'] }); s.originNumber = 1; s.pull.head.ref = 'delivery/candidate/test';

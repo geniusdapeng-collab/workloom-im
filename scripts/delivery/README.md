@@ -130,6 +130,14 @@ UI/桌面页面手动触发和 API 调用均必须显式传入 RELEASE_EXPECTED_
 
 验证：`node --test scripts/delivery/queue.test.mjs scripts/ci/protocol-rules.test.mjs sync/merge-sync-prs.test.mjs scripts/ui-release-registration.test.mjs`。包含真实本地 bare Git 的 CAS 并发、丢失 push 回执、主干对齐/语义冲突，与 AI 覆盖、权限、过期、依赖、失败隔离和冻结发布断言。云端上线另须真实平台检查、AI 和状态回读；本地模拟不算云端成功。
 
+### 账户新增仓持续安装
+
+基座激活后，安装端运行 `node scripts/delivery/install-account.mjs --source-root <基座当前 main 工作区> --directory <专用安装目录> --concurrency 2`。账户扫描读取所有 Owner/active 仓库的完整分页，包含嵌套组织；准确来源必须为当前基座 main，且账本有真实激活回执。每仓使用独立、带所有者标记的干净 clone，保留其他任务的工作树与远端；唯一进程声明文件避免并发安装和失效锁删除竞争。
+
+每仓先完整检查现有 CI，再用确定的资产摘要、任务卡、分支和 PR 幂等恢复。缺 main、冻结、权限失败、检查/AI 未通过分别保存明确状态；一仓失败不停止其他仓。真正 merge、准确双亲、activation 回读成功才计 active。已启用仓的包更新走原生不可修改候选，不重新开启人工计数。最终基座读取失败仍保存已完成回执，并以非零退出标注无法核实当前来源。
+
+Codex chat 的账户安装 heartbeat 负责首次设置权限，每 15 分钟运行同一安装端并恢复未完成项；无变化时保持安静，有实际完成、失败或权限需要处理才通知。它依赖本机 Codex 可用和本任务短期凭据有效，凭据仅注入进程，不进入调度提示、报告、配置或 CI。每仓的已激活集成和发布另由原生 5 分钟调度运行。账户安装状态保存在专用目录的 `latest-report.json`；保存调度成功与真实仓激活是两项分别回读的证据。
+
 ### CNB 语义的实际验证
 
 [官方语法手册](https://docs.cnb.cool/zh/build/grammar.html)规定：退出码 78 表示任务成功并中断当前流水线；include 的数组追加，对象合并，本地配置覆盖引用配置。因此 bootstrap 在非安装分支退出 78 不跳过产品流水线，追加 include 保留既有数组门禁。[真实首装构建 cnb-dm0-1k4545ojq](https://cnb.cool/workloom-ai/workloom-im/-/build/logs/cnb-dm0-1k4545ojq)实际出现 bootstrap、static、db、ui 四条流水线，三条原有门禁成功，AI 失败独立阻断了安装；这证明解析和触发边界，不代表当时 AI 通过或已上线。
