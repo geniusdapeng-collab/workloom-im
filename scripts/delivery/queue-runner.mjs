@@ -79,19 +79,27 @@ export async function requireTrustedRunner(platform, root, env = process.env, lo
   if (head !== (await platform.main()).commit?.sha) throw new Error('Runner is not checked out at current trusted main');
 }
 
+export function verifyInstallerChecks({ state, installer, statuses, tested, requiredNames }) {
+  const prepared = state.events.findLast(event => event.kind === 'installation_prepared' && event.data.installer === installer.number && event.data.headSha === installer.head?.sha);
+  if (!prepared || !SHA_RE.test(prepared.data.mainSha ?? '')) throw new Error('Installer ledger was not prepared for the exact source before merge');
+  const errors = checksVerdict(statuses, tested, { headSha: installer.head.sha, mainSha: prepared.data.mainSha }, [...new Set([...requiredNames, 'delivery-bootstrap-review'])]);
+  if (errors.length) throw new Error(`Installer CI not verified: ${errors.join('; ')}`);
+  return prepared.data;
+}
+
 export async function activate({ platform, store, root, installer }) {
   const cnb = await readFile(resolve(root, '.cnb.yml'), 'utf8');
   if (!cnb.includes('scripts/delivery/cnb.yml')) throw new Error('Trusted main does not include the delivery pipelines');
   const mainSha = (await platform.main()).commit?.sha;
   if (await git(['rev-parse', 'HEAD'], { cwd: root }) !== mainSha) throw new Error('Activation requires current main');
   if (!installer || installer.is_merged !== true) throw new Error('Activation requires a real installer merge receipt');
-  if (!(await store.read()).events.some(event => event.kind === 'installation_prepared' && event.data.installer === installer.number && event.data.headSha === installer.head?.sha)) throw new Error('Installer ledger was not prepared for the exact source before merge');
+  const installationState = await store.read();
   const policy = await loadPolicy(root);
   const statuses = await platform.call(`/-/pulls/${installer.number}/commit-statuses`);
   const tested = await platform.commit(statuses.sha);
-  const parents = tested.parents?.map(parent => parent.sha) ?? [];
-  const checkErrors = checksVerdict(statuses, tested, { headSha: installer.head?.sha, mainSha: parents[0] }, [...policy.requiredNames, 'delivery-bootstrap-review']);
-  if (checkErrors.length) throw new Error(`Installer CI not verified: ${checkErrors.join('; ')}`);
+  const preparation = verifyInstallerChecks({ state: installationState, installer, statuses, tested, requiredNames: policy.requiredNames });
+  await git(['merge-base', '--is-ancestor', installer.head.sha, mainSha], { cwd: root });
+  await git(['merge-base', '--is-ancestor', preparation.mainSha, mainSha], { cwd: root });
   const reviews = await platform.list(`/-/pulls/${installer.number}/reviews`);
   const head = await platform.commit(installer.head.sha);
   const independentApproval = independentCodeBuddyApproval(reviews, installer, Date.parse(head.commit?.committer?.date ?? head.commit?.author?.date));
@@ -110,7 +118,7 @@ export async function activate({ platform, store, root, installer }) {
     if (!after || after.required_master_approve !== false || after.forbid_approve_pull_created_by_own_npc !== true || after.required_status_checks !== true || validateBranchProtection(after).length) throw new Error('Automatic AI approval policy did not read back');
   }
   await ensureStateProtection(platform);
-  await store.mutate(state => appendEvent(state, 'activated', { mainSha, installer: installer.number, policyHash: policy.hash, independentApproval, humanClickRequired: false }));
+  await store.mutate(state => appendEvent(state, 'activated', { mainSha, installer: installer.number, testedMainSha: preparation.mainSha, policyHash: policy.hash, independentApproval, humanClickRequired: false }));
   return { repo: platform.repo, mainSha, policyHash: policy.hash, humanClickRequired: false };
 }
 

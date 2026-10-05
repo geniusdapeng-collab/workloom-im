@@ -13,7 +13,7 @@ import { dependencies, integratedDependency, mergeCandidate, reconcile, requestR
 import { enqueueReleases, reconcileReleases, verifyRelease } from './queue-release.mjs';
 import { injectDeliveryConfig } from './install-config.mjs';
 import { batchEnvironment, batchSnapshot, combineBatchResults, reviewBatches, reviewEnvironment, runReview, validateIssueSchema } from './review-plugin.mjs';
-import { ensureStateProtection, prepareInstallation, requireTrustedRunner, verifyPreparedInstallation } from './queue-runner.mjs';
+import { ensureStateProtection, prepareInstallation, requireTrustedRunner, verifyInstallerChecks, verifyPreparedInstallation } from './queue-runner.mjs';
 import { verifyReleaseSource } from './release-source.mjs';
 const repo = 'workloom-ai/test'; const head = 'a'.repeat(40); const main = 'b'.repeat(40); const mergedSha = 'c'.repeat(40); const testedSha = 'd'.repeat(40); const now = 10_000_000;
 const policy = { ...BASE_POLICY, hash: 'policy-1', requiredNames: ['static-gate'] };
@@ -116,6 +116,17 @@ test('CI must test exact main/source parents and each trusted required pipeline,
   assert.deepEqual(checksVerdict(payload, commit, { headSha: head, mainSha: main }, ['static-gate']), []);
   assert.ok(checksVerdict(payload, { ...commit, parents: [{ sha: head }, { sha: main }] }, { headSha: head, mainSha: main }, ['static-gate']).length);
   for (const statuses of [[], [payload.statuses[0], payload.statuses[0]], [{ ...payload.statuses[0], state: 'pending' }], [{ ...payload.statuses[0], context: 'cnb/push/pipeline-1(static-gate)' }]]) assert.ok(checksVerdict({ ...payload, statuses }, commit, { headSha: head, mainSha: main }, ['static-gate']).length);
+});
+test('installer activation binds tested main to the independent preparation receipt, not a tested parent to itself', () => {
+  const state = emptyState(repo); const installer = { number: 234, head: { sha: head } };
+  appendEvent(state, 'installation_prepared', { installer: 234, headSha: head, mainSha: main });
+  const statuses = { sha: testedSha, statuses: ['static-gate', 'delivery-bootstrap-review'].map(name => ({ context: `cnb/pull_request/pipeline-1(${name})`, state: 'success' })) };
+  const tested = { sha: testedSha, parents: [{ sha: main }, { sha: head }] };
+  const input = { state, installer, statuses, tested, requiredNames: ['static-gate'] };
+  assert.equal(verifyInstallerChecks(input).mainSha, main);
+  assert.throws(() => verifyInstallerChecks({ ...input, tested: { ...tested, parents: [{ sha: mergedSha }, { sha: head }] } }), /source\/main pair/);
+  assert.throws(() => verifyInstallerChecks({ ...input, state: emptyState(repo) }), /prepared/);
+  assert.throws(() => verifyInstallerChecks({ ...input, installer: { ...installer, head: { sha: main } } }), /prepared/);
 });
 test('eligibility rejects draft/block/expired review/wrong main/unhanded head even with green CI', () => {
   const s = snapshot(); assert.deepEqual(eligibility(s, { review: review(s) }, policy, now), []);
