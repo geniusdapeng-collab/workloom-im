@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 116,
+  "revision": 122,
   "tasks": {
     "236": {
       "number": 236,
@@ -27,34 +27,34 @@
       "attempts": {},
       "admission": {
         "number": 238,
-        "headSha": "e318163c6adc820c7a76ab7a0132f825dc8c9284",
+        "headSha": "db000693c8ee2ba68c13ec077650abc247e28da1",
         "mainSha": "e35625d856697ba95edf7cde8d294b35cea0de2f",
-        "filesHash": "68f7018b08c1900dedd04df6a8df0c7f8a2084fc3e1ec8853ac6d07d1a8a07f3",
+        "filesHash": "9ff91af2e53921fb2fa8c676a2a125f35955ecff6f98db55c12127e85385315c",
         "scopes": [
           "protocol",
           "sync"
         ],
         "owner": "admission/pr-238",
         "generation": {
-          "protocol": 9,
-          "sync": 9
+          "protocol": 10,
+          "sync": 10
         }
       },
-      "updatedAt": 1791205527037
+      "updatedAt": 1791205848562
     }
   },
   "leases": {
     "protocol": {
       "owner": null,
-      "generation": 9,
-      "acquiredAt": 1791205527037,
-      "expiresAt": 1791205527037
+      "generation": 10,
+      "acquiredAt": 1791205848562,
+      "expiresAt": 1791205848562
     },
     "sync": {
       "owner": null,
-      "generation": 9,
-      "acquiredAt": 1791205527037,
-      "expiresAt": 1791205527037
+      "generation": 10,
+      "acquiredAt": 1791205848562,
+      "expiresAt": 1791205848562
     }
   },
   "releases": {},
@@ -1831,6 +1831,113 @@
       },
       "previous": "575d8d9f9ea26ef734b8c0ff700529dcaa1f8bd18b33a769a59d8c9a45977f2c",
       "digest": "bba0e0e1881ba8d9d99c5e7fb1d5e48ed090d60e4e624381e8c3dd7d73bb0c3b"
+    },
+    {
+      "sequence": 117,
+      "at": "2026-10-05T13:10:48.562Z",
+      "kind": "lease_acquire",
+      "data": {
+        "scopes": [
+          "protocol",
+          "sync"
+        ],
+        "owner": "admission/pr-238",
+        "generation": {
+          "protocol": 10,
+          "sync": 10
+        }
+      },
+      "previous": "bba0e0e1881ba8d9d99c5e7fb1d5e48ed090d60e4e624381e8c3dd7d73bb0c3b",
+      "digest": "e1ef65332a3b401979f444f74826aff6eab19a55550b7e39ec1ab522ecd8abcc"
+    },
+    {
+      "sequence": 118,
+      "at": "2026-10-05T13:10:48.562Z",
+      "kind": "lease_release",
+      "data": {
+        "scopes": [
+          "protocol",
+          "sync"
+        ],
+        "owner": "admission/pr-238",
+        "generation": {
+          "protocol": 10,
+          "sync": 10
+        }
+      },
+      "previous": "e1ef65332a3b401979f444f74826aff6eab19a55550b7e39ec1ab522ecd8abcc",
+      "digest": "badf3350a49d220a52ffb2738d22b9309adc9d650b887f133aafcb5b23d69a3e"
+    },
+    {
+      "sequence": 119,
+      "at": "2026-10-05T13:10:48.562Z",
+      "kind": "source_admitted",
+      "data": {
+        "number": 238,
+        "headSha": "db000693c8ee2ba68c13ec077650abc247e28da1",
+        "mainSha": "e35625d856697ba95edf7cde8d294b35cea0de2f",
+        "filesHash": "9ff91af2e53921fb2fa8c676a2a125f35955ecff6f98db55c12127e85385315c",
+        "scopes": [
+          "protocol",
+          "sync"
+        ],
+        "owner": "admission/pr-238",
+        "generation": {
+          "protocol": 10,
+          "sync": 10
+        }
+      },
+      "previous": "badf3350a49d220a52ffb2738d22b9309adc9d650b887f133aafcb5b23d69a3e",
+      "digest": "b9d35fe5b261b721f679ba8c01a1d4ce98d75dee10192ce299da7dca41592ed4"
+    },
+    {
+      "sequence": 120,
+      "at": "2026-10-05T13:10:48.562Z",
+      "kind": "task",
+      "data": {
+        "number": 238,
+        "patch": {
+          "admission": {
+            "number": 238,
+            "headSha": "db000693c8ee2ba68c13ec077650abc247e28da1",
+            "mainSha": "e35625d856697ba95edf7cde8d294b35cea0de2f",
+            "filesHash": "9ff91af2e53921fb2fa8c676a2a125f35955ecff6f98db55c12127e85385315c",
+            "scopes": [
+              "protocol",
+              "sync"
+            ],
+            "owner": "admission/pr-238",
+            "generation": {
+              "protocol": 10,
+              "sync": 10
+            }
+          }
+        }
+      },
+      "previous": "b9d35fe5b261b721f679ba8c01a1d4ce98d75dee10192ce299da7dca41592ed4",
+      "digest": "a3b88280e7f0cfca960052161f5a657ad490b6a810543ad2b6c218fec22ca22a"
+    },
+    {
+      "sequence": 121,
+      "at": "2026-10-05T13:10:48.564Z",
+      "kind": "installation_prepared",
+      "data": {
+        "installer": 238,
+        "headSha": "db000693c8ee2ba68c13ec077650abc247e28da1",
+        "mainSha": "e35625d856697ba95edf7cde8d294b35cea0de2f"
+      },
+      "previous": "a3b88280e7f0cfca960052161f5a657ad490b6a810543ad2b6c218fec22ca22a",
+      "digest": "d18b694c86ba4f6fe7bad9b2573ccfe2119ab247e065374116df6ce61f8b64f8"
+    },
+    {
+      "sequence": 122,
+      "at": "2026-10-05T13:10:47.553Z",
+      "kind": "transaction",
+      "data": {
+        "id": "install-state:238:db000693c8ee2ba68c13ec077650abc247e28da1"
+      },
+      "previous": "d18b694c86ba4f6fe7bad9b2573ccfe2119ab247e065374116df6ce61f8b64f8",
+      "digest": "d5ca8af6478876028df929f9354bb86ee0335ec98deb367d5e9a827b4460ff2a"
     }
   ]
 }
