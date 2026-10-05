@@ -37,6 +37,15 @@ export async function reviewEnvironment(root, env = process.env) {
   };
 }
 
+/** Model tools must never inherit the independent platform approval identity. */
+export function batchEnvironment(env) {
+  const child = { ...env };
+  for (const key of Object.keys(child)) {
+    if (key !== 'CNB_TOKEN' && /(?:TOKEN|SECRET|PASSWORD|CREDENTIAL|PRIVATE_KEY)/i.test(key)) delete child[key];
+  }
+  return child;
+}
+
 export function reviewBatches(files) {
   if (!Array.isArray(files) || !files.length || files.some(path => typeof path !== 'string' || !path || path.includes('\0')) || new Set(files).size !== files.length) throw new Error('Invalid review file coverage');
   const sorted = [...files].sort();
@@ -100,7 +109,7 @@ function logStream(stream, destination, token) {
 
 async function nativeChild(mode, root, index, deadline, env) {
   await new Promise((accept, reject) => {
-    const child = spawn(process.execPath, [SELF, mode, String(index), root], { env: { ...env, DELIVERY_REVIEW_DEADLINE_MS: String(deadline) }, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(process.execPath, [SELF, mode, String(index), root], { env: { ...(mode === '--batch' ? batchEnvironment(env) : env), DELIVERY_REVIEW_DEADLINE_MS: String(deadline) }, stdio: ['ignore', 'pipe', 'pipe'] });
     const remaining = Math.max(1, deadline - Date.now());
     const timer = setTimeout(() => child.kill('SIGTERM'), remaining);
     const killTimer = setTimeout(() => child.kill('SIGKILL'), remaining + 10_000);

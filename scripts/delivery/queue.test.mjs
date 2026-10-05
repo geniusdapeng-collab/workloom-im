@@ -12,7 +12,7 @@ import { BASE_POLICY, ciImplementationChanges, parser, sourcePipelineReport, val
 import { dependencies, integratedDependency, mergeCandidate, reconcile, requestReview, writeTaskReceipts } from './queue-controller.mjs';
 import { enqueueReleases, reconcileReleases, verifyRelease } from './queue-release.mjs';
 import { injectDeliveryConfig } from './install-config.mjs';
-import { batchSnapshot, combineBatchResults, reviewBatches, reviewEnvironment, runReview, validateIssueSchema } from './review-plugin.mjs';
+import { batchEnvironment, batchSnapshot, combineBatchResults, reviewBatches, reviewEnvironment, runReview, validateIssueSchema } from './review-plugin.mjs';
 import { requireTrustedRunner } from './queue-runner.mjs';
 import { verifyReleaseSource } from './release-source.mjs';
 const repo = 'workloom-ai/test'; const head = 'a'.repeat(40); const main = 'b'.repeat(40); const mergedSha = 'c'.repeat(40); const testedSha = 'd'.repeat(40); const now = 10_000_000;
@@ -169,6 +169,11 @@ test('AI batch coverage cannot truncate, duplicate or reuse another source/main 
   for (const patch of [{ reviewed_files: batches[1] }, { reviewed_files: batches[0].slice(1) }, { head_sha: main }]) assert.throws(() => combineBatchResults(manifest, [{ ...outputs[0], ...patch }, ...outputs.slice(1)]));
   const rejected = combineBatchResults(manifest, [{ ...outputs[0], status: 'critical', issues: [{ severity: 'critical', file: s.files[0], start_line: 1, end_line: 1, problem: 'real regression', suggestion: 'fix the regression' }] }, ...outputs.slice(1)]);
   assert.equal(rejected.status, 'critical'); assert.equal(rejected.issues.length, 1);
+});
+test('model tool subprocess excludes approval and unrelated secrets without mutating the publisher environment', () => {
+  const env = { CNB_TOKEN: 'gateway', CNB_TOKEN_FOR_CODEBUDDY: 'approve', CNB_TOKEN_FOR_AI: 'approve2', NPM_TOKEN: 'npm', DATABASE_PASSWORD: 'db', PATH: '/bin', CNB_REPO_SLUG: repo };
+  assert.deepEqual(batchEnvironment(env), { CNB_TOKEN: 'gateway', PATH: '/bin', CNB_REPO_SLUG: repo });
+  assert.equal(env.CNB_TOKEN_FOR_CODEBUDDY, 'approve'); assert.equal(env.CNB_TOKEN_FOR_AI, 'approve2');
 });
 test('CI review receipts are assigned to the responsible batch and collected without omission or duplication', () => {
   const files = Array.from({ length: 61 }, (_, index) => `source/${String(index).padStart(2, '0')}.ts`);
