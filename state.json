@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 219,
+  "revision": 221,
   "tasks": {
     "231": {
       "number": 231,
@@ -308,13 +308,14 @@
         }
       },
       "recoveryCount": 1,
-      "recoveryIntent": {
-        "headSha": "9705852b0dc1fdfb54d87a22c473bbb10e2ebc20",
-        "reason": "检查/评审阻断：Required check static-gate missing/failed/ambiguous; Required check db-gate missing/failed/ambiguous; No current complete AI review",
-        "at": 1791243007261
-      },
+      "recoveryIntent": null,
       "error": "检查/评审阻断：Required check static-gate missing/failed/ambiguous; Required check db-gate missing/failed/ambiguous; No current complete AI review",
-      "blockedUntil": 1791243607261
+      "blockedUntil": 1791243607261,
+      "recovery": {
+        "marker": "delivery-repair:0c2c07091d532cd4e0e8b72b",
+        "reviewId": "2107252041840238592",
+        "dispatchedAt": 1791243012389
+      }
     },
     "236": {
       "number": 236,
@@ -4635,6 +4636,34 @@
       },
       "previous": "03c6a3ed8078222a820d90f98e10bf41680098cb06dde94d727edbef57c56c0e",
       "digest": "66f1fc48bd4e58792bf6dfb8c2c557bc76ebd49692675e59ce0610b97e4e189f"
+    },
+    {
+      "sequence": 220,
+      "at": "2026-10-05T23:30:07.261Z",
+      "kind": "task",
+      "data": {
+        "number": 232,
+        "patch": {
+          "recovery": {
+            "marker": "delivery-repair:0c2c07091d532cd4e0e8b72b",
+            "reviewId": "2107252041840238592",
+            "dispatchedAt": 1791243012389
+          },
+          "recoveryIntent": null
+        }
+      },
+      "previous": "66f1fc48bd4e58792bf6dfb8c2c557bc76ebd49692675e59ce0610b97e4e189f",
+      "digest": "44351d930f947e23ec46ec989364a50230d1f7e31a479a688658c6fc6bdefce6"
+    },
+    {
+      "sequence": 221,
+      "at": "2026-10-05T23:30:12.389Z",
+      "kind": "transaction",
+      "data": {
+        "id": "033ab80a-0703-409b-af71-074d045aad66"
+      },
+      "previous": "44351d930f947e23ec46ec989364a50230d1f7e31a479a688658c6fc6bdefce6",
+      "digest": "b47a7c7e99424882be11daca2771b49d840b6c35370f66da5b6a604eb4bbfd1f"
     }
   ]
 }
