@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 282,
+  "revision": 285,
   "tasks": {
     "231": {
       "number": 231,
@@ -336,7 +336,7 @@
     },
     "236": {
       "number": 236,
-      "status": "waiting_ci",
+      "status": "merging",
       "firstSeen": 1791201701860,
       "attempts": {},
       "headSha": "39a95964f70eeb7093be45ec73f9172511097f96",
@@ -575,6 +575,341 @@
         "marker": "delivery-repair:d8c5a710e55421651d2ff42c",
         "reviewId": "2107249528537784320",
         "dispatchedAt": 1791242413165
+      },
+      "mergePhase": "prepared",
+      "mergeSnapshot": {
+        "number": 241,
+        "pull": {
+          "number": 241,
+          "state": "open",
+          "title": "chore(ci): deliver #236 feat(base): 账户新仓自动安装研发交付 [T-2026-1005-2000]",
+          "body": "Immutable delivery candidate for #236. Exact source 39a95964f70eeb7093be45ec73f9172511097f96; tested main b2deb741ed16b9fa9d85986974930bcd10530075.\n\n<!-- delivery-origin:236:39a95964f70eeb7093be45ec73f9172511097f96:b2deb741ed16b9fa9d85986974930bcd10530075 -->\n\n<!-- workloom-delivery\n{\"ready\":true,\"depends_on\":[239],\"releases\":[]}\n-->",
+          "author": {
+            "username": "OCI",
+            "nickname": "Cloud Native Build",
+            "is_npc": true
+          },
+          "reviewers": [],
+          "labels": [],
+          "base": {
+            "ref": "refs/heads/main",
+            "sha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+            "repo": {
+              "id": "2100396957109968896",
+              "name": "workloom-im",
+              "path": "workloom-ai/workloom-im",
+              "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+            }
+          },
+          "head": {
+            "ref": "refs/heads/delivery/candidate/pr-236-eca0ea51108f9fd97719b68e191fe52b",
+            "sha": "39a95964f70eeb7093be45ec73f9172511097f96",
+            "repo": {
+              "id": "2100396957109968896",
+              "name": "workloom-im",
+              "path": "workloom-ai/workloom-im",
+              "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+            }
+          },
+          "blocked_on": "unblocked",
+          "merged_by": {
+            "is_npc": false
+          },
+          "mergeable_state": "mergeable",
+          "is_wip": false,
+          "is_merged": false,
+          "is_force_merged": false,
+          "statuses": {}
+        },
+        "headSha": "39a95964f70eeb7093be45ec73f9172511097f96",
+        "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+        "files": [
+          "scripts/delivery/README.md",
+          "scripts/delivery/git-state.mjs",
+          "scripts/delivery/install-account.mjs",
+          "scripts/delivery/install-account.test.mjs",
+          "scripts/delivery/install-assets.mjs",
+          "scripts/delivery/install-protocol.mjs",
+          "scripts/delivery/install-repository.mjs",
+          "scripts/delivery/install-repository.test.mjs",
+          "scripts/delivery/model-gateway.mjs",
+          "scripts/delivery/queue-controller.mjs",
+          "scripts/delivery/queue-model.mjs",
+          "scripts/delivery/queue-platform.mjs",
+          "scripts/delivery/queue-policy.mjs",
+          "scripts/delivery/queue.test.mjs",
+          "sync/base-sync.test.mjs",
+          "sync/fanout-cnb.mjs",
+          "sync/fanout-rules.test.mjs"
+        ],
+        "intent": {
+          "taskId": "T-2026-1005-2000",
+          "ready": true,
+          "dependsOn": [
+            239
+          ],
+          "releases": []
+        },
+        "headTime": 1791243628000,
+        "mergeBase": "b2deb741ed16b9fa9d85986974930bcd10530075",
+        "checkErrors": [],
+        "checkSha": "1bd120a2a5de4347f2f5cebfeb2c49f5ce0b292b",
+        "hasFailedChecks": false,
+        "ciPolicyChanges": [
+          {
+            "id": "CI-001",
+            "file": "scripts/delivery/queue-policy.mjs",
+            "before": {
+              "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+              "path": "scripts/delivery/queue-policy.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+              "path": "scripts/delivery/queue-policy.mjs",
+              "absent": false
+            },
+            "digest": "0edf759f7f6cd04ed4f2aceee92562fcc1d0ece2907622b3cf8ce88a3943d556"
+          },
+          {
+            "id": "CI-002",
+            "file": "scripts/delivery/queue.test.mjs",
+            "before": {
+              "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+              "path": "scripts/delivery/queue.test.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+              "path": "scripts/delivery/queue.test.mjs",
+              "absent": false
+            },
+            "digest": "11225046085034cd4976f777e396ea9cfe1100fb4ca074c4aa52473d38fb35fc"
+          },
+          {
+            "id": "CI-003",
+            "file": "scripts/delivery/install-repository.test.mjs",
+            "before": {
+              "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+              "path": "scripts/delivery/install-repository.test.mjs",
+              "absent": true
+            },
+            "after": {
+              "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+              "path": "scripts/delivery/install-repository.test.mjs",
+              "absent": false
+            },
+            "digest": "146482d3c7be110fb6200980fc2c1a5d8032f027f0f2be8997359f8cdd65b6cc"
+          },
+          {
+            "id": "CI-004",
+            "file": "scripts/delivery/install-account.test.mjs",
+            "before": {
+              "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+              "path": "scripts/delivery/install-account.test.mjs",
+              "absent": true
+            },
+            "after": {
+              "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+              "path": "scripts/delivery/install-account.test.mjs",
+              "absent": false
+            },
+            "digest": "163ed4f61d8ef6a0a930602723ae4d137ca3b74084ab4615d407f80c9d38b575"
+          },
+          {
+            "id": "CI-005",
+            "file": "scripts/delivery/install-repository.mjs",
+            "before": {
+              "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+              "path": "scripts/delivery/install-repository.mjs",
+              "absent": true
+            },
+            "after": {
+              "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+              "path": "scripts/delivery/install-repository.mjs",
+              "absent": false
+            },
+            "digest": "481c77c462820eaf3141579faa4ca7e2fb7017136755ccab104e0748793b7c7e"
+          },
+          {
+            "id": "CI-006",
+            "file": "scripts/delivery/install-protocol.mjs",
+            "before": {
+              "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+              "path": "scripts/delivery/install-protocol.mjs",
+              "absent": true
+            },
+            "after": {
+              "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+              "path": "scripts/delivery/install-protocol.mjs",
+              "absent": false
+            },
+            "digest": "5934e7b4b2f40ec0081f2d77bbb5a9e4937e8189a19b67c1fd57ec97bafb8860"
+          },
+          {
+            "id": "CI-007",
+            "file": "scripts/delivery/queue-model.mjs",
+            "before": {
+              "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+              "path": "scripts/delivery/queue-model.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+              "path": "scripts/delivery/queue-model.mjs",
+              "absent": false
+            },
+            "digest": "5e9528ce8cc8fd3ce5d0808e380c735a6ced8ce285d32ab9063b75bf1f47fa22"
+          },
+          {
+            "id": "CI-008",
+            "file": "scripts/delivery/model-gateway.mjs",
+            "before": {
+              "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+              "path": "scripts/delivery/model-gateway.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+              "path": "scripts/delivery/model-gateway.mjs",
+              "absent": false
+            },
+            "digest": "68ae657c21f4522b89fc5567205b6da7e568f0d1bdff468686f0c724c3f0f785"
+          },
+          {
+            "id": "CI-009",
+            "file": "scripts/delivery/git-state.mjs",
+            "before": {
+              "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+              "path": "scripts/delivery/git-state.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+              "path": "scripts/delivery/git-state.mjs",
+              "absent": false
+            },
+            "digest": "71ae9f5d0144123fd109af88aec3b76e12b5e5f48345b449342464f5a77047b3"
+          },
+          {
+            "id": "CI-010",
+            "file": "scripts/delivery/queue-controller.mjs",
+            "before": {
+              "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+              "path": "scripts/delivery/queue-controller.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+              "path": "scripts/delivery/queue-controller.mjs",
+              "absent": false
+            },
+            "digest": "83526edac9ca9d48251bebd09034fad9bf94d29ea50474de67d94cefdaaa353d"
+          },
+          {
+            "id": "CI-011",
+            "file": "scripts/delivery/install-account.mjs",
+            "before": {
+              "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+              "path": "scripts/delivery/install-account.mjs",
+              "absent": true
+            },
+            "after": {
+              "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+              "path": "scripts/delivery/install-account.mjs",
+              "absent": false
+            },
+            "digest": "93c3aa161631fd8598f5026d30c0d06dea42d6e5fdebaa87f83ab8605e8f5484"
+          },
+          {
+            "id": "CI-012",
+            "file": "scripts/delivery/queue-platform.mjs",
+            "before": {
+              "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+              "path": "scripts/delivery/queue-platform.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+              "path": "scripts/delivery/queue-platform.mjs",
+              "absent": false
+            },
+            "digest": "93e14acd4c1891c5395ee91e9daff65715ca0ae15c5059a857fb1729b16d3773"
+          },
+          {
+            "id": "CI-013",
+            "file": "sync/base-sync.test.mjs",
+            "before": {
+              "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+              "path": "sync/base-sync.test.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+              "path": "sync/base-sync.test.mjs",
+              "absent": false
+            },
+            "digest": "a28b06be16556eeaa7d9a1fcf159449d844fbefb4db70c4155f7e2d64b931fba"
+          },
+          {
+            "id": "CI-014",
+            "file": "sync/fanout-cnb.mjs",
+            "before": {
+              "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+              "path": "sync/fanout-cnb.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+              "path": "sync/fanout-cnb.mjs",
+              "absent": false
+            },
+            "digest": "c6ea622ef58f433388e308f976c3086cafad024e3d456e4e077db0921ae14c64"
+          },
+          {
+            "id": "CI-015",
+            "file": "scripts/delivery/install-assets.mjs",
+            "before": {
+              "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+              "path": "scripts/delivery/install-assets.mjs",
+              "absent": true
+            },
+            "after": {
+              "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+              "path": "scripts/delivery/install-assets.mjs",
+              "absent": false
+            },
+            "digest": "caaef18242c5333782030c84802e3c3ee83f4486795b5bb84b395a3c46366cb2"
+          },
+          {
+            "id": "CI-016",
+            "file": "sync/fanout-rules.test.mjs",
+            "before": {
+              "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+              "path": "sync/fanout-rules.test.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+              "path": "sync/fanout-rules.test.mjs",
+              "absent": false
+            },
+            "digest": "e4130a8892205691af545b3d03972c227989ff6ac6a48c6d6ad25dcec36d0af9"
+          }
+        ],
+        "originNumber": 236,
+        "pendingDependencies": []
+      },
+      "integrationLease": {
+        "owner": "integration/pr-236",
+        "scopes": [
+          "protocol",
+          "sync"
+        ],
+        "generation": {
+          "protocol": 24,
+          "sync": 22
+        }
       }
     },
     "238": {
@@ -1101,16 +1436,16 @@
   },
   "leases": {
     "protocol": {
-      "owner": null,
-      "generation": 23,
-      "acquiredAt": 1791243918464,
-      "expiresAt": 1791243918464
+      "owner": "integration/pr-236",
+      "generation": 24,
+      "acquiredAt": 1791244209411,
+      "expiresAt": 1791245109411
     },
     "sync": {
-      "owner": null,
-      "generation": 21,
-      "acquiredAt": 1791243918464,
-      "expiresAt": 1791243918464
+      "owner": "integration/pr-236",
+      "generation": 22,
+      "acquiredAt": 1791244209411,
+      "expiresAt": 1791245109411
     },
     "dependencies": {
       "owner": null,
@@ -7268,6 +7603,382 @@
       },
       "previous": "916b8b7782702fc6e7900d289bb644e8501c1da5973bf3a50000e57bef106565",
       "digest": "b3519ce0d06f9319fce328bf9ed0dab16b6da12c2dd47a45506ec4d17644afff"
+    },
+    {
+      "sequence": 283,
+      "at": "2026-10-05T23:50:09.411Z",
+      "kind": "lease_acquire",
+      "data": {
+        "scopes": [
+          "protocol",
+          "sync"
+        ],
+        "owner": "integration/pr-236",
+        "generation": {
+          "protocol": 24,
+          "sync": 22
+        }
+      },
+      "previous": "b3519ce0d06f9319fce328bf9ed0dab16b6da12c2dd47a45506ec4d17644afff",
+      "digest": "8c0150620d0ab817a421ffc92d005bba11a4e39bc7f382063a3d4d3db95f21d7"
+    },
+    {
+      "sequence": 284,
+      "at": "2026-10-05T23:50:09.411Z",
+      "kind": "task",
+      "data": {
+        "number": 236,
+        "patch": {
+          "status": "merging",
+          "mergePhase": "prepared",
+          "mergeSnapshot": {
+            "number": 241,
+            "pull": {
+              "number": 241,
+              "state": "open",
+              "title": "chore(ci): deliver #236 feat(base): 账户新仓自动安装研发交付 [T-2026-1005-2000]",
+              "body": "Immutable delivery candidate for #236. Exact source 39a95964f70eeb7093be45ec73f9172511097f96; tested main b2deb741ed16b9fa9d85986974930bcd10530075.\n\n<!-- delivery-origin:236:39a95964f70eeb7093be45ec73f9172511097f96:b2deb741ed16b9fa9d85986974930bcd10530075 -->\n\n<!-- workloom-delivery\n{\"ready\":true,\"depends_on\":[239],\"releases\":[]}\n-->",
+              "author": {
+                "username": "OCI",
+                "nickname": "Cloud Native Build",
+                "is_npc": true
+              },
+              "reviewers": [],
+              "labels": [],
+              "base": {
+                "ref": "refs/heads/main",
+                "sha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+                "repo": {
+                  "id": "2100396957109968896",
+                  "name": "workloom-im",
+                  "path": "workloom-ai/workloom-im",
+                  "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+                }
+              },
+              "head": {
+                "ref": "refs/heads/delivery/candidate/pr-236-eca0ea51108f9fd97719b68e191fe52b",
+                "sha": "39a95964f70eeb7093be45ec73f9172511097f96",
+                "repo": {
+                  "id": "2100396957109968896",
+                  "name": "workloom-im",
+                  "path": "workloom-ai/workloom-im",
+                  "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+                }
+              },
+              "blocked_on": "unblocked",
+              "merged_by": {
+                "is_npc": false
+              },
+              "mergeable_state": "mergeable",
+              "is_wip": false,
+              "is_merged": false,
+              "is_force_merged": false,
+              "statuses": {}
+            },
+            "headSha": "39a95964f70eeb7093be45ec73f9172511097f96",
+            "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+            "files": [
+              "scripts/delivery/README.md",
+              "scripts/delivery/git-state.mjs",
+              "scripts/delivery/install-account.mjs",
+              "scripts/delivery/install-account.test.mjs",
+              "scripts/delivery/install-assets.mjs",
+              "scripts/delivery/install-protocol.mjs",
+              "scripts/delivery/install-repository.mjs",
+              "scripts/delivery/install-repository.test.mjs",
+              "scripts/delivery/model-gateway.mjs",
+              "scripts/delivery/queue-controller.mjs",
+              "scripts/delivery/queue-model.mjs",
+              "scripts/delivery/queue-platform.mjs",
+              "scripts/delivery/queue-policy.mjs",
+              "scripts/delivery/queue.test.mjs",
+              "sync/base-sync.test.mjs",
+              "sync/fanout-cnb.mjs",
+              "sync/fanout-rules.test.mjs"
+            ],
+            "intent": {
+              "taskId": "T-2026-1005-2000",
+              "ready": true,
+              "dependsOn": [
+                239
+              ],
+              "releases": []
+            },
+            "headTime": 1791243628000,
+            "mergeBase": "b2deb741ed16b9fa9d85986974930bcd10530075",
+            "checkErrors": [],
+            "checkSha": "1bd120a2a5de4347f2f5cebfeb2c49f5ce0b292b",
+            "hasFailedChecks": false,
+            "ciPolicyChanges": [
+              {
+                "id": "CI-001",
+                "file": "scripts/delivery/queue-policy.mjs",
+                "before": {
+                  "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+                  "path": "scripts/delivery/queue-policy.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+                  "path": "scripts/delivery/queue-policy.mjs",
+                  "absent": false
+                },
+                "digest": "0edf759f7f6cd04ed4f2aceee92562fcc1d0ece2907622b3cf8ce88a3943d556"
+              },
+              {
+                "id": "CI-002",
+                "file": "scripts/delivery/queue.test.mjs",
+                "before": {
+                  "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+                  "path": "scripts/delivery/queue.test.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+                  "path": "scripts/delivery/queue.test.mjs",
+                  "absent": false
+                },
+                "digest": "11225046085034cd4976f777e396ea9cfe1100fb4ca074c4aa52473d38fb35fc"
+              },
+              {
+                "id": "CI-003",
+                "file": "scripts/delivery/install-repository.test.mjs",
+                "before": {
+                  "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+                  "path": "scripts/delivery/install-repository.test.mjs",
+                  "absent": true
+                },
+                "after": {
+                  "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+                  "path": "scripts/delivery/install-repository.test.mjs",
+                  "absent": false
+                },
+                "digest": "146482d3c7be110fb6200980fc2c1a5d8032f027f0f2be8997359f8cdd65b6cc"
+              },
+              {
+                "id": "CI-004",
+                "file": "scripts/delivery/install-account.test.mjs",
+                "before": {
+                  "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+                  "path": "scripts/delivery/install-account.test.mjs",
+                  "absent": true
+                },
+                "after": {
+                  "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+                  "path": "scripts/delivery/install-account.test.mjs",
+                  "absent": false
+                },
+                "digest": "163ed4f61d8ef6a0a930602723ae4d137ca3b74084ab4615d407f80c9d38b575"
+              },
+              {
+                "id": "CI-005",
+                "file": "scripts/delivery/install-repository.mjs",
+                "before": {
+                  "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+                  "path": "scripts/delivery/install-repository.mjs",
+                  "absent": true
+                },
+                "after": {
+                  "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+                  "path": "scripts/delivery/install-repository.mjs",
+                  "absent": false
+                },
+                "digest": "481c77c462820eaf3141579faa4ca7e2fb7017136755ccab104e0748793b7c7e"
+              },
+              {
+                "id": "CI-006",
+                "file": "scripts/delivery/install-protocol.mjs",
+                "before": {
+                  "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+                  "path": "scripts/delivery/install-protocol.mjs",
+                  "absent": true
+                },
+                "after": {
+                  "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+                  "path": "scripts/delivery/install-protocol.mjs",
+                  "absent": false
+                },
+                "digest": "5934e7b4b2f40ec0081f2d77bbb5a9e4937e8189a19b67c1fd57ec97bafb8860"
+              },
+              {
+                "id": "CI-007",
+                "file": "scripts/delivery/queue-model.mjs",
+                "before": {
+                  "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+                  "path": "scripts/delivery/queue-model.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+                  "path": "scripts/delivery/queue-model.mjs",
+                  "absent": false
+                },
+                "digest": "5e9528ce8cc8fd3ce5d0808e380c735a6ced8ce285d32ab9063b75bf1f47fa22"
+              },
+              {
+                "id": "CI-008",
+                "file": "scripts/delivery/model-gateway.mjs",
+                "before": {
+                  "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+                  "path": "scripts/delivery/model-gateway.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+                  "path": "scripts/delivery/model-gateway.mjs",
+                  "absent": false
+                },
+                "digest": "68ae657c21f4522b89fc5567205b6da7e568f0d1bdff468686f0c724c3f0f785"
+              },
+              {
+                "id": "CI-009",
+                "file": "scripts/delivery/git-state.mjs",
+                "before": {
+                  "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+                  "path": "scripts/delivery/git-state.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+                  "path": "scripts/delivery/git-state.mjs",
+                  "absent": false
+                },
+                "digest": "71ae9f5d0144123fd109af88aec3b76e12b5e5f48345b449342464f5a77047b3"
+              },
+              {
+                "id": "CI-010",
+                "file": "scripts/delivery/queue-controller.mjs",
+                "before": {
+                  "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+                  "path": "scripts/delivery/queue-controller.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+                  "path": "scripts/delivery/queue-controller.mjs",
+                  "absent": false
+                },
+                "digest": "83526edac9ca9d48251bebd09034fad9bf94d29ea50474de67d94cefdaaa353d"
+              },
+              {
+                "id": "CI-011",
+                "file": "scripts/delivery/install-account.mjs",
+                "before": {
+                  "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+                  "path": "scripts/delivery/install-account.mjs",
+                  "absent": true
+                },
+                "after": {
+                  "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+                  "path": "scripts/delivery/install-account.mjs",
+                  "absent": false
+                },
+                "digest": "93c3aa161631fd8598f5026d30c0d06dea42d6e5fdebaa87f83ab8605e8f5484"
+              },
+              {
+                "id": "CI-012",
+                "file": "scripts/delivery/queue-platform.mjs",
+                "before": {
+                  "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+                  "path": "scripts/delivery/queue-platform.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+                  "path": "scripts/delivery/queue-platform.mjs",
+                  "absent": false
+                },
+                "digest": "93e14acd4c1891c5395ee91e9daff65715ca0ae15c5059a857fb1729b16d3773"
+              },
+              {
+                "id": "CI-013",
+                "file": "sync/base-sync.test.mjs",
+                "before": {
+                  "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+                  "path": "sync/base-sync.test.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+                  "path": "sync/base-sync.test.mjs",
+                  "absent": false
+                },
+                "digest": "a28b06be16556eeaa7d9a1fcf159449d844fbefb4db70c4155f7e2d64b931fba"
+              },
+              {
+                "id": "CI-014",
+                "file": "sync/fanout-cnb.mjs",
+                "before": {
+                  "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+                  "path": "sync/fanout-cnb.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+                  "path": "sync/fanout-cnb.mjs",
+                  "absent": false
+                },
+                "digest": "c6ea622ef58f433388e308f976c3086cafad024e3d456e4e077db0921ae14c64"
+              },
+              {
+                "id": "CI-015",
+                "file": "scripts/delivery/install-assets.mjs",
+                "before": {
+                  "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+                  "path": "scripts/delivery/install-assets.mjs",
+                  "absent": true
+                },
+                "after": {
+                  "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+                  "path": "scripts/delivery/install-assets.mjs",
+                  "absent": false
+                },
+                "digest": "caaef18242c5333782030c84802e3c3ee83f4486795b5bb84b395a3c46366cb2"
+              },
+              {
+                "id": "CI-016",
+                "file": "sync/fanout-rules.test.mjs",
+                "before": {
+                  "ref": "b2deb741ed16b9fa9d85986974930bcd10530075",
+                  "path": "sync/fanout-rules.test.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "39a95964f70eeb7093be45ec73f9172511097f96",
+                  "path": "sync/fanout-rules.test.mjs",
+                  "absent": false
+                },
+                "digest": "e4130a8892205691af545b3d03972c227989ff6ac6a48c6d6ad25dcec36d0af9"
+              }
+            ],
+            "originNumber": 236,
+            "pendingDependencies": []
+          },
+          "integrationLease": {
+            "owner": "integration/pr-236",
+            "scopes": [
+              "protocol",
+              "sync"
+            ],
+            "generation": {
+              "protocol": 24,
+              "sync": 22
+            }
+          }
+        }
+      },
+      "previous": "8c0150620d0ab817a421ffc92d005bba11a4e39bc7f382063a3d4d3db95f21d7",
+      "digest": "c28bfce7f5139545cfc0588d826ce9b3bae2ffe0ce83de7dd5d357ac2ccc06ac"
+    },
+    {
+      "sequence": 285,
+      "at": "2026-10-05T23:50:14.389Z",
+      "kind": "transaction",
+      "data": {
+        "id": "50ba396f-4263-4e95-822b-4ed5f07b81ec"
+      },
+      "previous": "c28bfce7f5139545cfc0588d826ce9b3bae2ffe0ce83de7dd5d357ac2ccc06ac",
+      "digest": "a436dbf88dfa1f7919f1e63fe67cd27fa45fe0c2f3262846701fcc3a304a4eeb"
     }
   ]
 }
