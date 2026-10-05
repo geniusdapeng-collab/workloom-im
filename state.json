@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 8,
+  "revision": 10,
   "tasks": {},
   "leases": {},
   "releases": {},
@@ -93,6 +93,28 @@
       },
       "previous": "c93650167e19407033241c6e10535a42cbc18c875389f061e63ef502eb08411b",
       "digest": "61c7e1b7655378be6b6af711a47b9e68600b751eacb0b93f5b8d6b949d16a1a6"
+    },
+    {
+      "sequence": 9,
+      "at": "2026-10-05T09:40:22.420Z",
+      "kind": "installation_prepared",
+      "data": {
+        "installer": 234,
+        "headSha": "806c200233424858ae43f7ec38b660b34401a70a",
+        "mainSha": "e35625d856697ba95edf7cde8d294b35cea0de2f"
+      },
+      "previous": "61c7e1b7655378be6b6af711a47b9e68600b751eacb0b93f5b8d6b949d16a1a6",
+      "digest": "76f583a519affb9a8d64cd3651d690b688ba3283ead3a649c64d570c030ee5a6"
+    },
+    {
+      "sequence": 10,
+      "at": "2026-10-05T09:40:21.581Z",
+      "kind": "transaction",
+      "data": {
+        "id": "install-state:234:806c200233424858ae43f7ec38b660b34401a70a"
+      },
+      "previous": "76f583a519affb9a8d64cd3651d690b688ba3283ead3a649c64d570c030ee5a6",
+      "digest": "4819217102876db1dc3e600fb2803bee0c57762ee4baa69cb804001d44a30290"
     }
   ]
 }
