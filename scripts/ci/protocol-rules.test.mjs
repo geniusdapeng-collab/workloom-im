@@ -194,9 +194,22 @@ describe("PR 锁冲突门禁的新鲜度与失败闭合", () => {
     };
     const result = await verifyPrFreshness({ repoSlug: "workloom-ai/workloom-im", number, branch, eventSourceSha: source, eventTargetSha: main, request });
     assert.equal(result.headSha, source);
+    assert.equal(result.taskId, 'T-2026-0927-0009');
     assert.equal(pullReads, 2);
     await assert.rejects(verifyPrFreshness({ repoSlug: "workloom-ai/workloom-im", number, eventSourceSha: source, eventTargetSha: main, request: async () => { throw new Error("API unavailable"); } }), /API unavailable/);
     await assert.rejects(verifyPrFreshness({ repoSlug: "workloom-ai/workloom-im", number, eventSourceSha: source, eventTargetSha: "", request }), /缺少仓库、编号或 source\/target SHA/);
+  });
+
+  it('非 task 分支用当前 PR 意图识别租约 owner，意图在查询期间变化则拒绝', async () => {
+    const data = fixture(); const taskId = 'T-2026-1005-1001';
+    data.pull.head.ref = data.finalPull.head.ref = 'chore/protocol-onboarding-x';
+    data.pull.body = data.finalPull.body = `<!-- workloom-delivery\n{"task_id":"${taskId}","ready":true}\n-->`;
+    const request = async url => url.endsWith(`/pulls/${number}`) ? data.pull : url.endsWith('/git/branches/main') ? data.main : data.compare;
+    const result = await verifyPrFreshness({ repoSlug: 'workloom-ai/workloom-im', number, branch: 'chore/protocol-onboarding-x', eventSourceSha: source, eventTargetSha: main, request });
+    assert.equal(result.taskId, taskId);
+    const state = emptyState('workloom-ai/workloom-im'); leaseOperation(state, { action: 'acquire', scopes: ['protocol'], owner: taskId, ttlMs: 60000 }, 0);
+    assert.deepEqual(activeLeaseConflicts(result.files, state, result.taskId, 59000), []);
+    data.finalPull.body = ''; assert.match(validatePrSnapshot({ ...data, branch: 'chore/protocol-onboarding-x' }).errors.join(';'), /状态发生变化/);
   });
 
   it("已知 PR 编号不同，不能凭祖先关系把并发 PR 排除", () => {

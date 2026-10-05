@@ -21,7 +21,7 @@
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { findFileOverlaps, findModuleConflicts, parseChangedPaths, resolveLockOverlapMode } from "./protocol-rules.mjs";
-import { emptyState, sensitiveScopes, STATE_BRANCH, validateState } from '../delivery/queue-model.mjs';
+import { emptyState, parseIntent, sensitiveScopes, STATE_BRANCH, validateState } from '../delivery/queue-model.mjs';
 
 const API = "https://api.cnb.cool";
 const SHA_RE = /^[0-9a-f]{40,64}$/i;
@@ -98,7 +98,7 @@ export function validatePrSnapshot({ number, branch, eventSourceSha, eventTarget
   if (mergeBase && mainSha && mergeBase !== mainSha) errors.push("PR 分支未包含最新 main，需 rebase 后重跑门禁");
   if (sha(finalPull?.head?.sha) !== head || sha(finalPull?.base?.sha) !== base
     || finalPull?.head?.ref !== pull?.head?.ref || finalPull?.base?.ref !== pull?.base?.ref
-    || finalPull?.state !== "open" || String(finalPull?.number ?? "") !== String(number)) {
+    || finalPull?.state !== "open" || String(finalPull?.number ?? "") !== String(number) || finalPull?.body !== pull?.body) {
     errors.push("查询期间 PR 状态发生变化，需重跑门禁");
   }
   if (sha(finalMain?.commit?.sha) !== mainSha) errors.push("查询期间 main 已变化，需重跑门禁");
@@ -124,7 +124,7 @@ export async function verifyPrFreshness({ repoSlug, number, branch, eventSourceS
   const finalMain = await request(mainUrl);
   const verdict = validatePrSnapshot({ number, branch, eventSourceSha, eventTargetSha, pull, main, compare, finalPull, finalMain });
   if (verdict.errors.length) throw new Error(`PR 新鲜度门禁失败：${verdict.errors.join("；")}`);
-  return { ...verdict, headSha: head, mainSha };
+  return { ...verdict, headSha: head, mainSha, taskId: parseIntent(finalPull).taskId };
 }
 
 /** CNB PR 列表按页读取；页重复、结构异常时拒绝给出不完整的无冲突结论。 */
@@ -332,6 +332,7 @@ async function main() {
   // PR 必须先验证实时源/目标/merge-base，再从 compare 取完整路径；不能因本地 diff 为空提前放行。
   let mine;
   let range;
+  let taskId;
   if (prEvent) {
     if (!repoSlug || !process.env.CNB_TOKEN) throw new Error("PR 事件缺少 CNB_REPO_SLUG 或 CNB_TOKEN，锁冲突门禁拒绝放行");
     const snapshot = await verifyPrFreshness({
@@ -344,6 +345,7 @@ async function main() {
     mine = snapshot.files;
     range = `${snapshot.mainSha.slice(0, 12)}...${snapshot.headSha.slice(0, 12)} (CNB compare)`;
     selfHeadSha = snapshot.headSha;
+    taskId = snapshot.taskId;
   } else {
     ({ files: mine, range } = changedFiles(base));
   }
@@ -365,8 +367,7 @@ async function main() {
 
   let others;
   if (prEvent) {
-    const owner = /T-\d{4}-\d{4}-\d{4}/.exec(selfBranch ?? '')?.[0] ?? null;
-    const conflicts = activeLeaseConflicts(mine, await readLeases(repoSlug), owner);
+    const conflicts = activeLeaseConflicts(mine, await readLeases(repoSlug), taskId);
     if (conflicts.length) throw new Error(`敏感模块仍有有效开发租约：${conflicts.join(', ')}；等待期限到期或持有者交接，不按 open PR 编号占锁`);
   }
   try {
