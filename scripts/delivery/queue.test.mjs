@@ -337,6 +337,16 @@ test('task receipt cannot close an unmerged task or a task with declared unverif
   updateTask(state, 1, { status: 'waiting_ci', intent: taskIntent }, now); updateTask(state, 2, { status: 'release_pending', intent: taskIntent, merge: { sha: mergedSha, sourceSha: head, mainSha: main } }, now);
   let writes = 0; await writeTaskReceipts({ store: memoryStore(state), platform: { list: async () => { writes++; return []; } }, now }); assert.equal(writes, 0);
 });
+test('a lease acquired by another developer during snapshot reading blocks candidate creation', async () => {
+  const store = memoryStore(activate(emptyState(repo))); let candidates = 0;
+  const s = snapshot(2, { files: ['AGENTS.md'] });
+  const platform = { repo, error: e => e.message, pulls: async () => [s.pull],
+    snapshot: async () => { await store.mutate(current => leaseOperation(current, { action: 'acquire', owner: 'other', scopes: ['protocol'] }, now)); return s; },
+    ensureCandidate: async () => { candidates++; }, list: async () => [] };
+  const report = await reconcile({ platform, store, policy, now });
+  assert.equal(candidates, 0); assert.equal(report.waiting[0].reason, 'Active developer lease protocol');
+  assert.equal((await store.read()).leases.protocol.owner, 'other');
+});
 test('runner deadline uses elapsed time independently of injected lease/calendar time and preserves the exact boundary', async () => {
   const clocks = [0, 240000, 240001]; const scanned = [];
   const platform = { repo, error: e => e.message, pulls: async () => [snapshot(1).pull, snapshot(2).pull], snapshot: async number => { scanned.push(number); return snapshot(number, { checkErrors: ['still pending'] }); } };

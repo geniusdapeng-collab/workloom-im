@@ -291,12 +291,17 @@ export async function reconcile({ platform, store, policy, now = Date.now(), dry
         if (!dryRun) await store.mutate(current => updateTask(current, number, { status: 'waiting_dependency', headSha: snapshot.headSha, intent: snapshot.intent, dependencies: snapshot.pendingDependencies }, now));
         continue;
       }
+      // Lease writers are independent of this native merge runner, and earlier
+      // iterations may continue after a handoff mutation. Never reuse loop state.
+      state = await store.read();
       const activeScopes = sensitiveScopes(snapshot.files).filter(scope => state.leases[scope]?.owner && state.leases[scope].expiresAt > now);
       if (activeScopes.some(scope => state.leases[scope].owner !== snapshot.intent.taskId) || (activeScopes.length && snapshot.intent.ready !== true)) {
         report.waiting.push({ number, reason: `Active developer lease ${activeScopes.join(',')}` }); continue;
       }
       if (!dryRun) {
         await store.mutate(current => {
+          const changedScopes = sensitiveScopes(snapshot.files).filter(scope => current.leases[scope]?.owner && current.leases[scope].expiresAt > now);
+          if (changedScopes.some(scope => current.leases[scope].owner !== snapshot.intent.taskId) || (changedScopes.length && snapshot.intent.ready !== true)) throw new Error('Developer lease changed before handoff');
           if (snapshot.intent.ready === true && snapshot.intent.taskId) {
             for (const scope of sensitiveScopes(snapshot.files)) {
               const lease = current.leases[scope];
