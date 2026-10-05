@@ -170,8 +170,18 @@ export async function runReview(root = process.cwd(), { env = process.env, platf
   catch (error) {
     // Preserve genuine findings before an invalid coverage/migration receipt aborts publication.
     for (const [index, result] of results.entries()) console.log(`WorkLoom AI batch receipt ${index}: ${redactCredentials(JSON.stringify(result), env.CNB_TOKEN)}`);
-    const missing = results.map((result, index) => ({ batch: index, status: result?.status, expected: batchSnapshot(manifest.snapshot, index).ciPolicyChanges.map(change => change.id), actual: (result?.ci_policy_changes ?? []).map(change => change.id), issues: (result?.issues ?? []).map(issue => `${issue.file}:${issue.start_line} ${issue.problem}`) }));
-    throw new Error(`${error.message}; batch diagnostics=${JSON.stringify(missing)}`);
+    const diagnostics = results.map((result, index) => {
+      const expected = batchSnapshot(manifest.snapshot, index);
+      const actualIds = (result?.ci_policy_changes ?? []).map(change => change.id);
+      const expectedIds = expected.ciPolicyChanges.map(change => change.id);
+      return { batch: index, status: result?.status, missingChanges: expectedIds.filter(id => !actualIds.includes(id)), extraChanges: actualIds.filter(id => !expectedIds.includes(id)),
+        missingFiles: expected.files.filter(path => !result?.reviewed_files?.includes(path)), extraFiles: (result?.reviewed_files ?? []).filter(path => !expected.files.includes(path)),
+        headMatches: result?.head_sha === expected.headSha, mainMatches: result?.base_sha === expected.mainSha, policyMatches: result?.policy_hash === manifest.policyHash,
+        dependsOn: result?.depends_on, issues: (result?.issues ?? []).map(issue => `${issue.file}:${issue.start_line} ${issue.problem}`).slice(0, 4) };
+    });
+    // CNB's public failure summary keeps only the last ~2 KiB. The real reason
+    // must stay after the full raw receipts, rather than disappearing behind IDs.
+    throw new Error(`batch diagnostics=${JSON.stringify(diagnostics)}; fatal=${error.message}`);
   }
   await writeFile(manifest.output, JSON.stringify(output, null, 2));
   console.log(`WorkLoom AI receipt: ${redactCredentials(JSON.stringify(output), env.CNB_TOKEN)}`);
