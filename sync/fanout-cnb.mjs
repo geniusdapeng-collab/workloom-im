@@ -83,21 +83,37 @@ function pushBranch(dir, slug, branch, token, baseUrl) {
   }
 }
 
+/**
+ * 逐仓独立：base-sync pull 的退出码只对它自己的目标仓负责。
+ * spawnSync 会原样带回子进程退出码，一旦有仓用 78 表示“沿用已有能力退出”，
+ * 它会与真实失败、真实权限不足在 0/1 之外混在同一个数字上；把退出码当作
+ * 仓级结论就无法把成功仓与失败仓分开（2026-10-06 实测：九仓 required-only
+ * 全被一个基座自身资产的依赖闭包问题连坐）。
+ * 因此只认 base-sync 自己在 stdout 里给出的结构化报告：报告存在即本仓结论；
+ * 缺报告才是本仓失败，且必须按退出码如实区分成功退出、预期停止与失败。
+ */
+export function baseSyncOutcome({ exitCode, signal = null, stdout = "", stderr = "" }, scrub = redact) {
+  const text = String(stdout ?? "");
+  const start = text.indexOf("{");
+  if (start >= 0) {
+    try {
+      const report = JSON.parse(text.slice(start));
+      if (report && typeof report === "object") return { ok: true, report };
+    } catch {
+      // 报告必须自证；截断或非 JSON 的 stdout 不算成功。
+    }
+  }
+  const detail = scrub(String(stderr || text).slice(-500));
+  return { ok: false, exitCode, signal, reason: `base-sync pull 无结构化报告（exit=${exitCode ?? signal ?? "unknown"}）：${detail}` };
+}
+
 function runBaseSync(childDir, baseDir, mode) {
   const args = [join(baseDir, "sync/base-sync.mjs"), "pull", "--repo", childDir, "--base-dir", baseDir, "--json"];
   if (mode === "required-only") args.push("--required-only");
   const result = spawnSync(process.execPath, args, { encoding: "utf8", env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
-  const stdout = result.stdout ?? "";
-  let report = null;
-  try {
-    report = JSON.parse(stdout.slice(stdout.indexOf("{")));
-  } catch {
-    report = null;
-  }
-  if (result.status !== 0 || !report) {
-    throw new Error(`base-sync pull 失败（exit=${result.status}）：${redact((result.stderr || stdout).slice(-500))}`);
-  }
-  return report;
+  const outcome = baseSyncOutcome({ exitCode: result.status, signal: result.signal, stdout: result.stdout, stderr: result.stderr });
+  if (!outcome.ok) throw new Error(outcome.reason);
+  return outcome.report;
 }
 
 function pullBody({ mode, baseSha, baseRepo, files }) {
