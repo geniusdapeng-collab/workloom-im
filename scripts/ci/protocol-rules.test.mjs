@@ -263,4 +263,15 @@ describe("PR 锁冲突门禁的新鲜度与失败闭合", () => {
     assert.equal(result.status, 1, result.stderr);
     assert.match(result.stderr, /缺少 CNB_REPO_SLUG 或 CNB_TOKEN/);
   });
+
+  it('PR 查询失败仍退出非零，即使普通路径重叠只提醒', () => {
+    const data = fixture();
+    const prelude = `const f=${JSON.stringify(data)};globalThis.fetch=async input=>{const u=String(input);if(u.includes('/pulls?'))return new Response('unavailable',{status:503});let v;if(u.includes('/git/raw/'))v=${JSON.stringify(emptyState('workloom-ai/workloom-im'))};else if(u.endsWith('/pulls/${number}'))v=f.pull;else if(u.endsWith('/git/branches/main'))v=f.main;else if(u.includes('/git/compare/'))v=f.compare;else throw new Error('Unexpected mocked path');return new Response(JSON.stringify(v),{status:200});};`;
+    const env = { ...process.env, CNB_TOKEN: 'test-only', CNB_EVENT: 'pull_request', CNB_PULL_REQUEST: 'true', CNB_REPO_SLUG: 'workloom-ai/workloom-im', CNB_PULL_REQUEST_IID: number, CNB_PULL_REQUEST_BRANCH: branch, CNB_PULL_REQUEST_SHA: source, CNB_PULL_REQUEST_TARGET_SHA: main };
+    delete env.LOCK_OVERLAP_MODE;
+    const script = fileURLToPath(new URL('./verify-lock-conflict.mjs', import.meta.url));
+    const result = spawnSync(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(prelude)}`, script], { env, encoding: 'utf8' });
+    assert.equal(result.status, 1, result.stderr);
+    assert.match(result.stderr, /查询 open PR 失败/);
+  });
 });

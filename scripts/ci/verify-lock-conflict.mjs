@@ -378,7 +378,7 @@ async function main() {
       console.log(`  自身 PR 编号：#${selfNumber}（先到先得判定依据）`);
     }
   } catch (error) {
-    if (strict) throw new Error(`查询 open PR 失败：${error?.message ?? error}`);
+    if (prEvent || strict) throw new Error(`查询 open PR 失败：${error?.message ?? error}`);
     console.warn(`! 查询 open PR 失败，跳过冲突检测：${String(error).slice(0, 200)}`);
     return;
   }
