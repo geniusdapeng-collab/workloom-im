@@ -275,6 +275,17 @@ test('AI issue schema rejects incompatible severity/category/line data without d
   assert.equal(validateIssueSchema({ status: 'needs_modification', issues: [issue] }).issues.length, 1);
   for (const patch of [{ severity: 'high' }, { category: 'concurrency' }, { start_line: 0 }, { end_line: 1 }, { suggestion: '' }, { file: null }]) assert.throws(() => validateIssueSchema({ status: 'critical', issues: [{ ...issue, ...patch }] }), /schema/);
 });
+test('genuine rejected batches retain findings without an approval migration receipt, while every passing batch still needs the complete receipt', () => {
+  const s = snapshot(1, { ciPolicyChanges: [{ id: 'CI-001', file: 'apps/example.ts' }] });
+  const manifest = { snapshot: s, policyHash: policy.hash };
+  const issue = { severity: 'warning', file: 'apps/example.ts', start_line: 1, problem: 'Required assertion is missing', suggestion: 'Restore the assertion before approving' };
+  const rejected = { status: 'needs_modification', issues: [issue], reviewed_files: s.files, head_sha: head, base_sha: main, policy_hash: policy.hash, depends_on: [] };
+  const output = combineBatchResults(manifest, [rejected]);
+  assert.equal(output.status, 'needs_modification'); assert.deepEqual(output.issues, [issue]);
+  assert.throws(() => validateReview(output, s, policy.hash), /did not pass/);
+  assert.throws(() => combineBatchResults(manifest, [{ ...rejected, status: 'passed', issues: [] }]), /migration/);
+  for (const patch of [{ head_sha: main }, { reviewed_files: [] }, { depends_on: [1] }, { ci_policy_changes: {} }]) assert.throws(() => combineBatchResults(manifest, [{ ...rejected, ...patch }]));
+});
 test('required native node-test stages refer to existing repository files', async () => {
   const root = new URL('../../', import.meta.url); const YAML = await parser();
   const config = YAML.parse(await readFile(new URL('.cnb.yml', root), 'utf8'), { maxAliasCount: 1000 });

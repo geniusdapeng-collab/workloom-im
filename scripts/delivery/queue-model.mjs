@@ -112,13 +112,19 @@ export function dependencyState(number, graph, merged) {
   return (graph.get(number) ?? []).filter(n => !merged.has(n));
 }
 
-export function validateReview(output, snapshot, policyHash) {
-  if (!output || output.status !== 'passed' || !Array.isArray(output.issues) || output.issues.length) throw new Error('AI review did not pass without unresolved issues');
-  if (output.head_sha !== snapshot.headSha || output.base_sha !== snapshot.mainSha || output.policy_hash !== policyHash) throw new Error('AI review identity mismatch');
+/** Scope validation also applies to a genuine rejection; it never grants approval. */
+export function validateReviewScope(output, snapshot, policyHash) {
+  if (!output || output.head_sha !== snapshot.headSha || output.base_sha !== snapshot.mainSha || output.policy_hash !== policyHash) throw new Error('AI review identity mismatch');
   if (!Array.isArray(output.reviewed_files) || output.reviewed_files.some(p => typeof p !== 'string') || new Set(output.reviewed_files).size !== output.reviewed_files.length) throw new Error('AI review coverage is invalid');
   const expected = [...snapshot.files].sort();
   if (JSON.stringify([...output.reviewed_files].sort()) !== JSON.stringify(expected)) throw new Error('AI review omitted changed files');
   if (!Array.isArray(output.depends_on) || output.depends_on.some(n => !Number.isSafeInteger(n) || n <= 0 || n === snapshot.number)) throw new Error('AI review dependencies are invalid');
+  return expected;
+}
+
+export function validateReview(output, snapshot, policyHash) {
+  if (!output || output.status !== 'passed' || !Array.isArray(output.issues) || output.issues.length) throw new Error('AI review did not pass without unresolved issues');
+  const expected = validateReviewScope(output, snapshot, policyHash);
   const migration = output.ci_policy_changes ?? [];
   const ciIds = (snapshot.ciPolicyChanges ?? []).map(change => change.id).sort();
   if (!Array.isArray(migration) || migration.some(change => typeof change.id !== 'string' || typeof change.rationale !== 'string' || !change.rationale.trim()) ||

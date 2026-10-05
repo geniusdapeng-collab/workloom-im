@@ -5,7 +5,7 @@ import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
-import { SHA_RE, validateReview } from './queue-model.mjs';
+import { SHA_RE, validateReview, validateReviewScope } from './queue-model.mjs';
 import { BASE_POLICY, reviewRules } from './queue-policy.mjs';
 import { Platform } from './queue-platform.mjs';
 import { modelGateway } from './model-gateway.mjs';
@@ -66,7 +66,10 @@ export function combineBatchResults(manifest, results) {
   for (const [index, output] of results.entries()) {
     validateIssueSchema(output);
     // Validate identity/coverage even for a rejected review, without treating it as a pass.
-    validateReview({ ...output, status: 'passed', issues: [] }, batchSnapshot(manifest.snapshot, index), manifest.policyHash);
+    const scoped = batchSnapshot(manifest.snapshot, index);
+    validateReviewScope(output, scoped, manifest.policyHash);
+    if (output.ci_policy_changes !== undefined && !Array.isArray(output.ci_policy_changes)) throw new Error('Invalid AI migration receipt shape');
+    if (output.status === 'passed' && !output.issues.length) validateReview(output, scoped, manifest.policyHash);
   }
   const output = { status: results.some(result => result.status === 'critical') ? 'critical' : results.some(result => result.status !== 'passed' || result.issues.length) ? 'needs_modification' : 'passed',
     issues: results.flatMap(result => result.issues), reviewed_files: results.flatMap(result => result.reviewed_files),
@@ -174,10 +177,11 @@ export async function runReview(root = process.cwd(), { env = process.env, platf
       const expected = batchSnapshot(manifest.snapshot, index);
       const actualIds = (result?.ci_policy_changes ?? []).map(change => change.id);
       const expectedIds = expected.ciPolicyChanges.map(change => change.id);
-      return { batch: index, status: result?.status, missingChanges: expectedIds.filter(id => !actualIds.includes(id)), extraChanges: actualIds.filter(id => !expectedIds.includes(id)),
-        missingFiles: expected.files.filter(path => !result?.reviewed_files?.includes(path)), extraFiles: (result?.reviewed_files ?? []).filter(path => !expected.files.includes(path)),
+      const missingChanges = expectedIds.filter(id => !actualIds.includes(id)); const missingFiles = expected.files.filter(path => !result?.reviewed_files?.includes(path));
+      return { batch: index, status: result?.status, missingChanges: missingChanges.slice(0, 5), missingChangeCount: missingChanges.length, extraChanges: actualIds.filter(id => !expectedIds.includes(id)).slice(0, 5),
+        missingFiles: missingFiles.slice(0, 5), missingFileCount: missingFiles.length, extraFiles: (result?.reviewed_files ?? []).filter(path => !expected.files.includes(path)).slice(0, 5),
         headMatches: result?.head_sha === expected.headSha, mainMatches: result?.base_sha === expected.mainSha, policyMatches: result?.policy_hash === manifest.policyHash,
-        dependsOn: result?.depends_on, issues: (result?.issues ?? []).map(issue => `${issue.file}:${issue.start_line} ${issue.problem}`).slice(0, 4) };
+        dependsOn: result?.depends_on, issues: (result?.issues ?? []).map(issue => `${issue.file}:${issue.start_line} ${issue.problem}`.slice(0, 220)).slice(0, 4) };
     });
     // CNB's public failure summary keeps only the last ~2 KiB. The real reason
     // must stay after the full raw receipts, rather than disappearing behind IDs.
