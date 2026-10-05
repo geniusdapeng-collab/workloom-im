@@ -17,7 +17,8 @@ test('old entry point dispatches trusted main and has no direct merge operation'
 test('dry-run and absent installation cannot issue writes; missing build ack remains failed', async () => {
   let writes = 0; let installed = false;
   const platform = { repo: 'w/hotel', main: async () => ({ commit: { sha: 'a'.repeat(40) } }), call: async (_path, options) => options ? (++writes, {}) : installed ? 'scripts/delivery/cnb.yml' : 'old CI' };
-  assert.equal((await dispatchRepository(platform)).status, 'not_installed');
+  await assert.rejects(dispatchRepository(platform), /not installed/);
+  await assert.rejects(dispatchRepository(platform, { dryRun: true }), /not installed/);
   installed = true; assert.equal((await dispatchRepository(platform, { dryRun: true })).status, 'would_dispatch');
   assert.equal(writes, 0);
   await assert.rejects(dispatchRepository(platform), /acknowledgement/);

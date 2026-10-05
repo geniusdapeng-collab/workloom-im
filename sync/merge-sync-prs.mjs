@@ -16,7 +16,7 @@ export function targetsFor(fleet, { repo, only = [] } = {}) {
 export async function dispatchRepository(platform, { dryRun = false } = {}) {
   const main = await platform.main();
   const config = await platform.call(`/-/git/raw/${main.commit?.sha}/.cnb.yml`);
-  if (typeof config !== 'string' || !config.includes('scripts/delivery/cnb.yml')) return { repo: platform.repo, status: 'not_installed', mainSha: main.commit?.sha };
+  if (typeof config !== 'string' || !config.includes('scripts/delivery/cnb.yml')) throw new Error(`Delivery not installed at ${platform.repo} main ${main.commit?.sha}; installation must finish before dispatch`);
   if (dryRun) return { repo: platform.repo, status: 'would_dispatch', mainSha: main.commit.sha };
   const result = await platform.call('/-/build/start', { method: 'POST', body: { branch: 'main', sha: main.commit.sha, event: 'api_trigger_delivery_reconcile', sync: 'false', title: 'WorkLoom repository delivery reconcile' } });
   if (!result?.success || !result.sn) throw new Error('Delivery dispatch lacks a real build acknowledgement');
