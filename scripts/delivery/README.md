@@ -108,7 +108,7 @@ node --test scripts/delivery/*.test.mjs
 
 与上方 MCD 台账执行器并列的研发交付机制；具体协议见 `docs/DEVELOPMENT-PROTOCOL.md` v2。`queue-runner.mjs` 提供 status、lease、handoff、review-prepare、review-finish、prepare-install、activate、reconcile、releases。日常开发用独立工作树；普通重叠提示；敏感开发租约默认 15 分钟，owner/generation 续租；CI/评审前交接释放。
 
-trusted main 的 `cnb.yml` 每 5 分钟恢复，原生仓级锁串行集成。原 PR 通过必需检查后创建不可修改候选分支/PR，再运行绑定 source/main/policy/完整文件列表的真正 CodeBuddy 审查。Bot Approve 和完整结构化结果双重回读；平台强保护保留，不等待用户点 Approve。没有覆盖、超时、CI 红、依赖未满足或权限失败均不合。
+trusted main 的 `cnb.yml` 每 5 分钟恢复，原生仓级锁串行集成。原 PR 通过必需检查后创建不可修改候选分支/PR，再运行绑定 source/main/policy/完整文件列表的真正 CodeBuddy 审查。所有敏感候选在实际合并时强制取得并核验 fenced 集成租约，不依赖开发者选择是否领开发租约；真实通过或未发请求失败即释放。Bot Approve 和完整结构化结果双重回读；平台强保护保留，不等待用户点 Approve。没有覆盖、超时、CI 红、依赖未满足或权限失败均不合。
 
 AI 使用固定官方镜像内的 SDK，按每批最多 30 个变化路径分批精读；每仓同时只有一条审查流水线、最多两个模型子进程。全部批次必须给出准确覆盖和身份回执，任一批缺失、失败或漂移不发布 Approve。审查失败按 source/main 限两次并退避；进程中断由原生 build SN 回读计数，丢失启动响应以唯一 title 查回，无正向回执不重复启动。未知结果只保留该任务，超出在途时限后无关任务仍可排入原生串行锁。
 

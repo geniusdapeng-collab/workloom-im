@@ -341,6 +341,23 @@ test('unknown merge acknowledgement pauses later integration; never repeats the 
   await assert.rejects(mergeCandidate({ platform, store, policy, snapshot: s, dependencies: new Map([[1, { pending: [] }]]), now }), /lost/); assert.equal(writes, 1); assert.equal((await store.read()).tasks['1'].status, 'merging');
   const report = await reconcile({ platform, store, policy, now, services: { reconcileReleases: async () => [] } }); assert.equal(report.failed[0].stage, 'recover-merge'); assert.equal(writes, 1);
 });
+test('sensitive integration always acquires a fenced lease, even when developers did not opt in', async () => {
+  const s = snapshot(11, { files: ['scripts/ci/protocol-rules.mjs'] }); s.originNumber = 1; s.pull.head.ref = 'delivery/candidate/test';
+  const original = snapshot(1, { files: s.files }); const state = activate(emptyState(repo));
+  updateTask(state, 1, { status: 'waiting_ci', headSha: head, mainSha: main, originalBody: '', intent, review: review(s) }, now);
+  const store = memoryStore(state); let writes = 0; let phase = 'open';
+  const platform = { repo, error: e => e.message, assertCandidateProtection: async () => {}, snapshot: async () => s,
+    pull: async number => number === 1 ? { ...original.pull, state: phase } : s.pull, list: async () => [], comment: async () => {},
+    call: async (_path, options) => { if (options?.method === 'PATCH') phase = 'closed'; },
+    merge: async () => { writes++; const current = await store.read(); assert.equal(current.leases.protocol.owner, 'integration/pr-1'); assert.ok(current.leases.protocol.generation > 0); return { sha: mergedSha }; },
+    verifyMerge: async () => ({ sha: mergedSha, sourceSha: head, mainSha: main }) };
+  await store.mutate(current => leaseOperation(current, { action: 'acquire', owner: 'other', scopes: ['protocol'] }, now));
+  await assert.rejects(mergeCandidate({ platform, store, policy, snapshot: s, dependencies: new Map(), now }), /busy/); assert.equal(writes, 0);
+  await store.mutate(current => leaseOperation(current, { action: 'release', owner: 'other', scopes: ['protocol'], generation: { protocol: 1 } }, now));
+  await mergeCandidate({ platform, store, policy, snapshot: s, dependencies: new Map(), now });
+  assert.equal(writes, 1); assert.equal((await store.read()).leases.protocol.owner, null);
+  assert.ok((await store.read()).events.some(event => event.kind === 'lease_acquire' && event.data.owner === 'integration/pr-1'));
+});
 test('red oldest PR and failed release do not stop a later healthy PR candidate', async () => {
   const state = activate(emptyState(repo)); const good = snapshot(2); const candidate = snapshot(22); candidate.pull.head.ref = 'delivery/candidate/22'; candidate.originNumber = 2;
   updateTask(state, 22, { status: 'waiting_ci', review: review(candidate) }, now); const store = memoryStore(state); let candidateCreated = 0; let originalClosed = false;

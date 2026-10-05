@@ -69,6 +69,7 @@ async function finishIntegration({ platform, store, task, receipt, now }) {
     if (closed.state !== 'closed' || closed.head?.sha !== receipt.sourceSha) throw new Error('Original PR closure changed; integration receipt retained for recovery');
   }
   await store.mutate(current => {
+    releaseIntegrationLease(current, task, now);
     const updated = updateTask(current, task.number, {
       status: sourceChanged ? 'waiting_ci' : (task.intent?.releases?.length ? 'release_pending' : 'integrated'),
       merge: receipt, mergePhase: null, error: sourceChanged ? 'Original source advanced; new work remains open' : null,
@@ -84,7 +85,16 @@ async function recoverMerges({ platform, store, now }) {
   for (const task of Object.values(state.tasks).filter(task => task.status === 'merging')) {
     const receipt = await recoverMerge(platform, task);
     if (receipt) await finishIntegration({ platform, store, task, receipt, now });
-    else await store.mutate(current => updateTask(current, task.number, { status: 'waiting_ci', mergePhase: null, error: null }, now));
+    else await store.mutate(current => { releaseIntegrationLease(current, task, now); updateTask(current, task.number, { status: 'waiting_ci', mergePhase: null, error: null }, now); });
+  }
+}
+
+function releaseIntegrationLease(state, task, now) {
+  const intent = task.integrationLease;
+  if (!intent) return;
+  for (const scope of intent.scopes) {
+    const lease = state.leases[scope];
+    if (lease?.owner === intent.owner && lease.generation === intent.generation[scope] && lease.expiresAt > now) leaseOperation(state, { action: 'release', owner: intent.owner, scopes: [scope], generation: intent.generation }, now);
   }
 }
 
@@ -93,7 +103,20 @@ export async function mergeCandidate({ platform, store, policy, snapshot, depend
   const number = snapshot.originNumber ?? snapshot.number;
   await platform.assertCandidateProtection();
   if (!branchName(snapshot.pull.head.ref).startsWith('delivery/candidate/')) throw new Error('Merge requires an immutable candidate');
-  await store.mutate(state => updateTask(state, number, { status: 'merging', mergePhase: 'prepared', mergeSnapshot: snapshot }, now));
+  const scopes = sensitiveScopes(snapshot.files);
+  const owner = `integration/pr-${number}`;
+  const preparation = await store.mutate(state => {
+    const generation = scopes.length ? leaseOperation(state, { action: 'acquire', owner, scopes }, now) : {};
+    updateTask(state, number, { status: 'merging', mergePhase: 'prepared', mergeSnapshot: snapshot, integrationLease: { owner, scopes, generation } }, now);
+    return generation;
+  });
+  const generation = preparation.result;
+  const release = state => {
+    for (const scope of scopes) {
+      const lease = state.leases[scope];
+      if (lease?.owner === owner && lease.generation === generation[scope] && lease.expiresAt > now) leaseOperation(state, { action: 'release', owner, scopes: [scope], generation }, now);
+    }
+  };
   let issued = false;
   try {
     const latest = await platform.snapshot(snapshot.number, policy);
@@ -110,7 +133,13 @@ export async function mergeCandidate({ platform, store, policy, snapshot, depend
     if (reasons.length) throw new Error(reasons.join('; '));
     const original = await platform.pull(number);
     if (original.state !== 'open' || original.is_wip || original.head?.sha !== snapshot.headSha || original.body !== state.tasks[String(number)].originalBody) throw new Error('Developer changed source/handoff before candidate merge');
-    await store.mutate(current => updateTask(current, number, { mergePhase: 'merge_requested', mergeRequestedAt: now }, now));
+    await store.mutate(current => {
+      for (const scope of scopes) {
+        const lease = current.leases[scope];
+        if (lease?.owner !== owner || lease.generation !== generation[scope] || lease.expiresAt <= now) throw new Error('Integration lease is fenced/expired');
+      }
+      updateTask(current, number, { mergePhase: 'merge_requested', mergeRequestedAt: now }, now);
+    });
     issued = true;
     const result = await platform.merge(latest);
     const receipt = await platform.verifyMerge(latest, result);
@@ -120,7 +149,7 @@ export async function mergeCandidate({ platform, store, policy, snapshot, depend
     return receipt;
   } catch (error) {
     if (!issued) {
-      await store.mutate(current => updateTask(current, number, { status: 'waiting_ci', mergePhase: null, error: platform.error(error) }, now));
+      await store.mutate(current => { release(current); updateTask(current, number, { status: 'waiting_ci', mergePhase: null, error: platform.error(error) }, now); });
     } else {
       await store.mutate(current => updateTask(current, number, { error: platform.error(error) }, now));
     }

@@ -38,7 +38,7 @@
 ## 4. 三类互斥与依赖
 
 - **开发租约**：`sync`、`protocol`、`migrations`、`dependencies` 四个敏感范围，以 `queue-model.mjs#sensitiveScopes` 为准。默认 TTL 15 分钟，每 5 分钟续租；owner + generation 必须匹配，过期重领增加 generation，旧 owner 不能续租或释放新租约。一次多范围申请要么全成功，要么全失败。
-- **集成互斥**：所有合并调用进入同一仓级 CNB 原生锁 `workloom-delivery-merge`。创建 `delivery/candidate/**` 保护分支时固定 source SHA；所有人含管理员禁止推送、强推和删除。真实候选 PR 上的 CI 与 AI 结果绑定相同 source/main，合并必须回读准确双亲。普通 merge 主干进入开发分支，禁止 force/rebase 改写用户历史；语义冲突交给有上限的 CodeBuddy 工作模式修复。
+- **集成互斥**：所有合并调用进入同一仓级 CNB 原生锁 `workloom-delivery-merge`。创建 `delivery/candidate/**` 保护分支时固定 source SHA；所有人含管理员禁止推送、强推和删除。真实候选 PR 上的 CI 与 AI 结果绑定相同 source/main，合并必须回读准确双亲。敏感候选在合并前由执行器强制取得 owner/generation 集成租约，在发出请求前再次核验；开发者未显式领租约也不能绕过此集成围栏。租约只覆盖集成短步骤，成功或未发出请求的失败立即释放，未知写结果先回读。普通 merge 主干进入开发分支，禁止 force/rebase 改写用户历史；语义冲突交给有上限的 CodeBuddy 工作模式修复。
 - **发布互斥**：UI/桌面按环境独立排队、固定已合入 SHA/版本，失败保持真实欠项，不能跳过无关代码集成；启动回执不明时先回读构建，不能重复部署。
 - **语义依赖**：PR 正文的 `workloom-delivery.depends_on`、平台 blocked_on 与 AI 识别出的前置 PR 合并为 DAG。只有真实合入的当前源码才满足前置条件；关闭但未合入不算完成；循环依赖停在相关任务，不堵全仓。
 - **普通路径重叠**：只提示协作和后续冲突；不按 PR 编号永久占位。`--strict` 是显式诊断模式。source/target/current-main/merge-base 的新鲜度仍为硬检查。
