@@ -84,27 +84,23 @@ function pushBranch(dir, slug, branch, token, baseUrl) {
 }
 
 /**
- * 逐仓独立：base-sync pull 的退出码只对它自己的目标仓负责。
- * spawnSync 会原样带回子进程退出码，一旦有仓用 78 表示“沿用已有能力退出”，
- * 它会与真实失败、真实权限不足在 0/1 之外混在同一个数字上；把退出码当作
- * 仓级结论就无法把成功仓与失败仓分开（2026-10-06 实测：九仓 required-only
- * 全被一个基座自身资产的依赖闭包问题连坐）。
- * 因此只认 base-sync 自己在 stdout 里给出的结构化报告：报告存在即本仓结论；
- * 缺报告才是本仓失败，且必须按退出码如实区分成功退出、预期停止与失败。
+ * Each child must have both a successful process and a complete JSON report.
+ * The outer fanout uses 78 for missing first-install receipts. The base-sync
+ * child has no such successful-stop contract; JSON never overrides its failure.
  */
 export function baseSyncOutcome({ exitCode, signal = null, stdout = "", stderr = "" }, scrub = redact) {
   const text = String(stdout ?? "");
   const start = text.indexOf("{");
-  if (start >= 0) {
+  if (exitCode === 0 && signal === null && start >= 0) {
     try {
       const report = JSON.parse(text.slice(start));
-      if (report && typeof report === "object") return { ok: true, report };
+      if (report && typeof report === "object" && !Array.isArray(report)) return { ok: true, report };
     } catch {
       // 报告必须自证；截断或非 JSON 的 stdout 不算成功。
     }
   }
   const detail = scrub(String(stderr || text).slice(-500));
-  return { ok: false, exitCode, signal, reason: `base-sync pull 无结构化报告（exit=${exitCode ?? signal ?? "unknown"}）：${detail}` };
+  return { ok: false, exitCode, signal, reason: `base-sync pull 失败或无完整结构化报告（exit=${exitCode ?? signal ?? "unknown"}）：${detail}` };
 }
 
 function runBaseSync(childDir, baseDir, mode) {
