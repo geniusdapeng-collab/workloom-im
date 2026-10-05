@@ -15,7 +15,9 @@ const arg = (name, fallback) => { const index = process.argv.indexOf(name); retu
 const ROOT = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 
 export async function ensureStateProtection(platform) {
-  const expected = { ...branchProtectionPayload({ rule: STATE_BRANCH, requireReview: false }), allow_pushes: false, allow_master_pushes: true, required_must_push_via_pull_request: false, required_status_checks: false };
+  // CNB retains the PR requirement flag while granting the explicit admin-only
+  // push exception. Verify the actual stored rule; never grant ordinary pushes.
+  const expected = { ...branchProtectionPayload({ rule: STATE_BRANCH, requireReview: false }), allow_pushes: false, allow_master_pushes: true, required_must_push_via_pull_request: true, required_status_checks: false };
   const stateRule = (await platform.protections()).find(rule => rule.rule === STATE_BRANCH);
   if (!stateRule) {
     try { await platform.call('/-/settings/branch-protections', { method: 'POST', body: expected }); }
