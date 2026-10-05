@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 287,
+  "revision": 289,
   "tasks": {
     "231": {
       "number": 231,
@@ -576,7 +576,7 @@
         "reviewId": "2107249528537784320",
         "dispatchedAt": 1791242413165
       },
-      "mergePhase": "merge_requested",
+      "mergePhase": "merge_verified",
       "mergeSnapshot": {
         "number": 241,
         "pull": {
@@ -911,7 +911,15 @@
           "sync": 22
         }
       },
-      "mergeRequestedAt": 1791244209411
+      "mergeRequestedAt": 1791244209411,
+      "merge": {
+        "sha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+        "sourceSha": "39a95964f70eeb7093be45ec73f9172511097f96",
+        "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+        "checkSha": "1bd120a2a5de4347f2f5cebfeb2c49f5ce0b292b",
+        "mergedBy": "cnb.dYiF05kxAGA",
+        "verifiedAt": "2026-10-05T23:50:16.979Z"
+      }
     },
     "238": {
       "number": 238,
@@ -8004,6 +8012,37 @@
       },
       "previous": "e670068f850db8b4bded3ef15bfda135c55a2e89e13fb70bf12c20706b634af0",
       "digest": "80f0871a63954eea1bffe3c0f1943111141e71f74e8932c7db96f6336396665f"
+    },
+    {
+      "sequence": 288,
+      "at": "2026-10-05T23:50:09.411Z",
+      "kind": "task",
+      "data": {
+        "number": 236,
+        "patch": {
+          "mergePhase": "merge_verified",
+          "merge": {
+            "sha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+            "sourceSha": "39a95964f70eeb7093be45ec73f9172511097f96",
+            "mainSha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+            "checkSha": "1bd120a2a5de4347f2f5cebfeb2c49f5ce0b292b",
+            "mergedBy": "cnb.dYiF05kxAGA",
+            "verifiedAt": "2026-10-05T23:50:16.979Z"
+          }
+        }
+      },
+      "previous": "80f0871a63954eea1bffe3c0f1943111141e71f74e8932c7db96f6336396665f",
+      "digest": "33e61536b1dd385f957bf2428094353f8694983a7f24b3b787582f06cd6ee551"
+    },
+    {
+      "sequence": 289,
+      "at": "2026-10-05T23:50:16.979Z",
+      "kind": "transaction",
+      "data": {
+        "id": "d611b4e2-bb6a-4415-b5ba-58eea872cc20"
+      },
+      "previous": "33e61536b1dd385f957bf2428094353f8694983a7f24b3b787582f06cd6ee551",
+      "digest": "a7ee6aa41d0cf26978291060770af45c9e5cdab56622bf9489865afeba9f651b"
     }
   ]
 }
