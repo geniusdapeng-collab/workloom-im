@@ -72,3 +72,13 @@ test('Git credentials are transient scoped environment values, absent from argv/
   assert.equal(env.GIT_CONFIG_KEY_0, 'credential.helper'); assert.equal(env.GIT_CONFIG_VALUE_0, '');
   assert.equal(env.GIT_CONFIG_KEY_1, 'http.https://cnb.cool/.extraHeader'); assert.match(env.GIT_CONFIG_VALUE_1, /^Authorization: Basic /);
 });
+test('queued UI release remains bound to an integrated ancestor while main advances', t => {
+  const f = fixture(t); const stub = transport({ ...f, remote: older });
+  assert.equal(prepareUiRelease(f.root, { ...f, version: '1.2.3', expectedSha: head, git: stub.git }).releaseCommit, head);
+  assert.ok(stub.calls.some(x => JSON.stringify(x.argv) === JSON.stringify(['merge-base', '--is-ancestor', head, older])));
+  for (const options of [{ expectedSha: older }, { expectedSha: head, tagged: older }, { expectedSha: head, remote: older, failure: argv => argv[0] === 'merge-base' }]) {
+    const rejecting = transport({ ...f, ...options });
+    assert.throws(() => prepareUiRelease(f.root, { ...f, version: '1.2.3', expectedSha: options.expectedSha, git: rejecting.git }));
+    assert.equal(rejecting.calls.some(x => ['push', 'tag'].includes(x.argv[0])), false);
+  }
+});

@@ -6,7 +6,7 @@
 > 仓库：workloom-ai/workloom-im ｜ 最近一次成功扫描：尚未记录已核实成功（运行 `pnpm oss:watch`） ｜ 最近尝试：未记录
 > 历史全量扫描/尝试（未核实）：2026-09-19T10:16:38.000Z
 > 每项上游版本按成功时间、查询状态和 TTL 单独判定；历史缓存与失败查询不作本次最新版本结论。
-> 统计：登记组件 98 个 ｜ npm 直接依赖 171 个 ｜ Python 依赖 5 个 ｜ 容器镜像 2 个
+> 统计：登记组件 98 个 ｜ npm 直接依赖 171 个 ｜ Python 依赖 5 个 ｜ 容器镜像 3 个
 
 ## 0. 维护机制（四件事）
 
@@ -17,7 +17,7 @@
 | 安全事件（CVE / 供应链投毒） | 不等周期，立即全量扫描 | `pnpm oss:watch --all` |
 | 发布前 | 复核清单新鲜度与更新计划 | `pnpm oss:plan` |
 
-升级纪律：**扫描自动；升级走独立 PR（按 `docs/oss-update-plan.md` 组批 + 门禁 + 协议 §1/§9.5 合并），破坏性/大版本升级按 §3 人审放行**。
+升级纪律：**扫描自动；升级走独立 PR（按 `docs/oss-update-plan.md` 组批 + 门禁 + 协议 §1/§9.5 合并）；破坏性/大版本升级须包含迁移与回滚证据，并通过独立 AI 评审和必需检查，按 §3 执行**。
 
 ## 1. 登记组件（治理清单 · 人工登记 + 自动探测当前版本 + 自动扫描上游最新版本）
 
@@ -296,7 +296,7 @@
 | `vite` | 8.3.0（声明） | 8.3.0 | 开发 | apps/web/package.json、apps/webb/package.json、apps/webc/package.json | 8.3.0（历史记录；未核实或已过期） |
 | `vitest` | 5.0.1 | ^5.0.1 | 开发 | apps/webb/package.json、package.json、packages/base/package.json 等 7 处 | 5.0.1（历史记录；未核实或已过期） |
 | `ws` | 8.21.0（声明） | 8.21.0 | 开发 | vendor/dsh/package.json | 8.21.3（历史记录；未核实或已过期） |
-| `yaml` | 2.9.0 | 2.9.0 | 开发/生产 | .workloom-runtime-deps/package.json、package.json、packages/base/package.json | 2.9.1（历史记录；未核实或已过期） |
+| `yaml` | 2.9.0 | 2.9.0 | 开发/生产 | .workloom-runtime-deps/package.json、package.json、packages/base/package.json 等 4 处 | 2.9.1（历史记录；未核实或已过期） |
 | `yaml-governance → npm:yaml` | 2.9.0 | npm:yaml@2.9.0 | 开发 | package.json | 2.9.1（历史记录；未核实或已过期） |
 | `zod` | 4.6.5（声明） | 4.6.5 / ^4.6.5 | 生产 | .workloom-runtime-deps/package.json、apps/server/package.json、packages/base/package.json 等 6 处 | 4.6.5（历史记录；未核实或已过期） |
 
@@ -310,11 +310,12 @@
 | `Pillow` | 12.3.0 | ==12.3.0 | scripts/whiteboard/engine/requirements.txt | —（未扫描） |
 | `playwright` | >=1.40.0（下限声明） | >=1.40.0 | packages/base/computer-use/toolkit/requirements.txt | 1.45.1（历史记录；未核实或已过期） |
 
-### 2.3 容器镜像（2 个）
+### 2.3 容器镜像（3 个）
 
 | 镜像 | 出现位置 |
 |---|---|
-| `node:24.19.0-bookworm` | .cnb.yml |
+| `cnbcool/code-review@sha256:c20b1e826d854738c807f4949859a6df5d58b95545ebefc96197369943a4bcce` | scripts/delivery/bootstrap-cnb.yml、scripts/delivery/cnb.yml |
+| `node:24.19.0-bookworm` | .cnb.yml、scripts/delivery/bootstrap-cnb.yml、scripts/delivery/cnb.yml |
 | `pgvector/pgvector:pg17` | .cnb.yml、docker-compose.yml#postgres |
 
 ### 2.4 工具链

@@ -18,6 +18,7 @@ import { createLabel, createPull, createBranchProtection, listBranchProtections,
   gitAuthenticationEnvironment, redactCredentials } from "./cnb-api.mjs";
 export { gitAuthenticationEnvironment } from './cnb-api.mjs';
 import { isIsolated } from "./fleet-rules.mjs";
+import { injectDeliveryConfig } from '../delivery/install-config.mjs';
 
 export const FLEET_LABELS = {
   "t/draft": "6c757d",
@@ -38,6 +39,9 @@ export const PROTOCOL_ASSETS = [
   "scripts/ci/verify-commit-msg.mjs",
   "scripts/ci/verify-lock-conflict.mjs",
   "scripts/ci/protocol-rules.test.mjs",
+  'scripts/tools/cnb-api.mjs',
+  'scripts/tools/task.mjs',
+  ...['queue-model.mjs', 'queue-policy.mjs', 'queue-platform.mjs', 'queue-controller.mjs', 'queue-work.mjs', 'queue-release.mjs', 'queue-runner.mjs', 'git-state.mjs', 'review-plugin.mjs', 'model-gateway.mjs', 'install-config.mjs', 'release-source.mjs', 'queue.test.mjs', 'cnb.yml', 'bootstrap-cnb.yml', 'runtime/package.json', 'runtime/package-lock.json'].map(path => `scripts/delivery/${path}`),
 ];
 
 const GATE_STAGE = `    - name: 协议门禁（提交规范 + 并发冲突）
@@ -144,6 +148,15 @@ export async function provisionProtocol(slug, options = {}) {
     );
   }
 
+  // Resolve the exact YAML runtime and validate the original pipeline before any
+  // labels/protection mutation. Python-only projects use delivery/runtime/.
+  const originalCnb = await rawFile(slug, 'main', '.cnb.yml');
+  if (typeof originalCnb !== 'string' || !originalCnb.trim()) throw new Error('必需 .cnb.yml 缺失，拒绝无门禁纳管');
+  const preflightGate = injectGate(originalCnb);
+  if (preflightGate.mode === 'unsupported') throw new Error('无法识别 .cnb.yml 结构，拒绝缺少协议门禁的纳管');
+  try { await injectDeliveryConfig(preflightGate.content, { bootstrap: true }); }
+  catch (error) { throw new Error(`纳管 CI 预检失败（须先安装锁定的 scripts/delivery/runtime 依赖）：${error.message}`); }
+
   await ensureLabels(slug, { dryRun, log });
   await ensureBranchProtection(slug, { dryRun, log });
 
@@ -175,7 +188,10 @@ export async function provisionProtocol(slug, options = {}) {
     const cnbPath = join(repoDir, ".cnb.yml");
     if (existsSync(cnbPath)) {
       const original = readFileSync(cnbPath, "utf8");
-      const { content, changed, mode } = injectGate(original);
+      const gate = injectGate(original);
+      const installed = await injectDeliveryConfig(gate.content, { bootstrap: true });
+      const { content } = installed;
+      const changed = gate.changed || installed.changed; const mode = gate.mode;
       if (mode === "unsupported") throw new Error("无法识别 .cnb.yml 结构，拒绝缺少协议门禁的纳管");
       if (changed && !dryRun) writeFileSync(cnbPath, content, "utf8");
       log(`  门禁流水线：${changed ? `已注入（${mode}）` : mode === "already" ? "已存在" : "结构未识别，需人工处理"}`);
