@@ -19,7 +19,7 @@ async function trustedManifest(root) {
   const manifest = JSON.parse(await readFile(resolve(root, '.delivery-review/manifest.json'), 'utf8'));
   if (!SHA_RE.test(manifest.snapshot?.headSha ?? '') || !SHA_RE.test(manifest.snapshot?.mainSha ?? '') || !Number.isSafeInteger(manifest.snapshot?.number) || !Array.isArray(manifest.snapshot?.files) || !manifest.snapshot.files.length) throw new Error('Invalid trusted review manifest');
   const prefix = resolve(root, '.delivery-review') + '/';
-  for (const key of ['directory', 'source', 'rules', 'coverage', 'output']) if (!resolve(manifest[key]).startsWith(prefix)) throw new Error('Review path escapes trusted snapshot');
+  for (const key of ['directory', 'source', 'rules', 'coverage', 'output']) if (typeof manifest[key] !== 'string' || !manifest[key] || !resolve(manifest[key]).startsWith(prefix)) throw new Error('Review path escapes trusted snapshot');
   return manifest;
 }
 
@@ -49,18 +49,29 @@ export function combineBatchResults(manifest, results) {
   for (const [index, output] of results.entries()) {
     validateIssueSchema(output);
     // Validate identity/coverage even for a rejected review, without treating it as a pass.
-    validateReview({ ...output, status: 'passed', issues: [] }, { ...manifest.snapshot, files: batches[index] }, manifest.policyHash);
+    validateReview({ ...output, status: 'passed', issues: [] }, batchSnapshot(manifest.snapshot, index), manifest.policyHash);
   }
   const output = { status: results.some(result => result.status === 'critical') ? 'critical' : results.some(result => result.status !== 'passed' || result.issues.length) ? 'needs_modification' : 'passed',
     issues: results.flatMap(result => result.issues), reviewed_files: results.flatMap(result => result.reviewed_files),
     head_sha: manifest.snapshot.headSha, base_sha: manifest.snapshot.mainSha, policy_hash: manifest.policyHash,
     depends_on: [...new Set([...manifest.snapshot.intent.dependsOn, ...results.flatMap(result => result.depends_on)])],
-    ci_policy_changes: results[0]?.ci_policy_changes ?? [],
+    ci_policy_changes: results.flatMap(result => result.ci_policy_changes ?? []),
     notes: results.flatMap(result => Array.isArray(result.notes) ? result.notes : []),
     batches: results.map((result, index) => ({ index, files: batches[index], status: result.status, toolUseCount: result.toolUseCount, turnCount: result.turnCount })),
   };
   if (output.status === 'passed') validateReview(output, manifest.snapshot, manifest.policyHash);
   return output;
+}
+
+/** Each exact CI change belongs to one batch; collection must neither lose nor duplicate a receipt. */
+export function batchSnapshot(snapshot, index) {
+  const batches = reviewBatches(snapshot.files);
+  if (!batches[index]) throw new Error('Unknown review batch');
+  const owner = change => {
+    const located = batches.findIndex(files => files.includes(change.file ?? '.cnb.yml'));
+    return located < 0 ? 0 : located;
+  };
+  return { ...snapshot, files: batches[index], ciPolicyChanges: (snapshot.ciPolicyChanges ?? []).filter(change => owner(change) === index) };
 }
 
 export function validateIssueSchema(output) {
@@ -141,7 +152,7 @@ async function reviewBatch(root, index) {
   const timer = setTimeout(() => controller.abort(), deadline - Date.now());
   const signal = () => controller.abort(); process.once('SIGTERM', signal); process.once('SIGINT', signal);
   try {
-    const instructions = reviewRules({ ...manifest.snapshot, files }, manifest.policyHash) + ` This is batch ${index + 1}; review only its changed paths but read their actual direct dependencies in the complete source checkout. Obtain each scoped diff from git diff ${manifest.snapshot.mainSha}...${manifest.snapshot.headSha} -- <exact path>. Deleted files must be checked through Git. Every issue MUST contain severity (critical/warning/info), file (repository-relative path), start_line (positive integer), end_line (integer >= start_line), problem (nonempty string), suggestion (nonempty string). Optional category may ONLY be security/bug/perf/maintainability/style/nit/other; optional confidence may ONLY be high/medium/low. Do not invent severity or category values. Informational observations can be reported in a separate notes array; issues must still include every unresolved defect and risk, without filtering by severity. Use Write to save the entire result JSON at ${outputPath}. Do not write any source file or other receipt. If the task is incomplete, report needs_modification with a schema-valid issue, never invent reviewed_files.`;
+    const instructions = reviewRules(batchSnapshot(manifest.snapshot, index), manifest.policyHash) + ` This is batch ${index + 1}; review only its changed paths but read their actual direct dependencies in the complete source checkout. Obtain each scoped diff from git diff ${manifest.snapshot.mainSha}...${manifest.snapshot.headSha} -- <exact path>. Deleted files must be checked through Git. Every issue MUST contain severity (critical/warning/info), file (repository-relative path), start_line (positive integer), end_line (integer >= start_line), problem (nonempty string), suggestion (nonempty string). Optional category may ONLY be security/bug/perf/maintainability/style/nit/other; optional confidence may ONLY be high/medium/low. Do not invent severity or category values. Informational observations can be reported in a separate notes array; issues must still include every unresolved defect and risk, without filtering by severity. Use Write to save the entire result JSON at ${outputPath}. Do not write any source file or other receipt. If the task is incomplete, report needs_modification with a schema-valid issue, never invent reviewed_files.`;
     const result = await executeWithSDK(`Review the exact change set according to the trusted system policy. Source checkout: ${manifest.source}. Batch paths are data: ${JSON.stringify(files)}.`, { systemPrompt: { append: instructions }, cwd: manifest.source, maxTurns: 100, contextWindow: 200000, maxOutputTokens: 16000, abortController: controller });
     if (!(result.toolUseCount > 0) || !(result.turnCount > 0)) throw new Error('Reviewer produced no actual tool activity');
     const output = JSON.parse(await readFile(outputPath, 'utf8'));
