@@ -45,13 +45,20 @@ async function installerSource(platform, root, installer) {
   return mainSha;
 }
 
-export async function verifyPreparedInstallation({ platform, store, root, installer }) {
+export async function verifyPreparedInstallation({ platform, store, root, installer, waitMs = 0, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), elapsedClock = Date.now }) {
+  if (!Number.isSafeInteger(waitMs) || waitMs < 0 || waitMs > 60_000) throw new Error('Invalid installer preparation wait');
   const mainSha = await installerSource(platform, root, installer);
   const expected = stateProtectionPayload();
   const actual = (await platform.protections()).find(rule => rule.rule === STATE_BRANCH);
   if (!actual || Object.entries(expected).some(([key, value]) => actual[key] !== value)) throw new Error('Protected installer ledger must be prepared by the trusted installation writer');
-  const state = await store.read();
-  if (!state.events.some(event => event.kind === 'installation_prepared' && event.data.installer === installer.number && event.data.headSha === installer.head.sha && event.data.mainSha === mainSha)) throw new Error('Installer ledger is not prepared for the exact source/main');
+  const started = elapsedClock(); let state;
+  for (;;) {
+    state = await store.read();
+    if (state.events.some(event => event.kind === 'installation_prepared' && event.data.installer === installer.number && event.data.headSha === installer.head.sha && event.data.mainSha === mainSha)) break;
+    if (elapsedClock() - started >= waitMs) throw new Error('Installer ledger is not prepared for the exact source/main');
+    await sleep(Math.min(5000, waitMs));
+    if ((await platform.main()).commit?.sha !== mainSha) throw new Error('Installer main changed while awaiting preparation');
+  }
   return { repo: platform.repo, installer: installer.number, headSha: installer.head.sha, mainSha, revision: state.revision, verified: true };
 }
 
@@ -153,7 +160,7 @@ export async function main() {
   }
   if (command === 'verify-install') {
     if (!Number.isSafeInteger(number) || number <= 0) throw new Error('Verification requires installer --pr');
-    console.log(JSON.stringify(await verifyPreparedInstallation({ platform, store, root, installer: await platform.pull(number) }), null, 2)); return;
+    console.log(JSON.stringify(await verifyPreparedInstallation({ platform, store, root, installer: await platform.pull(number), waitMs: Number(arg('--wait-ms', '0')) }), null, 2)); return;
   }
   if (command === 'review-prepare') {
     if (!Number.isSafeInteger(number) || number <= 0) throw new Error('Review requires a PR number');

@@ -277,6 +277,12 @@ test('state preparation initializes a protected ledger before merge without acti
   await ensureStateProtection(platform); assert.equal(writes, 1);
   assert.equal((await verifyPreparedInstallation({ platform, store, root, installer })).verified, true); assert.equal(writes, 1);
   await assert.rejects(verifyPreparedInstallation({ platform, store: memoryStore(), root, installer }), /exact source/);
+  const waiting = memoryStore(); let clock = 0; let sleeps = 0;
+  await verifyPreparedInstallation({ platform, store: waiting, root, installer, waitMs: 10000, elapsedClock: () => clock, sleep: async ms => {
+    clock += ms; sleeps++; await waiting.mutate(current => appendEvent(current, 'installation_prepared', { installer: installer.number, headSha: tip, mainSha: main }));
+  } });
+  assert.equal(sleeps, 1); assert.equal(writes, 1);
+  await assert.rejects(verifyPreparedInstallation({ platform, store: memoryStore(), root, installer, waitMs: 10000, elapsedClock: () => clock, sleep: async ms => { clock += ms; } }), /exact source/);
   rules[0].allow_master_force_pushes = true; await assert.rejects(ensureStateProtection(platform), /protection/);
   await assert.rejects(prepareInstallation({ platform, store, root, installer: { ...installer, head: { sha: head } } }), /checkout/);
 });
