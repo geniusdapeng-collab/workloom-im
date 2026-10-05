@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -58,6 +59,16 @@ test('installation preflight rejects incomplete assets, invalid or missing produ
   }
   const root = await fixture(t); const incomplete = { ...assets }; delete incomplete[CORE_ASSETS[0]];
   await assert.rejects(plan(root, { assets: incomplete }), /closure/);
+});
+test('actual installed main-selector Python product runs the copied delivery regression with resolved include gates and the normalized bootstrap selector', async t => {
+  const root = await fixture(t);
+  const currentAssets = { ...assets, 'scripts/delivery/queue.test.mjs': await readFile(join(sourceRoot, 'scripts/delivery/queue.test.mjs'), 'utf8') };
+  await applyInstallation(await plan(root, { assets: currentAssets }), root);
+  await cp(join(sourceRoot, 'scripts/delivery/runtime/node_modules/yaml'), join(root, 'scripts/delivery/runtime/node_modules/yaml'), { recursive: true });
+  await git(['init', '--quiet'], { cwd: root }); await git(['add', '.'], { cwd: root }); await git(['commit', '--quiet', '-m', 'installation fixture'], { cwd: root });
+  const env = { ...process.env }; delete env.NODE_TEST_CONTEXT; delete env.CNB_TOKEN; delete env.CNB_TOKEN_FOR_AI; delete env.CNB_TOKEN_FOR_CODEBUDDY;
+  const result = spawnSync(process.execPath, ['--test', 'scripts/delivery/queue.test.mjs', 'scripts/ci/protocol-rules.test.mjs'], { cwd: root, env, encoding: 'utf8', timeout: 60000, maxBuffer: 4 * 1024 * 1024 });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`); assert.match(result.stdout, /tests 81/);
 });
 test('installation rejects a symlink in any asset path before performing any migration', async t => {
   const root = await fixture(t); const outside = await temp(t);

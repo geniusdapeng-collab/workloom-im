@@ -291,7 +291,7 @@ test('genuine rejected batches retain findings without an approval migration rec
 });
 test('required native node-test stages refer to existing repository files', async () => {
   const root = new URL('../../', import.meta.url); const YAML = await parser();
-  const config = YAML.parse(await readFile(new URL('.cnb.yml', root), 'utf8'), { maxAliasCount: 1000 });
+  const config = await resolvePipelineConfig(await readFile(new URL('.cnb.yml', root), 'utf8'), { readLocal: path => readFile(new URL(path, root), 'utf8') });
   let verified = 0;
   for (const pipeline of (prPipelines(config) ?? []).filter(value => value.allowFailure !== true)) {
     for (const stage of pipeline.stages) {
@@ -351,7 +351,7 @@ test('archived actual non-installer CNB run proves exit 78 preserves all indepen
   ]
 };
   const YAML = await parser();
-  const bootstrap = YAML.parse(await readFile(new URL('./bootstrap-cnb.yml', import.meta.url), 'utf8'))['**'].pull_request[0];
+  const bootstrap = prPipelines(YAML.parse(await readFile(new URL('./bootstrap-cnb.yml', import.meta.url), 'utf8')))[0];
   const skipped = spawnSync('sh', ['-c', bootstrap.stages[0].script], { env: { CNB_PULL_REQUEST_BRANCH: proof.branch.replace(/^refs\/heads\//, '') }, encoding: 'utf8' });
   assert.equal(skipped.status, 78);
   assert.deepEqual(checksVerdict({ sha: proof.testedCommit, statuses: proof.statuses }, { sha: proof.testedCommit, parents: proof.parents.map(sha => ({ sha })) }, { headSha: proof.sourceSha, mainSha: proof.mainSha }, ['delivery-bootstrap-review', 'static-gate', 'db-gate', 'ui-gate']), []);
