@@ -745,6 +745,8 @@ include:
         done
         node -e '
           const fs=require("fs"),c=require("crypto");
+          const sourceSha=process.env.RELEASE_EXPECTED_SHA;
+          if(!/^[a-f0-9]{40,64}$/.test(sourceSha||"")) throw new Error("发布清单要求显式 RELEASE_EXPECTED_SHA");
           const specs=[["desktop-macos-manifest.json",["WorkLoom-mac-arm64.dmg","WorkLoom-mac-x64.dmg"]],["desktop-windows-manifest.json",["WorkLoom-win-x64.exe"]]];
           const assets=[];
           for(const [manifestFile,names] of specs){
@@ -758,7 +760,7 @@ include:
               assets.push({name,size:b.length,sha512:digest});
             }
           }
-          fs.writeFileSync("WorkLoom-release-manifest.json",JSON.stringify({schemaVersion:1,product:"workloom-desktop",tag:process.env.VERSION,sourceSha:process.env.RELEASE_EXPECTED_SHA||process.env.CNB_BRANCH_SHA,channel:"cnb",assets},null,2)+"\n");
+          fs.writeFileSync("WorkLoom-release-manifest.json",JSON.stringify({schemaVersion:1,product:"workloom-desktop",tag:process.env.VERSION,sourceSha,channel:"cnb",assets},null,2)+"\n");
           fs.writeFileSync("WorkLoom-SHA512SUMS.txt",assets.map((a)=>`${a.sha512}  ${a.name}`).join("\n")+"\n");
           console.log("汇总校验表：",assets.map((a)=>a.name).join("、"));
         '
