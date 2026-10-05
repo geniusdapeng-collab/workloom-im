@@ -9,7 +9,7 @@ import { GitStateStore, git } from './git-state.mjs';
 import { alignBranch, independentCodeBuddyApproval } from './queue-work.mjs';
 import { Platform } from './queue-platform.mjs';
 import { BASE_POLICY, ciImplementationChanges, parser, sourcePipelineReport, validateSourcePipeline } from './queue-policy.mjs';
-import { dependencies, integratedDependency, mergeCandidate, reconcile, requestReview, writeTaskReceipts } from './queue-controller.mjs';
+import { dependencies, integratedDependency, mergeCandidate, reconcile, requestReview, reviewSlotBusy, writeTaskReceipts } from './queue-controller.mjs';
 import { enqueueReleases, reconcileReleases, verifyRelease } from './queue-release.mjs';
 import { injectDeliveryConfig } from './install-config.mjs';
 import { batchEnvironment, batchSnapshot, combineBatchResults, reviewBatches, reviewEnvironment, runReview, validateIssueSchema } from './review-plugin.mjs';
@@ -342,6 +342,18 @@ test('runner deadline uses elapsed time independently of injected lease/calendar
   const platform = { repo, error: e => e.message, pulls: async () => [snapshot(1).pull, snapshot(2).pull], snapshot: async number => { scanned.push(number); return snapshot(number, { checkErrors: ['still pending'] }); } };
   const report = await reconcile({ platform, store: memoryStore(), policy, now: 1, dryRun: true, elapsedClock: () => clocks.shift(), deadlineMs: 240000 });
   assert.deepEqual(scanned, [1]); assert.equal(report.waiting.find(item => item.number === 2).reason, 'Bounded runner time; next reconcile continues');
+});
+test('new candidates reserve actual AI parent capacity; failed, stale and completed reviews do not block unrelated PRs', async () => {
+  const state = emptyState(repo); updateTask(state, 1, { status: 'waiting_ci', headSha: head, candidate: { number: 11, headSha: head, mainSha: main, at: now } }, now); const store = memoryStore(state);
+  let status = 'pending'; const platform = { call: async () => ({ status }) };
+  assert.equal(await reviewSlotBusy(platform, store, 2, main, now), true); assert.equal(await reviewSlotBusy(platform, store, 1, main, now), false);
+  await store.mutate(current => updateTask(current, 11, { status: 'waiting_review', reviewBuild: { sn: 'real-build', at: now } }, now));
+  assert.equal(await reviewSlotBusy(platform, store, 2, main, now), true);
+  status = 'error'; assert.equal(await reviewSlotBusy(platform, store, 2, main, now), false);
+  status = 'unknown'; await assert.rejects(reviewSlotBusy(platform, store, 2, main, now), /unreadable/);
+  assert.equal(await reviewSlotBusy(platform, store, 2, main, now + 45 * 60000), false);
+  status = 'pending'; await store.mutate(current => updateTask(current, 11, { review: review(snapshot(11)) }, now));
+  assert.equal(await reviewSlotBusy(platform, store, 2, main, now), false);
 });
 test('release enqueue is idempotent by frozen source/kind/version and keeps integration separate', () => {
   const state = emptyState(repo); const task = { number: 1, merge: { sha: mergedSha }, intent: { releases: [{ kind: 'ui', version: 'v1.2.3' }] } };

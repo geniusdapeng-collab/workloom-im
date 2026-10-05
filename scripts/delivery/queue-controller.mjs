@@ -188,6 +188,26 @@ async function requestRepair(platform, store, snapshot, task, reason, policy, no
   await store.mutate(state => updateTask(state, snapshot.number, { recovery: receipt, recoveryIntent: null }, now));
 }
 
+/** Candidate creation triggers a real target-event review; reserve capacity before creating another one. */
+export async function reviewSlotBusy(platform, store, originNumber, mainSha, now) {
+  const state = await store.read();
+  for (const origin of Object.values(state.tasks)) {
+    const candidate = origin.candidate;
+    if (origin.number === originNumber || !candidate || candidate.mainSha !== mainSha || candidate.headSha !== origin.headSha || ['integrated', 'release_pending', 'delivered', 'closed'].includes(origin.status)) continue;
+    const task = state.tasks[String(candidate.number)];
+    if (task?.review?.passed && task.review.headSha === candidate.headSha && task.review.mainSha === mainSha) continue;
+    if (task?.reviewBuild?.sn && now - task.reviewBuild.at < 45 * 60_000) {
+      const actual = await platform.call(`/-/build/status/${encodeURIComponent(task.reviewBuild.sn)}`);
+      if (actual?.status === 'pending') return true;
+      if (!['success', 'error', 'cancel'].includes(actual?.status)) throw new Error('In-flight AI build status is unreadable; new candidate deferred');
+      continue; // A terminal failed review cannot reserve unrelated candidate capacity.
+    }
+    if (task?.reviewDispatch && now - task.reviewDispatch.at < 45 * 60_000) return true;
+    if (!task && now - candidate.at < 2 * 60_000) return true; // Target event is starting.
+  }
+  return false;
+}
+
 export async function writeTaskReceipts({ platform, store, now = Date.now() }) {
   const state = await store.read();
   const tasks = Object.values(state.tasks).filter(task => ['integrated', 'delivered'].includes(task.status) && !task.issueReceipt && task.intent?.taskId && task.merge && (task.intent.releases ?? []).every(intent => Object.values(state.releases).some(release => release.number === task.number && release.sha === task.merge.sha && release.kind === intent.kind && release.version.replace(/^v/, '') === intent.version.replace(/^v/, '') && release.status === 'delivered' && release.receipt?.sha === task.merge.sha)));
@@ -232,7 +252,7 @@ export async function reconcile({ platform, store, policy, now = Date.now(), dry
   const pulls = await platform.pulls();
   let state = await store.read();
   const dependencyMap = await dependencies(platform, pulls, state);
-  let alignments = 0; let reviews = 0; let repairs = 0;
+  let alignments = 0; let reviews = 0; let repairs = 0; let createdCandidates = 0;
   const age = pull => state.tasks[String(pull.number)]?.firstSeen ?? (Date.parse(pull.created_at ?? '') || now);
   const queue = [...pulls].sort((a, b) => age(a) - age(b) || Number(a.number) - Number(b.number));
   for (const pull of queue) {
@@ -312,7 +332,13 @@ export async function reconcile({ platform, store, policy, now = Date.now(), dry
       if (!reasons.length || reasons.every(reason => reason === 'No current complete AI review')) {
         if (dryRun) report.integrated.push({ number, dryRun: true });
         else {
+          const existingCandidate = task?.candidate?.headSha === snapshot.headSha && task.candidate.mainSha === snapshot.mainSha;
+          if (!existingCandidate && (createdCandidates || await reviewSlotBusy(platform, store, number, snapshot.mainSha, now))) {
+            report.waiting.push({ number, reason: 'Independent AI parent capacity is occupied; source remains available for development' }); continue;
+          }
           const candidate = await platform.ensureCandidate(snapshot);
+          candidate.at = existingCandidate ? (task.candidate.at ?? now) : now;
+          if (!existingCandidate) createdCandidates++;
           await store.mutate(current => updateTask(current, number, { candidate }, now));
           const candidateSnapshot = await platform.snapshot(candidate.number, policy);
           candidateSnapshot.originNumber = number;
