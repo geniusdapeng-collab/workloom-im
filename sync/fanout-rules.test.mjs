@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 import {
   autoMergeEligibility,
@@ -16,6 +18,66 @@ import {
   syncedChildren,
   syncDrift,
 } from "./fanout-rules.mjs";
+import { deliveryRolloutReady } from './fanout-cnb.mjs';
+import { appendEvent, emptyState } from '../scripts/delivery/queue-model.mjs';
+
+test('新租约门禁只下发到已准备账本的仓；权限、损坏或不同仓账本不能放行', async () => {
+  const repo = 'workloom-ai/workloom-hotel';
+  const absent = await deliveryRolloutReady(repo, async () => { throw Object.assign(new Error('not found'), { status: 404 }); });
+  assert.equal(absent.ready, false); assert.match(absent.reason, /先经首装/);
+  const state = emptyState(repo); assert.equal((await deliveryRolloutReady(repo, async () => state)).ready, false);
+  appendEvent(state, 'installation_prepared', { installer: 1 });
+  assert.equal((await deliveryRolloutReady(repo, async () => state)).ready, true);
+  for (const status of [403, 500]) await assert.rejects(deliveryRolloutReady(repo, async () => { throw Object.assign(new Error('unreadable'), { status }); }), /unreadable/);
+  await assert.rejects(deliveryRolloutReady(repo, async () => emptyState('foreign/repo')), /identity/);
+  const corrupted = structuredClone(state); corrupted.events[0].data.installer = 2;
+  await assert.rejects(deliveryRolloutReady(repo, async () => corrupted), /chain/);
+});
+
+test('实际 fanout CLI 对既有订阅仓缺首装回执返回非零及可恢复动作，不把跳过计为健康', () => {
+  const root = mkdtempSync(join(tmpdir(), 'fanout-first-install-regression-'));
+  try {
+    const preload = join(root, 'offline-api.mjs');
+    writeFileSync(preload, 'globalThis.fetch = async url => { if (String(url) !== "https://api.cnb.cool/workloom-ai/workloom-hotel/-/git/raw/automation%2Fdelivery-state/state.json") throw new Error("Unexpected API in first-install fixture"); return new Response(JSON.stringify({errcode:404}), {status:404}); };\n');
+    const script = fileURLToPath(new URL('./fanout-cnb.mjs', import.meta.url));
+    const base = fileURLToPath(new URL('../', import.meta.url));
+    const env = { ...process.env, CNB_TOKEN: 'offline-fanout-fixture' }; delete env.NODE_TEST_CONTEXT;
+    const result = spawnSync(process.execPath, ['--import', preload, script, '--base-dir', base,
+      '--only', 'workloom-ai/workloom-hotel', '--dry-run', '--json', '--tolerate-scope-error'],
+    { cwd: root, env, encoding: 'utf8', timeout: 15000 });
+    assert.ifError(result.error);
+    assert.equal(result.status, 78, result.stderr + result.stdout);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.waitingInstallation, 1);
+    assert.equal(report.outcome, 'waiting-installation'); assert.equal(report.exitCode, 78);
+    assert.equal(report.aligned, 0); assert.equal(report.opened, 0);
+    assert.equal(report.results[0].status, 'waiting-installation');
+    assert.equal(report.results[0].action.repo, 'workloom-ai/workloom-hotel');
+    assert.deepEqual(report.results[0].action.requiredReceipts, ['installation_prepared', 'activated', 'native-reconcile-state-write']);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('实际 fanout 的真实权限/传输错误优先于首装等待，不被 78 或容忍开关隐藏', () => {
+  const root = mkdtempSync(join(tmpdir(), 'fanout-mixed-failure-regression-'));
+  try {
+    const preload = join(root, 'offline-api.mjs');
+    writeFileSync(preload, 'globalThis.fetch = async url => { if (String(url).includes("workloom-hotel")) return new Response("{}", {status:404}); if (String(url).includes("panda-cineforge")) { if (process.env.FANOUT_OFFLINE_MODE === "transport") throw new Error("offline transport unavailable"); return new Response("{}", {status:403}); } throw new Error("Unexpected fixture API"); };\n');
+    const script = fileURLToPath(new URL('./fanout-cnb.mjs', import.meta.url)); const base = fileURLToPath(new URL('../', import.meta.url));
+    const env = { ...process.env, CNB_TOKEN: 'offline-fanout-fixture' }; delete env.NODE_TEST_CONTEXT;
+    for (const mode of ['scope', 'transport', 'tolerated-scope']) {
+      const tolerate = mode !== 'scope'; const code = mode === 'tolerated-scope' ? 78 : 1;
+      const result = spawnSync(process.execPath, ['--import', preload, script, '--base-dir', base, '--only',
+        'workloom-ai/workloom-hotel,workloom-ai/panda-cineforge', '--dry-run', '--json', ...(tolerate ? ['--tolerate-scope-error'] : [])],
+      { cwd: root, env: { ...env, FANOUT_OFFLINE_MODE: mode }, encoding: 'utf8', timeout: 15000 });
+      assert.ifError(result.error); assert.equal(result.status, code, result.stderr + result.stdout);
+      const report = JSON.parse(result.stdout);
+      assert.equal(report.waitingInstallation, 1); assert.equal(report.children, 2);
+      assert.equal(report.scopeDenied, mode === 'transport' ? 0 : 1); assert.equal(report.failed, mode === 'transport' ? 1 : 0);
+      assert.equal(report.outcome, code === 78 ? 'waiting-installation' : 'failed'); assert.equal(report.exitCode, code);
+      assert.equal(report.warnings.length, mode === 'tolerated-scope' ? 1 : 0);
+    }
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
 
 const pull = (overrides = {}) => ({
   number: "7",

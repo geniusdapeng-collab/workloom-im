@@ -1,7 +1,8 @@
 <!--
 document_schema: workloom.product-context/v1
 document_id: workloom-product-and-code-panorama
-context_version: 2026-09-30.1
+context_version: 2026-10-05.1
+development_policy_updated_at: 2026-10-05  # 仅研发交付政策/机制修订；其余仓库统计仍为 snapshot_date 快照
 snapshot_date: 2026-09-22
 timezone: Asia/Shanghai
 canonical_repository: cnb.cool/workloom-ai/workloom-im
@@ -54,7 +55,7 @@ WorkLoom 不是一组彼此独立的 AI 应用，而是一套“一个基座、�
 - **酒店、电商、视频、获客、咨询、交易等项目**是从同一基座派生的行业经营体。它们用行业包定义自己的数字员工组织、技能、业务对象、阶段、围栏、种子数据、投影和 UI。
 - **狐狸先生**不是一个独立行业，而是新人格、新交互和影音汇报方式的试验田；成功经验可回到基座，失败实验进入“策略墓地”。
 - 整套系统的真正差异化不只在模型能力，而在两层复利：一是“围栏 + 账本 + 考试院”的信任工程，二是“经验上行、评测灰度、能力下发”的蜂群飞轮。
-- 研发侧已上线**开发协作机制**（`docs/DEVELOPMENT-PROTOCOL.md`，协议 v1 · 2026-09-22 修订）：五条硬规则（一任务一分支、任务号进提交、先声明后落笔、**合并在机器且串行（人保留叫停权）**、无回执不算完成）+ 三个自动化工具 + 每日舰队扫描；同时为 `workroom-fox` / `WorkLoom-growth` 建立了**实验车道**，实验语义不下发、不覆盖、不回流。
+- 研发侧已上线**开发协作机制**（`docs/DEVELOPMENT-PROTOCOL.md`，协议 v2 · 2026-10-05 修订）：五条硬规则（一任务一分支、任务号进提交、先声明后落笔、**合并在机器且串行（人保留叫停权）**、无回执不算完成）+ 三个自动化工具 + 每日舰队扫描；同时为 `workroom-fox` / `WorkLoom-growth` 建立了**实验车道**，实验语义不下发、不覆盖、不回流。
 - 舰队分层（2026-09-22）：**十个订阅仓**（基座 + 9 个子仓）走正常同步与纳管；`workloom-growthtest` / `workloom-growthmatrix` 两个**隔离副本**只登记、不纳管、双向不同步（基座内容不直接下发，其改动也不直接回流），见 §5.8/§5.9 与 §14.5。
 - 工程完整性上，每个仓都是**可独立运行的自包含 monorepo 源码树**（含服务端、三端前端、桌面壳、数据库迁移、行业包与技能），开源组件以“仓内 vendor / npm 依赖 / 安装期受控下载”三种形态存在，详见 §12。
 
@@ -349,7 +350,7 @@ WorkData 事件以五元结构记录业务事实（`packages/shared/src/event-sc
 1. **租户隔离**：数据库 RLS、运行时上下文和缓存键都必须带租户边界（HP-34 待专项）。
 2. **只增不改**：经营事件、审批证据和关键回执不可静默覆盖；修正应产生新事件。
 3. **先围栏后动作**：任何入口和子调用都不能绕过统一网关（权限 → 脱敏 → 审批 → 事件）。
-4. **高风险必须人审**：涉钱、涉敏感数据、群发、外部发布、交易与破坏性变更不能被默认自动化。
+4. **高风险经营动作必须单独授权**：涉钱、涉敏感数据、群发、外部发布、交易与破坏性变更不能被默认自动化。2026-10-05 产品所有者授权正常研发代码/CI/协议交付由独立 AI 审查和必需检查执行，不等待用户逐 PR 点击批准；这不授权真实资金、秘密轮换、客户外发或实盘。
 5. **无回执不算完成**：UI 状态、审计和任务恢复都以真实回执为准。
 6. **客户原始数据不上行**：蜂群只接收经过白名单、脱敏与审核的元数据/经验。
 7. **覆盖层只能收紧**：客户个性化不能突破平台不可变红线（`is_baseline` 单调守卫 + 合并期复核）。
@@ -464,7 +465,7 @@ WorkData 事件以五元结构记录业务事实（`packages/shared/src/event-sc
 2. **npm 依赖（锁定但不随仓携带）**：React、Hono、tRPC、Vite、Tailwind、Three Fiber、Pixi/Live2D 渲染插件、pg、zod 等，由 `package.json` + `pnpm-lock.yaml` 锁定，安装时从 registry 获取；共享 UI 包 `@workloom/ui` 作为**版本化制品**分发（2026-09-18 起托管在 CNB Release，由 `ui-release` 流水线构建发布，`integrityByVersion` 记录 SHA-512；截至 2026-09-22 的最高版本/最新发布为 `ui-v0.1.6`（86,345 字节，2026-09-19T14:04Z；平台未设 `is_latest` 标记），下载形如 `https://cnb.cool/workloom-ai/workloom-im/-/releases/download/ui-v0.1.6/workloom-ui-0.1.6.tgz`，具体版本以 CNB Release 列表与各仓 `.workloom-ui.json` 为准）。
 3. **安装期受控下载（带 sha256，不随仓携带）**：Node 24.19.0（darwin arm64/x64、win x64）、npm 11.17.0、PostgreSQL 17（PostgresApp / zonky 嵌入包）、nats-server 2.11.4 等，登记在 `scripts/release-assets.json` 与各仓 `.workloom-runtime-deps/`（含 `metadata.json` 与 `package-lock.json` 的精确闭包；B-01.SC-4 已做到每产品 runtime lock + 三目标 os/cpu 闭包 + 12 直接依赖 verify）。
 
-补充机制（2026-09-19 升级）：`oss-components.json` 已扩为**全量清单 v2**，并新增**每周上游扫描机制**（`feat(base): 开源组件全量清单 v2 + 每周上游扫描机制`，commit `44f48c38`）。`oss-components.json`（根目录）是受监测开源组件清单（name / repo / channel / current / cadence / gate / scope / notes），配 `skills/oss-watch/SKILL.md`、`scripts/oss-watch.sh` 与 `.oss-watch-state.json`，实现“清单登记 → 周期扫描 → 更新计划 → 一键执行 → 全量门禁 → 发布”；纪律是**扫描自动、升级走独立 PR 并由 AI 在门禁全绿后按协议 §1/§9.5 合并**（破坏性/大版本升级按 §3 人审放行，人保留叫停与回滚权）。清单里相当一部分是“选型在案、未进运行时”（如 mem0、presidio、langfuse、deepeval、promptfoo、skyvern、gui-agents、wrenai、lago、copilotkit、tauri、litestream 等），不要把清单条目等同于已集成组件。
+补充机制（2026-09-19 升级）：`oss-components.json` 已扩为**全量清单 v2**，并新增**每周上游扫描机制**（`feat(base): 开源组件全量清单 v2 + 每周上游扫描机制`，commit `44f48c38`）。`oss-components.json`（根目录）是受监测开源组件清单（name / repo / channel / current / cadence / gate / scope / notes），配 `skills/oss-watch/SKILL.md`、`scripts/oss-watch.sh` 与 `.oss-watch-state.json`，实现“清单登记 → 周期扫描 → 更新计划 → 一键执行 → 全量门禁 → 发布”；纪律是**扫描自动、升级走独立 PR 并由 AI 在门禁全绿后按协议 §1/§9.5 合并**（破坏性/大版本升级按 §3 补迁移、回归与回滚证据，独立 AI 和必需检查放行，人保留叫停与回滚权）。清单里相当一部分是“选型在案、未进运行时”（如 mem0、presidio、langfuse、deepeval、promptfoo、skyvern、gui-agents、wrenai、lago、copilotkit、tauri、litestream 等），不要把清单条目等同于已集成组件。
 
 ### 12.2 结论
 
@@ -503,15 +504,15 @@ WorkData 事件以五元结构记录业务事实（`packages/shared/src/event-sc
 
 ## 14. 开发协作机制与舰队治理（2026-09-19 新增；2026-09-22 增补隔离副本车道）
 
-**协议正文**：`docs/DEVELOPMENT-PROTOCOL.md`（workloom-im 唯一定义，随 base-sync 分发各订阅仓只读副本；当前协议 **v1 · 2026-09-22 修订**，含新增 §11 隔离副本车道）。核心是"不新造系统"——用 CNB 原生能力 + 三个校验脚本管住"谁在改什么、别撞车、会话断了能接上"。
+**协议正文**：`docs/DEVELOPMENT-PROTOCOL.md`（workloom-im 唯一定义，随 base-sync 分发各订阅仓只读副本；当前协议 **v2 · 2026-10-05 修订**，含限时开发租约、独立 AI 审查和持续交付恢复）。核心是"不新造系统"——用 CNB 原生能力 + 三个校验脚本管住"谁在改什么、别撞车、会话断了能接上"。
 
 ### 14.1 五条硬规则
 
 1. 一任务一分支一 PR：任务卡 = CNB Issue（标题 `[T-YYYY-MMDD-XXXX]`），分支 = `task/T-YYYY-MMDD-XXXX`（提交门禁正则 `\[T-\d{4}-\d{4}-\d{4}\]`）；
 2. 提交标题 `<type>(<layer>): <摘要> [T-…]`；type ∈ `feat|fix|sync|protocol|exam|docs|test|chore|ci`；layer 仅告警；2026-09-19 起新提交必须带任务号（此前提交按过渡期祖父规则放行）；
-3. 先声明后落笔：与同仓其它 open PR 改到同一文件或同一互斥模块（`sync/`、`protocol/`、`migrations/`、`.cnb.yml`、`AGENTS.md`、根 `package.json`）→ **先到先得**（编号小者优先），后到者排队；
-4. 合并在机器、串行执行：AI 只提 PR，门禁全绿后由 AI 按队列一次一个合并（squash），人保留叫停与回滚权；
-5. 无回执不算完成：Issue 必须留 5 行回执并关单。
+3. 先声明后落笔：普通文件重叠只提示；敏感模块有期限开发租约（owner + generation），等待 CI/审查前释放；真实前置依赖写入 PR 的 depends_on；
+4. 合并在机器、串行执行：不可修改候选固定源码，真实 CodeBuddy 审查和必需检查绑定最新主干；合并使用普通 merge 并回读准确双亲，不等待人工点击，人保留叫停与 revert 回滚权；
+5. 无回执不算完成：准确源码真实合入且所声明制品发布已验证，才写 Issue 五行回执并关单。
 
 ### 14.2 自动化边界（哪些不用人管）
 
@@ -523,7 +524,7 @@ WorkData 事件以五元结构记录业务事实（`packages/shared/src/event-sc
 | **新仓发现与纳管** | 每日 cron（09:00）`scripts/tools/fleet-scan.mjs --issue --provision`：识别 → 开扫描卡 → 自动建纳管 PR（隔离副本仓按 `isolatedRepos` 跳过，只单列报告） |
 | 任务卡建卡 / 回执 / 关单 | `scripts/tools/task.mjs new|list|receipt` |
 | 实验路径护栏 | 每日 cron `scripts/tools/experiment-guard.mjs --check` |
-| **基座资产分发**（根级受控资产 → 各仓 `sync/base-*` PR → 合并） | 30 分钟 cron + `api_trigger_base_sync`：`sync/fanout-cnb.mjs` + `sync/merge-sync-prs.mjs`（仅纯同步 PR 自动合并，白名单见协议 §9.4） |
+| **基座资产分发**（根级受控资产 → 各仓 `sync/base-*` PR → 合并） | 30 分钟 cron + `api_trigger_base_sync`：`sync/fanout-cnb.mjs` 创建 PR；独立仓级 `scripts/delivery/cnb.yml` 每 5 分钟恢复和集成；旧 merge-sync-prs 只派发 |
 | **代码类 PR 合并 / 高风险裁决 / 协议发布** | **AI 执行合并**（门禁全绿 + 串行；`risk/review` 放行后合并，`risk/block` 永不合并）；**人**保留高风险裁决与随时叫停 / 回滚权 |
 
 ### 14.3 工具与服务
@@ -537,7 +538,8 @@ WorkData 事件以五元结构记录业务事实（`packages/shared/src/event-sc
 | `scripts/tools/task.mjs` | 任务卡 `new` / `list` / `receipt` |
 | `scripts/tools/experiment-guard.mjs` | 实验车道护栏：实验路径不得被 base-sync 覆盖、必须进 UI 扩展白名单；同时校验隔离副本登记完整且未混入 `children`（`ISOLATED_IN_CHILDREN`） |
 | `sync/fanout-cnb.mjs` | 基座 fanout：资产摘要漂移预检 → 只对真漂移子仓 clone → 建 `sync/base-*` PR（在途去重、不强推）；入口过滤隔离副本（`isolatedRepos` 不下发） |
-| `sync/merge-sync-prs.mjs` | 纯同步 PR 自动合并：分支前缀 + 文件白名单 + 全部门禁 success 三条件齐备才合并 |
+| `sync/merge-sync-prs.mjs` | 兼容入口，只派发各订阅仓的 trusted-main 执行器，无第二条直接合并路径 |
+| `scripts/delivery/queue-*.mjs` | Git CAS 持久化状态、限时租约、依赖 DAG、独立 AI、准确候选集成、有限恢复与冻结 SHA 发布回执；是否已激活以平台/状态回读为准 |
 
 **任务集看板**：`workloom-ai/WorkLoom-Dev-Dispatch`（纳入十仓，按 `t/*` 标签分列；CNB 任务集名不允许空格与中文）。**标签体系**：每仓 10 个（CNB 硬上限，实测第 11 个返回 201 但不落库）。隔离副本仓不参与任务集看板与协议纳管。
 

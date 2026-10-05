@@ -7,7 +7,7 @@ allowed-tools: Read, Write, Bash, Grep, WebFetch
 # oss-watch · 开源组件升级监测与执行技能
 
 > **一句话用法**：对本仓库的 AI Coding Agent 说「**升级开源组件**」，即自动走完全流程：扫描 → 出计划 → 你圈范围 → 逐项升级 → 门禁 → 发布。
-> **纪律**：扫描可以自动；升级走独立 PR——「更新计划组批 → 门禁测试 → 按协议 §1/§9.5 合并」；破坏性/大版本升级按 §3 人审放行，人保留叫停与回滚权。禁止裸 `pnpm update` 直接提交。
+> **纪律**：扫描可以自动；升级走独立 PR——「更新计划组批 → 门禁测试 → 独立 AI 审查 → 按协议 §1/§9.5 合并」；破坏性/大版本升级须补迁移、回归与回滚证据后按 §3 执行，人保留叫停与回滚权。正常研发升级不等待用户逐 PR 点击批准。禁止裸 `pnpm update` 直接提交。
 > **可选提醒**：本机制为**可选能力**——开发者不主动发起时，仓库不做任何强制性的组件检查/升级拦截；想知道有没有可更新项，随时 `pnpm oss:plan` 看一眼即可。
 
 ---
@@ -38,7 +38,7 @@ pnpm oss:check        # CI 门禁：清单与仓库事实不一致即失败（�
 | 时机 | 触发者 | 动作 | 失败后果 |
 |---|---|---|---|
 | **依赖变更**（`package.json` / `pnpm-lock.yaml` / `requirements.txt`） | CNB PR 流水线 `static-gate` | `pnpm oss:check` 离线比对清单 | 清单未同步 → **红灯**，合并被拦 |
-| **每周一 07:00（Asia/Shanghai）** | CNB crontab 流水线 `oss-watch-weekly` | `node scripts/oss-watch-ci.mjs`：刷新上游最新版本 → 有变化开 `chore/oss-watch-*` PR | 计划 PR 由 AI 按 §1/§9.5 合并（破坏性升级按 §3 人审放行）；查询失败项进计划附录复核 |
+| **每周一 07:00（Asia/Shanghai）** | CNB crontab 流水线 `oss-watch-weekly` | `node scripts/oss-watch-ci.mjs`：刷新上游最新版本 → 有变化开 `chore/oss-watch-*` PR | 计划 PR 通过独立 AI 与必需检查后按 §1/§9.5 合并（破坏性升级按 §3 补迁移与回滚证明）；查询失败项进计划附录复核 |
 | **每天 01:00 基座审计（task1）** | Codex 应用自动化 | 审计依赖风险时顺带 `pnpm oss:watch`（到期才联网） | 计划与清单随审计报告一起提交 |
 | **安全事件**（CVE / 供应链投毒） | 人 | `pnpm oss:watch --all` 立即全量扫描 | 不等周期（litellm 等 `cadence=event` 组件） |
 | **发布前** | 人 | `pnpm oss:plan` 复核清单新鲜度 | README/清单漂移属发布阻断项 |

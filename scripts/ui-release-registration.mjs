@@ -19,12 +19,13 @@ function gitCommand(root, argv, { token, network = false } = {}) {
   if (run.error || run.status !== 0) throw new Error(redactCredentials(`UI release git ${argv[0]} failed: ${run.error?.code ?? run.stderr}`, token));
   return run.stdout.trim();
 }
-export function prepareUiRelease(root, { version, metadata, token, git = gitCommand } = {}) {
+export function prepareUiRelease(root, { version, metadata, token, expectedSha, git = gitCommand } = {}) {
   root = resolve(root);
   const manifest = JSON.parse(readFileSync(resolve(root, 'sync/base-capabilities.json'), 'utf8'));
   validateRegistration(manifest, metadata, version);
   const head = git(root, ['rev-parse', 'HEAD'], { token });
   if (!SHA.test(head)) throw new Error('UI source requires a full Git commit');
+  if (expectedSha !== undefined && (!SHA.test(expectedSha) || head !== expectedSha)) throw new Error('UI release checkout differs from frozen delivery SHA');
   if (git(root, ['status', '--porcelain', '--untracked-files=no'], { token })) throw new Error('UI release source is dirty');
   const origin = git(root, ['remote', 'get-url', 'origin'], { token });
   if (!/^https:\/\/cnb\.cool\/workloom-ai\/workloom-im(?:\.git)?$/.test(origin)) throw new Error('UI release origin must be the credential-free CNB base repository');
@@ -36,9 +37,17 @@ export function prepareUiRelease(root, { version, metadata, token, git = gitComm
     if (!SHA.test(sha) || !['refs/heads/main', ref, ref + '^{}'].includes(name) || refs.has(name)) throw new Error('Unexpected UI release reference response');
     refs.set(name, sha);
   }
-  if (refs.get('refs/heads/main') !== head) throw new Error('Release checkout differs from current reviewed remote main');
+  const remoteMain = refs.get('refs/heads/main');
+  if (!SHA.test(remoteMain ?? '')) throw new Error('Reviewed remote main is unreadable');
+  if (remoteMain !== head) {
+    if (!expectedSha) throw new Error('Release checkout differs from current reviewed remote main');
+    git(root, ['fetch', '--no-tags', 'origin', 'refs/heads/main'], { token, network: true });
+    // A queued release stays pinned while newer unrelated integration proceeds.
+    git(root, ['merge-base', '--is-ancestor', head, remoteMain], { token });
+  }
   let releaseCommit = refs.get(ref + '^{}') ?? refs.get(ref);
   if (releaseCommit) {
+    if (expectedSha && releaseCommit !== expectedSha) throw new Error('Existing UI tag differs from frozen delivery SHA');
     git(root, ['fetch', '--no-tags', 'origin', ref], { token, network: true });
     const registered = JSON.parse(git(root, ['show', `${releaseCommit}:sync/base-capabilities.json`], { token }));
     validateRegistration(registered, metadata, version);
@@ -56,7 +65,7 @@ export function prepareUiRelease(root, { version, metadata, token, git = gitComm
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     if (process.argv.length !== 4) throw new Error('Usage: ui-release-registration.mjs METADATA_JSON OUTPUT_COMMIT_FILE');
-    const result = prepareUiRelease(process.cwd(), { version: process.env.UI_VERSION, metadata: JSON.parse(readFileSync(process.argv[2], 'utf8')), token: requireToken() });
+    const result = prepareUiRelease(process.cwd(), { version: process.env.UI_VERSION, expectedSha: process.env.RELEASE_EXPECTED_SHA, metadata: JSON.parse(readFileSync(process.argv[2], 'utf8')), token: requireToken() });
     writeFileSync(process.argv[3], result.releaseCommit + '\n');
     console.log(JSON.stringify(result));
   } catch (error) { console.error(redactCredentials(error.message)); process.exitCode = 1; }

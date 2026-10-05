@@ -9,12 +9,14 @@ import {
   collectNpmInventory,
   collectPythonInventory,
   compareVersions,
+  containerVersion,
   generateDocument,
   highestVersion,
   isOutdated,
   normalizeRepoIdentityForCompare,
   probeVersions,
   renderMarkdown,
+  resolveCurrent,
 } from "./oss-inventory.mjs";
 
 function fixture(files) {
@@ -104,6 +106,19 @@ test("Python 与容器镜像：解析约束、镜像来源", () => {
   }
 });
 
+test('本地 CNB include 镜像保留 digest，递归去重并拒绝越界或缺失必需文件', () => {
+  const image = 'cnbcool/code-review@sha256:' + 'a'.repeat(64);
+  const root = fixture({ '.cnb.yml': 'include: [scripts/delivery/cnb.yml]\n',
+    'scripts/delivery/cnb.yml': `include: [.cnb.yml, {path: optional.yml, ignoreError: true}]\nmain:\n  pull_request.target:\n    - stages:\n        - image: ${image}\n` });
+  try {
+    assert.deepEqual(collectContainerInventory(root), [{ image, sources: ['scripts/delivery/cnb.yml'] }]);
+    writeFileSync(join(root, '.cnb.yml'), 'include: [../outside.yml]\n');
+    assert.throws(() => collectContainerInventory(root), /escapes/);
+    writeFileSync(join(root, '.cnb.yml'), 'include: [missing.yml]\n');
+    assert.throws(() => collectContainerInventory(root), /missing/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test("probe 探测：regex / vendor / lockfile 三类来源", () => {
   const root = fixture({
     "package.json": { name: "fixture" },
@@ -126,6 +141,15 @@ test("probe 探测：regex / vendor / lockfile 三类来源", () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('摘要镜像的版本解析保留 tag，registry 端口和纯 digest 不伪装成 latest', t => {
+  const digest = 'sha256:' + 'a'.repeat(64);
+  for (const [image, expected] of [['node:20@' + digest, '20'], ['registry:5000/team/node:20@' + digest, '20'], ['registry:5000/team/node@' + digest, digest], ['team/node@' + digest, digest], ['registry:5000/team/node', 'latest']]) assert.equal(containerVersion(image), expected);
+  const root = fixture({ '.cnb.yml': `main:\n  push:\n    - docker:\n        image: registry:5000/team/node:20@${digest}\n` });
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  assert.equal(probeVersions(root, [{ name: 'node', probe: { kind: 'docker', image: 'registry:5000/team/node:' } }]).node.value, '20');
+  assert.equal(resolveCurrent({ channel: 'docker', image: 'registry:5000/team/node:' }, { containers: collectContainerInventory(root) }, {}).current, '20');
 });
 
 test("清单渲染：确定性、含上游最新与漂移标记、--check 可复现", () => {

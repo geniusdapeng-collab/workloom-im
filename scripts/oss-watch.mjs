@@ -389,10 +389,10 @@ export function renderPlan({ root, registry, inventory, state, iso }) {
   lines.push(
     `> 生成：${iso} ｜ 登记组件有更新 **${updates.length}** 个 ｜ 直接依赖有更新 **${dependencyUpdates.length + pythonUpdates.length}** 个`,
   );
-  lines.push("> 使用：Agent 按清单组批 → 逐项升级 → 按 gate 过门禁 → 门禁全绿后按协议 §1/§9.5 合并。破坏性/大版本升级须在 PR 显著标注并按 §3 人审放行；人保留叫停与回滚权。");
+  lines.push("> 使用：Agent 按清单组批 → 逐项升级 → 按 gate 过门禁 → 独立 AI 评审和必需检查满足后按协议 §1/§9.5 合并。破坏性/大版本升级须显著标注迁移、回归与回滚证据，按 §3 执行；人保留叫停与回滚权。");
   lines.push("");
   if (updates.length) {
-    lines.push("## 一、登记组件更新（待处理：AI 组批执行，破坏性升级人审放行）");
+    lines.push("## 一、登记组件更新（待处理：AI 组批执行，独立 AI 审查与机器门禁放行）");
     lines.push("");
     lines.push("| 组件 | 现版 | 最新 | 周期 | 门禁 | 备注 |");
     lines.push("|---|---|---|---|---|---|");
