@@ -8,7 +8,7 @@ import { appendEvent, checksVerdict, dependencyState, eligibility, emptyState, h
 import { GitStateStore, git } from './git-state.mjs';
 import { alignBranch, independentCodeBuddyApproval } from './queue-work.mjs';
 import { Platform } from './queue-platform.mjs';
-import { BASE_POLICY, REVIEW_IMAGE, ciImplementationChanges, loadPolicy, parser, resolvePipelineConfig, sourcePipelineReport, validateSourcePipeline } from './queue-policy.mjs';
+import { BASE_POLICY, REVIEW_IMAGE, ciImplementationChanges, loadPolicy, parser, readableCiChanges, resolvePipelineConfig, sourcePipelineReport, validateSourcePipeline } from './queue-policy.mjs';
 import { dependencies, integratedDependency, mergeCandidate, reconcile, requestReview, reviewSlotBusy, writeTaskReceipts } from './queue-controller.mjs';
 import { enqueueReleases, reconcileReleases, verifyRelease } from './queue-release.mjs';
 import { injectDeliveryConfig } from './install-config.mjs';
@@ -179,6 +179,18 @@ test('unchanged YAML cannot hide edits to required check implementations and dep
   const output = { status: 'passed', issues: [], reviewed_files: s.files, head_sha: head, base_sha: main, policy_hash: policy.hash, depends_on: [] };
   assert.throws(() => validateReview(output, s, policy.hash), /migration/);
   assert.equal(validateReview({ ...output, ci_policy_changes: changes.map(change => ({ id: change.id, rationale: 'Read exact old/new Git source and verified retained assertions.' })) }, s, policy.hash).passed, true);
+});
+test('short AI migration identifiers are deterministic but retain complete digest binding, even when two snapshots reuse the same ordinal', () => {
+  const changes = ciImplementationChanges([{ path: 'scripts/ci/check.mjs', status: 'modify' }, { path: 'scripts/delivery/queue-model.mjs', status: 'modify' }], main, head);
+  const readable = readableCiChanges(changes);
+  assert.deepEqual(readableCiChanges([...changes].reverse()), readable); assert.deepEqual(readable.map(change => change.id), ['CI-001', 'CI-002']);
+  assert.deepEqual(readable.map(change => change.digest).sort(), changes.map(change => change.id).sort());
+  assert.throws(() => readableCiChanges([...changes, changes[0]]), /duplicated/);
+  const s = snapshot(1, { files: changes.map(change => change.file), ciPolicyChanges: readable });
+  const output = { status: 'passed', issues: [], reviewed_files: s.files, head_sha: head, base_sha: main, policy_hash: policy.hash, depends_on: [], ci_policy_changes: readable.map(change => ({ id: change.id, rationale: 'Read exact old/new source; retained regression and rollback.' })) };
+  const receipt = validateReview(output, s, policy.hash); assert.deepEqual(eligibility(s, { review: receipt }, policy, now), []);
+  assert.ok(eligibility({ ...s, ciPolicyChanges: [{ ...readable[0], digest: 'f'.repeat(64) }, readable[1]] }, { review: receipt }, policy, now).includes('No exact AI CI migration receipt'));
+  assert.throws(() => validateReview({ ...output, ci_policy_changes: [{ id: 'CI-001', rationale: 'read' }, { id: 'CI-001', rationale: 'read' }] }, s, policy.hash), /migration/);
 });
 test('local include graph preserves product arrays and structurally pins delivery events and stage order', async t => {
   const root = await temporary(t, 'delivery-policy-'); const YAML = await parser();
