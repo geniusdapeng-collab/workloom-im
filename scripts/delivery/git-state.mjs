@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
-import { appendEvent, emptyState, STATE_BRANCH, validateState } from './queue-model.mjs';
+import { appendEvent, emptyState, STATE_BRANCH, validateState, validRepoSlug } from './queue-model.mjs';
 import { gitAuthenticationEnvironment, redactCredentials } from '../tools/cnb-api.mjs';
 
 const execute = promisify(execFile);
@@ -43,7 +43,7 @@ export async function git(args, { cwd, token, input, remote, raw = false } = {})
 
 export class GitStateStore {
   constructor({ repo, token, remote = `https://cnb.cool/${repo}.git`, branch = STATE_BRANCH, retries = 4 }) {
-    if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) throw new Error('Invalid repository slug');
+    if (!validRepoSlug(repo)) throw new Error('Invalid repository slug');
     if (token && remote !== `https://cnb.cool/${repo}.git`) throw new Error('Unexpected credential destination');
     if (!/^automation\/[A-Za-z0-9_.-]+$/.test(branch)) throw new Error('Invalid state branch');
     this.repo = repo; this.token = token; this.remote = remote; this.branch = branch; this.retries = retries;

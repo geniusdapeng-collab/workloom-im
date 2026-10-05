@@ -2,12 +2,13 @@
 import { createServer } from 'node:http';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { validRepoSlug } from './queue-model.mjs';
 
 const MODEL_PATH = /^\/(?:v1\/)?(?:messages(?:\/count_tokens)?|chat\/completions|responses)$/;
 const MAX_BODY = 8 * 1024 * 1024;
 
 export async function modelGateway({ repo, token, endpoint = 'https://api.cnb.cool', request = fetch }) {
-  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo ?? '') || !token || new URL(endpoint).origin !== 'https://api.cnb.cool') throw new Error('Model gateway identity is invalid');
+  if (!validRepoSlug(repo) || !token || new URL(endpoint).origin !== 'https://api.cnb.cool') throw new Error('Model gateway identity is invalid');
   const controllers = new Set();
   const server = createServer(async (incoming, outgoing) => {
     const controller = new AbortController(); controllers.add(controller);

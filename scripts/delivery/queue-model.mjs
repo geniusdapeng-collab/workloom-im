@@ -5,6 +5,7 @@ export const STATE_BRANCH = 'automation/delivery-state';
 export const SHA_RE = /^[a-f0-9]{40,64}$/;
 export const hash = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 export const branchName = ref => String(ref ?? '').replace(/^refs\/heads\//, '');
+export const validRepoSlug = repo => typeof repo === 'string' && /^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+$/.test(repo) && repo.split('/').every(part => part !== '.' && part !== '..');
 export const STATES = new Set(['developing', 'waiting_dependency', 'waiting_ci', 'waiting_review', 'ready', 'aligning', 'merging', 'integrated', 'release_pending', 'releasing', 'delivered', 'parked', 'closed']);
 
 export function emptyState(repo) {
