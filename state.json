@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 198,
+  "revision": 200,
   "tasks": {
     "231": {
       "number": 231,
@@ -362,12 +362,13 @@
         "scripts/delivery/queue.test.mjs"
       ],
       "ciSince": 1791242410476,
-      "recoveryIntent": {
-        "headSha": "3429d3a936790b808dd5e65fb8c1f5f7d40eead6",
-        "reason": "检查/评审阻断：Required check static-gate missing/failed/ambiguous; No current complete AI review",
-        "at": 1791242410476
-      },
-      "error": "检查/评审阻断：Required check static-gate missing/failed/ambiguous; No current complete AI review"
+      "recoveryIntent": null,
+      "error": "检查/评审阻断：Required check static-gate missing/failed/ambiguous; No current complete AI review",
+      "recovery": {
+        "marker": "delivery-repair:d8c5a710e55421651d2ff42c",
+        "reviewId": "2107249528537784320",
+        "dispatchedAt": 1791242413165
+      }
     },
     "238": {
       "number": 238,
@@ -4041,6 +4042,34 @@
       },
       "previous": "81436098c9ba9bf702f018d69654bd9b347abd677274f253da88fb6c8a0d454b",
       "digest": "4b6a5073b6edaabf90e5b5a7786dd1e3c1fcec6beb5534a6155c72d283cfad10"
+    },
+    {
+      "sequence": 199,
+      "at": "2026-10-05T23:20:10.476Z",
+      "kind": "task",
+      "data": {
+        "number": 236,
+        "patch": {
+          "recovery": {
+            "marker": "delivery-repair:d8c5a710e55421651d2ff42c",
+            "reviewId": "2107249528537784320",
+            "dispatchedAt": 1791242413165
+          },
+          "recoveryIntent": null
+        }
+      },
+      "previous": "4b6a5073b6edaabf90e5b5a7786dd1e3c1fcec6beb5534a6155c72d283cfad10",
+      "digest": "95bc5d3503f8e309f0f15c37d57cf216753743ceb35420b51de76cbe6c3ee594"
+    },
+    {
+      "sequence": 200,
+      "at": "2026-10-05T23:20:13.165Z",
+      "kind": "transaction",
+      "data": {
+        "id": "725427ba-3915-4834-a0e9-29558e7a1d9c"
+      },
+      "previous": "95bc5d3503f8e309f0f15c37d57cf216753743ceb35420b51de76cbe6c3ee594",
+      "digest": "dfbf7bc5857f9d05158ef47f50f6f2126fae77936148e628a0c7da4d361028ac"
     }
   ]
 }
