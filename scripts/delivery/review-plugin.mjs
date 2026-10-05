@@ -175,13 +175,15 @@ export async function runReview(root = process.cwd(), { env = process.env, platf
     for (const [index, result] of results.entries()) console.log(`WorkLoom AI batch receipt ${index}: ${redactCredentials(JSON.stringify(result), env.CNB_TOKEN)}`);
     const diagnostics = results.map((result, index) => {
       const expected = batchSnapshot(manifest.snapshot, index);
-      const actualIds = (result?.ci_policy_changes ?? []).map(change => change.id);
+      const actualIds = (Array.isArray(result?.ci_policy_changes) ? result.ci_policy_changes : []).map(change => change?.id);
+      const actualFiles = Array.isArray(result?.reviewed_files) ? result.reviewed_files : [];
+      const actualIssues = Array.isArray(result?.issues) ? result.issues : [];
       const expectedIds = expected.ciPolicyChanges.map(change => change.id);
-      const missingChanges = expectedIds.filter(id => !actualIds.includes(id)); const missingFiles = expected.files.filter(path => !result?.reviewed_files?.includes(path));
+      const missingChanges = expectedIds.filter(id => !actualIds.includes(id)); const missingFiles = expected.files.filter(path => !actualFiles.includes(path));
       return { batch: index, status: result?.status, missingChanges: missingChanges.slice(0, 5), missingChangeCount: missingChanges.length, extraChanges: actualIds.filter(id => !expectedIds.includes(id)).slice(0, 5),
-        missingFiles: missingFiles.slice(0, 5), missingFileCount: missingFiles.length, extraFiles: (result?.reviewed_files ?? []).filter(path => !expected.files.includes(path)).slice(0, 5),
+        missingFiles: missingFiles.slice(0, 5), missingFileCount: missingFiles.length, extraFiles: actualFiles.filter(path => !expected.files.includes(path)).slice(0, 5),
         headMatches: result?.head_sha === expected.headSha, mainMatches: result?.base_sha === expected.mainSha, policyMatches: result?.policy_hash === manifest.policyHash,
-        dependsOn: result?.depends_on, issues: (result?.issues ?? []).map(issue => `${issue.file}:${issue.start_line} ${issue.problem}`.slice(0, 220)).slice(0, 4) };
+        dependsOn: result?.depends_on, issues: actualIssues.map(issue => `${issue?.file}:${issue?.start_line} ${issue?.problem}`.slice(0, 220)).slice(0, 4) };
     });
     // CNB's public failure summary keeps only the last ~2 KiB. The real reason
     // must stay after the full raw receipts, rather than disappearing behind IDs.
