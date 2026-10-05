@@ -6,15 +6,15 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { SHA_RE, validateReview } from './queue-model.mjs';
-import { reviewRules } from './queue-policy.mjs';
+import { BASE_POLICY, reviewRules } from './queue-policy.mjs';
 import { Platform } from './queue-platform.mjs';
 import { modelGateway } from './model-gateway.mjs';
 import { redactCredentials } from '../tools/cnb-api.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const require = createRequire(import.meta.url);
-const BATCH_SIZE = 30;
-const CONCURRENCY = 2;
+const BATCH_SIZE = BASE_POLICY.reviewBatchSize;
+const CONCURRENCY = BASE_POLICY.reviewBatchConcurrency;
 
 async function trustedManifest(root) {
   const manifest = JSON.parse(await readFile(resolve(root, '.delivery-review/manifest.json'), 'utf8'));
