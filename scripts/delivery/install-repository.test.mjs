@@ -136,11 +136,11 @@ test('exact protected installation source must read back before a merge; a weak 
 });
 test('an activated package update preserves verified AI main policy without restoring the human approval counter', async () => {
   const state = emptyState(repo); appendEvent(state, 'activated', { mainSha: main });
-  let rule = { ...branchProtectionPayload({ requireReview: false }), id: 'main-rule' }; let writes = 0; let candidates = 0;
+  let rule = { ...branchProtectionPayload({ requireReview: false }), allow_master_manual_merge: false, id: 'main-rule' }; let writes = 0; let candidates = 0;
   const platform = { protections: async () => [rule], call: async () => { writes++; }, assertCandidateProtection: async () => { candidates++; } };
   assert.equal((await ensureInstallationPolicy(platform, state)).required_pull_request_reviews, false);
   assert.equal(writes, 0); assert.equal(candidates, 1);
-  for (const patch of [{ required_pull_request_reviews: true }, { allow_master_pushes: true }, { required_master_approve: true }]) {
+  for (const patch of [{ required_pull_request_reviews: true }, { allow_master_pushes: true }, { required_master_approve: true }, { allow_master_manual_merge: true }]) {
     const before = rule; rule = { ...rule, ...patch }; await assert.rejects(ensureInstallationPolicy(platform, state), /drifted/); rule = before;
   }
   assert.equal(writes, 0);

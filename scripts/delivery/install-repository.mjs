@@ -52,7 +52,7 @@ export async function ensureInstallationMainProtection(platform) {
 export async function ensureInstallationPolicy(platform, state) {
   if (!state.events.some(event => event.kind === 'activated')) return ensureInstallationMainProtection(platform);
   const mainRule = (await platform.protections()).find(rule => rule.rule === 'main');
-  const errors = validateBranchProtection(mainRule, { requireReview: false });
+  const errors = validateBranchProtection(mainRule, { requireReview: false, forbidManualOverride: true });
   if (errors.length || mainRule.required_pull_request_reviews !== false || mainRule.required_master_approve !== false) throw new Error('Active installation policy drifted; preserve AI policy and stop instead of restoring a human counter');
   await platform.assertCandidateProtection();
   return mainRule;
