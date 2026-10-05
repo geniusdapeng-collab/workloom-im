@@ -79,6 +79,16 @@ async function optionalFile(root, path) {
   catch (error) { if (error.code !== 'ENOENT') throw error; return null; }
 }
 
+/** A sparse installer checkout may omit a valid existing include outside its cone. */
+async function localInclude(root, path) {
+  const content = await optionalFile(root, path);
+  if (content !== null) return content;
+  const entry = await git(['ls-tree', 'HEAD', '--', path], { cwd: root });
+  if (!entry) return null;
+  if (!entry.startsWith('100644 ') && !entry.startsWith('100755 ')) throw new Error('CI include is not a regular tracked file');
+  return git(['show', `HEAD:${path}`], { cwd: root, raw: true });
+}
+
 export async function readAssets(sourceRoot, sourceSha) {
   if (!SHA_RE.test(sourceSha ?? '')) throw new Error('Installation source must be an exact commit');
   const assets = {};
@@ -100,7 +110,7 @@ export async function installationPlan({ root, assets, sourceRepo, sourceSha, re
   if (CORE_ASSETS.some(path => typeof assets[path] !== 'string' || !assets[path])) throw new Error('Incomplete execution asset closure');
   const original = await optionalFile(root, '.cnb.yml');
   if (!original?.trim()) throw new Error('Repository needs an existing, verifiable main PR CI before automatic installation');
-  const parsed = await resolvePipelineConfig(original, { readLocal: path => optionalFile(root, path) });
+  const parsed = await resolvePipelineConfig(original, { readLocal: path => localInclude(root, path) });
   const selector = parsed.main?.pull_request ? 'main' : parsed['**']?.pull_request ? '**' : parsed.$?.pull_request ? '$' : null;
   const existingPr = selector ? parsed[selector].pull_request : null;
   if (!Array.isArray(existingPr) || !existingPr.some(p => p.allowFailure !== true && p.name && p.stages?.length)) throw new Error('Existing product PR checks are missing');
@@ -125,7 +135,7 @@ export async function installationPlan({ root, assets, sourceRepo, sourceSha, re
   const value = doc.toJS({ maxAliasCount: 1000 });
   const includes = Array.isArray(value.include) ? value.include : [value.include];
   if (!includes.some(item => (typeof item === 'string' ? item : item?.path) === 'scripts/delivery/install-cnb.yml')) { doc.set('include', [...includes, 'scripts/delivery/install-cnb.yml']); ci = doc.toString({ lineWidth: 0 }); }
-  const resolved = await resolvePipelineConfig(ci, { readLocal: path => executionAssets[path] ?? optionalFile(root, path) });
+  const resolved = await resolvePipelineConfig(ci, { readLocal: path => executionAssets[path] ?? localInclude(root, path) });
   const names = (resolved[selector].pull_request).filter(p => p.allowFailure !== true).map(p => p.name);
   for (const p of existingPr.filter(p => p.allowFailure !== true)) if (!names.includes(p.name)) throw new Error('Installation lost an existing required product check');
   if (!names.includes('delivery-bootstrap-review') || !names.includes('delivery-regression')) throw new Error('Installation missed required independent AI or regression');

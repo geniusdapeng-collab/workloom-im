@@ -66,6 +66,14 @@ test('installation rejects a symlink in any asset path before performing any mig
   assert.equal(await readFile(join(root, '.cnb.yml'), 'utf8'), original);
   await assert.rejects(readFile(join(outside, 'queue-model.mjs')), { code: 'ENOENT' });
 });
+test('sparse installation reads an existing product include from its exact tracked HEAD without losing checks', async t => {
+  const root = await fixture(t, 'include: product/ci.yml\n');
+  await mkdir(join(root, 'product')); await writeFile(join(root, 'product/ci.yml'), original);
+  await git(['init', '--quiet'], { cwd: root }); await git(['add', '.'], { cwd: root }); await git(['commit', '--quiet', '-m', 'fixture'], { cwd: root });
+  await rm(join(root, 'product'), { recursive: true });
+  const result = await plan(root);
+  assert.ok(result.requiredNames.includes('product-gate')); assert.ok(!result.changes.has('product/ci.yml'));
+});
 test('instruction append is idempotent and rejects duplicate, reversed or incomplete markers', () => {
   const before = 'frozen original instructions\n'; const once = appendAgentRule(before);
   assert.equal(appendAgentRule(once), once); assert.ok(once.includes(AGENT_RULE));
