@@ -1,4 +1,4 @@
-import { branchName, dependencyState, eligibility, hash, leaseOperation, sensitiveScopes, updateTask } from './queue-model.mjs';
+import { appendEvent, branchName, dependencyState, eligibility, hash, leaseOperation, sensitiveScopes, updateTask } from './queue-model.mjs';
 import { alignBranch, dispatchRecovery } from './queue-work.mjs';
 import { enqueueReleases } from './queue-release.mjs';
 import { performance } from 'node:perf_hooks';
@@ -151,7 +151,18 @@ export async function mergeCandidate({ platform, store, policy, snapshot, depend
     if (!issued) {
       await store.mutate(current => { release(current); updateTask(current, number, { status: 'waiting_ci', mergePhase: null, error: platform.error(error) }, now); });
     } else {
-      await store.mutate(current => updateTask(current, number, { error: platform.error(error) }, now));
+      let rejected = false;
+      if (error.status === 409) {
+        try { const actual = await platform.pull(snapshot.number); rejected = actual.is_merged === false && actual.head?.sha === snapshot.headSha; }
+        catch (readError) { error = new Error(`${platform.error(error)}; merge rejection readback unavailable: ${platform.error(readError)}`); }
+      }
+      await store.mutate(current => {
+        if (rejected) {
+          release(current);
+          appendEvent(current, 'merge_rejected', { number, candidate: snapshot.number, headSha: snapshot.headSha, httpStatus: 409, verifiedUnmerged: true }, now);
+        }
+        updateTask(current, number, { error: platform.error(error), ...(rejected ? { status: 'waiting_ci', mergePhase: null } : {}) }, now);
+      });
     }
     throw error;
   }

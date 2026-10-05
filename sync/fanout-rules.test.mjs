@@ -18,7 +18,7 @@ import {
   syncedChildren,
   syncDrift,
 } from "./fanout-rules.mjs";
-import { deliveryRolloutReady } from './fanout-cnb.mjs';
+import { baseSyncOutcome, deliveryRolloutReady } from './fanout-cnb.mjs';
 import { appendEvent, emptyState } from '../scripts/delivery/queue-model.mjs';
 
 test('新租约门禁只下发到已准备账本的仓；权限、损坏或不同仓账本不能放行', async () => {
@@ -412,4 +412,19 @@ test("full 波次跳过 paused 波次仓（获客实验车道），其余仓照�
   // 大小写与空值容忍：不因字段书写差异误判
   assert.deepEqual(pausedWaveChildren([{ repo: "a/b", uiRolloutWave: "PAUSED" }]).skipped, ["a/b"]);
   assert.deepEqual(pausedWaveChildren([{ repo: "a/b", uiRolloutWave: null }]).skipped, []);
+});
+
+test("base-sync 的仓级成功必须同时具备零退出码和完整报告", () => {
+  const healthy = baseSyncOutcome({ exitCode: 0, stdout: '{"changed":0,"stateUpdated":false}\n' });
+  assert.equal(healthy.ok, true); assert.equal(healthy.report.changed, 0);
+  const prefixed = baseSyncOutcome({ exitCode: 0, stdout: '前置说明\n{"changed":0,"stateUpdated":true}\n' });
+  assert.equal(prefixed.ok, true); assert.equal(prefixed.report.stateUpdated, true);
+  // Failure remains a failure even if the process emitted a plausible report.
+  for (const failure of [{ exitCode: 1, stdout: "" }, { exitCode: 1, stdout: '{"changed":0}' }, { exitCode: 78, stdout: '{"changed":0}' }, { exitCode: 1, stdout: "traceback without json" }, { exitCode: null, signal: "SIGKILL", stdout: '{"changed":0}' }, { exitCode: 0, stdout: '{"changed":' }, { exitCode: 0, stdout: '[]' }]) {
+    const outcome = baseSyncOutcome({ ...failure, stderr: "依赖闭包失败" });
+    assert.equal(outcome.ok, false); assert.match(outcome.reason, /失败或无完整结构化报告/); assert.match(outcome.reason, /依赖闭包失败/);
+  }
+  // 报告里的凭据与 URL 凭据一律脱敏，错误文本不回传机密。
+  const leaked = baseSyncOutcome({ exitCode: 1, stderr: "fatal: https://cnb:topsecret@cnb.cool/x.git denied topsecret" }, text => text.split("topsecret").join("[REDACTED]"));
+  assert.ok(!leaked.reason.includes("topsecret"));
 });

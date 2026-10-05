@@ -83,21 +83,33 @@ function pushBranch(dir, slug, branch, token, baseUrl) {
   }
 }
 
+/**
+ * Each child must have both a successful process and a complete JSON report.
+ * The outer fanout uses 78 for missing first-install receipts. The base-sync
+ * child has no such successful-stop contract; JSON never overrides its failure.
+ */
+export function baseSyncOutcome({ exitCode, signal = null, stdout = "", stderr = "" }, scrub = redact) {
+  const text = String(stdout ?? "");
+  const start = text.indexOf("{");
+  if (exitCode === 0 && signal === null && start >= 0) {
+    try {
+      const report = JSON.parse(text.slice(start));
+      if (report && typeof report === "object" && !Array.isArray(report)) return { ok: true, report };
+    } catch {
+      // 报告必须自证；截断或非 JSON 的 stdout 不算成功。
+    }
+  }
+  const detail = scrub(String(stderr || text).slice(-500));
+  return { ok: false, exitCode, signal, reason: `base-sync pull 失败或无完整结构化报告（exit=${exitCode ?? signal ?? "unknown"}）：${detail}` };
+}
+
 function runBaseSync(childDir, baseDir, mode) {
   const args = [join(baseDir, "sync/base-sync.mjs"), "pull", "--repo", childDir, "--base-dir", baseDir, "--json"];
   if (mode === "required-only") args.push("--required-only");
   const result = spawnSync(process.execPath, args, { encoding: "utf8", env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
-  const stdout = result.stdout ?? "";
-  let report = null;
-  try {
-    report = JSON.parse(stdout.slice(stdout.indexOf("{")));
-  } catch {
-    report = null;
-  }
-  if (result.status !== 0 || !report) {
-    throw new Error(`base-sync pull 失败（exit=${result.status}）：${redact((result.stderr || stdout).slice(-500))}`);
-  }
-  return report;
+  const outcome = baseSyncOutcome({ exitCode: result.status, signal: result.signal, stdout: result.stdout, stderr: result.stderr });
+  if (!outcome.ok) throw new Error(outcome.reason);
+  return outcome.report;
 }
 
 function pullBody({ mode, baseSha, baseRepo, files }) {
