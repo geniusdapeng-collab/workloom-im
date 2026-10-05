@@ -12,7 +12,8 @@ import {
   resolveLockOverlapMode,
   validateSubject,
 } from "./protocol-rules.mjs";
-import { isPrEvent, isSelfPull, openPrFiles, validatePrSnapshot, verifyPrFreshness } from "./verify-lock-conflict.mjs";
+import { activeLeaseConflicts, isPrEvent, isSelfPull, openPrFiles, readLeases, validatePrSnapshot, verifyPrFreshness } from "./verify-lock-conflict.mjs";
+import { emptyState, leaseOperation } from '../delivery/queue-model.mjs';
 
 describe("提交信息规则", () => {
   it("接受合法提交并拒绝缺任务号", () => {
@@ -83,12 +84,28 @@ describe("并发冲突规则", () => {
   it("push 事件降级为提醒：合并已发生，跨 PR 重叠不再判红（回归 2026-09-27 main 误报）", () => {
     assert.equal(resolveLockOverlapMode({ event: "push" }), "warn");
     // PR 事件保持先到先得拦截
-    assert.equal(resolveLockOverlapMode({ event: "pull_request" }), "fail");
-    assert.equal(resolveLockOverlapMode({ event: null }), "fail");
+    assert.equal(resolveLockOverlapMode({ event: "pull_request" }), "warn");
+    assert.equal(resolveLockOverlapMode({ event: null }), "warn");
     // 显式覆盖与人工严格模式优先
     assert.equal(resolveLockOverlapMode({ event: "push", envMode: "fail" }), "fail");
     assert.equal(resolveLockOverlapMode({ event: "pull_request", envMode: "warn" }), "warn");
     assert.equal(resolveLockOverlapMode({ event: "pull_request", envMode: "warn", strict: true }), "fail");
+  });
+});
+
+describe('限时开发租约代替 open PR 永久占位', () => {
+  it('只阻止其他 owner 的有效敏感租约，普通文件和到期租约不阻止交付', () => {
+    const state = emptyState('workloom-ai/workloom-im');
+    leaseOperation(state, { action: 'acquire', scopes: ['protocol'], owner: 'T-2026-1005-9999', ttlMs: 60000 }, 0);
+    assert.deepEqual(activeLeaseConflicts(['scripts/ci/a.mjs'], state, 'other', 59000), ['protocol']);
+    assert.deepEqual(activeLeaseConflicts(['scripts/ci/a.mjs'], state, 'other', 60000), []);
+    assert.deepEqual(activeLeaseConflicts(['scripts/ci/a.mjs'], state, 'T-2026-1005-9999', 59000), []);
+    assert.deepEqual(activeLeaseConflicts(['apps/web/a.ts'], state, 'other', 59000), []);
+  });
+  it('明确未安装404允许空租约；权限/网络/账本损坏不能伪装成无占用', async () => {
+    assert.equal((await readLeases('workloom-ai/workloom-im', async () => { throw Object.assign(new Error('not found'), { status: 404 }); })).revision, 0);
+    for (const status of [403, 429, 500]) await assert.rejects(readLeases('workloom-ai/workloom-im', async () => { throw Object.assign(new Error('unreadable'), { status }); }), /unreadable/);
+    await assert.rejects(readLeases('workloom-ai/workloom-im', async () => ({ schemaVersion: 1 })), /state/);
   });
 });
 

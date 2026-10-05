@@ -50,7 +50,9 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * 因此所有调用默认重试 4 次（指数退避 + 抖动），并尊重 Retry-After。
  */
 export async function api(slug, path, options = {}) {
-  const { method = "GET", body, token = requireToken(), accept = "application/json", retries = 4, baseDelayMs = 700 } = options;
+  const { method = "GET", body, token = requireToken(), accept = "application/json", baseDelayMs = 700 } = options;
+  // Mutating requests can succeed while their response is lost. Their callers must reconcile by identity.
+  const retries = options.retries ?? (method === 'GET' ? 4 : 0);
   const url = path.startsWith("http") ? path : `${API_BASE}/${slug}${path}`;
   if (new URL(url).origin !== API_BASE) throw new Error('CNB API 不允许把凭据发送到其他来源');
   const headers = { Authorization: `Bearer ${token}`, Accept: accept };
@@ -61,6 +63,8 @@ export async function api(slug, path, options = {}) {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(30000),
+      redirect: 'error',
     });
     const text = await response.text();
     if (response.ok) {

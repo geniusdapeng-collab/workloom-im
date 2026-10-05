@@ -1,0 +1,270 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { appendEvent, checksVerdict, dependencyState, eligibility, emptyState, hash, leaseOperation, parseIntent, updateTask, validateReview, validateState } from './queue-model.mjs';
+import { GitStateStore, git } from './git-state.mjs';
+import { alignBranch } from './queue-work.mjs';
+import { Platform } from './queue-platform.mjs';
+import { BASE_POLICY, parser, validateSourcePipeline } from './queue-policy.mjs';
+import { dependencies, integratedDependency, mergeCandidate, reconcile, requestReview, writeTaskReceipts } from './queue-controller.mjs';
+import { enqueueReleases, reconcileReleases, verifyRelease } from './queue-release.mjs';
+import { injectDeliveryConfig } from './install-config.mjs';
+import { combineBatchResults, reviewBatches, reviewEnvironment, runReview } from './review-plugin.mjs';
+import { requireTrustedRunner } from './queue-runner.mjs';
+import { verifyReleaseSource } from './release-source.mjs';
+const repo = 'workloom-ai/test'; const head = 'a'.repeat(40); const main = 'b'.repeat(40); const mergedSha = 'c'.repeat(40); const testedSha = 'd'.repeat(40); const now = 10_000_000;
+const policy = { ...BASE_POLICY, hash: 'policy-1', requiredNames: ['static-gate'] };
+const intent = { ready: true, dependsOn: [], releases: [], taskId: null };
+function snapshot(number = 1, patch = {}) {
+  return { number, headSha: head, mainSha: main, headTime: 0, mergeBase: main, files: ['apps/example.ts'], checkErrors: [], checkSha: testedSha, intent,
+    pull: { number, title: 'fix(base): useful change', body: '', state: 'open', is_wip: false, mergeable_state: 'mergeable', labels: [], head: { sha: head, ref: `task/test-${number}`, repo: { path: repo } }, base: { sha: main, ref: 'main' } }, ...patch };
+}
+function review(s = snapshot()) { return { passed: true, headSha: s.headSha, mainSha: s.mainSha, policyHash: policy.hash, filesHash: hash([...s.files].sort()), dependsOn: [] }; }
+function memoryStore(initial = emptyState(repo)) {
+  let value = structuredClone(initial);
+  return { read: async () => structuredClone(value), mutate: async operation => { const next = structuredClone(value); const result = operation(next); validateState(next, repo); value = next; return { state: structuredClone(value), result }; } };
+}
+function activate(state) { appendEvent(state, 'activated', { policyHash: policy.hash }, now); return state; }
+async function temporary(t, prefix) { const root = await mkdtemp(join(tmpdir(), prefix)); t.after(() => rm(root, { recursive: true, force: true })); return root; }
+
+test('lease acquisition is atomic across scopes; TTL reclaim fences stale renewal and release', () => {
+  const state = emptyState(repo); const generation = leaseOperation(state, { action: 'acquire', owner: 'a', scopes: ['protocol', 'sync'], ttlMs: 60000 }, 0);
+  assert.throws(() => leaseOperation(state, { action: 'acquire', owner: 'b', scopes: ['migrations', 'sync'] }, 1), /busy/);
+  assert.equal(state.leases.migrations, undefined);
+  const next = leaseOperation(state, { action: 'acquire', owner: 'b', scopes: ['sync'], ttlMs: 60000 }, 60000);
+  assert.equal(next.sync, generation.sync + 1);
+  for (const action of ['release', 'renew']) assert.throws(() => leaseOperation(state, { action, owner: 'a', scopes: ['sync'], generation }, 60001), /expired/);
+  leaseOperation(state, { action: 'release', owner: 'b', scopes: ['sync'], generation: next }, 60001);
+  assert.equal(state.leases.sync.owner, null); validateState(state, repo);
+});
+test('lease empty/oversized TTL and mismatched scope generation cannot silently succeed', () => {
+  for (const spec of [{ scopes: [] }, { ttlMs: 59999 }, { ttlMs: 1800001 }, { owner: '' }, { scopes: [''] }]) assert.throws(() => leaseOperation(emptyState(repo), { action: 'acquire', owner: 'a', scopes: ['protocol'], ...spec }, 0));
+});
+test('state hash chain detects history tampering and incomplete/foreign snapshots', () => {
+  const state = emptyState(repo); updateTask(state, 1, { status: 'waiting_ci' }, now); validateState(state, repo);
+  const bad = structuredClone(state); bad.events[0].data.patch.status = 'delivered'; assert.throws(() => validateState(bad, repo), /chain/);
+  for (const invalid of [{ ...state, repo: 'foreign/repo' }, { ...state, revision: 5 }, { ...state, tasks: { 1: { status: 'invented' } } }]) assert.throws(() => validateState(invalid, repo));
+});
+test('explicit intent preserves native prerequisites and rejects duplicates/self dependency/ambiguous releases', () => {
+  const pull = { number: 4, title: 'task T-2026-1005-1001', blocked_on: [{ number: 2 }], body: '<!-- workloom-delivery\n{"ready":true,"depends_on":[1],"releases":[{"kind":"ui","version":"1.2.3"}]}\n-->' };
+  assert.deepEqual(parseIntent(pull).dependsOn, [1, 2]); assert.equal(parseIntent(pull).taskId, 'T-2026-1005-1001');
+  for (const body of [pull.body + pull.body, '<!-- workloom-delivery\n{"depends_on":[4]}\n-->', '<!-- workloom-delivery\n{"releases":[{"kind":"ui","version":"latest"}]}\n-->', '<!-- workloom-delivery\n{"ready":"yes"}\n-->', '<!-- workloom-delivery\n{"bypass":true}\n-->']) assert.throws(() => parseIntent({ ...pull, body }));
+});
+test('dependency DAG reports cycles and closed unmerged prerequisites remain pending', async () => {
+  assert.throws(() => dependencyState(1, new Map([[1, [2]], [2, [1]]]), new Set()), /cycle/);
+  const pulls = [{ ...snapshot().pull, body: '<!-- workloom-delivery\n{"depends_on":[2]}\n-->' }];
+  const result = await dependencies({ pull: async () => ({ state: 'closed', is_merged: false }) }, pulls, emptyState(repo));
+  assert.deepEqual(result.get(1).pending, [2]);
+  const advanced = { head: { sha: head }, is_merged: false };
+  assert.equal(integratedDependency(advanced, { status: 'waiting_ci', merge: { sourceSha: head } }), false);
+  assert.equal(integratedDependency(advanced, { status: 'integrated', merge: { sourceSha: main } }), false);
+  assert.equal(integratedDependency(advanced, { status: 'integrated', merge: { sourceSha: head } }), true);
+});
+test('malformed contract isolates one PR instead of breaking unrelated dependency analysis', async () => {
+  const list = [{ ...snapshot(1).pull, body: '<!-- workloom-delivery\nBAD\n-->' }, snapshot(2).pull];
+  const map = await dependencies({}, list, emptyState(repo)); assert.ok(map.get(1).error); assert.deepEqual(map.get(2), { pending: [], error: null });
+});
+test('unreadable dependency blocks its dependents while unrelated PRs keep progressing', async () => {
+  const list = [{ ...snapshot(1).pull, body: '<!-- workloom-delivery\n{"depends_on":[3]}\n-->' }, snapshot(2).pull];
+  const map = await dependencies({ pull: async () => { throw new Error('denied'); } }, list, emptyState(repo));
+  assert.match(map.get(1).error, /Prerequisite #3 is unreadable/); assert.deepEqual(map.get(1).pending, [3]);
+  assert.deepEqual(map.get(2), { pending: [], error: null });
+});
+test('AI build watchdog counts terminal failures once and respects backoff, budget and pending runs', async () => {
+  const state = emptyState(repo); updateTask(state, 1, { status: 'waiting_review', headSha: head, mainSha: main,
+    reviewBuild: { sn: 'run-1', headSha: head, mainSha: main, at: now - 600000 } }, now - 600000);
+  const store = memoryStore(state); let writes = 0; let status = 'pending';
+  const platform = { call: async (_path, options) => { if (options?.method === 'POST') writes++; return { status }; }, builds: async () => [] };
+  assert.equal((await requestReview(platform, store, snapshot(), null, now)).waiting, 'running');
+  status = 'error'; await requestReview(platform, store, snapshot(), null, now);
+  assert.equal((await store.read()).tasks['1'].reviewFailures.count, 1);
+  assert.equal((await requestReview(platform, store, snapshot(), null, now + 1)).waiting, 'backoff');
+  await store.mutate(current => updateTask(current, 1, { reviewBuild: { sn: 'run-2', headSha: head, mainSha: main, at: now } }, now));
+  await requestReview(platform, store, snapshot(), null, now + 600001);
+  assert.equal((await requestReview(platform, store, snapshot(), null, now + 1800000)).waiting, 'budget'); assert.equal(writes, 0);
+});
+test('lost AI launch acknowledgement is recovered by unique title without a duplicate request', async () => {
+  const state = emptyState(repo); updateTask(state, 1, { status: 'waiting_ci', headSha: head, mainSha: main }, now - 600000);
+  const store = memoryStore(state); let writes = 0; let history = [];
+  const platform = { builds: async () => history, call: async () => { writes++; throw new Error('lost ack'); } };
+  await assert.rejects(requestReview(platform, store, snapshot(), null, now), /lost ack/);
+  assert.equal((await requestReview(platform, store, snapshot(), null, now + 60000)).waiting, 'unknown-launch');
+  const dispatch = (await store.read()).tasks['1'].reviewDispatch;
+  history = [{ sn: 'recovered', title: dispatch.title, sha: main, event: 'api_trigger_delivery_review' }];
+  assert.equal((await requestReview(platform, store, snapshot(), null, now + 120000)).waiting, 'recovered-launch');
+  assert.equal((await store.read()).tasks['1'].reviewBuild.sn, 'recovered'); assert.equal(writes, 1);
+});
+test('AI receipt requires exact identity, complete unique scope, no unresolved issues and valid prerequisites', () => {
+  const s = snapshot(); const good = { status: 'passed', issues: [], reviewed_files: s.files, head_sha: head, base_sha: main, policy_hash: policy.hash, depends_on: [] };
+  assert.equal(validateReview(good, s, policy.hash).passed, true);
+  for (const patch of [{ status: 'critical' }, { issues: [{ problem: 'bug' }] }, { reviewed_files: [] }, { reviewed_files: [...s.files, ...s.files] }, { head_sha: main }, { base_sha: head }, { policy_hash: 'old' }, { depends_on: [1] }]) assert.throws(() => validateReview({ ...good, ...patch }, s, policy.hash));
+});
+test('CI must test exact main/source parents and each trusted required pipeline, never a loose green commit', () => {
+  const payload = { sha: testedSha, statuses: [{ context: 'cnb/pull_request/pipeline-1(static-gate)', state: 'success' }, { context: 'cnb/pull_request/pipeline-2(debt-gate)', state: 'error' }] };
+  const commit = { sha: testedSha, parents: [{ sha: main }, { sha: head }] };
+  assert.deepEqual(checksVerdict(payload, commit, { headSha: head, mainSha: main }, ['static-gate']), []);
+  assert.ok(checksVerdict(payload, { ...commit, parents: [{ sha: head }, { sha: main }] }, { headSha: head, mainSha: main }, ['static-gate']).length);
+  for (const statuses of [[], [payload.statuses[0], payload.statuses[0]], [{ ...payload.statuses[0], state: 'pending' }], [{ ...payload.statuses[0], context: 'cnb/push/pipeline-1(static-gate)' }]]) assert.ok(checksVerdict({ ...payload, statuses }, commit, { headSha: head, mainSha: main }, ['static-gate']).length);
+});
+test('eligibility rejects draft/block/expired review/wrong main/unhanded head even with green CI', () => {
+  const s = snapshot(); assert.deepEqual(eligibility(s, { review: review(s) }, policy, now), []);
+  for (const patch of [{ pull: { ...s.pull, is_wip: true } }, { pull: { ...s.pull, labels: ['risk/block'] } }, { mainSha: head }, { intent: { ...intent, ready: false } }, { pendingDependencies: [2] }, { files: ['secrets/real'] }]) assert.ok(eligibility({ ...s, ...patch }, { review: review(s) }, policy, now).length);
+  assert.ok(eligibility(s, { review: { ...review(s), policyHash: 'old' } }, policy, now).includes('No current complete AI review'));
+});
+test('source CI may add stages but cannot remove, weaken, reorder or rename trusted baseline checks', async () => {
+  const YAML = await parser(); const baseline = { name: 'static-gate', stages: [{ name: 'compile', script: 'compile' }, { name: 'test', script: 'test' }] };
+  const p = { requiredPipelines: [baseline] };
+  const text = pipeline => YAML.stringify({ '**': { pull_request: [pipeline] } });
+  assert.deepEqual(await validateSourcePipeline(text({ ...baseline, stages: [...baseline.stages, { name: 'more', script: 'more' }] }), p), []);
+  for (const changed of [{ ...baseline, allowFailure: true }, { ...baseline, name: 'pretend' }, { ...baseline, stages: [baseline.stages[1]] }, { ...baseline, stages: [...baseline.stages].reverse() }, { ...baseline, stages: [{ ...baseline.stages[0], script: 'true' }, baseline.stages[1]] }]) assert.ok((await validateSourcePipeline(text(changed), p)).length);
+});
+test('CI installation is idempotent and preserves every existing product event/stage', async () => {
+  const input = '# existing\nmain:\n  push:\n    - name: product\n      stages: [keep]\ninclude: old.yml\n'; const YAML = await parser();
+  const installed = await injectDeliveryConfig(input); assert.equal(installed.changed, true);
+  assert.deepEqual(YAML.parse(installed.content).main, YAML.parse(input).main);
+  assert.deepEqual(YAML.parse(installed.content).include, ['old.yml', 'scripts/delivery/cnb.yml']);
+  assert.equal((await injectDeliveryConfig(installed.content)).changed, false);
+  await assert.rejects(injectDeliveryConfig('not: [valid'), /valid/);
+});
+test('review child receives trusted identity and paths; inherited plugin overrides cannot weaken the gate', async t => {
+  const root = await temporary(t, 'delivery-review-env-'); const directory = join(root, '.delivery-review/snapshot-x'); await mkdir(directory, { recursive: true });
+  const manifest = { snapshot: snapshot(), directory, source: join(directory, 'source'), rules: join(directory, 'rules'), coverage: join(directory, 'coverage'), output: join(directory, 'output') };
+  await writeFile(join(root, '.delivery-review/manifest.json'), JSON.stringify(manifest));
+  const result = await reviewEnvironment(root, { PLUGIN_REVIEW_EVENT: 'comment', PLUGIN_MAX_FILES: '1', CNB_PULL_REQUEST_SHA: 'wrong' });
+  assert.equal(result.CNB_PULL_REQUEST_SHA, head); assert.equal(result.PLUGIN_REVIEW_EVENT, 'auto'); assert.equal(result.PLUGIN_EXCLUDE_CATEGORIES, '');
+  manifest.output = '/tmp/escape.json'; await writeFile(join(root, '.delivery-review/manifest.json'), JSON.stringify(manifest));
+  await assert.rejects(reviewEnvironment(root, {}), /escapes/);
+});
+test('AI batch coverage cannot truncate, duplicate or reuse another source/main result', () => {
+  const s = snapshot(1, { files: Array.from({ length: 61 }, (_, index) => `source/${index}.ts`) });
+  const manifest = { snapshot: s, policyHash: policy.hash };
+  const batches = reviewBatches(s.files); assert.deepEqual(batches.map(files => files.length), [30, 30, 1]);
+  const outputs = batches.map(files => ({ status: 'passed', issues: [], reviewed_files: files, head_sha: head, base_sha: main, policy_hash: policy.hash, depends_on: [] }));
+  assert.equal(combineBatchResults(manifest, outputs).reviewed_files.length, 61);
+  assert.throws(() => combineBatchResults(manifest, outputs.slice(1)), /missing/);
+  for (const patch of [{ reviewed_files: batches[1] }, { reviewed_files: batches[0].slice(1) }, { head_sha: main }]) assert.throws(() => combineBatchResults(manifest, [{ ...outputs[0], ...patch }, ...outputs.slice(1)]));
+  const rejected = combineBatchResults(manifest, [{ ...outputs[0], status: 'critical', issues: [{ severity: 'critical', problem: 'real regression' }] }, ...outputs.slice(1)]);
+  assert.equal(rejected.status, 'critical'); assert.equal(rejected.issues.length, 1);
+});
+test('real review orchestration caps concurrent batches and withholds decisions on incomplete coverage or drift', async t => {
+  const root = await temporary(t, 'delivery-batch-'); const directory = join(root, '.delivery-review/snapshot-x'); await mkdir(directory, { recursive: true });
+  const s = snapshot(1, { files: Array.from({ length: 91 }, (_, index) => `source/${index}.ts`) });
+  const manifest = { snapshot: s, policyHash: policy.hash, directory, source: join(directory, 'source'), rules: join(directory, 'rules'), coverage: join(directory, 'coverage'), output: join(directory, 'output') };
+  await writeFile(join(root, '.delivery-review/manifest.json'), JSON.stringify(manifest));
+  let active = 0; let maximum = 0; let published = 0;
+  const runBatch = async (_index, files) => { active++; maximum = Math.max(maximum, active); await new Promise(resolve => setImmediate(resolve)); active--; return { status: 'passed', issues: [], reviewed_files: files, head_sha: head, base_sha: main, policy_hash: policy.hash, depends_on: [] }; };
+  const options = { env: {}, platform: { snapshot: async () => s }, runBatch, publish: async output => { published++; assert.equal(output.reviewed_files.length, 91); } };
+  await runReview(root, options); assert.equal(maximum, 2); assert.equal(published, 1);
+  await assert.rejects(runReview(root, { ...options, runBatch: async (index, files) => ({ ...await runBatch(index, files), reviewed_files: [] }) }), /omitted/);
+  await assert.rejects(runReview(root, { ...options, platform: { snapshot: async () => ({ ...s, mainSha: head }) } }), /expired/);
+  assert.equal(published, 1);
+  let started = 0;
+  await assert.rejects(runReview(root, { ...options, runBatch: async () => { started++; throw new Error('SDK interrupted'); } }), /interrupted/);
+  assert.ok(started <= 2); assert.equal(published, 1);
+});
+test('mutation rejects local/PR-source runners, absent native lock and checkout main drift', async t => {
+  const root = await temporary(t, 'delivery-runner-'); await git(['init', '--quiet'], { cwd: root }); await git(['commit', '--allow-empty', '-m', 'init'], { cwd: root });
+  const sha = await git(['rev-parse', 'HEAD'], { cwd: root }); const platform = { main: async () => ({ commit: { sha } }) };
+  const env = { CNB_BUILD_ID: 'build', CNB_EVENT: 'api_trigger_delivery_reconcile', DELIVERY_NATIVE_LOCK: 'workloom-delivery-merge' };
+  await requireTrustedRunner(platform, root, env);
+  for (const patch of [{ CNB_BUILD_ID: '' }, { CNB_EVENT: 'pull_request' }, { DELIVERY_NATIVE_LOCK: '' }]) await assert.rejects(requireTrustedRunner(platform, root, { ...env, ...patch }));
+  await assert.rejects(requireTrustedRunner({ main: async () => ({ commit: { sha: head } }) }, root, env), /trusted main/);
+});
+test('frozen release requires exact checkout and positive main ancestry, without updating its source', async () => {
+  const calls = []; const env = { CNB_TOKEN: 'test-only', CNB_REPO_SLUG: repo, RELEASE_EXPECTED_SHA: head };
+  const run = async argv => { calls.push(argv); return argv[0] === 'rev-parse' ? head : ''; };
+  assert.equal((await verifyReleaseSource({ env, run })).sha, head); assert.deepEqual(calls.at(-1), ['merge-base', '--is-ancestor', head, 'FETCH_HEAD']);
+  await assert.rejects(verifyReleaseSource({ env: { ...env, RELEASE_EXPECTED_SHA: main }, run }), /checkout/);
+});
+
+test('actual bare Git CAS preserves simultaneous updates and append-only history', async t => {
+  const root = await temporary(t, 'delivery-git-cas-'); const remote = join(root, 'remote.git'); await git(['init', '--bare', '--quiet', remote]);
+  const stores = Array.from({ length: 6 }, () => new GitStateStore({ repo, remote, retries: 12 }));
+  await Promise.all(stores.map((store, index) => store.mutate(state => updateTask(state, index + 1, { status: 'waiting_ci' }), { id: `write-${index}` })));
+  const state = await stores[0].read(); assert.equal(Object.keys(state.tasks).length, 6); assert.equal(state.events.filter(event => event.kind === 'transaction').length, 6); validateState(state, repo);
+  const count = await git(['--git-dir', remote, 'rev-list', '--count', 'automation/delivery-state']); assert.equal(Number(count), 6);
+});
+test('actual lost Git push acknowledgement recovers the committed transaction once', async t => {
+  const root = await temporary(t, 'delivery-git-lostack-'); const remote = join(root, 'remote.git'); await git(['init', '--bare', '--quiet', remote]);
+  class LostAckStore extends GitStateStore { async withRepository(operation) { return super.withRepository(run => operation(async (args, options) => { const result = await run(args, options); if (args[0] === 'push' && !this.lost) { this.lost = true; throw new Error('lost acknowledgement'); } return result; })); } }
+  const store = new LostAckStore({ repo, remote }); let mutations = 0;
+  const result = await store.mutate(state => { mutations++; updateTask(state, 1, { status: 'waiting_ci' }); }, { id: 'same-transaction' });
+  assert.equal(result.recovered, true); await store.mutate(() => { mutations++; }, { id: 'same-transaction' }); assert.equal(mutations, 1);
+});
+test('actual branch alignment uses ordinary merge/push; semantic conflicts preserve source', async t => {
+  const root = await temporary(t, 'delivery-align-'); const remote = join(root, 'remote.git'); const source = join(root, 'source'); await mkdir(source); await git(['init', '--bare', '--quiet', remote]);
+  const run = args => git(args, { cwd: source }); await run(['init', '--quiet', '--initial-branch=main']); await writeFile(join(source, 'shared'), 'start\n'); await run(['add', 'shared']); await run(['commit', '-m', 'initial']);
+  const common = await run(['rev-parse', 'HEAD']); await run(['checkout', 'main']); await writeFile(join(source, 'mainfile'), 'main\n'); await run(['add', 'mainfile']); await run(['commit', '-m', 'main']); const target = await run(['rev-parse', 'HEAD']);
+  await run(['checkout', '-b', 'task/test', common]); await writeFile(join(source, 'taskfile'), 'task\n'); await run(['add', 'taskfile']); await run(['commit', '-m', 'task']); const tip = await run(['rev-parse', 'HEAD']); await run(['push', remote, 'main', 'task/test']);
+  const pull = { state: 'open', is_wip: false, head: { sha: tip, ref: 'task/test' } }; const platform = { repo, pull: async () => pull, main: async () => ({ commit: { sha: target } }) };
+  const aligned = await alignBranch(platform, { number: 1, headSha: tip, mainSha: target, pull }, { remote });
+  await run(['fetch', remote, 'task/test']); const parents = (await run(['rev-list', '--parents', '-n', '1', 'FETCH_HEAD'])).split(' '); assert.deepEqual(parents.slice(1), [tip, target]); assert.equal(parents[0], aligned.sha);
+  await run(['checkout', 'main']); await writeFile(join(source, 'shared'), 'main conflict\n'); await run(['add', 'shared']); await run(['commit', '-m', 'main conflict']); const conflictMain = await run(['rev-parse', 'HEAD']); await run(['push', remote, 'main']);
+  await run(['checkout', '-b', 'task/conflict', common]); await writeFile(join(source, 'shared'), 'task conflict\n'); await run(['add', 'shared']); await run(['commit', '-m', 'task conflict']); const conflictHead = await run(['rev-parse', 'HEAD']); await run(['push', remote, 'task/conflict']);
+  const conflictPull = { ...pull, head: { sha: conflictHead, ref: 'task/conflict' } }; await assert.rejects(alignBranch({ ...platform, pull: async () => conflictPull, main: async () => ({ commit: { sha: conflictMain } }) }, { number: 2, headSha: conflictHead, mainSha: conflictMain, pull: conflictPull }, { remote }), /git merge/);
+  assert.equal((await git(['ls-remote', remote, 'refs/heads/task/conflict'])).split(/\s/)[0], conflictHead);
+});
+
+test('immutable candidate creation reuses exact protected refs/PRs and rejects source replacement', async () => {
+  let created = false; let posts = 0; const s = snapshot(); const marker = `delivery-origin:1:${head}:${main}`;
+  const platform = new Platform(repo, undefined, async (_repo, path, options) => {
+    if (path.includes('branch-protections')) return [{ id: 'candidate-rule', rule: 'delivery/candidate/**', allow_creation: true, allow_master_creation: true, allow_pushes: false, allow_master_pushes: false, allow_force_pushes: false, allow_master_force_pushes: false, allow_deletions: false, allow_master_deletions: false }];
+    if (path === '/-/git/branches' && options.method === 'POST') { posts++; if (created) throw new Error('already exists'); created = true; return {}; }
+    if (path.includes('/git/branches/')) return { commit: { sha: head }, protected: true };
+    if (path.includes('/pulls?')) return [];
+    if (path === '/-/pulls') return { number: 11, head: { sha: head }, body: `<!-- ${marker} -->` };
+    throw new Error(`Unexpected ${path}`);
+  });
+  assert.equal((await platform.ensureCandidate(s)).number, 11); assert.equal((await platform.ensureCandidate(s)).headSha, head); assert.equal(posts, 2);
+  platform.request = async (_repo, path) => path.includes('branch-protections') ? [{ id: 'candidate-rule', rule: 'delivery/candidate/**', allow_creation: true, allow_master_creation: true, allow_pushes: false, allow_master_pushes: false, allow_force_pushes: false, allow_master_force_pushes: false, allow_deletions: false, allow_master_deletions: false }] : path === '/-/git/branches' ? Promise.reject(new Error('already exists')) : { commit: { sha: main }, protected: true };
+  await assert.rejects(platform.ensureCandidate(s), /already exists/);
+});
+test('positive merge readback requires actual is_merged and exact tested parent order', async () => {
+  const platform = new Platform(repo); platform.pull = async () => ({ is_merged: true, head: { sha: head }, merged_by: { username: 'npc' } }); platform.commit = async () => ({ parents: [{ sha: main }, { sha: head }] });
+  assert.equal((await platform.verifyMerge(snapshot(), { sha: mergedSha })).sha, mergedSha);
+  platform.commit = async () => ({ parents: [{ sha: head }, { sha: main }] }); await assert.rejects(platform.verifyMerge(snapshot(), { sha: mergedSha }), /parents/);
+  platform.pull = async () => ({ state: 'closed', is_merged: false, head: { sha: head } }); await assert.rejects(platform.verifyMerge(snapshot(), { sha: mergedSha }), /receipt/);
+});
+test('unknown merge acknowledgement pauses later integration; never repeats the write', async () => {
+  const s = snapshot(11); s.originNumber = 1; s.pull.head.ref = 'delivery/candidate/test';
+  const state = activate(emptyState(repo)); updateTask(state, 1, { status: 'waiting_ci', headSha: head, mainSha: main, originalBody: '', intent, review: review(s) }, now); const store = memoryStore(state); let writes = 0;
+  const platform = { repo, assertCandidateProtection: async () => {}, snapshot: async () => s, pull: async number => number === 1 ? snapshot().pull : s.pull, merge: async () => { writes++; throw new Error('network lost response'); }, error: e => e.message };
+  await assert.rejects(mergeCandidate({ platform, store, policy, snapshot: s, dependencies: new Map([[1, { pending: [] }]]), now }), /lost/); assert.equal(writes, 1); assert.equal((await store.read()).tasks['1'].status, 'merging');
+  const report = await reconcile({ platform, store, policy, now, services: { reconcileReleases: async () => [] } }); assert.equal(report.failed[0].stage, 'recover-merge'); assert.equal(writes, 1);
+});
+test('red oldest PR and failed release do not stop a later healthy PR candidate', async () => {
+  const state = activate(emptyState(repo)); const good = snapshot(2); const candidate = snapshot(22); candidate.pull.head.ref = 'delivery/candidate/22'; candidate.originNumber = 2;
+  updateTask(state, 22, { status: 'waiting_ci', review: review(candidate) }, now); const store = memoryStore(state); let candidateCreated = 0; let originalClosed = false;
+  const platform = { repo, error: e => e.message, pulls: async () => [snapshot(1).pull, good.pull], snapshot: async number => number === 1 ? snapshot(1, { checkErrors: ['Required check static-gate failed'] }) : number === 22 ? candidate : good,
+    pull: async number => number === 2 ? { ...good.pull, state: originalClosed ? 'closed' : 'open' } : number === 22 ? candidate.pull : snapshot(number).pull,
+    ensureCandidate: async () => { candidateCreated++; return { number: 22 }; }, assertCandidateProtection: async () => {}, list: async () => [], comment: async () => {},
+    merge: async () => ({ sha: mergedSha }), verifyMerge: async () => ({ sha: mergedSha, sourceSha: head, mainSha: main }),
+    call: async (_path, options) => { if (options?.method === 'PATCH') originalClosed = true; return {}; } };
+  const report = await reconcile({ platform, store, policy, now, services: { reconcileReleases: async () => { throw new Error('release failed'); } } });
+  assert.equal(candidateCreated, 1); assert.equal(report.integrated[0].number, 2); assert.ok(report.waiting.some(item => item.number === 1)); assert.equal(report.failed[0].stage, 'releases'); assert.equal(originalClosed, true);
+});
+test('task receipt cannot close an unmerged task or a task with declared unverified release', async () => {
+  const state = emptyState(repo); const taskIntent = { ...intent, taskId: 'T-2026-1005-1001', releases: [{ kind: 'desktop', version: 'v1.2.3' }] };
+  updateTask(state, 1, { status: 'waiting_ci', intent: taskIntent }, now); updateTask(state, 2, { status: 'release_pending', intent: taskIntent, merge: { sha: mergedSha, sourceSha: head, mainSha: main } }, now);
+  let writes = 0; await writeTaskReceipts({ store: memoryStore(state), platform: { list: async () => { writes++; return []; } }, now }); assert.equal(writes, 0);
+});
+test('release enqueue is idempotent by frozen source/kind/version and keeps integration separate', () => {
+  const state = emptyState(repo); const task = { number: 1, merge: { sha: mergedSha }, intent: { releases: [{ kind: 'ui', version: 'v1.2.3' }] } };
+  enqueueReleases(state, repo, task, now); enqueueReleases(state, repo, task, now); assert.equal(Object.keys(state.releases).length, 1); assert.equal(Object.values(state.releases)[0].version, '1.2.3');
+});
+test('release launch intent survives lost acknowledgement and forbids duplicate publication', async () => {
+  const state = emptyState(repo); const task = { number: 1, merge: { sha: mergedSha }, intent: { releases: [{ kind: 'ui', version: '1.2.3' }] } }; enqueueReleases(state, repo, task, now); const store = memoryStore(state); let launches = 0;
+  const platform = { repo, error: e => e.message, call: async (path, options) => { if (path.includes('/build/logs')) return { total: 0, data: [] }; if (options?.method === 'POST') { launches++; throw new Error('lost ack'); } throw new Error('unexpected call'); } };
+  assert.equal((await reconcileReleases({ platform, store, now }))[0].status, 'unknown'); await reconcileReleases({ platform, store, now: now + 60000 }); assert.equal(launches, 1);
+});
+test('release verifies actual tag source, manifest identity and every downloaded digest', async () => {
+  const hex = 'a'.repeat(128); const names = ['WorkLoom-mac-arm64.dmg', 'WorkLoom-mac-x64.dmg', 'WorkLoom-win-x64.exe']; const release = { sha: mergedSha, kind: 'desktop', version: 'v1.2.3', build: { sn: 'run' } };
+  const manifest = { schemaVersion: 1, tag: release.version, sourceSha: mergedSha, assets: names.map(name => ({ name, size: 5, sha512: hex })) };
+  const platform = { repo, call: async path => path.includes('/releases/') ? { id: 'r', draft: false } : { sha: mergedSha } }; let downloads = 0;
+  const download = async (_repo, _tag, name) => { downloads++; return name.endsWith('.json') ? { data: manifest } : { name, size: 5, sha512: hex }; };
+  assert.equal((await verifyRelease(platform, release, download)).assets.length, 3); assert.equal(downloads, 4);
+  manifest.sourceSha = head; await assert.rejects(verifyRelease(platform, release, download), /manifest/); manifest.sourceSha = mergedSha;
+  await assert.rejects(verifyRelease(platform, release, async () => ({ data: manifest, size: 6, sha512: hex })), /byte/);
+});

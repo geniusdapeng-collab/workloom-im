@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
  * 并发冲突检测（docs/DEVELOPMENT-PROTOCOL.md §4）。
- * 逻辑：取本分支改动文件 → 拉同仓 open PR 的改动文件 → 模块级互斥命中即拒；同文件重叠在 PR 事件下默认拒
- * （LOCK_OVERLAP_MODE=warn 可降级；push 事件见下）。
+ * 普通路径重叠只提醒；敏感路径仅受持久化限时开发租约约束。
+ * 实时 PR source/main 与 merge-base 新鲜度仍为硬门禁；--strict 是额外诊断模式。
  *
  * 事件语义（2026-09-27 修订）：
- * - **PR 事件**：按 §4 先到先得拦截（后到者排队），命中即 fail；
+ * - **PR 事件**：普通重叠只提醒；其他 owner 的有效敏感租约拒绝；
  *   事件 source/target SHA 必须与实时 PR/main、compare merge base 一致；缺令牌/API 失败也 fail。
  * - **push 事件（main 合并提交）**：合并已经发生，门禁拦不住任何东西，只降级为**提醒**
  *   （列出需要 rebase 的在途 PR），否则每次并发合并都会把 main 门禁打红——
@@ -21,6 +21,7 @@
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { findFileOverlaps, findModuleConflicts, parseChangedPaths, resolveLockOverlapMode } from "./protocol-rules.mjs";
+import { emptyState, sensitiveScopes, validateState } from '../delivery/queue-model.mjs';
 
 const API = "https://api.cnb.cool";
 const SHA_RE = /^[0-9a-f]{40,64}$/i;
@@ -60,7 +61,7 @@ async function apiJson(url) {
     },
   });
   const text = await response.text();
-  if (!response.ok) throw new Error(`CNB API HTTP ${response.status} (${new URL(url).pathname})`);
+  if (!response.ok) throw Object.assign(new Error(`CNB API HTTP ${response.status} (${new URL(url).pathname})`), { status: response.status });
   if (!text) throw new Error(`CNB API 返回空响应 (${new URL(url).pathname})`);
   return JSON.parse(text);
 }
@@ -221,6 +222,21 @@ export async function openPrFiles(repoSlug, selfNumber, selfBranch, selfHeadSha,
   return { prs: result, selfNumber: resolvedSelfNumber };
 }
 
+/** Development occupation is a bounded lease, never the age or open state of a PR. */
+export function activeLeaseConflicts(files, state, owner, now = Date.now()) {
+  return sensitiveScopes(files).filter(scope => state.leases[scope]?.owner && state.leases[scope].expiresAt > now && state.leases[scope].owner !== owner);
+}
+
+export async function readLeases(repoSlug, request = apiJson) {
+  try {
+    const state = await request(`${API}/${repoSlug}/-/git/raw/automation%2Fdelivery-state/state.json`);
+    return validateState(state, repoSlug);
+  } catch (error) {
+    if (error.status === 404) return emptyState(repoSlug); // Explicit pre-install state only.
+    throw error;
+  }
+}
+
 function selfTest() {
   const mine = ["sync/base-sync.mjs"];
   const theirs = ["sync/client-foundation.mjs"];
@@ -254,8 +270,8 @@ function selfTest() {
   const modeCases = [
     // push 事件（main 合并）→ 只提醒：合并已发生，拦不住任何东西（2026-09-27 误报回归）
     [{ event: "push" }, "warn"],
-    [{ event: "pull_request" }, "fail"],
-    [{ event: null }, "fail"],
+    [{ event: "pull_request" }, "warn"],
+    [{ event: null }, "warn"],
     [{ event: "push", envMode: "fail" }, "fail"],
     [{ event: "pull_request", strict: true }, "fail"],
   ];
@@ -339,6 +355,11 @@ async function main() {
   }
 
   let others;
+  if (prEvent) {
+    const owner = /T-\d{4}-\d{4}-\d{4}/.exec(selfBranch ?? '')?.[0] ?? null;
+    const conflicts = activeLeaseConflicts(mine, await readLeases(repoSlug), owner);
+    if (conflicts.length) throw new Error(`敏感模块仍有有效开发租约：${conflicts.join(', ')}；等待期限到期或持有者交接，不按 open PR 编号占锁`);
+  }
   try {
     const scanned = await openPrFiles(repoSlug, selfNumber, selfBranch, selfHeadSha);
     others = scanned.prs;
@@ -347,7 +368,7 @@ async function main() {
       console.log(`  自身 PR 编号：#${selfNumber}（先到先得判定依据）`);
     }
   } catch (error) {
-    if (prEvent || strict) throw new Error(`查询 open PR 失败：${error?.message ?? error}`);
+    if (strict) throw new Error(`查询 open PR 失败：${error?.message ?? error}`);
     console.warn(`! 查询 open PR 失败，跳过冲突检测：${String(error).slice(0, 200)}`);
     return;
   }
@@ -357,19 +378,15 @@ async function main() {
   for (const other of others) {
     const moduleConflicts = findModuleConflicts(mine, other.paths);
     const overlaps = findFileOverlaps(mine, other.paths);
-    // 先到先得：编号小的 PR 优先合并；编号大的（后到者）自行排队；无法判定自身编号时保持对称拦截
-    const mineNumber = Number(selfNumber);
-    const theirNumber = Number(other.number);
-    const iAmLater = Number.isFinite(mineNumber) && Number.isFinite(theirNumber)
-      ? theirNumber < mineNumber
-      : true;
+    // Explicit strict diagnostics can reject overlap; normal CI never leases by PR number.
+    const iAmLater = true;
     if (moduleConflicts.length) {
       if (advisory) {
         console.warn(`! 与 PR #${other.number}「${other.title}」同改互斥模块：${moduleConflicts.join(", ")}（push 事件提醒：该 PR 需 rebase）`);
       } else if (iAmLater) {
         failed += 1;
         console.error(`✗ 与 PR #${other.number}「${other.title}」互斥模块冲突：${moduleConflicts.join(", ")}`);
-        console.error("   模块级互斥路径同一时刻只允许一个任务（协议 §4）——你是后到者，请排队等其合并后 rebase。");
+        console.error("   显式 strict 诊断拒绝重叠；正常开发互斥以有效租约为准（协议 §4）。");
       } else {
         console.warn(`! 与 PR #${other.number}「${other.title}」同改互斥模块 ${moduleConflicts.join(", ")}：该 PR 编号更大（后到），由它排队。`);
       }

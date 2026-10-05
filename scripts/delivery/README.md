@@ -102,3 +102,20 @@ node --test scripts/delivery/*.test.mjs
 进程执行与退出状态遵循 [Node.js child_process 官方文档](https://nodejs.org/api/child_process.html#child_processspawnsynccommand-args-options)；代码 blob 和后代关系分别由 [git show](https://git-scm.com/docs/git-show) 与 [git merge-base --is-ancestor](https://git-scm.com/docs/git-merge-base) 回读，工作树状态由 [git status --porcelain](https://git-scm.com/docs/git-status) 判断。
 
 结构化测试观测使用 [Node.js Test runner 的 custom reporter / TestsStream](https://nodejs.org/api/test.html#custom-reporters)；人读报告格式不用于机器解析。
+
+
+## 持续研发交付（queue-*，2026-10-05）
+
+与上方 MCD 台账执行器并列的研发交付机制；具体协议见 `docs/DEVELOPMENT-PROTOCOL.md` v2。`queue-runner.mjs` 提供 status、lease、handoff、review-prepare、review-finish、activate、reconcile。日常开发用独立工作树；普通重叠提示；敏感开发租约默认 15 分钟，owner/generation 续租；CI/评审前交接释放。
+
+trusted main 的 `cnb.yml` 每 5 分钟恢复，原生仓级锁串行集成。原 PR 通过必需检查后创建不可修改候选分支/PR，再运行绑定 source/main/policy/完整文件列表的真正 CodeBuddy 审查。Bot Approve 和完整结构化结果双重回读；平台强保护保留，不等待用户点 Approve。没有覆盖、超时、CI 红、依赖未满足或权限失败均不合。
+
+AI 使用固定官方镜像内的 SDK，按每批最多 30 个变化路径分批精读；每仓同时只有一条审查流水线、最多两个模型子进程。全部批次必须给出准确覆盖和身份回执，任一批缺失、失败或漂移不发布 Approve。审查失败按 source/main 限两次并退避；进程中断由原生 build SN 回读计数，丢失启动响应以唯一 title 查回，无正向回执不重复启动。未知结果只保留该任务，超出在途时限后无关任务仍可排入原生串行锁。
+
+既有必需 CI 阶段只能增加检查，不能被来源分支删改、调序或降级；若需改变既有门禁本身，先提交独立治理变更并经过可回读的独立 AI/平台检查，不能借普通 PR 偷换已经测试的政策。当前执行器对此类门禁替换保持阻断，不能声称它已支持自动迁移门禁政策。
+
+Git `automation/delivery-state` 保存任务、租约、事件、尝试、AI、集成和发布证明；普通 fast-forward push 是 CAS，transaction ID 处理丢失响应。没有强推。合并响应不明暂停集成，先正向回读；声明的 UI/桌面制品发布单独排队、固定 SHA/版本并校验 tag/manifest/实际 SHA-512 字节，失败不跳过无关集成，不生成发布成功回执。
+
+初次安装必须有真实 bootstrap AI 审查和原仓检查；合入以后由设置权限者一次安装不可修改候选/状态保护规则、回读 main 必需检查/评审并取消额外管理员批准、写 activation 事件。云端只有 CNB 原生令牌，不保存会话凭据。隔离副本排除，平台秘密/实盘/客户动作不在研发自动授权内。
+
+验证：`node --test scripts/delivery/queue.test.mjs scripts/ci/protocol-rules.test.mjs sync/merge-sync-prs.test.mjs scripts/ui-release-registration.test.mjs`。包含真实本地 bare Git 的 CAS 并发、丢失 push 回执、主干对齐/语义冲突，与 AI 覆盖、权限、过期、依赖、失败隔离和冻结发布断言。云端上线另须真实平台检查、AI 和状态回读；本地模拟不算云端成功。

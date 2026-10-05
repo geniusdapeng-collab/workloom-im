@@ -1,3 +1,7 @@
+include:
+  - scripts/delivery/cnb.yml
+  - scripts/delivery/bootstrap-cnb.yml
+
 # WorkLoom 织元 · CNB 云原生构建闸门
 #
 # 2026-09-17 随仓库迁移到 CNB 落地：把原 GitHub Actions `ci.yml`（ci-gate）的闸门
@@ -115,6 +119,11 @@
         node --test scripts/acceptance/lib/profile-contract.test.mjs scripts/acceptance/profile-check.test.mjs scripts/acceptance/outcome.test.mjs scripts/acceptance/fleet-run.test.mjs scripts/acceptance/lib/environment-safety.test.mjs scripts/acceptance/lib/outcome-contract.test.mjs scripts/acceptance/lib/live/budget.test.mjs scripts/acceptance/lib/live/live-truth.test.mjs scripts/acceptance/lib/live/providers.test.mjs scripts/acceptance/lib/live/usage.test.mjs scripts/acceptance/lib/live/audit.test.mjs scripts/acceptance/lib/live/providers-http.test.mjs scripts/acceptance/lib/live/dsh-process.test.mjs scripts/acceptance/lib/live/live-cli-wire.test.mjs scripts/acceptance/lib/live/product.test.mjs scripts/acceptance/lib/live/media-negative.test.mjs scripts/acceptance/lib/live/live-cli.test.mjs
         node --test scripts/capability-status.test.mjs scripts/tools/provision-safety.test.mjs scripts/ui-release-registration.test.mjs
         node --test apps/desktop/electron/bootstrap.test.cjs scripts/desktop-bootstrap-db.test.mjs
+
+    - name: 持续交付与不可变发布回归
+      script: |
+        set -eu
+        node --test scripts/delivery/queue.test.mjs scripts/tools/task.test.mjs scripts/tools/provision-protocol.test.mjs scripts/cnb-release-publish.test.mjs
 
     - name: 三端生产构建
       script: |
@@ -398,6 +407,11 @@
 
 .ui-release: &ui_release
   name: ui-release
+  lock:
+    key: workloom-delivery-release-ui
+    expires: 14400
+    wait: true
+    timeout: 60
   docker:
     image: node:24.19.0-bookworm
     volumes:
@@ -408,6 +422,7 @@
     - name: 构建并打包 @workloom/ui
       script: |
         set -eu
+        node scripts/delivery/release-source.mjs
         corepack enable
         corepack prepare pnpm@10.14.0 --activate
         pnpm config set store-dir /cnb-cache/pnpm-store
@@ -445,58 +460,19 @@
     - name: 发布到 CNB Release
       script: |
         set -eu
-        cat > /tmp/publish.mjs <<'JS'
-        import fs from 'node:fs';
-        import {resolve} from 'node:path';
-        import {pathToFileURL} from 'node:url';
-        const {redactCredentials}=await import(pathToFileURL(resolve('scripts/tools/cnb-api.mjs')).href);
-        const API='https://api.cnb.cool', REPO='workloom-ai/workloom-im';
-        const ver=process.env.UI_VERSION;
-        const tag=`ui-v${ver}`, asset=`workloom-ui-${ver}.tgz`;
-        const token=process.env.CNB_TOKEN;
-        const meta=JSON.parse(fs.readFileSync('/workspace/dist/release-metadata.json','utf8'));
-        const releaseSha=fs.readFileSync('/workspace/dist/release-commit.txt','utf8').trim();
-        const J={'Authorization':`Bearer ${token}`,'Accept':'application/json','Content-Type':'application/json'};
-        async function req(url, opts={}) {
-          if(new URL(url).origin!==API) throw new Error('拒绝把发布凭据发送到非 CNB API 来源');
-          const r=await fetch(url,{...opts,signal:AbortSignal.timeout(30000),headers:{...J,...(opts.headers||{})}});
-          const t=await r.text();
-          if(!r.ok) throw Object.assign(new Error(redactCredentials(`${r.status} ${t.slice(0,400)}`,token)),{status:r.status});
-          return t?JSON.parse(t):{};
-        }
-        let rel;
-        try { rel = await req(`${API}/${REPO}/-/releases/tags/${tag}`); }
-        catch(error) { if(error.status!==404) throw error; rel = await req(`${API}/${REPO}/-/releases`, {method:'POST', body: JSON.stringify({tag_name:tag,name:tag,body:'WorkLoom 织元共享 UI 制品（CNB 托管）',target_commitish:releaseSha,draft:false,prerelease:false,make_latest:'false'})}); }
-        const buf=fs.readFileSync(`/workspace/dist/${asset}`);
-        const up=await req(`${API}/${REPO}/-/releases/${rel.id}/asset-upload-url`, {method:'POST', body: JSON.stringify({asset_name:asset,size:buf.length,overwrite:true})});
-        const put=await fetch(up.upload_url,{method:'PUT',body:buf,signal:AbortSignal.timeout(30000),headers:{'Content-Type':'application/octet-stream'}});
-        if(!put.ok) throw new Error(redactCredentials('upload '+put.status+' '+(await put.text()).slice(0,200),token));
-        await req(up.verify_url, {method:'POST', body:'{}'});
-        const after=await req(`${API}/${REPO}/-/releases/tags/${tag}`);
-        // 回读校验：远端资产字节必须与本地打包字节逐字节一致，且等于登记摘要。
-        const {createHash}=await import('node:crypto');
-        const response=await fetch(`https://cnb.cool/${REPO}/-/releases/download/${tag}/${asset}`,{signal:AbortSignal.timeout(30000)});
-        if(!response.ok) throw new Error(`回读发布资产失败 HTTP ${response.status}`);
-        const downloaded=Buffer.from(await response.arrayBuffer());
-        const digest='sha512-'+createHash('sha512').update(downloaded).digest('base64');
-        if(downloaded.length!==meta.size || digest!==meta.sha512) throw new Error(`发布资产与登记摘要不一致：${downloaded.length}/${digest}`);
-        console.log('assets', (after.assets||[]).map(a=>`${a.name}:${a.size}`).join(', '));
-        console.log('DONE', `https://cnb.cool/${REPO}/-/releases/download/${tag}/${asset}`);
-        JS
-        if ! node /tmp/publish.mjs; then
-          # 失败保持已受审 main 与不可变标签；下次以同一登记摘要幂等重试上传。
-          echo "发布资产上传或回读失败；保持登记提交与标签，拒绝报告发布成功"
-          exit 1
-        fi
+        node scripts/cnb-release-publish.mjs --tag "ui-v${UI_VERSION}" --create \
+          --body "WorkLoom 织元共享 UI 制品（已受审登记，固定 SHA 与字节）" \
+          "/workspace/dist/workloom-ui-${UI_VERSION}.tgz"
 
 # 基座 → 子仓 fanout（云端自动更新的主通道）
 #
 # 职责：把 workloom-im 的根级受控资产（全景认知 / 开发协议 / AGENTS 受控区块 / 同步登记）
-# 的最新版本，开成每个子仓里的一条 `sync/base-*` 同步 PR；门禁全绿后由
-# `sync/merge-sync-prs.mjs` 自动合并：仅非执行性资产的纯同步 PR 走免审通道；携带运行时代码的
-# `-full` 波次与代码类 PR 走 §9.5 代码车道（门禁全绿 + 10 分钟冷却期 + 无风险标签 +
-# 治理路径拦截，同仓每轮串行合并一条）。AGENTS/协议/同步器/验收执行器等治理资产
-# 即使由 fanout 生成，也须显式审查后合并。人保留叫停 / 回滚 / 高风险裁决权。
+# 的最新版本，开成每个子仓里的一条 `sync/base-*` 同步 PR。
+# 合并由 scripts/delivery/cnb.yml 中独立的可信 main 执行器承担；fanout 故障不跳过合并。
+# `sync/merge-sync-prs.mjs` 仅派发仓级执行器，不再拥有第二条直接合并路径。携带运行时代码的
+# `-full` 波次与代码类 PR 走 §9.5 代码车道（必需检查 + 独立 AI 审查 + 交接/冷却期 +
+# 无风险阻断标签，同仓每轮串行合并一条）。AGENTS/协议/同步器/验收执行器等治理资产
+# 同样接受完整 AI 审查，不等待人工点击。人保留叫停 / 回滚 / 业务高风险裁决权。
 #
 # 跨仓前提（一次性）：CNB「组织设置 → 仓库管控 → 允许定时任务跨仓操作」。
 # 未开启时定时任务会以“权限不足”告警收尾（不红），可改用 API 触发
@@ -524,16 +500,6 @@
         # shellcheck disable=SC2086
         node sync/fanout-cnb.mjs --mode "$MODE" $DRY --tolerate-scope-error --json > /tmp/fanout.json
         cat /tmp/fanout.json
-
-    - name: 门禁全绿即合（纯同步 + 代码车道；同仓每轮一条，治理路径除外）
-      script: |
-        set -eu
-        if [ "${BASE_SYNC_DRY_RUN:-0}" = "1" ]; then
-          node sync/merge-sync-prs.mjs --dry-run --json > /tmp/merge.json
-        else
-          node sync/merge-sync-prs.mjs --json > /tmp/merge.json
-        fi
-        cat /tmp/merge.json
 
 # 桌面安装包发布（CNB 侧通道，MC-202）
 #
@@ -570,6 +536,7 @@
     - name: 发布输入与密钥前置（fail-closed）
       script: |
         set -eu
+        node scripts/delivery/release-source.mjs
         VERSION="${DESKTOP_RELEASE_VERSION:-}"
         echo "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || {
           echo "必须用 env DESKTOP_RELEASE_VERSION=vX.Y.Z 触发桌面发布（当前：'${VERSION}'）"; exit 1; }
@@ -623,6 +590,7 @@
     - name: 依赖 + 签名 Bundle + 投影/产品校验 + web 构建
       script: |
         set -eu
+        node scripts/delivery/release-source.mjs
         corepack enable
         corepack prepare pnpm@10.14.0 --activate
         pnpm install --frozen-lockfile
@@ -696,6 +664,8 @@
       script: |
         # 注：自托管 Windows 节点上 stage script 默认走 PowerShell（CNB 文档），bash 步骤显式经 Git for Windows 执行
         $ErrorActionPreference = "Stop"
+        node scripts/delivery/release-source.mjs
+        if ($LASTEXITCODE -ne 0) { throw "冻结发布源码校验失败" }
         powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-pgvector-win.ps1
         if ($LASTEXITCODE -ne 0) { throw "pgvector/PG 运行时编译失败" }
         bash -lc @'
@@ -764,6 +734,7 @@
     - name: 回读候选字节 + 汇总校验表与发布清单
       script: |
         set -eu
+        node scripts/delivery/release-source.mjs
         mkdir -p dist/desktop
         cd dist/desktop
         for asset in WorkLoom-mac-arm64.dmg WorkLoom-mac-x64.dmg WorkLoom-win-x64.exe desktop-macos-manifest.json desktop-windows-manifest.json; do
@@ -784,7 +755,7 @@
               assets.push({name,size:b.length,sha512:digest});
             }
           }
-          fs.writeFileSync("WorkLoom-release-manifest.json",JSON.stringify({schemaVersion:1,product:"workloom-desktop",tag:process.env.VERSION,channel:"cnb",assets},null,2)+"\n");
+          fs.writeFileSync("WorkLoom-release-manifest.json",JSON.stringify({schemaVersion:1,product:"workloom-desktop",tag:process.env.VERSION,sourceSha:process.env.RELEASE_EXPECTED_SHA||process.env.CNB_BRANCH_SHA,channel:"cnb",assets},null,2)+"\n");
           fs.writeFileSync("WorkLoom-SHA512SUMS.txt",assets.map((a)=>`${a.sha512}  ${a.name}`).join("\n")+"\n");
           console.log("汇总校验表：",assets.map((a)=>a.name).join("、"));
         '
@@ -851,7 +822,7 @@ $:
   # 每周开源组件上游扫描（周一 07:00 Asia/Shanghai；CNB crontab 用 Asia/Shanghai 时区）：
   #   全量刷新「当前版本 + 上游最新版本」清单与更新计划；有变化即开 chore/oss-watch-* PR。
   #   扫描只刷新事实；升级由 AI 按协议 §1/§9.5 执行（门禁全绿 + 串行 + 冷却期后合并），
-  #   破坏性/大版本升级须在 PR 显著标注并按 §3 人审放行；人保留叫停与回滚权。
+#   破坏性/大版本升级须在 PR 显著标注并按 §3 由独立 AI 检查迁移/回滚；人保留叫停与回滚权。
   "crontab: 0 7 * * 1":
     - name: oss-watch-weekly
       docker:
