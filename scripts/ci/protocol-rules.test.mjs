@@ -103,7 +103,12 @@ describe('限时开发租约代替 open PR 永久占位', () => {
     assert.deepEqual(activeLeaseConflicts(['apps/web/a.ts'], state, 'other', 59000), []);
   });
   it('明确未安装404允许空租约；权限/网络/账本损坏不能伪装成无占用', async () => {
-    assert.equal((await readLeases('workloom-ai/workloom-im', async () => { throw Object.assign(new Error('not found'), { status: 404 }); })).revision, 0);
+    const absent = () => { throw Object.assign(new Error('not found'), { status: 404 }); };
+    const preInstall = async url => url.endsWith('/git/raw/main/.cnb.yml') ? 'main:\n  push: []\n' : absent();
+    assert.equal((await readLeases('workloom-ai/workloom-im', preInstall)).revision, 0);
+    await assert.rejects(readLeases('workloom-ai/workloom-im', async url => url.includes('/git/branches/') ? { name: 'automation/delivery-state' } : absent()), /state.json 缺失/);
+    await assert.rejects(readLeases('workloom-ai/workloom-im', async url => url.endsWith('/git/raw/main/.cnb.yml') ? 'include: scripts/delivery/cnb.yml' : absent()), /账本缺失/);
+    await assert.rejects(readLeases('workloom-ai/workloom-im', absent), /not found/);
     for (const status of [403, 429, 500]) await assert.rejects(readLeases('workloom-ai/workloom-im', async () => { throw Object.assign(new Error('unreadable'), { status }); }), /unreadable/);
     await assert.rejects(readLeases('workloom-ai/workloom-im', async () => ({ schemaVersion: 1 })), /state/);
   });

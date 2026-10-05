@@ -21,7 +21,7 @@
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { findFileOverlaps, findModuleConflicts, parseChangedPaths, resolveLockOverlapMode } from "./protocol-rules.mjs";
-import { emptyState, sensitiveScopes, validateState } from '../delivery/queue-model.mjs';
+import { emptyState, sensitiveScopes, STATE_BRANCH, validateState } from '../delivery/queue-model.mjs';
 
 const API = "https://api.cnb.cool";
 const SHA_RE = /^[0-9a-f]{40,64}$/i;
@@ -52,7 +52,7 @@ function changedFiles(base) {
   return { files: [], range: null };
 }
 
-async function apiJson(url) {
+async function apiJson(url, { raw = false } = {}) {
   const response = await fetch(url, {
     signal: AbortSignal.timeout(15000),
     headers: {
@@ -63,7 +63,7 @@ async function apiJson(url) {
   const text = await response.text();
   if (!response.ok) throw Object.assign(new Error(`CNB API HTTP ${response.status} (${new URL(url).pathname})`), { status: response.status });
   if (!text) throw new Error(`CNB API 返回空响应 (${new URL(url).pathname})`);
-  return JSON.parse(text);
+  return raw ? text : JSON.parse(text);
 }
 
 export function isPrEvent(env = process.env) {
@@ -229,11 +229,20 @@ export function activeLeaseConflicts(files, state, owner, now = Date.now()) {
 
 export async function readLeases(repoSlug, request = apiJson) {
   try {
-    const state = await request(`${API}/${repoSlug}/-/git/raw/automation%2Fdelivery-state/state.json`);
+    const state = await request(`${API}/${repoSlug}/-/git/raw/${encodeURIComponent(STATE_BRANCH)}/state.json`);
     return validateState(state, repoSlug);
   } catch (error) {
-    if (error.status === 404) return emptyState(repoSlug); // Explicit pre-install state only.
-    throw error;
+    if (error.status !== 404) throw error;
+    // A missing file on an existing control branch is corruption, never an empty lease set.
+    try {
+      await request(`${API}/${repoSlug}/-/git/branches/${encodeURIComponent(STATE_BRANCH)}`);
+    } catch (branchError) {
+      if (branchError.status !== 404) throw branchError;
+      const cnb = await request(`${API}/${repoSlug}/-/git/raw/main/.cnb.yml`, { raw: true });
+      if (typeof cnb !== 'string' || cnb.includes('scripts/delivery/cnb.yml')) throw new Error('已安装交付机制但租约账本缺失，拒绝按空租约放行');
+      return emptyState(repoSlug);
+    }
+    throw new Error('租约控制分支存在但 state.json 缺失，拒绝放行');
   }
 }
 
