@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 160,
+  "revision": 162,
   "tasks": {
     "236": {
       "number": 236,
@@ -44,7 +44,7 @@
     },
     "239": {
       "number": 239,
-      "status": "developing",
+      "status": "integrated",
       "firstSeen": 1791239708979,
       "attempts": {},
       "admission": {
@@ -62,7 +62,71 @@
           "sync": 16
         }
       },
-      "updatedAt": 1791241682834
+      "updatedAt": 1791242012388,
+      "headSha": "d8ddc3ec52e1a984c8ef0293559196b317a3c995",
+      "intent": {
+        "taskId": "T-2026-1005-1001",
+        "ready": true,
+        "dependsOn": [],
+        "releases": []
+      },
+      "merge": {
+        "sha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+        "sourceSha": "d8ddc3ec52e1a984c8ef0293559196b317a3c995",
+        "mainSha": "e35625d856697ba95edf7cde8d294b35cea0de2f",
+        "checkSha": "a92b2f5628ea326e0c85ad9a5919d7e1b45c9c35",
+        "mergedBy": "cnb.dYiF05kxAGA",
+        "verifiedAt": "2026-10-05T23:13:30.197Z"
+      },
+      "mergeSnapshot": {
+        "number": 239,
+        "pull": {
+          "number": 239,
+          "state": "open",
+          "title": "feat(ci): 持续研发交付与真实 AI 审查 [T-2026-1005-1001]",
+          "body": "多个开发会话因旧 PR 文件锁、主干漂移或等待人工 Approve 停住，原合并步骤还依赖 fanout 成功。本变更让开发交接后由持久交付器接管，失败 PR 保留分支并隔离，无关 PR 持续推进。\n\n普通重叠改为提示，敏感开发使用 owner/generation/TTL 租约；显式依赖 DAG；独立可信 main 每 5 分钟恢复并用 CNB 原生仓级锁串行集成。不可修改候选固定 source/main；官方 CodeBuddy SDK 分批审查完整变化文件并回读真实 Bot Approve，机器检查绑定准确双亲，禁止 force。合并、任务、固定 SHA 制品发布各有独立回执；丢失响应先回读，重试有预算。首装 bootstrap 受真实 AI 和原仓门禁约束。\n\n共享协议、分发闭包、纳管器与旧合并入口同步更新；保护行业资产、Andromeda 平台秘密及两个隔离副本。\n\n验证：387 项本地回归通过；最终定向 44 项通过；11 工作区 typecheck 通过；26 文件语法、41 文件 staged 秘密扫描、diff 与能力生成检查通过。真实 CNB CI、AI 审查和启用回读仍待本 PR 验证，未声明已上线。\n\n<!-- workloom-delivery\n{\"task_id\":\"T-2026-1005-1001\",\"ready\":true,\"depends_on\":[],\"releases\":[]}\n-->\n\n<!-- installation-policy-refresh-v2:234:6e9aee3733252f33532aa3cb72156e6a5b7f33c8 -->\n\n首次安装在原 #234 完成真实 AI 和机器检查后更新了平台规则。CNB 旧 PR 仍绑定创建时规则，使用相同准确 source 创建此 PR 重新运行全部门禁；仅在此 PR 真正合并后关闭被替代 #234。\n\n<!-- quota-restored-full-review:238:0f8a3fe2c779c330dea1e8afceab2d9b9af4040c -->\n\nCNB AI 额度已恢复。原 #238 的旧构建重跑接口明确返回 404，因此用同一准确 source/main 创建本安装 PR，重新运行全部产品 CI 与独立 CodeBuddy 审查。保留原 PR 和源分支；仅以真实审查、测试、普通合并及激活回执交付。",
+          "author": {
+            "username": "cnb.dYiF05kxAGA",
+            "nickname": "Genius",
+            "email": "XYpmztfpCvez6l8z5BBAvJ+cnb.dYiF05kxAGA@noreply.cnb.cool",
+            "is_npc": false
+          },
+          "reviewers": [],
+          "labels": [],
+          "base": {
+            "ref": "refs/heads/main",
+            "sha": "e35625d856697ba95edf7cde8d294b35cea0de2f",
+            "repo": {
+              "id": "2100396957109968896",
+              "name": "workloom-im",
+              "path": "workloom-ai/workloom-im",
+              "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+            }
+          },
+          "head": {
+            "ref": "refs/heads/chore/protocol-onboarding-delivery-base-v3-0f8a3fe2c779c330",
+            "sha": "d8ddc3ec52e1a984c8ef0293559196b317a3c995",
+            "repo": {
+              "id": "2100396957109968896",
+              "name": "workloom-im",
+              "path": "workloom-ai/workloom-im",
+              "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+            }
+          },
+          "blocked_on": "unblocked",
+          "merged_by": {
+            "is_npc": false
+          },
+          "mergeable_state": "mergeable",
+          "is_wip": false,
+          "is_merged": false,
+          "is_force_merged": false,
+          "statuses": {}
+        },
+        "headSha": "d8ddc3ec52e1a984c8ef0293559196b317a3c995",
+        "mainSha": "e35625d856697ba95edf7cde8d294b35cea0de2f",
+        "checkSha": "a92b2f5628ea326e0c85ad9a5919d7e1b45c9c35"
+      }
     }
   },
   "leases": {
@@ -2678,6 +2742,93 @@
       },
       "previous": "e9f59a03b6ce6e92231be53096d9050bd710423ae05ff4c8e37331e6794f8ad9",
       "digest": "0139b109550ad20af9e2b79bd418b012ff902a447538abe881efcf9d1cd2aba1"
+    },
+    {
+      "sequence": 161,
+      "at": "2026-10-05T23:13:32.388Z",
+      "kind": "task",
+      "data": {
+        "number": 239,
+        "patch": {
+          "status": "integrated",
+          "headSha": "d8ddc3ec52e1a984c8ef0293559196b317a3c995",
+          "intent": {
+            "taskId": "T-2026-1005-1001",
+            "ready": true,
+            "dependsOn": [],
+            "releases": []
+          },
+          "merge": {
+            "sha": "b2deb741ed16b9fa9d85986974930bcd10530075",
+            "sourceSha": "d8ddc3ec52e1a984c8ef0293559196b317a3c995",
+            "mainSha": "e35625d856697ba95edf7cde8d294b35cea0de2f",
+            "checkSha": "a92b2f5628ea326e0c85ad9a5919d7e1b45c9c35",
+            "mergedBy": "cnb.dYiF05kxAGA",
+            "verifiedAt": "2026-10-05T23:13:30.197Z"
+          },
+          "mergeSnapshot": {
+            "number": 239,
+            "pull": {
+              "number": 239,
+              "state": "open",
+              "title": "feat(ci): 持续研发交付与真实 AI 审查 [T-2026-1005-1001]",
+              "body": "多个开发会话因旧 PR 文件锁、主干漂移或等待人工 Approve 停住，原合并步骤还依赖 fanout 成功。本变更让开发交接后由持久交付器接管，失败 PR 保留分支并隔离，无关 PR 持续推进。\n\n普通重叠改为提示，敏感开发使用 owner/generation/TTL 租约；显式依赖 DAG；独立可信 main 每 5 分钟恢复并用 CNB 原生仓级锁串行集成。不可修改候选固定 source/main；官方 CodeBuddy SDK 分批审查完整变化文件并回读真实 Bot Approve，机器检查绑定准确双亲，禁止 force。合并、任务、固定 SHA 制品发布各有独立回执；丢失响应先回读，重试有预算。首装 bootstrap 受真实 AI 和原仓门禁约束。\n\n共享协议、分发闭包、纳管器与旧合并入口同步更新；保护行业资产、Andromeda 平台秘密及两个隔离副本。\n\n验证：387 项本地回归通过；最终定向 44 项通过；11 工作区 typecheck 通过；26 文件语法、41 文件 staged 秘密扫描、diff 与能力生成检查通过。真实 CNB CI、AI 审查和启用回读仍待本 PR 验证，未声明已上线。\n\n<!-- workloom-delivery\n{\"task_id\":\"T-2026-1005-1001\",\"ready\":true,\"depends_on\":[],\"releases\":[]}\n-->\n\n<!-- installation-policy-refresh-v2:234:6e9aee3733252f33532aa3cb72156e6a5b7f33c8 -->\n\n首次安装在原 #234 完成真实 AI 和机器检查后更新了平台规则。CNB 旧 PR 仍绑定创建时规则，使用相同准确 source 创建此 PR 重新运行全部门禁；仅在此 PR 真正合并后关闭被替代 #234。\n\n<!-- quota-restored-full-review:238:0f8a3fe2c779c330dea1e8afceab2d9b9af4040c -->\n\nCNB AI 额度已恢复。原 #238 的旧构建重跑接口明确返回 404，因此用同一准确 source/main 创建本安装 PR，重新运行全部产品 CI 与独立 CodeBuddy 审查。保留原 PR 和源分支；仅以真实审查、测试、普通合并及激活回执交付。",
+              "author": {
+                "username": "cnb.dYiF05kxAGA",
+                "nickname": "Genius",
+                "email": "XYpmztfpCvez6l8z5BBAvJ+cnb.dYiF05kxAGA@noreply.cnb.cool",
+                "is_npc": false
+              },
+              "reviewers": [],
+              "labels": [],
+              "base": {
+                "ref": "refs/heads/main",
+                "sha": "e35625d856697ba95edf7cde8d294b35cea0de2f",
+                "repo": {
+                  "id": "2100396957109968896",
+                  "name": "workloom-im",
+                  "path": "workloom-ai/workloom-im",
+                  "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+                }
+              },
+              "head": {
+                "ref": "refs/heads/chore/protocol-onboarding-delivery-base-v3-0f8a3fe2c779c330",
+                "sha": "d8ddc3ec52e1a984c8ef0293559196b317a3c995",
+                "repo": {
+                  "id": "2100396957109968896",
+                  "name": "workloom-im",
+                  "path": "workloom-ai/workloom-im",
+                  "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+                }
+              },
+              "blocked_on": "unblocked",
+              "merged_by": {
+                "is_npc": false
+              },
+              "mergeable_state": "mergeable",
+              "is_wip": false,
+              "is_merged": false,
+              "is_force_merged": false,
+              "statuses": {}
+            },
+            "headSha": "d8ddc3ec52e1a984c8ef0293559196b317a3c995",
+            "mainSha": "e35625d856697ba95edf7cde8d294b35cea0de2f",
+            "checkSha": "a92b2f5628ea326e0c85ad9a5919d7e1b45c9c35"
+          }
+        }
+      },
+      "previous": "0139b109550ad20af9e2b79bd418b012ff902a447538abe881efcf9d1cd2aba1",
+      "digest": "2e387139f87b2d6eb76fd17636ef22018dcbf089e67c835efe314964c625a453"
+    },
+    {
+      "sequence": 162,
+      "at": "2026-10-05T23:13:30.197Z",
+      "kind": "transaction",
+      "data": {
+        "id": "278a0c5f-7c17-4b02-a2a0-36f76d7be1e7"
+      },
+      "previous": "2e387139f87b2d6eb76fd17636ef22018dcbf089e67c835efe314964c625a453",
+      "digest": "b7c2de756763b642095da4724360d443b1bf979c28bc3279998f7a0df1e6f766"
     }
   ]
 }
