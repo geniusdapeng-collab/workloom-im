@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { GitStateStore, git } from './git-state.mjs';
 import { Platform } from './queue-platform.mjs';
 import { loadPolicy } from './queue-policy.mjs';
-import { prepareReview, finishReview } from './queue-work.mjs';
+import { prepareReview, finishReview, independentCodeBuddyApproval } from './queue-work.mjs';
 import { reconcile, writeTaskReceipts } from './queue-controller.mjs';
 import { reconcileReleases } from './queue-release.mjs';
 import { appendEvent, branchName, checksVerdict, leaseOperation, parseIntent, STATE_BRANCH, updateTask } from './queue-model.mjs';
@@ -36,7 +36,8 @@ export async function activate({ platform, store, root, installer }) {
   const checkErrors = checksVerdict(statuses, tested, { headSha: installer.head?.sha, mainSha: parents[0] }, [...policy.requiredNames, 'delivery-bootstrap-review']);
   if (checkErrors.length) throw new Error(`Installer CI not verified: ${checkErrors.join('; ')}`);
   const reviews = await platform.list(`/-/pulls/${installer.number}/reviews`);
-  if (!reviews.some(review => review.state === 'approved' && review.author?.is_npc === true && `${review.author.username} ${review.author.nickname}`.toLowerCase().includes('codebuddy'))) throw new Error('Installer lacks genuine AI approval');
+  const head = await platform.commit(installer.head.sha);
+  const independentApproval = independentCodeBuddyApproval(reviews, installer, Date.parse(head.commit?.committer?.date ?? head.commit?.author?.date));
   const candidateExpected = { ...branchProtectionPayload({ rule: 'delivery/candidate/**', requireReview: false }), required_status_checks: false };
   const candidateRule = (await platform.protections()).find(rule => rule.rule === candidateExpected.rule);
   if (!candidateRule) await platform.call('/-/settings/branch-protections', { method: 'POST', body: candidateExpected });
@@ -56,7 +57,7 @@ export async function activate({ platform, store, root, installer }) {
   if (!stateRule) await platform.call('/-/settings/branch-protections', { method: 'POST', body: expected });
   const actual = (await platform.protections()).find(rule => rule.rule === STATE_BRANCH);
   if (!actual || Object.entries(expected).some(([key, value]) => actual[key] !== value)) throw new Error('Durable state protection did not read back');
-  await store.mutate(state => appendEvent(state, 'activated', { mainSha, installer: installer.number, policyHash: policy.hash, humanClickRequired: false }));
+  await store.mutate(state => appendEvent(state, 'activated', { mainSha, installer: installer.number, policyHash: policy.hash, independentApproval, humanClickRequired: false }));
   return { repo: platform.repo, mainSha, policyHash: policy.hash, humanClickRequired: false };
 }
 

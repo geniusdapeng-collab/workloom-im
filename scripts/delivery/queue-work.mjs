@@ -5,6 +5,16 @@ import { git } from './git-state.mjs';
 import { branchName, hash, SHA_RE, updateTask, validateReview } from './queue-model.mjs';
 import { reviewRules } from './queue-policy.mjs';
 
+export function independentCodeBuddyApproval(reviews, pull, startedAt) {
+  const creator = pull.author?.username;
+  if (typeof creator !== 'string' || !creator || !Number.isFinite(startedAt)) throw new Error('Independent approval requires a known PR creator and review freshness boundary');
+  const approval = reviews.find(review => review.state === 'approved' && review.author?.is_npc === true &&
+    typeof review.author.username === 'string' && review.author.username && review.author.username.toLowerCase() !== creator.toLowerCase() &&
+    `${review.author.username} ${review.author.nickname ?? ''}`.toLowerCase().includes('codebuddy') && Date.parse(review.created_at) >= startedAt);
+  if (!approval) throw new Error('No current independent real CodeBuddy platform approval was read back');
+  return { id: approval.id, author: approval.author.username, creator, isNpc: true, createdAt: approval.created_at };
+}
+
 export async function alignBranch(platform, snapshot, { remote: testRemote } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'workloom-delivery-align-'));
   const remote = testRemote ?? `https://cnb.cool/${platform.repo}.git`;
@@ -81,9 +91,7 @@ export async function finishReview({ platform, store, policy, root, stateless = 
     // Dependencies cannot be silently dropped by the model.
     receipt.dependsOn = [...new Set([...latest.intent.dependsOn, ...receipt.dependsOn])];
     const actual = await platform.list(`/-/pulls/${latest.number}/reviews`);
-    const approval = actual.find(review => review.state === 'approved' && review.author?.is_npc === true && `${review.author?.username ?? ''} ${review.author?.nickname ?? ''}`.toLowerCase().includes('codebuddy') && Date.parse(review.created_at) >= manifest.snapshot.reviewStartedAt);
-    if (!approval) throw new Error('No current real CodeBuddy platform approval was read back');
-    receipt.platformReview = { id: approval.id, author: approval.author.username, isNpc: true, createdAt: approval.created_at };
+    receipt.platformReview = independentCodeBuddyApproval(actual, latest.pull, manifest.snapshot.reviewStartedAt);
     if (!stateless) await store.mutate(state => updateTask(state, latest.number, { status: 'waiting_ci', review: { ...receipt, result: output, approvedAt: Date.now() }, headSha: latest.headSha, mainSha: latest.mainSha, intent: latest.intent, error: null, blockedUntil: 0 }));
     return receipt;
   } catch (error) {

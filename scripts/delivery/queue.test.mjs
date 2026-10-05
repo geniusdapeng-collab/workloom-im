@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { appendEvent, checksVerdict, dependencyState, eligibility, emptyState, hash, leaseOperation, parseIntent, releaseKey, updateTask, validateReview, validateState } from './queue-model.mjs';
 import { GitStateStore, git } from './git-state.mjs';
-import { alignBranch } from './queue-work.mjs';
+import { alignBranch, independentCodeBuddyApproval } from './queue-work.mjs';
 import { Platform } from './queue-platform.mjs';
 import { BASE_POLICY, ciImplementationChanges, parser, sourcePipelineReport, validateSourcePipeline } from './queue-policy.mjs';
 import { dependencies, integratedDependency, mergeCandidate, reconcile, requestReview, writeTaskReceipts } from './queue-controller.mjs';
@@ -101,6 +101,14 @@ test('AI receipt requires exact identity, complete unique scope, no unresolved i
   const s = snapshot(); const good = { status: 'passed', issues: [], reviewed_files: s.files, head_sha: head, base_sha: main, policy_hash: policy.hash, depends_on: [] };
   assert.equal(validateReview(good, s, policy.hash).passed, true);
   for (const patch of [{ status: 'critical' }, { issues: [{ problem: 'bug' }] }, { reviewed_files: [] }, { reviewed_files: [...s.files, ...s.files] }, { head_sha: main }, { base_sha: head }, { policy_hash: 'old' }, { depends_on: [1] }]) assert.throws(() => validateReview({ ...good, ...patch }, s, policy.hash));
+});
+test('real platform approval requires an independent known creator, actual NPC identity and a fresh decision', () => {
+  const pull = { author: { username: 'creator' } }; const approval = { id: 'review-1', state: 'approved', author: { username: 'CodeBuddy', is_npc: true }, created_at: new Date(now).toISOString() };
+  assert.equal(independentCodeBuddyApproval([approval], pull, now).creator, 'creator');
+  for (const change of [{ state: 'changes_requested' }, { created_at: new Date(now - 1).toISOString() }, { author: { username: 'CodeBuddy', is_npc: false } }, { author: { username: 'another-bot', is_npc: true } }]) assert.throws(() => independentCodeBuddyApproval([{ ...approval, ...change }], pull, now), /independent/);
+  assert.throws(() => independentCodeBuddyApproval([approval], { author: { username: 'codebuddy' } }, now), /independent/);
+  assert.throws(() => independentCodeBuddyApproval([approval], {}, now), /known/);
+  assert.throws(() => independentCodeBuddyApproval([approval], pull, NaN), /freshness/);
 });
 test('CI must test exact main/source parents and each trusted required pipeline, never a loose green commit', () => {
   const payload = { sha: testedSha, statuses: [{ context: 'cnb/pull_request/pipeline-1(static-gate)', state: 'success' }, { context: 'cnb/pull_request/pipeline-2(debt-gate)', state: 'error' }] };
