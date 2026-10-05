@@ -13,7 +13,7 @@ import { dependencies, integratedDependency, mergeCandidate, reconcile, requestR
 import { enqueueReleases, reconcileReleases, verifyRelease } from './queue-release.mjs';
 import { injectDeliveryConfig } from './install-config.mjs';
 import { batchEnvironment, batchSnapshot, botApiEndpoint, combineBatchResults, reviewBatches, reviewEnvironment, runReview, validateIssueSchema } from './review-plugin.mjs';
-import { ensureStateProtection, prepareInstallation, requireTrustedRunner, verifyInstallerChecks, verifyPreparedInstallation } from './queue-runner.mjs';
+import { configureAutomaticReviewPolicy, ensureStateProtection, prepareInstallation, requireTrustedRunner, verifyInstallerChecks, verifyPreparedInstallation } from './queue-runner.mjs';
 import { verifyReleaseSource } from './release-source.mjs';
 import { modelGateway } from './model-gateway.mjs';
 import { randomUUID } from 'node:crypto';
@@ -133,6 +133,19 @@ test('installer activation binds tested main to the independent preparation rece
   assert.throws(() => verifyInstallerChecks({ ...input, tested: { ...tested, parents: [{ sha: mergedSha }, { sha: head }] } }), /source\/main pair/);
   assert.throws(() => verifyInstallerChecks({ ...input, state: emptyState(repo) }), /prepared/);
   assert.throws(() => verifyInstallerChecks({ ...input, installer: { ...installer, head: { sha: main } } }), /prepared/);
+});
+test('genuine exact AI replaces the human review counter while preserving all other main restrictions, including lost acknowledgement recovery', async () => {
+  const { branchProtectionPayload } = await import('../tools/cnb-api.mjs');
+  let rule = { ...branchProtectionPayload(), id: 'main-rule', required_master_approve: true }; let writes = 0;
+  const platform = { protections: async () => [rule], call: async (_path, options) => { writes++; rule = { ...options.body, id: rule.id }; throw new Error('lost acknowledgement'); } };
+  const proof = { independentApproval: { id: 'genuine-npc-review', author: 'CodeBuddy', creator: 'developer', isNpc: true }, preparation: { headSha: head, mainSha: main } };
+  await assert.rejects(configureAutomaticReviewPolicy(platform), /proof/); assert.equal(writes, 0);
+  await assert.rejects(configureAutomaticReviewPolicy(platform, { ...proof, independentApproval: { ...proof.independentApproval, creator: 'codebuddy' } }), /proof/); assert.equal(writes, 0);
+  const before = { ...rule }; const after = await configureAutomaticReviewPolicy(platform, proof);
+  assert.equal(after.required_pull_request_reviews, false); assert.equal(after.required_master_approve, false);
+  for (const [key, value] of Object.entries(before)) if (!['required_pull_request_reviews', 'required_master_approve'].includes(key)) assert.equal(after[key], value);
+  await configureAutomaticReviewPolicy(platform, proof); assert.equal(writes, 1);
+  rule.allow_master_pushes = true; await assert.rejects(configureAutomaticReviewPolicy(platform, proof), /allow_master_pushes/); assert.equal(writes, 1);
 });
 test('eligibility rejects draft/block/expired review/wrong main/unhanded head even with green CI', () => {
   const s = snapshot(); assert.deepEqual(eligibility(s, { review: review(s) }, policy, now), []);

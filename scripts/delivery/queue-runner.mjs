@@ -87,6 +87,29 @@ export function verifyInstallerChecks({ state, installer, statuses, tested, requ
   return prepared.data;
 }
 
+/** CNB's human reviewer counter does not count the genuine CodeBuddy review in the live installation.
+ * The exact AI/CI proof replaces that counter; ordinary PR, status and push restrictions remain enforced.
+ */
+export async function configureAutomaticReviewPolicy(platform, { independentApproval, preparation } = {}) {
+  if (!independentApproval?.id || independentApproval.isNpc !== true || !independentApproval.author || !independentApproval.creator ||
+    independentApproval.author.toLowerCase() === independentApproval.creator.toLowerCase() ||
+    !SHA_RE.test(preparation?.headSha ?? '') || !SHA_RE.test(preparation?.mainSha ?? '')) throw new Error('Automatic review policy requires independent exact installer AI/CI proof');
+  const main = (await platform.protections()).find(rule => rule.rule === 'main');
+  const errors = validateBranchProtection(main, { requireReview: false });
+  if (errors.length) throw new Error(errors.join('; '));
+  const { id, ...prior } = main;
+  if (main.required_pull_request_reviews !== false || main.required_master_approve !== false || main.forbid_approve_pull_created_by_own_npc !== true) {
+    const expected = { ...prior, required_pull_request_reviews: false, required_master_approve: false, forbid_approve_pull_created_by_own_npc: true };
+    let failure;
+    try { await platform.call(`/-/settings/branch-protections/${encodeURIComponent(id)}`, { method: 'PATCH', body: expected }); }
+    catch (error) { failure = error; }
+    const after = (await platform.protections()).find(rule => rule.id === id);
+    if (!after || Object.entries(expected).some(([key, value]) => after[key] !== value) || validateBranchProtection(after, { requireReview: false }).length) throw failure ?? new Error('Automatic AI review policy did not read back');
+    return after;
+  }
+  return main;
+}
+
 export async function activate({ platform, store, root, installer }) {
   const cnb = await readFile(resolve(root, '.cnb.yml'), 'utf8');
   if (!cnb.includes('scripts/delivery/cnb.yml')) throw new Error('Trusted main does not include the delivery pipelines');
@@ -107,16 +130,7 @@ export async function activate({ platform, store, root, installer }) {
   const candidateRule = (await platform.protections()).find(rule => rule.rule === candidateExpected.rule);
   if (!candidateRule) await platform.call('/-/settings/branch-protections', { method: 'POST', body: candidateExpected });
   await platform.assertCandidateProtection();
-  const rules = await platform.protections();
-  const main = rules.find(rule => rule.rule === 'main');
-  const errors = validateBranchProtection(main, { requireReview: true });
-  if (errors.length) throw new Error(errors.join('; '));
-  if (main.required_master_approve !== false) {
-    const { id, ...current } = main;
-    await platform.call(`/-/settings/branch-protections/${encodeURIComponent(id)}`, { method: 'PATCH', body: { ...current, required_master_approve: false } });
-    const after = (await platform.protections()).find(rule => rule.id === id);
-    if (!after || after.required_master_approve !== false || after.forbid_approve_pull_created_by_own_npc !== true || after.required_status_checks !== true || validateBranchProtection(after).length) throw new Error('Automatic AI approval policy did not read back');
-  }
+  await configureAutomaticReviewPolicy(platform, { independentApproval, preparation });
   await ensureStateProtection(platform);
   await store.mutate(state => appendEvent(state, 'activated', { mainSha, installer: installer.number, testedMainSha: preparation.mainSha, policyHash: policy.hash, independentApproval, humanClickRequired: false }));
   return { repo: platform.repo, mainSha, policyHash: policy.hash, humanClickRequired: false };
