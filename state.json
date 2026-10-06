@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 1664,
+  "revision": 1666,
   "tasks": {
     "231": {
       "number": 231,
@@ -380,17 +380,12 @@
         }
       },
       "recoveryCount": 2,
-      "recoveryIntent": {
-        "headSha": "643a96edc8a4a819a682020ea8f52b8783d898e3",
-        "reason": "不可修改候选 #263 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
-        "at": 1791283812815
-      },
+      "recoveryIntent": null,
       "error": "不可修改候选 #263 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
       "blockedUntil": 1791284412815,
       "recovery": {
         "marker": "delivery-repair:632d1dfa0c5c36c258d30af2",
-        "reviewId": "2107406966847086592",
-        "dispatchedAt": 1791279949379
+        "recovered": true
       },
       "reviewFailures": null,
       "candidate": {
@@ -60088,6 +60083,33 @@
       },
       "previous": "362339a0ae1bb82151089e5b4c27ec0b2db15d4ebd9ce31f93bdf2621c8d61df",
       "digest": "5f4ce02b1d3e5f201198cffb1669f759a173231813af80efe06d1a4f74cd4b3d"
+    },
+    {
+      "sequence": 1665,
+      "at": "2026-10-06T10:50:12.815Z",
+      "kind": "task",
+      "data": {
+        "number": 232,
+        "patch": {
+          "recovery": {
+            "marker": "delivery-repair:632d1dfa0c5c36c258d30af2",
+            "recovered": true
+          },
+          "recoveryIntent": null
+        }
+      },
+      "previous": "5f4ce02b1d3e5f201198cffb1669f759a173231813af80efe06d1a4f74cd4b3d",
+      "digest": "57fce32423ad574bab54d812fee2b92dbddad7d17c91036ad273a3beec4b4dc9"
+    },
+    {
+      "sequence": 1666,
+      "at": "2026-10-06T10:51:34.735Z",
+      "kind": "transaction",
+      "data": {
+        "id": "95c12653-4138-472f-aafd-283c794a5ac7"
+      },
+      "previous": "57fce32423ad574bab54d812fee2b92dbddad7d17c91036ad273a3beec4b4dc9",
+      "digest": "e5c3f2a0b4bd7545aa9e1308bed17da61a27e40df7ff7a659774d2a33d0de5a1"
     }
   ]
 }
