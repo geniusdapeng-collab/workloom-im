@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 372,
+  "revision": 374,
   "tasks": {
     "231": {
       "number": 231,
@@ -1497,7 +1497,14 @@
       "reviewFailures": null,
       "blockedUntil": 0,
       "review": null,
-      "candidate": null,
+      "candidate": {
+        "number": 246,
+        "branch": "delivery/candidate/pr-243-a8335b9f449707d92f8d07971266a11a",
+        "headSha": "dbc002361775b510673249145ce117f273085d49",
+        "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+        "marker": "delivery-origin:243:dbc002361775b510673249145ce117f273085d49:b949346721360f3c20f10c628d5c7b214bc2b95e",
+        "at": 1791246307622
+      },
       "headSha": "dbc002361775b510673249145ce117f273085d49",
       "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
       "branch": "task/T-2026-1006-1002",
@@ -10470,6 +10477,36 @@
       },
       "previous": "30b7f75fbaba9ff3e0e6549525c7890c8f3dfab671610676715c4d009cd33dc5",
       "digest": "d9a95a7ef2a2d1ecd3de19045870324854bea3597e58ade542c408b6cd3a6572"
+    },
+    {
+      "sequence": 373,
+      "at": "2026-10-06T00:25:07.622Z",
+      "kind": "task",
+      "data": {
+        "number": 243,
+        "patch": {
+          "candidate": {
+            "number": 246,
+            "branch": "delivery/candidate/pr-243-a8335b9f449707d92f8d07971266a11a",
+            "headSha": "dbc002361775b510673249145ce117f273085d49",
+            "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+            "marker": "delivery-origin:243:dbc002361775b510673249145ce117f273085d49:b949346721360f3c20f10c628d5c7b214bc2b95e",
+            "at": 1791246307622
+          }
+        }
+      },
+      "previous": "d9a95a7ef2a2d1ecd3de19045870324854bea3597e58ade542c408b6cd3a6572",
+      "digest": "9e23b2963f988e102b434066d1da8229cf9296ddfba6a3084b688f7211a18503"
+    },
+    {
+      "sequence": 374,
+      "at": "2026-10-06T00:25:18.436Z",
+      "kind": "transaction",
+      "data": {
+        "id": "93bd5062-af58-4a7e-a0c1-72dba9bfe3df"
+      },
+      "previous": "9e23b2963f988e102b434066d1da8229cf9296ddfba6a3084b688f7211a18503",
+      "digest": "fd5917e418ef2d07c465f513d2d2b4cda88cc93bdb8e4da8c0891f153e2d6cab"
     }
   ]
 }
