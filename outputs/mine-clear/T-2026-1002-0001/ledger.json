@@ -1,0 +1,533 @@
+{
+  "schema": "workloom.mine-clear/ledger@1",
+  "task_id": "T-2026-1002-0001",
+  "repo": "workspace",
+  "repo_path": "/workspace",
+  "title": "",
+  "created_at": "2026-10-06T00:45:15.713Z",
+  "updated_at": "2026-10-06T08:58:11.197Z",
+  "baseline": {
+    "audit": {
+      "commit": "67129d3b870cf2572aa0ad2e3bfaae7d04170923",
+      "branch": "task/T-2026-1002-0001",
+      "remote": "origin",
+      "fetched_at": null,
+      "fetch_status": "skipped",
+      "notes": "审计基线 = 修复提交 67129d3（本轮源码改动全覆盖）；台账本身另以文档提交记录。"
+    },
+    "repair": {
+      "commit": "0648c8a5f885ae65e7b424721927d8ec6ace4888",
+      "notes": "repair 基线 = 回执实体与运行记录共同落地的提交"
+    },
+    "acceptance": {
+      "commit": null,
+      "is_descendant_of_repair": null
+    }
+  },
+  "environment": {
+    "kind": "unknown",
+    "notes": ""
+  },
+  "invariants": [
+    {
+      "id": "INV-1",
+      "text": "租户边界覆盖数据库 RLS、运行时上下文、事件、缓存和外部连接器。",
+      "source": "AGENTS.md#4.1"
+    },
+    {
+      "id": "INV-2",
+      "text": "经营事件、审批和关键回执只增不改；纠正通过新事件表达，不静默覆盖证据。",
+      "source": "AGENTS.md#4.2"
+    },
+    {
+      "id": "INV-3",
+      "text": "所有外部或变更性动作及其子调用，统一经过权限、PII、围栏和审批链路。",
+      "source": "AGENTS.md#4.3"
+    },
+    {
+      "id": "INV-4",
+      "text": "涉钱、敏感数据、群发、公开发布、交易和破坏性变更必须按高风险处理并由人审批。",
+      "source": "AGENTS.md#4.4"
+    },
+    {
+      "id": "INV-5",
+      "text": "没有真实回执就不能标记完成；mock、模拟和体验模式在数据结构与界面上都要明确区分。",
+      "source": "AGENTS.md#4.5"
+    },
+    {
+      "id": "INV-6",
+      "text": "客户原始经营数据不得上行；蜂群只接受白名单化、最小化、匿名化且可审计的元数据或派生经验。",
+      "source": "AGENTS.md#4.6"
+    },
+    {
+      "id": "INV-7",
+      "text": "租户覆盖层只能收紧围栏，不能放宽平台不可变红线。",
+      "source": "AGENTS.md#4.7"
+    },
+    {
+      "id": "INV-8",
+      "text": "模型、提示词、技能、bundle、策略和热更新必须先评测再灰度，且始终可回滚。",
+      "source": "AGENTS.md#4.8"
+    },
+    {
+      "id": "INV-9",
+      "text": "platform-ops、平台账户运营和平台秘密只属于 Andromeda。",
+      "source": "AGENTS.md#4.9"
+    },
+    {
+      "id": "INV-10",
+      "text": "Tiger 在获得单独的合规审查和用户明确授权前，只能模拟或纸面交易。",
+      "source": "AGENTS.md#4.10"
+    },
+    {
+      "id": "INV-11",
+      "text": "令牌、密码、API key、私钥、客户凭证和私密客户数据不得进入源码、文档、上下文、提示词、日志或提交。",
+      "source": "AGENTS.md#4.11"
+    },
+    {
+      "id": "INV-12",
+      "text": "个性化与行业扩展不得形成公共机制的第二事实源。",
+      "source": "AGENTS.md#4.12"
+    }
+  ],
+  "cards": [
+    {
+      "id": "MC-040",
+      "kind": "problem",
+      "level": "L3",
+      "severity": "P1",
+      "batch": 1,
+      "state": "fixed",
+      "title": "演示名册缺 company-ceo 岗，CEO 节拍全部被 F2.10 正确拒写",
+      "evidence": [
+        {
+          "type": "code",
+          "ref": "packages/base/captain/loop.ts:23@67129d3b870cf2572aa0ad2e3bfaae7d04170923",
+          "sha256": "0fb599d5ec6b153f2c4887c4d07a47d2c3f7da02d15113350355a619fb4f21e4",
+          "note": "loop.ceoActor 按 preset_key='company-ceo' 从 agents 名册解析 actor；缺行即空 fenceBindings → gateway 段①拒绝"
+        },
+        {
+          "type": "code",
+          "ref": "scripts/seed.ts:619@67129d3b870cf2572aa0ad2e3bfaae7d04170923",
+          "sha256": "359255aa777d13225eaed2f6e91c343938b6a6a94f7a6fb1f74caacd01f37cb1",
+          "note": "修复前此处只有 Bundle 7 岗位入册，没有任何 company-ceo 行"
+        }
+      ],
+      "root_cause": {
+        "file": "scripts/seed.ts",
+        "line": 620,
+        "commit": "67129d3b870cf2572aa0ad2e3bfaae7d04170923",
+        "symbol": "main()"
+      },
+      "trigger_path": "pnpm db:seed 后执行任一 ceo.* 写动作节拍",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "私有 Unix 集群上名册无 company-ceo（before 方向）",
+          "expect": "ceo.briefing 被 gateway 段① 以「未声明 fence_bindings」（F2.10）拒绝，且不留任何事件；actor 解析出空 fence_bindings",
+          "command": "node --import tsx scripts/repair-mc040-f210.mts before",
+          "exec": {
+            "file": "node",
+            "args": [
+              "--import",
+              "tsx",
+              "scripts/repair-mc040-f210.mts",
+              "before"
+            ]
+          },
+          "last_result": "pass",
+          "run": {
+            "path": "runs/MC-040-0-1791277054268.json",
+            "sha256": "07be13be833f888363c8f8d89e3c7b586432fd3b755fc5b795a51f9c16bd361e",
+            "commit": "0648c8a5f885ae65e7b424721927d8ec6ace4888"
+          },
+          "evidence": {
+            "path": "evidence/MC-040-0-1791277054268.txt",
+            "sha256": "763b4c8927f44b226adc823f9d94fe390a3694f0146fa3055818f7606efdad96",
+            "commit": "0648c8a5f885ae65e7b424721927d8ec6ace4888"
+          }
+        },
+        {
+          "kind": "property",
+          "given": "同一私有集群上种子补齐 CEO 名册行（after 方向）",
+          "expect": "ceo.briefing 真实落库并返回 eventId，事件可回读且 who.id=company-ceo，actor 取得声明围栏 R1/R2",
+          "command": "node --import tsx scripts/repair-mc040-f210.mts after",
+          "exec": {
+            "file": "node",
+            "args": [
+              "--import",
+              "tsx",
+              "scripts/repair-mc040-f210.mts",
+              "after"
+            ]
+          },
+          "last_result": "pass",
+          "run": {
+            "path": "runs/MC-040-1-1791277059828.json",
+            "sha256": "d9898db1b7e452928b224697fc1a18ea4a181ef76e2981c6d10bac136288a667",
+            "commit": "0648c8a5f885ae65e7b424721927d8ec6ace4888"
+          },
+          "evidence": {
+            "path": "evidence/MC-040-1-1791277059828.txt",
+            "sha256": "fb5896a324e257a0a1fcfc841c75217abe7153f10bcdb68a72e2e8664b140c03",
+            "commit": "0648c8a5f885ae65e7b424721927d8ec6ace4888"
+          }
+        }
+      ],
+      "notes": "MC-040 原登记口径为「标准 suite 的 CEO 正例未声明测试名册和 actor 的围栏绑定」；本轮实测证明根因在**生产种子**缺 CEO 名册行。修复同时覆盖 seed.ts / seed-aipm.ts 与 suite 的 ceoRosterActor()。 本轮（2026-10-06）把断言改成可独立复跑的 F2.10 双向复现：before 方向必须在缺岗时拒绝，after 方向必须在补齐名册后真实写入。整轮 pnpm suite 470/470 仍作为宽回归单列，不再当作单卡回执。",
+      "regression": {
+        "command": "pnpm -C packages/base exec vitest run captain/ceo-loop.test.ts",
+        "evidence": null
+      },
+      "last_assertion_attempt": {
+        "actor": "ai-repair-session-2026-10-06",
+        "role": "repair",
+        "result": "pass",
+        "at": "2026-10-06T08:57:34.267Z",
+        "commit": "0648c8a5f885ae65e7b424721927d8ec6ace4888",
+        "finished_at": "2026-10-06T08:57:44.581Z"
+      },
+      "fixed_by": "ai-repair-session-2026-10-06",
+      "verified_by": null,
+      "verified_at": null,
+      "verification_evidence": null,
+      "last_verification_attempt": {
+        "actor": "session-acceptance",
+        "result": "pass",
+        "at": "2026-10-06T06:16:36.084Z",
+        "runs": [
+          {
+            "path": "runs/MC-040-0-1791267387729.json",
+            "sha256": "71c9d4477e9977b723e28aecb7c7c1def14578849f5747ebf1ba5261e29cf933",
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
+          },
+          {
+            "path": "runs/MC-040-1-1791267391958.json",
+            "sha256": "9c5b36aeef09d608a9bff53ef568c20d628a0a2e6c847bf09c27a5138ab17b14",
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
+          }
+        ]
+      }
+    },
+    {
+      "id": "MC-043",
+      "kind": "problem",
+      "level": "L3",
+      "severity": "P1",
+      "batch": 1,
+      "state": "fixed",
+      "title": "H-13 夹具把工作区永久翻到 dataMode=real，连坐 O/H 域 5 条用例假红",
+      "evidence": [
+        {
+          "type": "code",
+          "ref": "scripts/suite.ts:2589@67129d3b870cf2572aa0ad2e3bfaae7d04170923",
+          "sha256": "e3338994784f618ccb3ad6c6eb3954040a4ceabcde1323144e9f0c3348352cd2",
+          "note": "夹具调用 activateRealMode 后无 finally 复位，工作区 dataMode 被永久写成 real"
+        },
+        {
+          "type": "code",
+          "ref": "packages/runtime/src/tools.ts:42@67129d3b870cf2572aa0ad2e3bfaae7d04170923",
+          "sha256": "78d110dfcf5281024d10e3dfac06c9cf719624a68b5adddf51ecb5605c03902e",
+          "note": "executeDeclaredTool：!simulated 时返回 connector-required + synced:false → 线程转 failed"
+        }
+      ],
+      "root_cause": {
+        "file": "scripts/suite.ts",
+        "line": 2589,
+        "commit": "67129d3b870cf2572aa0ad2e3bfaae7d04170923",
+        "symbol": "onboarding 经营主体写入后"
+      },
+      "trigger_path": "E2E 段执行到 H-13；门禁放行即污染全局工作区状态",
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "私有 Unix 集群上 H-13 夹具不写 finally（before 方向）",
+          "expect": "profiles.archive.dataMode 被永久写成 real，后续用例读到 real（复现连坐根因）",
+          "command": "node --import tsx scripts/repair-mc043-h13.mts before",
+          "exec": {
+            "file": "node",
+            "args": [
+              "--import",
+              "tsx",
+              "scripts/repair-mc043-h13.mts",
+              "before"
+            ]
+          },
+          "last_result": "pass",
+          "run": {
+            "path": "runs/MC-043-0-1791277068111.json",
+            "sha256": "3fb3dc7d49338b06020d37bcd0d90a4db461d03bf6f3a006eee16f2a1ef279b9",
+            "commit": "0648c8a5f885ae65e7b424721927d8ec6ace4888"
+          },
+          "evidence": {
+            "path": "evidence/MC-043-0-1791277068111.txt",
+            "sha256": "41b8414f481361a283c2c3910ee063248334040603feb71bca673ce80e080d5b",
+            "commit": "0648c8a5f885ae65e7b424721927d8ec6ace4888"
+          }
+        },
+        {
+          "kind": "property",
+          "given": "同一夹具把复位放进 finally（after 方向）",
+          "expect": "两个观察者都看到 simulated，archive 与复位前逐字节相同",
+          "command": "node --import tsx scripts/repair-mc043-h13.mts after",
+          "exec": {
+            "file": "node",
+            "args": [
+              "--import",
+              "tsx",
+              "scripts/repair-mc043-h13.mts",
+              "after"
+            ]
+          },
+          "last_result": "pass",
+          "run": {
+            "path": "runs/MC-043-1-1791277072260.json",
+            "sha256": "f44296df97f55763c283ca7b6b91b1fb11935cc708cd531e37fecab65e0f3cda",
+            "commit": "0648c8a5f885ae65e7b424721927d8ec6ace4888"
+          },
+          "evidence": {
+            "path": "evidence/MC-043-1-1791277072260.txt",
+            "sha256": "b82cc2f428e9c82467b9ee22249c041a804cf50c2c019f1043262a1eca47f813",
+            "commit": "0648c8a5f885ae65e7b424721927d8ec6ace4888"
+          }
+        }
+      ],
+      "notes": "夹具写入在 finally 中按原 archive 字节还原，与 R 域 restoreArchive 同口径；未放宽任何门禁断言。 本轮把断言换成可独立复跑的 H-13 双向复现，不再用整轮 suite 当作单卡回执。",
+      "regression": {
+        "command": "pnpm suite",
+        "evidence": null
+      },
+      "last_assertion_attempt": {
+        "actor": "ai-repair-session-2026-10-06",
+        "role": "repair",
+        "result": "pass",
+        "at": "2026-10-06T08:57:48.110Z",
+        "commit": "0648c8a5f885ae65e7b424721927d8ec6ace4888",
+        "finished_at": "2026-10-06T08:57:57.095Z"
+      },
+      "fixed_by": "ai-repair-session-2026-10-06",
+      "verified_by": null,
+      "verified_at": null,
+      "verification_evidence": null,
+      "last_verification_attempt": {
+        "actor": "session-acceptance",
+        "result": "pass",
+        "at": "2026-10-06T06:16:44.672Z",
+        "runs": [
+          {
+            "path": "runs/MC-043-0-1791267396159.json",
+            "sha256": "b20c099055492e45666fca17014e62cd92c0fd91988d0097a332d7fd5385cd8b",
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
+          },
+          {
+            "path": "runs/MC-043-1-1791267400781.json",
+            "sha256": "0e1031dafaf4464407a97395175ced3f0cd6d61429ca5078dfa65cb5c371fc19",
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
+          }
+        ]
+      }
+    },
+    {
+      "id": "MC-101",
+      "kind": "fix",
+      "batch": 1,
+      "state": "fixed",
+      "title": "补齐公司负责人名册行（seed/seed-aipm）+ suite 直连注入读名册",
+      "covers": [
+        "MC-040"
+      ],
+      "evidence": [
+        {
+          "type": "code",
+          "ref": "scripts/seed.ts:622@67129d3b870cf2572aa0ad2e3bfaae7d04170923",
+          "sha256": "359255aa777d13225eaed2f6e91c343938b6a6a94f7a6fb1f74caacd01f37cb1",
+          "note": "新增 agt-company-ceo 名册行，绑定基线围栏 R1/R2"
+        },
+        {
+          "type": "code",
+          "ref": "scripts/suite.ts:120@67129d3b870cf2572aa0ad2e3bfaae7d04170923",
+          "sha256": "e3338994784f618ccb3ad6c6eb3954040a4ceabcde1323144e9f0c3348352cd2",
+          "note": "ceoRosterActor() 从名册读围栏绑定，替换 R-22/R-24 的硬编码空 actor"
+        }
+      ],
+      "fix_plan": "seed.ts/seed-aipm.ts 各补一条 ON CONFLICT DO NOTHING 的名册插入；suite 的两处直连注入改用 ceoRosterActor()。",
+      "blast_radius": "演示库新增一行 agents；不改变 gateway 权限语义，缺岗/停用仍失败关闭。",
+      "conflict_paths": [
+        "scripts/seed.ts",
+        "scripts/seed-aipm.ts",
+        "scripts/suite.ts"
+      ],
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "种子补齐后按工作区派生 id 回读",
+          "expect": "两个示例种子各自写入自己的 company-ceo 行，后写者不再被 ON CONFLICT 静默丢行",
+          "command": "node --import tsx scripts/repair-mc040-f210.mts after",
+          "exec": {
+            "file": "node",
+            "args": [
+              "--import",
+              "tsx",
+              "scripts/repair-mc040-f210.mts",
+              "after"
+            ]
+          },
+          "last_result": "pass",
+          "run": {
+            "path": "runs/MC-101-0-1791277077161.json",
+            "sha256": "a84e8f70b083b558d0bfb3cdae9523ea96462aaa0293daaa55941dad5624b495",
+            "commit": "0648c8a5f885ae65e7b424721927d8ec6ace4888"
+          },
+          "evidence": {
+            "path": "evidence/MC-101-0-1791277077161.txt",
+            "sha256": "fb5896a324e257a0a1fcfc841c75217abe7153f10bcdb68a72e2e8664b140c03",
+            "commit": "0648c8a5f885ae65e7b424721927d8ec6ace4888"
+          }
+        },
+        {
+          "kind": "property",
+          "given": "补齐名册后 CEO 节拍真实写入",
+          "expect": "ceo.briefing 返回 eventId，事件 who.id=company-ceo",
+          "command": "node --import tsx scripts/repair-mc040-f210.mts after",
+          "exec": {
+            "file": "node",
+            "args": [
+              "--import",
+              "tsx",
+              "scripts/repair-mc040-f210.mts",
+              "after"
+            ]
+          },
+          "last_result": "pass",
+          "run": {
+            "path": "runs/MC-101-1-1791277081757.json",
+            "sha256": "c3b0238d2714663d74de89209dee6507b1abe7fec4efacb137ca693cfdd3421e",
+            "commit": "0648c8a5f885ae65e7b424721927d8ec6ace4888"
+          },
+          "evidence": {
+            "path": "evidence/MC-101-1-1791277081757.txt",
+            "sha256": "fb5896a324e257a0a1fcfc841c75217abe7153f10bcdb68a72e2e8664b140c03",
+            "commit": "0648c8a5f885ae65e7b424721927d8ec6ace4888"
+          }
+        }
+      ],
+      "regression": {
+        "command": "pnpm db:seed && pnpm db:seed:aipm",
+        "evidence": null
+      },
+      "rollback": "revert 149c93c92110（按文件 revert 本提交）",
+      "fixed_by": "ai-repair-session-2026-10-06",
+      "notes": "",
+      "last_assertion_attempt": {
+        "actor": "ai-repair-session-2026-10-06",
+        "role": "repair",
+        "result": "pass",
+        "at": "2026-10-06T08:57:57.160Z",
+        "commit": "0648c8a5f885ae65e7b424721927d8ec6ace4888",
+        "finished_at": "2026-10-06T08:58:06.533Z"
+      },
+      "verified_by": null,
+      "verified_at": null,
+      "verification_evidence": null,
+      "last_verification_attempt": {
+        "actor": "session-acceptance",
+        "result": "pass",
+        "at": "2026-10-06T06:16:52.672Z",
+        "runs": [
+          {
+            "path": "runs/MC-101-0-1791267404755.json",
+            "sha256": "e20500229f776c855a0b87e550a919794891436ece4a47923efef975033b644e",
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
+          },
+          {
+            "path": "runs/MC-101-1-1791267408664.json",
+            "sha256": "55db3efcc7352c8a2e3af7f768f6e27b851365cf53e094888f11b277c9e293c0",
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
+          }
+        ]
+      }
+    },
+    {
+      "id": "MC-102",
+      "kind": "fix",
+      "batch": 1,
+      "state": "fixed",
+      "title": "H-13 夹具 finally 复位工作区 archive",
+      "covers": [
+        "MC-043"
+      ],
+      "evidence": [
+        {
+          "type": "code",
+          "ref": "scripts/suite.ts:2589@67129d3b870cf2572aa0ad2e3bfaae7d04170923",
+          "sha256": "e3338994784f618ccb3ad6c6eb3954040a4ceabcde1323144e9f0c3348352cd2",
+          "note": "进入用例前快照 archive，finally 按原文写回；门禁断言与负例强度不变"
+        }
+      ],
+      "fix_plan": "在「onboarding 经营主体写入后…」用例中加入 before/after archive 快照与 finally 还原。",
+      "blast_radius": "仅改变夹具的收尾行为；用例断言语义不变。",
+      "conflict_paths": [
+        "scripts/suite.ts"
+      ],
+      "assertions": [
+        {
+          "kind": "sample",
+          "given": "H-13 夹具的写入在 finally 中按原字节复位",
+          "expect": "复位后 archive 与夹具起点逐字节相同，工作区回到 simulated",
+          "command": "node --import tsx scripts/repair-mc043-h13.mts after",
+          "exec": {
+            "file": "node",
+            "args": [
+              "--import",
+              "tsx",
+              "scripts/repair-mc043-h13.mts",
+              "after"
+            ]
+          },
+          "last_result": "pass",
+          "run": {
+            "path": "runs/MC-102-0-1791277086608.json",
+            "sha256": "142c64331274677945853e0cbddc588ceffdc0b429f61c2405ddb9de880e4eec",
+            "commit": "0648c8a5f885ae65e7b424721927d8ec6ace4888"
+          },
+          "evidence": {
+            "path": "evidence/MC-102-0-1791277086608.txt",
+            "sha256": "b82cc2f428e9c82467b9ee22249c041a804cf50c2c019f1043262a1eca47f813",
+            "commit": "0648c8a5f885ae65e7b424721927d8ec6ace4888"
+          }
+        }
+      ],
+      "regression": {
+        "command": "pnpm suite",
+        "evidence": null
+      },
+      "rollback": "revert 149c93c92110（按文件 revert 本提交）",
+      "fixed_by": "ai-repair-session-2026-10-06",
+      "notes": "",
+      "last_assertion_attempt": {
+        "actor": "ai-repair-session-2026-10-06",
+        "role": "repair",
+        "result": "pass",
+        "at": "2026-10-06T08:58:06.608Z",
+        "commit": "0648c8a5f885ae65e7b424721927d8ec6ace4888",
+        "finished_at": "2026-10-06T08:58:11.197Z"
+      },
+      "verified_by": null,
+      "verified_at": null,
+      "verification_evidence": null,
+      "last_verification_attempt": {
+        "actor": "session-acceptance",
+        "result": "pass",
+        "at": "2026-10-06T06:16:56.629Z",
+        "runs": [
+          {
+            "path": "runs/MC-102-0-1791267412750.json",
+            "sha256": "8982d938932f17bc57dfdca92ecf093bfee599fa7bf05164e092eb7d41738eab",
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
+          }
+        ]
+      }
+    }
+  ],
+  "gates": []
+}

@@ -1,0 +1,38 @@
+{
+  "schema": "workloom.evidence-run/v1",
+  "id": "MC-043-1-1791277072260",
+  "command": "node --import tsx scripts/repair-mc043-h13.mts after",
+  "exec": {
+    "file": "node",
+    "args": [
+      "--import",
+      "tsx",
+      "scripts/repair-mc043-h13.mts",
+      "after"
+    ]
+  },
+  "actor": "ai-repair-session-2026-10-06",
+  "role": "repair",
+  "subject": {
+    "card_id": "MC-043",
+    "assertion_index": 1
+  },
+  "commit": "0648c8a5f885ae65e7b424721927d8ec6ace4888",
+  "working_tree_dirty": false,
+  "started_at": "2026-10-06T08:57:52.260Z",
+  "finished_at": "2026-10-06T08:57:57.084Z",
+  "exit_code": 0,
+  "signal": null,
+  "validation": {
+    "ok": true,
+    "errors": []
+  },
+  "result": "pass",
+  "outputs": [
+    {
+      "path": "evidence/MC-043-1-1791277072260.txt",
+      "sha256": "b82cc2f428e9c82467b9ee22249c041a804cf50c2c019f1043262a1eca47f813",
+      "commit": "0648c8a5f885ae65e7b424721927d8ec6ace4888"
+    }
+  ]
+}
