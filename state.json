@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 476,
+  "revision": 479,
   "tasks": {
     "231": {
       "number": 231,
@@ -1495,7 +1495,7 @@
     },
     "243": {
       "number": 243,
-      "status": "waiting_ci",
+      "status": "merging",
       "firstSeen": 1791245280309,
       "attempts": {},
       "admission": {
@@ -1620,7 +1620,147 @@
         "scripts/delivery/queue-platform.mjs",
         "scripts/delivery/queue.test.mjs"
       ],
-      "ciSince": 1791246908288
+      "ciSince": 1791246908288,
+      "mergePhase": "prepared",
+      "mergeSnapshot": {
+        "number": 248,
+        "pull": {
+          "number": 248,
+          "state": "open",
+          "title": "chore(ci): deliver #243 fix(base): 修复首装恢复与依赖读取 [T-2026-1006-1002]",
+          "body": "Immutable delivery candidate for #243. Exact source d691e15cd9390e195def2a9896194d1b18a5b73d; tested main b949346721360f3c20f10c628d5c7b214bc2b95e.\n\n<!-- delivery-origin:243:d691e15cd9390e195def2a9896194d1b18a5b73d:b949346721360f3c20f10c628d5c7b214bc2b95e -->\n\n<!-- workloom-delivery\n{\"ready\":true,\"depends_on\":[236],\"releases\":[]}\n-->",
+          "author": {
+            "username": "OCI",
+            "nickname": "Cloud Native Build",
+            "is_npc": true
+          },
+          "reviewers": [],
+          "labels": [],
+          "base": {
+            "ref": "refs/heads/main",
+            "sha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+            "repo": {
+              "id": "2100396957109968896",
+              "name": "workloom-im",
+              "path": "workloom-ai/workloom-im",
+              "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+            }
+          },
+          "head": {
+            "ref": "refs/heads/delivery/candidate/pr-243-8050895e5ec6eed9cc75aba5a56f0b6a",
+            "sha": "d691e15cd9390e195def2a9896194d1b18a5b73d",
+            "repo": {
+              "id": "2100396957109968896",
+              "name": "workloom-im",
+              "path": "workloom-ai/workloom-im",
+              "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+            }
+          },
+          "blocked_on": "unblocked",
+          "merged_by": {
+            "is_npc": false
+          },
+          "mergeable_state": "mergeable",
+          "is_wip": false,
+          "is_merged": false,
+          "is_force_merged": false,
+          "statuses": {}
+        },
+        "headSha": "d691e15cd9390e195def2a9896194d1b18a5b73d",
+        "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+        "files": [
+          "scripts/delivery/install-repository.mjs",
+          "scripts/delivery/install-repository.test.mjs",
+          "scripts/delivery/queue-platform.mjs",
+          "scripts/delivery/queue.test.mjs"
+        ],
+        "intent": {
+          "taskId": "T-2026-1006-1002",
+          "ready": true,
+          "dependsOn": [
+            236
+          ],
+          "releases": []
+        },
+        "headTime": 1791246711000,
+        "mergeBase": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+        "checkErrors": [],
+        "checkSha": "108cdd2c697427cfb06741fbc69fbce0ea6cc06e",
+        "hasFailedChecks": false,
+        "ciPolicyChanges": [
+          {
+            "id": "CI-001",
+            "file": "scripts/delivery/install-repository.mjs",
+            "before": {
+              "ref": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+              "path": "scripts/delivery/install-repository.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "d691e15cd9390e195def2a9896194d1b18a5b73d",
+              "path": "scripts/delivery/install-repository.mjs",
+              "absent": false
+            },
+            "digest": "00d2b0a770113838054f29ed9fc35b09e7ca2bd7d5d46ca4cfe12a8377fa7e5b"
+          },
+          {
+            "id": "CI-002",
+            "file": "scripts/delivery/queue-platform.mjs",
+            "before": {
+              "ref": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+              "path": "scripts/delivery/queue-platform.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "d691e15cd9390e195def2a9896194d1b18a5b73d",
+              "path": "scripts/delivery/queue-platform.mjs",
+              "absent": false
+            },
+            "digest": "0b596961ed39cc0ca23814e1ae2f4d906fea83560642806b87eaae10358171b0"
+          },
+          {
+            "id": "CI-003",
+            "file": "scripts/delivery/queue.test.mjs",
+            "before": {
+              "ref": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+              "path": "scripts/delivery/queue.test.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "d691e15cd9390e195def2a9896194d1b18a5b73d",
+              "path": "scripts/delivery/queue.test.mjs",
+              "absent": false
+            },
+            "digest": "88919c9ab616c48102b976097fc6265fc6eedfb5d45c257fa00c7ca44be03f1f"
+          },
+          {
+            "id": "CI-004",
+            "file": "scripts/delivery/install-repository.test.mjs",
+            "before": {
+              "ref": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+              "path": "scripts/delivery/install-repository.test.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "d691e15cd9390e195def2a9896194d1b18a5b73d",
+              "path": "scripts/delivery/install-repository.test.mjs",
+              "absent": false
+            },
+            "digest": "95533bc31191933d7ee5ea5dd7b2f6189b129f30f86f7041bf7e4dbf600637b0"
+          }
+        ],
+        "originNumber": 243,
+        "pendingDependencies": []
+      },
+      "integrationLease": {
+        "owner": "integration/pr-243",
+        "scopes": [
+          "protocol"
+        ],
+        "generation": {
+          "protocol": 35
+        }
+      }
     },
     "244": {
       "number": 244,
@@ -1862,10 +2002,10 @@
   },
   "leases": {
     "protocol": {
-      "owner": null,
-      "generation": 34,
-      "acquiredAt": 1791247693694,
-      "expiresAt": 1791247693694
+      "owner": "integration/pr-243",
+      "generation": 35,
+      "acquiredAt": 1791247809520,
+      "expiresAt": 1791248709520
     },
     "sync": {
       "owner": null,
@@ -13412,6 +13552,185 @@
       },
       "previous": "dfdc5bf405d247bbb00248a55653b9e722bd30ab24bf12d80cde3c073b9e7d34",
       "digest": "0091d20b8f56b13e4e10a2be6839cb7bc626f426cd790c61399ec1b86f460e66"
+    },
+    {
+      "sequence": 477,
+      "at": "2026-10-06T00:50:09.520Z",
+      "kind": "lease_acquire",
+      "data": {
+        "scopes": [
+          "protocol"
+        ],
+        "owner": "integration/pr-243",
+        "generation": {
+          "protocol": 35
+        }
+      },
+      "previous": "0091d20b8f56b13e4e10a2be6839cb7bc626f426cd790c61399ec1b86f460e66",
+      "digest": "718738f4afff996acad3d4aef37bc349c54c99c2b1ae9ee140c2df967ddaac18"
+    },
+    {
+      "sequence": 478,
+      "at": "2026-10-06T00:50:09.520Z",
+      "kind": "task",
+      "data": {
+        "number": 243,
+        "patch": {
+          "status": "merging",
+          "mergePhase": "prepared",
+          "mergeSnapshot": {
+            "number": 248,
+            "pull": {
+              "number": 248,
+              "state": "open",
+              "title": "chore(ci): deliver #243 fix(base): 修复首装恢复与依赖读取 [T-2026-1006-1002]",
+              "body": "Immutable delivery candidate for #243. Exact source d691e15cd9390e195def2a9896194d1b18a5b73d; tested main b949346721360f3c20f10c628d5c7b214bc2b95e.\n\n<!-- delivery-origin:243:d691e15cd9390e195def2a9896194d1b18a5b73d:b949346721360f3c20f10c628d5c7b214bc2b95e -->\n\n<!-- workloom-delivery\n{\"ready\":true,\"depends_on\":[236],\"releases\":[]}\n-->",
+              "author": {
+                "username": "OCI",
+                "nickname": "Cloud Native Build",
+                "is_npc": true
+              },
+              "reviewers": [],
+              "labels": [],
+              "base": {
+                "ref": "refs/heads/main",
+                "sha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+                "repo": {
+                  "id": "2100396957109968896",
+                  "name": "workloom-im",
+                  "path": "workloom-ai/workloom-im",
+                  "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+                }
+              },
+              "head": {
+                "ref": "refs/heads/delivery/candidate/pr-243-8050895e5ec6eed9cc75aba5a56f0b6a",
+                "sha": "d691e15cd9390e195def2a9896194d1b18a5b73d",
+                "repo": {
+                  "id": "2100396957109968896",
+                  "name": "workloom-im",
+                  "path": "workloom-ai/workloom-im",
+                  "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+                }
+              },
+              "blocked_on": "unblocked",
+              "merged_by": {
+                "is_npc": false
+              },
+              "mergeable_state": "mergeable",
+              "is_wip": false,
+              "is_merged": false,
+              "is_force_merged": false,
+              "statuses": {}
+            },
+            "headSha": "d691e15cd9390e195def2a9896194d1b18a5b73d",
+            "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+            "files": [
+              "scripts/delivery/install-repository.mjs",
+              "scripts/delivery/install-repository.test.mjs",
+              "scripts/delivery/queue-platform.mjs",
+              "scripts/delivery/queue.test.mjs"
+            ],
+            "intent": {
+              "taskId": "T-2026-1006-1002",
+              "ready": true,
+              "dependsOn": [
+                236
+              ],
+              "releases": []
+            },
+            "headTime": 1791246711000,
+            "mergeBase": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+            "checkErrors": [],
+            "checkSha": "108cdd2c697427cfb06741fbc69fbce0ea6cc06e",
+            "hasFailedChecks": false,
+            "ciPolicyChanges": [
+              {
+                "id": "CI-001",
+                "file": "scripts/delivery/install-repository.mjs",
+                "before": {
+                  "ref": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+                  "path": "scripts/delivery/install-repository.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "d691e15cd9390e195def2a9896194d1b18a5b73d",
+                  "path": "scripts/delivery/install-repository.mjs",
+                  "absent": false
+                },
+                "digest": "00d2b0a770113838054f29ed9fc35b09e7ca2bd7d5d46ca4cfe12a8377fa7e5b"
+              },
+              {
+                "id": "CI-002",
+                "file": "scripts/delivery/queue-platform.mjs",
+                "before": {
+                  "ref": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+                  "path": "scripts/delivery/queue-platform.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "d691e15cd9390e195def2a9896194d1b18a5b73d",
+                  "path": "scripts/delivery/queue-platform.mjs",
+                  "absent": false
+                },
+                "digest": "0b596961ed39cc0ca23814e1ae2f4d906fea83560642806b87eaae10358171b0"
+              },
+              {
+                "id": "CI-003",
+                "file": "scripts/delivery/queue.test.mjs",
+                "before": {
+                  "ref": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+                  "path": "scripts/delivery/queue.test.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "d691e15cd9390e195def2a9896194d1b18a5b73d",
+                  "path": "scripts/delivery/queue.test.mjs",
+                  "absent": false
+                },
+                "digest": "88919c9ab616c48102b976097fc6265fc6eedfb5d45c257fa00c7ca44be03f1f"
+              },
+              {
+                "id": "CI-004",
+                "file": "scripts/delivery/install-repository.test.mjs",
+                "before": {
+                  "ref": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+                  "path": "scripts/delivery/install-repository.test.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "d691e15cd9390e195def2a9896194d1b18a5b73d",
+                  "path": "scripts/delivery/install-repository.test.mjs",
+                  "absent": false
+                },
+                "digest": "95533bc31191933d7ee5ea5dd7b2f6189b129f30f86f7041bf7e4dbf600637b0"
+              }
+            ],
+            "originNumber": 243,
+            "pendingDependencies": []
+          },
+          "integrationLease": {
+            "owner": "integration/pr-243",
+            "scopes": [
+              "protocol"
+            ],
+            "generation": {
+              "protocol": 35
+            }
+          }
+        }
+      },
+      "previous": "718738f4afff996acad3d4aef37bc349c54c99c2b1ae9ee140c2df967ddaac18",
+      "digest": "88c5cc10a62cb7d5e081769cb46d66902b593ea6d5344a8cdee33808160bc0dc"
+    },
+    {
+      "sequence": 479,
+      "at": "2026-10-06T00:50:21.481Z",
+      "kind": "transaction",
+      "data": {
+        "id": "ce4e3297-fcb7-4ac3-ac8f-7ddb63234e28"
+      },
+      "previous": "88c5cc10a62cb7d5e081769cb46d66902b593ea6d5344a8cdee33808160bc0dc",
+      "digest": "2c15c6daead9d1283c85aa9a5b9c2872144ab8044f6a8c60bebfc0459688bb82"
     }
   ]
 }
