@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 2306,
+  "revision": 2308,
   "tasks": {
     "231": {
       "number": 231,
@@ -4686,7 +4686,7 @@
           "protocol": 83
         }
       },
-      "updatedAt": 1791311837900,
+      "updatedAt": 1791312011765,
       "headSha": "aac6f97cb196e900912e53ae842962ec0386ac7d",
       "intent": {
         "taskId": "T-2026-1007-1002",
@@ -4837,7 +4837,13 @@
             "digest": "43b1ec98ac17d1e93ba7b521ad09d2b29147147af9ac3463b00dd747de7a17dd"
           }
         ]
-      }
+      },
+      "originalBody": "十二仓五分钟任务的真实平台记录连续出现 Git 读取 HTTP 429。普通只读账本改用已实测的官方 branch + 准确 immutable SHA raw API，继续校验仓库身份和完整事件摘要链。只有有证据的缺控制分支才可返回空状态；权限、网络、坏 SHA、缺内容和损坏状态明确失败。\n\n真实 Git 写入、普通 fast-forward CAS、事务去重和未知写确认回读保持原逻辑；仅 ls-remote/fetch 的明确 429 最多两次退避，push/merge 不进入该重试通道。CLI API fixture 从真实 bare Git 精确提交回读，真实并发与丢失确认回归保留。当前 Codex 审查与实际回归回执成立后，经原有机器门禁和不可修改候选普通集成。任务卡 #268。平台 AI/NPC 均保持关闭。\n\n<!-- delivery-ledger-read-rate:20261007 -->\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1007-1002\",\n  \"ready\": true,\n  \"depends_on\": [\n    267\n  ],\n  \"releases\": []\n}\n-->",
+      "files": [
+        "scripts/delivery/git-state.mjs",
+        "scripts/delivery/queue.test.mjs"
+      ],
+      "ciSince": 1791312011765
     }
   },
   "leases": {
@@ -93605,6 +93611,46 @@
       },
       "previous": "a7ede666af8451ec6d96478a8c921141bbaca723ae9f06349806358e0c717cc3",
       "digest": "497b1f5e14c250c4074418adaebee6c7d9d8b062af61017bd6b8fc404046f0f1"
+    },
+    {
+      "sequence": 2307,
+      "at": "2026-10-06T18:40:11.765Z",
+      "kind": "task",
+      "data": {
+        "number": 269,
+        "patch": {
+          "headSha": "aac6f97cb196e900912e53ae842962ec0386ac7d",
+          "mainSha": "83ac6ef9466e93704725f469c366cfd7b54f0a99",
+          "branch": "task/T-2026-1007-1002",
+          "intent": {
+            "taskId": "T-2026-1007-1002",
+            "ready": true,
+            "dependsOn": [
+              267
+            ],
+            "releases": []
+          },
+          "originalBody": "十二仓五分钟任务的真实平台记录连续出现 Git 读取 HTTP 429。普通只读账本改用已实测的官方 branch + 准确 immutable SHA raw API，继续校验仓库身份和完整事件摘要链。只有有证据的缺控制分支才可返回空状态；权限、网络、坏 SHA、缺内容和损坏状态明确失败。\n\n真实 Git 写入、普通 fast-forward CAS、事务去重和未知写确认回读保持原逻辑；仅 ls-remote/fetch 的明确 429 最多两次退避，push/merge 不进入该重试通道。CLI API fixture 从真实 bare Git 精确提交回读，真实并发与丢失确认回归保留。当前 Codex 审查与实际回归回执成立后，经原有机器门禁和不可修改候选普通集成。任务卡 #268。平台 AI/NPC 均保持关闭。\n\n<!-- delivery-ledger-read-rate:20261007 -->\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1007-1002\",\n  \"ready\": true,\n  \"depends_on\": [\n    267\n  ],\n  \"releases\": []\n}\n-->",
+          "files": [
+            "scripts/delivery/git-state.mjs",
+            "scripts/delivery/queue.test.mjs"
+          ],
+          "status": "waiting_ci",
+          "ciSince": 1791312011765
+        }
+      },
+      "previous": "497b1f5e14c250c4074418adaebee6c7d9d8b062af61017bd6b8fc404046f0f1",
+      "digest": "c8798a0f55ca1493a4b49405dfddc27e195faefdd75e238a3b227149b9726cdc"
+    },
+    {
+      "sequence": 2308,
+      "at": "2026-10-06T18:41:03.350Z",
+      "kind": "transaction",
+      "data": {
+        "id": "0f13917f-3a86-4226-bef6-f3450cc3855f"
+      },
+      "previous": "c8798a0f55ca1493a4b49405dfddc27e195faefdd75e238a3b227149b9726cdc",
+      "digest": "0a50f60b232ad0fb57eea998f95e2a62ebc3a98892c05338c442994e0a4af2ce"
     }
   ]
 }
