@@ -320,3 +320,99 @@ test("report 目录结构约定可写（evidence 目录）", () => {
   assert.ok(existsSync(ledgerPath));
   assert.ok(existsSync(join(dir, "outputs", "mine-clear", TASK, "evidence")));
 });
+
+const REBIND = fileURLToPath(new URL("./rebind-ledger-evidence.mjs", import.meta.url));
+
+function runRebind(args, { cwd } = {}) {
+  return spawnSync(process.execPath, [REBIND, ...args], { cwd, encoding: "utf8" });
+}
+
+/**
+ * Reproduces the 5e0044f regression: one commit lands the receipt entities, but the
+ * ledger/index still point at the earlier "repair" commit whose tree does not contain
+ * them. The gate reads receipts back through git at the declared commit, so a fresh
+ * clone cannot verify a single one of them.
+ *
+ * The fixture keeps the receipts tracked by committing them with `git add -f`, exactly
+ * like the repo's real `outputs/` tree (which is ignored but force-added).
+ */
+function landReceipts(dir, ledgerPath, { id, card }) {
+  const ledger = JSON.parse(readFileSync(ledgerPath, "utf8"));
+  ledger.baseline.repair.commit = git(dir, ["rev-parse", "HEAD"]);
+  ledger.cards = ledger.cards.map((item) => (item.id === id ? card : item));
+  writeFileSync(ledgerPath, `${JSON.stringify(ledger, null, 2)}\n`);
+  git(dir, ["add", "-f", "-A", "outputs"]);
+  git(dir, ["commit", "--quiet", "-m", `chore(base): 回执随分支入库 [${TASK}]`]);
+  return git(dir, ["rev-parse", "HEAD"]);
+}
+
+test("回执绑定：声明提交必须真的包含该产物，并可在其上回读", () => {
+  const dir = makeRepo();
+  const ledgerPath = initLedger(dir);
+  const root = join(dir, "outputs", "mine-clear", TASK);
+  const card = problemCard(dir);
+  assert.equal(run(["add", "--ledger", ledgerPath, "--card", writeCard(dir, "rebind.json", card)], { cwd: dir }).status, 0);
+  const repaired = closeCard(dir, ledgerPath, card.id);
+
+  // 5e0044f 的真实形态：runs/evidence 实体已随提交入库，台账/索引仍指向前一个提交。
+  landReceipts(dir, ledgerPath, { id: card.id, card: repaired });
+  const declared = JSON.parse(readFileSync(ledgerPath, "utf8")).cards.find((item) => item.id === card.id).assertions[0].run.commit;
+  assert.notEqual(declared, git(dir, ["rev-parse", "HEAD"]), "夹具必须让声明提交落后于实体所在的提交");
+  const aligned = runRebind(["--ledger", ledgerPath, "--repo", dir], { cwd: dir });
+  assert.equal(aligned.status, 1, "实体与声明提交脱钩时必须判红");
+  assert.match(aligned.stderr, /回执绑定/);
+
+  // 真实流程：重绑到已承载实体的提交 → 重绑结果随提交入库 → 逐份回读通过。
+  assert.equal(runRebind(["--ledger", ledgerPath, "--repo", dir, "--write"], { cwd: dir }).status, 0);
+  git(dir, ["add", "-f", "-A", "outputs"]);
+  git(dir, ["commit", "--quiet", "-m", `chore(base): 回执重绑到承载实体的提交 [${TASK}]`]);
+  const rebound = runRebind(["--ledger", ledgerPath, "--repo", dir], { cwd: dir });
+  assert.equal(rebound.status, 0, `逐份回读失败：${rebound.stderr}`);
+
+  const assertions = JSON.parse(readFileSync(ledgerPath, "utf8")).cards.find((item) => item.id === card.id).assertions;
+  assert.ok(assertions.length > 0);
+  for (const assertion of assertions) {
+    for (const field of ["run", "evidence"]) {
+      const ref = assertion[field];
+      // 声明提交必须真的包含该产物：逐个 blob 回读并核对散列。
+      const blob = execFileSync("git", ["show", `${ref.commit}:outputs/mine-clear/${TASK}/${ref.path}`], { cwd: dir });
+      assert.equal(hashBytes(blob), ref.sha256);
+    }
+  }
+  const index = JSON.parse(readFileSync(join(root, "evidence-index.json"), "utf8"));
+  for (const ref of [...index.runs, ...index.artifacts]) {
+    const blob = execFileSync("git", ["show", `${ref.commit}:outputs/mine-clear/${TASK}/${ref.path}`], { cwd: dir });
+    assert.equal(hashBytes(blob), ref.sha256);
+  }
+});
+
+test("回执绑定：工作树不干净时拒绝重绑（不能把回执绑到尚未包含它的提交）", () => {
+  const dir = makeRepo();
+  const ledgerPath = initLedger(dir);
+  writeFileSync(join(dir, "AGENTS.md"), "# 未提交改动\n", "utf8");
+  assert.notEqual(git(dir, ["status", "--porcelain"]), "", "夹具必须先弄脏工作树");
+  const result = runRebind(["--ledger", ledgerPath, "--repo", dir, "--write"], { cwd: dir });
+  assert.equal(result.status, 1, result.stdout);
+  assert.match(result.stderr, /工作树必须干净/);
+});
+
+test("回执绑定：sha256 与提交内字节不一致时判红", () => {
+  const dir = makeRepo();
+  const ledgerPath = initLedger(dir);
+  const card = problemCard(dir);
+  assert.equal(run(["add", "--ledger", ledgerPath, "--card", writeCard(dir, "sha.json", card)], { cwd: dir }).status, 0);
+  const closed = closeCard(dir, ledgerPath, card.id);
+  landReceipts(dir, ledgerPath, { id: card.id, card: closed });
+  assert.equal(runRebind(["--ledger", ledgerPath, "--repo", dir, "--write"], { cwd: dir }).status, 0);
+  git(dir, ["add", "-f", "-A", "outputs"]);
+  git(dir, ["commit", "--quiet", "-m", `chore(base): 绑定到落地提交 [${TASK}]`]);
+
+  const tampered = JSON.parse(readFileSync(ledgerPath, "utf8"));
+  tampered.cards.find((item) => item.id === card.id).assertions[0].run.sha256 = "0".repeat(64);
+  writeFileSync(ledgerPath, `${JSON.stringify(tampered, null, 2)}\n`);
+  git(dir, ["add", "-f", "-A", "outputs"]);
+  git(dir, ["commit", "--quiet", "-m", `chore(base): 篡改回执散列 [${TASK}]`]);
+  const result = runRebind(["--ledger", ledgerPath, "--repo", dir], { cwd: dir });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /sha256 不一致/);
+});
