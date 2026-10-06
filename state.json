@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 2215,
+  "revision": 2217,
   "tasks": {
     "231": {
       "number": 231,
@@ -4380,7 +4380,7 @@
           "protocol": 78
         }
       },
-      "updatedAt": 1791308665953,
+      "updatedAt": 1791308708799,
       "headSha": "716eb682583f0dbb00ff577d77ce850294973f30",
       "intent": {
         "taskId": "T-2026-1007-1001",
@@ -4515,7 +4515,12 @@
             "digest": "8b277d5d3757e4456d9a5eab2ee6ccb7fdb055606ad94ee26d69babd8404618b"
           }
         ]
-      }
+      },
+      "originalBody": "加强版目标 main 8c19e677122398fee9b9751d18ac1d5811307d2f 新增严格 CNB 原始合并标题/双亲校验。安装器只登记已精读与实际测试的新校验器/测试准确摘要，要求成对匹配；目标实现原字节保留，不回流隔离仓实现。原协议、未知/混配/篡改拒绝、Git/PR/路径/租约证明及平台 AI 禁用规则继续保留。\n\n当前 Codex 已跑新校验器 109 项；完整实际安装副本 255 项中 254 通过、1 项因无共享 UI 发布通道跳过，四项混配/篡改拒绝与旧版支持、重复安装幂等、新校验器及测试字节保留均验证。原有机器门禁与准确当前会话回执成立后，由不可修改候选普通集成。任务卡 #265。\n\n<!-- delivery-reviewed-bound-input:20261007 -->\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1007-1001\",\n  \"ready\": true,\n  \"depends_on\": [\n    264\n  ],\n  \"releases\": []\n}\n-->",
+      "files": [
+        "scripts/delivery/install-protocol.mjs"
+      ],
+      "ciSince": 1791308708799
     }
   },
   "leases": {
@@ -89060,6 +89065,45 @@
       },
       "previous": "f7f5d489c9a3194e23ce203ada44e819368c347ca720fd0b34628052fd44d231",
       "digest": "9181c4a9ef8d604ca1e9991cfad6fcc635d64116a846643213a4933cf765a77f"
+    },
+    {
+      "sequence": 2216,
+      "at": "2026-10-06T17:45:08.799Z",
+      "kind": "task",
+      "data": {
+        "number": 266,
+        "patch": {
+          "headSha": "716eb682583f0dbb00ff577d77ce850294973f30",
+          "mainSha": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+          "branch": "task/T-2026-1007-1001",
+          "intent": {
+            "taskId": "T-2026-1007-1001",
+            "ready": true,
+            "dependsOn": [
+              264
+            ],
+            "releases": []
+          },
+          "originalBody": "加强版目标 main 8c19e677122398fee9b9751d18ac1d5811307d2f 新增严格 CNB 原始合并标题/双亲校验。安装器只登记已精读与实际测试的新校验器/测试准确摘要，要求成对匹配；目标实现原字节保留，不回流隔离仓实现。原协议、未知/混配/篡改拒绝、Git/PR/路径/租约证明及平台 AI 禁用规则继续保留。\n\n当前 Codex 已跑新校验器 109 项；完整实际安装副本 255 项中 254 通过、1 项因无共享 UI 发布通道跳过，四项混配/篡改拒绝与旧版支持、重复安装幂等、新校验器及测试字节保留均验证。原有机器门禁与准确当前会话回执成立后，由不可修改候选普通集成。任务卡 #265。\n\n<!-- delivery-reviewed-bound-input:20261007 -->\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1007-1001\",\n  \"ready\": true,\n  \"depends_on\": [\n    264\n  ],\n  \"releases\": []\n}\n-->",
+          "files": [
+            "scripts/delivery/install-protocol.mjs"
+          ],
+          "status": "waiting_ci",
+          "ciSince": 1791308708799
+        }
+      },
+      "previous": "9181c4a9ef8d604ca1e9991cfad6fcc635d64116a846643213a4933cf765a77f",
+      "digest": "391c4945bbc57eda748c5be7b2d5381a3177a9ea5006957790c25ad2ae347c48"
+    },
+    {
+      "sequence": 2217,
+      "at": "2026-10-06T17:45:52.977Z",
+      "kind": "transaction",
+      "data": {
+        "id": "5a6a9378-c2c6-4f60-a634-26c4904deaa5"
+      },
+      "previous": "391c4945bbc57eda748c5be7b2d5381a3177a9ea5006957790c25ad2ae347c48",
+      "digest": "cd56415552ba7dd3750e327dd4f3407b0fcd86115fcf1b987668aefae3acabda"
     }
   ]
 }
