@@ -11,7 +11,7 @@
 import pg from "pg";
 import { withPrivatePg } from "./private-pg.mts";
 import { ceoActor, runBriefingBeat } from "@workloom/base/captain";
-import { ensureCeoRosterRow } from "./seed-ceo-roster.mjs";
+import { ensureCeoRosterRow } from "./seed-ceo-roster.js";
 
 const mode = process.argv[2];
 if (!["before", "after"].includes(mode ?? "")) {

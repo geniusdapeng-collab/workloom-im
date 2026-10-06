@@ -447,50 +447,11 @@ const foundation = scope.clientFoundationCapability;
   const closurePairs = new Set();
   const rawIncludes = (scope.include ?? []).map(globToRegExp);
   const rawExcludes = (scope.exclude ?? []).map(globToRegExp);
-  /**
-   * 自包含的显式排除源：这些文件在基座里被 base-scope.exclude 排除，但 runner 自带私有集群，
-   * 在子仓里原样保留。它们的相对依赖是"脚下有别的门口"，既不随基座下发、也不该由子仓复制一份，
-   * 因此不能拿 allowedExcludedTargets 逐对登记（那会要求子仓必须存在这个目标文件）。
-   */
-  const selfContained = closure.selfContainedExcludedSources ?? [];
-  if (!Array.isArray(selfContained)) throw new Error("dependencyClosure.selfContainedExcludedSources 必须是数组");
-  const selfContainedPaths = new Set();
-  for (const entry of selfContained) {
-    const path = assertSafeRelative(typeof entry === "string" ? entry : entry?.path, "dependency closure 自包含排除源");
-    if (typeof entry !== "string") {
-      if (typeof entry?.reason !== "string" || !entry.reason.trim()) {
-        throw new Error(`dependency closure 自包含排除源缺少原因：${path}`);
-      }
-    }
-    if (selfContainedPaths.has(path)) throw new Error(`dependency closure 自包含排除源重复：${path}`);
-    selfContainedPaths.add(path);
-    if (!existsSync(join(baseDir, path))) throw new Error(`dependency closure 自包含排除源在基座不存在：${path}`);
-    if (!hitAny(rawExcludes, path)) throw new Error(`dependency closure 自包含排除源未被显式排除：${path}`);
-    const pairPrefix = `${path}\0`;
-    if ([...closurePairs].some((pair) => pair.startsWith(pairPrefix))) {
-      throw new Error(`dependency closure 自包含排除源不得同时登记逐对例外：${path}`);
-    }
-  }
   for (const entry of closure.allowedExcludedTargets) {
     const importer = assertSafeRelative(entry.importer, "dependency closure importer");
     const target = assertSafeRelative(entry.target, "dependency closure target");
     if (typeof entry.reason !== "string" || !entry.reason.trim()) {
       throw new Error(`dependency closure 例外缺少原因：${importer} -> ${target}`);
-    }
-    /**
-     * 自包含排除源的相对依赖一律不作为闭包例外登记：它在基座里真实存在（因此不是断链），
-     * 只是不随基座下发、也不需要在子仓重建。逐对登记会连带要求子仓存在该目标文件，
-     * 把"本仓不消费"误判成"子仓保留实现"。
-     */
-    const ownedBySelfContained = [...selfContainedPaths].some((source) => {
-      const sourceDir = resolve(baseDir, dirname(source));
-      const requested = resolve(sourceDir, ...target.split("/"));
-      const requestedDir = dirname(requested);
-      if (requestedDir !== sourceDir && !requestedDir.startsWith(`${sourceDir}${sep}`)) return false;
-      return !existsSync(join(baseDir, target));
-    });
-    if (ownedBySelfContained) {
-      throw new Error(`依赖闭包例外应登记为自包含排除源，而不是逐对例外：${importer} -> ${target}`);
     }
     if (!existsSync(join(baseDir, importer)) || !existsSync(join(baseDir, target))) {
       throw new Error(`dependency closure 例外引用不存在文件：${importer} -> ${target}`);
@@ -571,25 +532,14 @@ function resolveRelativeModule(baseDir, importer, specifier) {
 }
 
 function dependencyClosureViolations(baseDir, scope) {
-  const closureConfig = scope.raw.dependencyClosure ?? {};
-  const allowed = new Set((closureConfig.allowedExcludedTargets ?? [])
+  const allowed = new Set((scope.raw.dependencyClosure?.allowedExcludedTargets ?? [])
     .map((entry) => `${entry.importer}\0${entry.target}`));
-  const selfContained = new Set((closureConfig.selfContainedExcludedSources ?? [])
-    .map((entry) => (typeof entry === "string" ? entry : entry?.path)));
   const violations = [];
   const sourcePaths = [...walk(baseDir)]
     .map((path) => path.split(sep).join("/"))
     .filter((path) => inScope(scope, path) && /\.(?:[cm]?[jt]sx?|json)$/.test(path));
   for (const importer of sourcePaths) {
     if (importer.endsWith(".json")) continue;
-    /**
-     * 逐仓附加排除项（sync/child-repos.json 的 extraExclude）会把普通下发文件从某个子仓剔掉。
-     * 这些文件不是"保留实现"，而是"该子仓不消费"——它们的相对依赖只在基座内成立，
-     * 在对应子仓里本就不存在（例如 andromeda 的 platform-ops/**）。
-     * 只有登记为自包含排除源的文件才按这一口径跳过；基座自身的检查不含任何附加排除项，
-     * 因此仍然要求下发面的相对依赖全部闭合。
-     */
-    if (selfContained.has(importer)) continue;
     const source = readFileSync(join(baseDir, importer), "utf8");
     for (const specifier of moduleSpecifiers(source)) {
       const target = resolveRelativeModule(baseDir, importer, specifier);

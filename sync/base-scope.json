@@ -377,7 +377,7 @@
       "reason": "种子预检负向测试连接固定的 127.0.0.1:1 不可达地址，用户名和密码均为 invalid。"
     },
     "scripts/seed-aipm.ts": {
-      "sha256": "94764601b7674c7c5a646bbc94fceff6ad072ebfafa349f930dd4435c4b0a7f2",
+      "sha256": "e7a422b96eda3fd223c903da8c9d65a4649bbacb26c798848c6c4f3b10621a22",
       "findings": [
         {
           "rule": "credential-in-url",
@@ -415,7 +415,7 @@
       "reason": "上游 dsh 0.2.0-rc.2 的 devDependencies 新增包名 @deepseek-ai/dsh-llm-deepseek-api-key，被启发式规则按「api-key + 字符串字面量」误判；该字面量是 npm 版本号 0.2.0-rc.2，不是凭据。vendor/dsh 为上游 tarball 逐字节基线（sha512 已与 registry 核对），按 D12 纪律不得改写，故登记内容绑定放行。"
     },
     "scripts/seed.ts": {
-      "sha256": "9ef8e094f57a127ff502fb953198d1ffd934daecdd5fef53769d2c085d3b32fc",
+      "sha256": "941a6c552bbe0430c227e680d6f3da9b8ea9728c26d158e315cfc340f832e34a",
       "findings": [
         {
           "rule": "credential-in-url",
@@ -440,16 +440,6 @@
   },
   "dependencyClosure": {
     "relativeImports": "fail-closed",
-    "selfContainedExcludedSources": [
-      {
-        "path": "scripts/repair-mc040-f210.ts",
-        "reason": "MC-040/F2.10 与 MC-121 的定向复现 runner，自带私有 PostgreSQL 集群；只在本仓排雷台账中复跑，不随基座下发、也不在子仓重建。"
-      },
-      {
-        "path": "scripts/repair-mc043-h13.ts",
-        "reason": "MC-043/H13 的定向复现 runner，自带私有 PostgreSQL 集群；只在本仓排雷台账中复跑，不随基座下发、也不在子仓重建。"
-      }
-    ],
     "allowedExcludedTargets": [
       {
         "importer": "apps/server/src/index.ts",
@@ -590,8 +580,6 @@
     "scripts/install-im-channels.sh",
     "scripts/skill-forge.mts",
     "scripts/skill-dist-demo.mts",
-    "scripts/repair-mc040-f210.ts",
-    "scripts/repair-mc043-h13.ts",
     "scripts/build-sales-pptx.py",
     "scripts/eval/report/**",
     "package.json",

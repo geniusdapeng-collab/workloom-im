@@ -34,7 +34,7 @@ import {
 } from "@workloom/base/workdata";
 import { loadFencePack } from "@workloom/base/fence-engine";
 import { resolveHotelSeedBundle } from "./hotel-seed-preflight.js";
-import { ensureCeoRosterRow } from "./seed-ceo-roster.mjs";
+import { ensureCeoRosterRow } from "./seed-ceo-roster.js";
 import {
   loadVerifiedBundleManifest,
   loadVerifiedBundleWorkforcePresets,

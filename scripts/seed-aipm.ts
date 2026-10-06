@@ -22,7 +22,7 @@ import {
   loadVerifiedBundleWorkforcePresets,
 } from "@workloom/base/bundles";
 import { loadFencePack } from "@workloom/base/fence-engine";
-import { ensureCeoRosterRow } from "./seed-ceo-roster.mjs";
+import { ensureCeoRosterRow } from "./seed-ceo-roster.js";
 
 import { fileURLToPath } from "node:url";
 const REPO_ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..");
