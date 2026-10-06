@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 2337,
+  "revision": 2339,
   "tasks": {
     "231": {
       "number": 231,
-      "status": "waiting_ci",
+      "status": "aligning",
       "firstSeen": 1791242108737,
       "attempts": {},
       "headSha": "56aebb80bb644b4d0b9ff0354f1cce7ae0f656e4",
@@ -96,8 +96,12 @@
       ],
       "ciSince": 1791309117484,
       "updatedAt": 1791312443365,
-      "alignmentCount": 0,
-      "alignmentIntent": null,
+      "alignmentCount": 1,
+      "alignmentIntent": {
+        "headSha": "56aebb80bb644b4d0b9ff0354f1cce7ae0f656e4",
+        "mainSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+        "at": 1791312443365
+      },
       "review": null,
       "error": "不可修改候选 #262 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
       "blockedUntil": 0,
@@ -94743,6 +94747,36 @@
       },
       "previous": "4a750970cd7cbb9d532a52af4a2ce1a6602d5b7664a113088254cbb9ddd51152",
       "digest": "ec15234c7622004dd2fdd3b378e57d64edc8cbfab64dc62b3817246568aa18ef"
+    },
+    {
+      "sequence": 2338,
+      "at": "2026-10-06T18:47:23.365Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "status": "aligning",
+          "alignmentCount": 1,
+          "alignmentIntent": {
+            "headSha": "56aebb80bb644b4d0b9ff0354f1cce7ae0f656e4",
+            "mainSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+            "at": 1791312443365
+          },
+          "developerReview": null
+        }
+      },
+      "previous": "ec15234c7622004dd2fdd3b378e57d64edc8cbfab64dc62b3817246568aa18ef",
+      "digest": "897512e3b388b834185f3cd588a930d5e8eec6abcc29da62914fb42ea4109f1f"
+    },
+    {
+      "sequence": 2339,
+      "at": "2026-10-06T18:47:32.352Z",
+      "kind": "transaction",
+      "data": {
+        "id": "3918be37-035f-40bc-a96b-472bbb53377e"
+      },
+      "previous": "897512e3b388b834185f3cd588a930d5e8eec6abcc29da62914fb42ea4109f1f",
+      "digest": "60d2b081ab38eecdad82143a16a12dbbc34c6871d4479e533bbfc7ff7a1198a4"
     }
   ]
 }
