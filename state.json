@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 413,
+  "revision": 415,
   "tasks": {
     "231": {
       "number": 231,
@@ -1491,21 +1491,14 @@
           "protocol": 31
         }
       },
-      "updatedAt": 1791246840690,
+      "updatedAt": 1791246908288,
       "alignmentCount": 0,
       "recoveryCount": 0,
       "reviewFailures": null,
       "blockedUntil": 0,
       "review": null,
-      "candidate": {
-        "number": 246,
-        "branch": "delivery/candidate/pr-243-a8335b9f449707d92f8d07971266a11a",
-        "headSha": "dbc002361775b510673249145ce117f273085d49",
-        "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
-        "marker": "delivery-origin:243:dbc002361775b510673249145ce117f273085d49:b949346721360f3c20f10c628d5c7b214bc2b95e",
-        "at": 1791246307622
-      },
-      "headSha": "dbc002361775b510673249145ce117f273085d49",
+      "candidate": null,
+      "headSha": "d691e15cd9390e195def2a9896194d1b18a5b73d",
       "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
       "branch": "task/T-2026-1006-1002",
       "intent": {
@@ -1516,14 +1509,14 @@
         ],
         "releases": []
       },
-      "originalBody": "真实首装恢复发现 CNB Issue 列表不含 body、PR 列表 body 为空。Issue 按任务号查询后读取准确详情，PR 安装恢复只读取准确分支详情；原生候选队列读取真实 handoff/depends_on，同时保留列表的年龄字段。丢失创建响应先按详情恢复，权限或身份错误不当作不存在。任务卡 Issue #242。\n\n验证：149 项核心、安装器、协议与舰队回归通过，包含实际列表摘要契约的丢失响应、重复执行、依赖与权限用例；4 文件秘密扫描与 diff 检查通过。\n\n<!-- delivery-live-list-contract:20261006 -->\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1006-1002\",\n  \"ready\": true,\n  \"depends_on\": [\n    236\n  ],\n  \"releases\": []\n}\n-->",
+      "originalBody": "真实首装恢复发现 CNB Issue 列表不含 body、PR 列表 body 为空。Issue 按任务号查询后读取准确详情，PR 安装恢复只读取准确分支详情；原生候选队列读取真实 handoff/depends_on，同时保留列表的年龄字段。丢失创建响应先按详情恢复，权限或身份错误不当作不存在。任务卡 Issue #242。\n\n验证：149 项核心、安装器、协议与舰队回归通过，包含实际列表摘要契约的丢失响应、重复执行、依赖与权限用例；4 文件秘密扫描与 diff 检查通过。\n\n<!-- delivery-live-list-contract:20261006 -->\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1006-1002\",\n  \"ready\": true,\n  \"depends_on\": [\n    236\n  ],\n  \"releases\": []\n}\n-->\n\n补充评审修复：分页扫描所有 open/closed 任务标题，匹配任务读取详情；不再以关键词索引为碰撞覆盖依据。新增索引遗漏用例，完整 162 项回归通过。",
       "files": [
         "scripts/delivery/install-repository.mjs",
         "scripts/delivery/install-repository.test.mjs",
         "scripts/delivery/queue-platform.mjs",
         "scripts/delivery/queue.test.mjs"
       ],
-      "ciSince": 1791245408538
+      "ciSince": 1791246908288
     },
     "244": {
       "number": 244,
@@ -11539,6 +11532,54 @@
       },
       "previous": "72f97cc77bdf056553bc5b8a49c9c665548fd9c604dad304c51c768c72f88920",
       "digest": "730d54f92502dfe6e0ca2dafd00061030acfd9cf06042606ef26b6d5b8cda340"
+    },
+    {
+      "sequence": 414,
+      "at": "2026-10-06T00:35:08.288Z",
+      "kind": "task",
+      "data": {
+        "number": 243,
+        "patch": {
+          "alignmentCount": 0,
+          "recoveryCount": 0,
+          "reviewFailures": null,
+          "blockedUntil": 0,
+          "review": null,
+          "candidate": null,
+          "headSha": "d691e15cd9390e195def2a9896194d1b18a5b73d",
+          "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+          "branch": "task/T-2026-1006-1002",
+          "intent": {
+            "taskId": "T-2026-1006-1002",
+            "ready": true,
+            "dependsOn": [
+              236
+            ],
+            "releases": []
+          },
+          "originalBody": "真实首装恢复发现 CNB Issue 列表不含 body、PR 列表 body 为空。Issue 按任务号查询后读取准确详情，PR 安装恢复只读取准确分支详情；原生候选队列读取真实 handoff/depends_on，同时保留列表的年龄字段。丢失创建响应先按详情恢复，权限或身份错误不当作不存在。任务卡 Issue #242。\n\n验证：149 项核心、安装器、协议与舰队回归通过，包含实际列表摘要契约的丢失响应、重复执行、依赖与权限用例；4 文件秘密扫描与 diff 检查通过。\n\n<!-- delivery-live-list-contract:20261006 -->\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1006-1002\",\n  \"ready\": true,\n  \"depends_on\": [\n    236\n  ],\n  \"releases\": []\n}\n-->\n\n补充评审修复：分页扫描所有 open/closed 任务标题，匹配任务读取详情；不再以关键词索引为碰撞覆盖依据。新增索引遗漏用例，完整 162 项回归通过。",
+          "files": [
+            "scripts/delivery/install-repository.mjs",
+            "scripts/delivery/install-repository.test.mjs",
+            "scripts/delivery/queue-platform.mjs",
+            "scripts/delivery/queue.test.mjs"
+          ],
+          "status": "waiting_ci",
+          "ciSince": 1791246908288
+        }
+      },
+      "previous": "730d54f92502dfe6e0ca2dafd00061030acfd9cf06042606ef26b6d5b8cda340",
+      "digest": "8d577d193780bc1e60c23080170a17e02451fc7970edf90c584911fdd684c3a0"
+    },
+    {
+      "sequence": 415,
+      "at": "2026-10-06T00:35:18.791Z",
+      "kind": "transaction",
+      "data": {
+        "id": "8d6de2b5-4f04-4265-9a70-6335e9f16e25"
+      },
+      "previous": "8d577d193780bc1e60c23080170a17e02451fc7970edf90c584911fdd684c3a0",
+      "digest": "968fba06f1d4849a1b051a140f834d574dfb77ab9f1b6f930881ec710634cd8e"
     }
   ]
 }
