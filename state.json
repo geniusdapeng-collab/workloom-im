@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 1272,
+  "revision": 1274,
   "tasks": {
     "231": {
       "number": 231,
@@ -3150,23 +3150,17 @@
       },
       "reviewAttemptAt": 1791269733939,
       "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
-      "reviewBuild": null,
-      "reviewDispatch": {
+      "reviewBuild": {
+        "sn": "cnb-36f-1k481l2km",
+        "buildLogUrl": "https://cnb.cool/workloom-ai/workloom-im/-/build/logs/cnb-36f-1k481l2km",
+        "event": "api_trigger_delivery_review",
+        "message": "cnb received, but didn't finish build yet",
+        "success": true,
         "headSha": "096b20e6711d50cd7473af33d370389f9bd79056",
         "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
-        "at": 1791271510560,
-        "title": "WorkLoom AI review #259 4331f512842c5e7dd3ea",
-        "knownBuilds": [
-          "cnb-ll6-1k480glue",
-          "cnb-ehs-1k47sfrkh",
-          "cnb-p1l-1k47r33qn",
-          "cnb-ue7-1k47nteog",
-          "cnb-mmj-1k47ltib8",
-          "cnb-qi1-1k47jt20u",
-          "cnb-8uq-1k47fjoan",
-          "cnb-4h1-1k47efce9"
-        ]
+        "at": 1791271510560
       },
+      "reviewDispatch": null,
       "review": null,
       "error": "AI review did not pass without unresolved issues",
       "reviewFailures": {
@@ -44261,6 +44255,39 @@
       },
       "previous": "ef78e907e7ce9df1e86c0418aa272befda3265cdf536f0cf433674c0a806c46e",
       "digest": "c329049aebde8c6bc61a97c6866c9d1fe301c56b696873f43d51722262af6492"
+    },
+    {
+      "sequence": 1273,
+      "at": "2026-10-06T07:25:10.560Z",
+      "kind": "task",
+      "data": {
+        "number": 259,
+        "patch": {
+          "reviewBuild": {
+            "sn": "cnb-36f-1k481l2km",
+            "buildLogUrl": "https://cnb.cool/workloom-ai/workloom-im/-/build/logs/cnb-36f-1k481l2km",
+            "event": "api_trigger_delivery_review",
+            "message": "cnb received, but didn't finish build yet",
+            "success": true,
+            "headSha": "096b20e6711d50cd7473af33d370389f9bd79056",
+            "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+            "at": 1791271510560
+          },
+          "reviewDispatch": null
+        }
+      },
+      "previous": "c329049aebde8c6bc61a97c6866c9d1fe301c56b696873f43d51722262af6492",
+      "digest": "024c4fd80a2847b440deba957f53c7d0d5dd755715404469a82ea80e420a7caa"
+    },
+    {
+      "sequence": 1274,
+      "at": "2026-10-06T07:25:37.457Z",
+      "kind": "transaction",
+      "data": {
+        "id": "c4988376-3120-4df5-8084-835a47060a35"
+      },
+      "previous": "024c4fd80a2847b440deba957f53c7d0d5dd755715404469a82ea80e420a7caa",
+      "digest": "f4c9337cac6ad9e58db2dde98f078b4d8c343225c601a855ab5fadee8a6d6e29"
     }
   ]
 }
