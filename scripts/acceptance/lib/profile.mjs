@@ -176,7 +176,7 @@ export function loadProfile(repoRoot = findRepoRoot(), explicitPath = null) {
       },
     };
     Object.defineProperty(fallback.profile, "environmentKindDeclared", { value: false });
-    fallback.environment = resolveEnvironment(fallback.profile, { flag: cliArgs().environmentKind, allowProdWrites: cliArgs().has("--allow-prod-writes") });
+    fallback.environment = resolveEnvironment(fallback.profile, { flag: cliArgs().environmentKind, allowProdWrites: cliArgs().has("--allow-prod-writes"), repositoryRoot: repoRoot });
     return fallback;
   }
   const raw = JSON.parse(readFileSync(path, "utf-8"));
@@ -231,12 +231,12 @@ export function loadProfile(repoRoot = findRepoRoot(), explicitPath = null) {
     soak: { ...DEFAULT_SOAK, ...(raw.soak ?? {}) },
   };
   Object.defineProperty(profile, "environmentKindDeclared", { value: Object.hasOwn(raw.environment ?? {}, "kind") });
-  const resolvedEnvironment = resolveEnvironment(profile, { flag: cliArgs().environmentKind, allowProdWrites: cliArgs().has("--allow-prod-writes") });
+  const resolvedEnvironment = resolveEnvironment(profile, { flag: cliArgs().environmentKind, allowProdWrites: cliArgs().has("--allow-prod-writes"), repositoryRoot: repoRoot });
   return { isDefault: false, warnings, profile, path, environment: resolvedEnvironment };
 }
 
-export function urlsOf(profile) {
-  const environment = resolveEnvironment(profile, { flag: cliArgs().environmentKind, allowProdWrites: cliArgs().has("--allow-prod-writes") });
+export function urlsOf(profile, repositoryRoot = findRepoRoot()) {
+  const environment = resolveEnvironment(profile, { flag: cliArgs().environmentKind, allowProdWrites: cliArgs().has("--allow-prod-writes"), repositoryRoot });
   return { ...environment.urls, environmentKind: environment.kind };
 }
 

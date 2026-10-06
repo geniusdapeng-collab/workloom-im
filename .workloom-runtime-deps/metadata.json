@@ -31,8 +31,12 @@
       "sha256": "be14a57489c5687f6fb209975bf6f6d0041a214f670bf638bf7e37d631a232e0"
     },
     {
+      "path": "apps/web/vite.config.ts",
+      "sha256": "0178d69b6401e6e4420d8ea2ac29f835e511a7835f8b4d613c44b1ad35f6c3fe"
+    },
+    {
       "path": "package.json",
-      "sha256": "04fb121638b9840aec9b7a172a48b7e05a496529795f7eefdffaa69467ed6a06"
+      "sha256": "6f0e7174043aa89db4d0c0e0e9de530b531789198fab29a8f3b884e7fb77fa9c"
     },
     {
       "path": "packages/base/package.json",
@@ -64,7 +68,7 @@
     },
     {
       "path": "product.manifest.json",
-      "sha256": "cd79d5cb5627b55fb7fc2d0547e45fb5fc0c3e611adcc066b3432a20a1ea7e2d"
+      "sha256": "d48bd980aa7b5dab716c78c3c281d571ab5468b8b32a328b7e66695861b4c3c8"
     },
     {
       "path": "scripts/pack-nm-merge.mjs",
@@ -80,7 +84,7 @@
     },
     {
       "path": "scripts/runtime-deps-lock.mjs",
-      "sha256": "41ed96676eadb4f6556f15522b6ec22bb25fc7885cbca59650ed577e61b10026"
+      "sha256": "32c658a000d911fcd3ab3caede2895ee86e6c27d91db86f06bfccab28638e96d"
     }
   ],
   "manifestSha256": "28a4eb3f27de3e7e5a70d9942355b46525aaa13e5f856fa7b3817240f0a3ce25",

@@ -120,7 +120,7 @@ include:
         node --test scripts/capability-status.test.mjs scripts/tools/provision-safety.test.mjs scripts/ui-release-registration.test.mjs scripts/verify-product-content.test.mjs
         # 桌面/打包契约必须真实执行：行业契约不得覆盖桌面受管配置、载荷版本标记需早失败、
         # vite-product 声明与实现一致；此前这些用例只被本地 test:desktop-bootstrap 引用。
-        node --test apps/desktop/electron/bootstrap.test.cjs apps/desktop/electron/desktop-safety.test.cjs apps/desktop/electron/industry-runtime.test.cjs scripts/desktop-bootstrap-db.test.mjs scripts/vite-product.test.mjs scripts/payload-markers.test.mjs
+        node --test apps/desktop/electron/bootstrap.test.cjs apps/desktop/electron/desktop-safety.test.cjs apps/desktop/electron/industry-runtime.test.cjs scripts/desktop-bootstrap-db.test.mjs scripts/vite-product.test.mjs scripts/payload-markers.test.mjs scripts/native-smoke.test.mjs
 
     - name: 持续交付与不可变发布回归
       script: |
@@ -631,7 +631,7 @@ include:
           tar -tzf "$RES/payload.tar.gz" > /tmp/wl-pkg-list.txt
           grep -q "runtime/node_modules/tsx/package.json" /tmp/wl-pkg-list.txt || { echo "拆包验收失败：归档内缺 tsx"; exit 1; }
           grep -q "nats/nats-server" /tmp/wl-pkg-list.txt || { echo "拆包验收失败：归档内缺 nats"; exit 1; }
-          node apps/desktop/electron/bootstrap.cjs --smoke --resources "$RES" --support "/tmp/wl-smoke-$(basename "$dir")"
+          node scripts/native-smoke.mjs --resources "$RES" --support "/tmp/wl-smoke-$(basename "$dir")"
           echo "拆包验收通过：$APP"
         done
         # 封存：改名到对外恒定名并写出平台清单（与遗留发布通道逐字段同口径）
@@ -708,8 +708,16 @@ include:
         grep -q "nats/nats-server" /tmp/wl-pkg-list.txt || { echo "归档内缺 nats"; exit 1; }
         '@
         if ($LASTEXITCODE -ne 0) { throw "拆包验收失败：载荷归档内容不完整" }
-        node apps/desktop/electron/bootstrap.cjs --smoke --resources $resources --support "$env:TEMP/wl-win-smoke"
+        node scripts/native-smoke.mjs --resources $resources --support "$env:TEMP/wl-win-smoke"
         if ($LASTEXITCODE -ne 0) { throw "win-unpacked 载荷首启冒烟失败" }
+        # Authenticode 验签：signed 档位必须实测通过；正式发布前若落到 unsigned 档位，
+        # 预检缺凭据即 fail-closed，所以这里同样按 signed 口径强制验签。
+        $signed = Get-AuthenticodeSignature -FilePath (Get-ChildItem release/win-unpacked -Filter *.exe | Where-Object { $_.Name -notlike "*uninstall*" } | Select-Object -First 1).FullName
+        if ($signed.Status -ne "Valid") { throw "win-unpacked 应用签名无效：$($signed.Status)" }
+        $installer = Get-ChildItem release -Filter *.exe | Select-Object -First 1
+        if (-not $installer) { throw "Windows 安装包未生成" }
+        $installerSignature = Get-AuthenticodeSignature -FilePath $installer.FullName
+        if ($installerSignature.Status -ne "Valid") { throw "Windows 安装包签名无效：$($installerSignature.Status)" }
         node scripts/desktop-candidate-stage.mjs --platform win --out dist-desktop --version $env:VERSION --signing signed
         if ($LASTEXITCODE -ne 0) { throw "候选封存失败（产物数量/命名与发布策略不一致）" }
     - name: 上传 Windows 候选资产到 CNB Release

@@ -28,9 +28,20 @@ export function assertPayloadMarkers(root, { expectedVersion } = {}) {
 }
 
 export function main(args = process.argv.slice(2)) {
-  const [directory, ...extra] = args;
-  if (!directory || extra.length) throw new Error("用法：payload-markers.mjs <payload-dir>");
-  console.log(JSON.stringify(assertPayloadMarkers(resolve(directory)), null, 1));
+  const [directory, ...rest] = args;
+  if (!directory) throw new Error("用法：payload-markers.mjs <payload-dir> [--expected-version <version>]");
+  let expectedVersion;
+  for (let index = 0; index < rest.length; index += 1) {
+    const flag = rest[index];
+    if (flag !== "--expected-version") throw new Error(`未知参数：${flag}`);
+    const value = rest[index + 1];
+    if (value === undefined || value.startsWith("--")) throw new Error("--expected-version 缺少版本值");
+    expectedVersion = value;
+    index += 1;
+  }
+  // 装配版本显式传入：三个标记互相一致还不够，必须与本次装配的 $VERSION 交叉核对，
+  // 否则将来少写一处 runtime/VERSION 也会在本步静默通过。
+  console.log(JSON.stringify(assertPayloadMarkers(resolve(directory), { expectedVersion }), null, 1));
 }
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {

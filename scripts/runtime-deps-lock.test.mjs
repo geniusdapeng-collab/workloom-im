@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 import {
   bundledNpmCliCandidates,
   runtimeInputSha256,
+  runtimeVitestConfigCandidates,
+  runtimeImportsVitestConfig,
   verifyInstalledRuntimeTarget,
   verifyRuntimeDepsLock,
   verifyRuntimePackageLock,
@@ -391,7 +393,7 @@ test("当前产品配置不携带 Vitest 运行时兼容依赖，legacy 变体�
 });
 
 test("只引用 Vitest 类型的产品不强制兼容依赖，运行期导入才要求并校验", { timeout: 75_000 }, async () => {
-  const { buildRuntimeDepsManifest, runtimeImportsVitestConfig } = await import("./runtime-deps-lock.mjs");
+  const { buildRuntimeDepsManifest } = await import("./runtime-deps-lock.mjs");
   const root = mkdtempSync(join(tmpdir(), "workloom-runtime-vitest-pin-"));
   const policy = { includePlatformOps: false };
   const version = "5.0.1";
@@ -473,4 +475,39 @@ test("只引用 Vitest 类型的产品不强制兼容依赖，运行期导入才
   // 隔离 fixture 里复现“已发布稳定客户端”的运行时导入：仓根未声明兼容依赖时
   // 必须真实加载失败，而不是静默降级发行一个启动即坏的载荷。
   await verifyProductionPreview({ legacy: true, withVitest: false, rejectMissingVitest: true });
+});
+
+test("运行依赖锁把决定兼容闭包的客户端 Vite 配置登记为受控输入", () => {
+  const root = mkdtempSync(join(tmpdir(), "workloom-runtime-inputs-"));
+  try {
+    mkdirSync(join(root, "apps", "web"), { recursive: true });
+    mkdirSync(join(root, "packages"), { recursive: true });
+    writeFileSync(join(root, "package.json"), '{"private":true,"dependencies":{}}\n');
+    writeFileSync(join(root, "apps", "web", "package.json"), '{"private":true}\n');
+    writeFileSync(join(root, "apps", "web", "vite.config.ts"), 'import { defineConfig } from "vite";\n');
+    // 候选目录来自同一份运行依赖来源清单的客户端导入者（apps/*）；仓根配置不参与，
+    // 顺序稳定且不重复，packages/ 下没有配置时不产生空登记。
+    writeFileSync(join(root, "vite.config.ts"), 'import { defineConfig } from "vitest/config";\n');
+    const policy = { includePlatformOps: false };
+    assert.deepEqual(runtimeVitestConfigCandidates(root, policy), ["apps/web/vite.config.ts"]);
+    // 兼容闭包只看客户端配置：仓根配置运行期导入 Vitest 也不能决定发行闭包。
+    assert.equal(runtimeImportsVitestConfig(root, policy), false);
+    writeFileSync(join(root, "apps", "web", "vite.config.ts"), 'import { defineConfig } from "vitest/config";\n');
+    assert.equal(runtimeImportsVitestConfig(root, policy), true);
+    rmSync(join(root, "apps", "web", "vite.config.ts"));
+    assert.deepEqual(runtimeVitestConfigCandidates(root, policy), []);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("当前产品的锁输入清单必须登记参与兼容判定的客户端 Vite 配置", () => {
+  const metadata = JSON.parse(readFileSync(join(REPOSITORY_ROOT, ".workloom-runtime-deps", "metadata.json"), "utf8"));
+  const registered = new Set(metadata.inputs.map((input) => input.path));
+  const policy = { includePlatformOps: loadProductRuntime(REPOSITORY_ROOT).productId === "workloom-andromeda" };
+  const candidates = runtimeVitestConfigCandidates(REPOSITORY_ROOT, policy);
+  assert.ok(candidates.length > 0, "本产品必须有参与判定的客户端 Vite 配置");
+  for (const candidate of candidates) {
+    assert.ok(registered.has(candidate), `锁输入清单缺少 ${candidate}`);
+    const input = metadata.inputs.find((entry) => entry.path === candidate);
+    assert.equal(input.sha256, runtimeInputSha256(readFileSync(join(REPOSITORY_ROOT, candidate))), candidate);
+  }
 });

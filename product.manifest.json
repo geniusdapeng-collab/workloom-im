@@ -16,7 +16,10 @@
     "website": "apps/site"
   },
   "desktop": {
-    "portOffset": 0
+    "portOffset": 0,
+    "sourceGates": ["static-gate", "db-gate", "ui-gate"],
+    "nativeCandidateTrigger": "api_trigger_desktop_release",
+    "smokeRunner": "scripts/native-smoke.mjs"
   },
   "clients": {
     "bPc": { "enabled": true, "entry": "apps/web" },

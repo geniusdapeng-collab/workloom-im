@@ -41,7 +41,7 @@ async function main() {
   if (!existsSync(path)) { report.errors.push('本仓显式 profile 缺失；未使用默认配置或生成模板'); return 2; }
   const raw = JSON.parse(readAsset(path));
   const manifest = JSON.parse(readAsset(join(repoRoot, 'product.manifest.json')));
-  const environment = resolveEnvironment(raw, { flag: args.environmentKind, allowProdWrites: args.has('--allow-prod-writes') });
+  const environment = resolveEnvironment(raw, { flag: args.environmentKind, allowProdWrites: args.has('--allow-prod-writes'), repositoryRoot: repoRoot });
   report.environmentKind = environment.kind; report.effectiveAllowWrites = environment.allowWrites;
   let YAML;
   try { YAML = (await import('yaml')).default; }

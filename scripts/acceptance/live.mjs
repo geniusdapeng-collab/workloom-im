@@ -116,7 +116,7 @@ process.on("exit", () => {
 
 const { profile, warnings: profileWarnings } = loadProfile(REPO_ROOT, args.profilePath);
 const liveProfile = profile.live ?? {};
-const environment = resolveEnvironment(profile, { flag: ENV_FLAG, allowProdWrites: ALLOW_PROD_WRITES });
+const environment = resolveEnvironment(profile, { flag: ENV_FLAG, allowProdWrites: ALLOW_PROD_WRITES, repositoryRoot: REPO_ROOT });
 const notes = [];
 
 /* ---------------------------- 自检模式：本地替身 ---------------------------- */

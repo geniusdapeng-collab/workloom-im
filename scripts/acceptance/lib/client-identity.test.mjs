@@ -7,9 +7,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { inspectClientIdentity } from "./client-identity.mjs";
-import { probeEnvironment } from "./target.mjs";
+import { probeEnvironment, repositoryProductIdentity, resolveEnvironment } from "./target.mjs";
 const { generatePayloadIntegrity } = createRequire(import.meta.url)("../../../apps/desktop/electron/payload-integrity.cjs");
 
+const profile = (kind, target = {}) => ({ environment: { kind, target }, startup: { ports: { pc: 3000, bMobile: 3001, cMobile: 3002, server: 8787 } } });
 const instanceId = "11111111-1111-4111-8111-111111111111";
 const urls = { api: "http://127.0.0.1:8787", pc: "http://localhost:5173" };
 function fixture(t) {
@@ -246,4 +247,67 @@ test("actual HTTP installed identity: inert comments/scripts/templates do not ob
   const result = await probeEnvironment({ env: f.env });
   assert.equal(result.ok, true, JSON.stringify({ checks: result.checks, calls: f.calls }));
   assert.deepEqual(f.calls, { api: 1, web: 1, lookalike: 0 });
+});
+
+/**
+ * 权威产品身份必须来自仓内 product.manifest.json：profile v2 契约没有 productId，
+ * 从 profile 推导恒为 null，等于 client-runtime 从不比对“装的是不是本产品”。
+ */
+test("client identity: repository product manifest is the only source of the expected product id", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "workloom-product-identity-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  assert.equal(repositoryProductIdentity(root).productId, null, "缺失清单不得被解释成任意产品");
+  assert.equal(repositoryProductIdentity(root).reason, "repository_product_manifest_missing");
+  writeFileSync(join(root, "product.manifest.json"), "{SYNTHETIC_UNTRUSTED_PARSE_DETAIL\n");
+  assert.equal(repositoryProductIdentity(root).reason, "repository_product_manifest_invalid");
+  for (const manifest of [{}, { productId: "Foreign Product" }, { productId: "A" }, { productId: 42 }]) {
+    writeFileSync(join(root, "product.manifest.json"), JSON.stringify(manifest));
+    assert.equal(repositoryProductIdentity(root).productId, null, JSON.stringify(manifest));
+  }
+  writeFileSync(join(root, "product.manifest.json"), JSON.stringify({ productId: "workloom-im" }));
+  assert.deepEqual(repositoryProductIdentity(root), { productId: "workloom-im", reason: null });
+});
+
+test("client identity: client-runtime expected product id binds to the repository manifest, not the profile", () => {
+  const root = mkdtempSync(join(tmpdir(), "workloom-product-env-"));
+  try {
+    writeFileSync(join(root, "product.manifest.json"), JSON.stringify({ productId: "workloom-im" }));
+    const env = resolveEnvironment(profile("client-runtime"), { repositoryRoot: root });
+    assert.equal(env.expectedProductId, "workloom-im");
+    assert.equal(env.expectedProductIdSource, "product.manifest.json");
+    // profile 不得凭空改名产品：声明与清单不一致必须拒绝。
+    const conflicting = { ...profile("client-runtime"), productId: "foreign-product" };
+    assert.throws(() => resolveEnvironment(conflicting, { repositoryRoot: root }), /产品身份/);
+    // 其他档位不引入客户端身份耦合。
+    assert.equal(resolveEnvironment(profile("local-preview"), { repositoryRoot: root }).expectedProductId, null);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("client identity: a foreign-product install state fails the client-runtime lane even when it is self-consistent", async (t) => {
+  const f = installed(t);
+  const productId = f.state.runtimeIdentity.productId; // synthetic-product
+  const health = JSON.stringify({ ok: true, service: "workloom-im-server", instanceId });
+  const html = `<!doctype html><html><head><meta name="workloom-product-id" content="${productId}"></head><body>Synthetic</body></html>`;
+  const server = await localServer(t, (req, res) => {
+    const json = req.url === "/health";
+    res.setHeader("content-type", json ? "application/json" : "text/html");
+    res.setHeader("x-workloom-instance-id", instanceId);
+    res.setHeader("x-workloom-product-id", productId);
+    res.end(json ? health : html);
+  });
+  f.state.runtimeIdentity.ports = { server: Number(new URL(server).port), web: Number(new URL(server).port) + 1 };
+  writeFileSync(f.file, JSON.stringify(f.state));
+  const env = { kind: "client-runtime", supportDir: f.supportDir, expectedProductId: "workloom-im", urls: { api: server, pc: server } };
+  const result = await probeEnvironment({ env });
+  assert.equal(result.ok, false, JSON.stringify(result.checks));
+  assert.equal(result.checks.find((row) => row.name === "client.identity").ok, false);
+});
+
+test("client identity: client-runtime without an authoritative repository product id fails closed instead of skipping the check", async (t) => {
+  const f = installed(t);
+  const result = await probeEnvironment({ env: { kind: "client-runtime", supportDir: f.supportDir, expectedProductId: null, urls } });
+  assert.equal(result.ok, false, JSON.stringify(result.checks));
+  const identity = result.checks.find((row) => row.name === "client.identity");
+  assert.equal(identity.ok, false);
+  assert.equal(identity.diagnostic.category, "repository_product_identity_unavailable");
 });

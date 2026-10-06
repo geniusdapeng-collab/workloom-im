@@ -108,80 +108,118 @@ if (product) {
 }
 
 /**
- * CNB 发布通道门禁校验：清单声明 release.workflow === ".cnb.yml" 时生效。
+ * CNB 发布通道门禁校验：清单声明 release.workflow === ".cnb.yml" 时才生效。
  *
- * 抽成纯函数是为了能用真实夹具单测——此前该分支在当前清单下永远不执行，里面的
- * 假设（源码门禁名、原生候选触发、原生入口）无人验证，等于休眠地雷。现在门禁名
- * 与触发名一律取自 product.desktop.*，错误信息带出受控入口，不再错位误导。
+ * 契约必须与实际承载结构一致，否则「切到 .cnb.yml」会以大量错位的
+ * 「缺少安全门禁」fail-closed（方向安全、契约错误），且没有真实证据可复核：
+ *   - 源码门禁与原生候选触发名一律取自 product.desktop.sourceGates /
+ *     nativeCandidateTrigger，不写死任何仓的栈名；
+ *   - 原生候选作业位于顶层 `$` 键下（CNB 的 API 触发事件不是分支键），
+ *     作业标签按桌面发布实际语义判定（mac 自托管节点 / windows 自托管节点）；
+ *   - 签名、公证、Authenticode、PG 运行时、载荷装配与首启冒烟标记位于
+ *     作业 stage 脚本内（该发布通道不用 pack-mac.sh / pack-windows.sh），
+ *     判定的是「受控作业确实执行这些命令」，而不是「某个脚本文件写着这些词」。
+ * 进入该分支前必须补齐清单字段；字段缺失或与工作流不一致都点名拒绝。
  */
+const SAFE_NODE_SCRIPT = /^scripts\/[A-Za-z0-9._-]+\.mjs$/u;
+
+/** 只把可执行行当命令：注释与字符串里的同名标记不能冒充门禁。 */
+function scriptStatements(script) {
+  return String(script ?? "").split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#") && !line.startsWith("//"));
+}
+
+function runnerTags(job) {
+  const tags = job?.runner?.tags;
+  return Array.isArray(tags) ? tags.map((tag) => String(tag)) : [];
+}
+
+/** CNB 的 `$` 事件键：事件值必须是（可带条件包装的）非空作业数组。 */
+function eventJobs(configured, event) {
+  const value = configured?.["$"]?.[event];
+  return Array.isArray(value) && value.length > 0 ? value : null;
+}
+
+function statementsOf(job) {
+  if (!job || !Array.isArray(job.stages)) return null;
+  // 结构化阶段（await/resolve/trigger 等）没有脚本：只收集有脚本的阶段，
+  // 但作业至少要有一个真实脚本阶段，否则“作业存在”不等于“门禁被执行”。
+  const scripts = job.stages.filter((stage) => stage && typeof stage.script === "string" && stage.script.trim());
+  if (!scripts.length) return null;
+  return scripts.flatMap((stage) => scriptStatements(stage.script));
+}
+
+function exactJob(jobs, predicate) {
+  const matches = Array.isArray(jobs) ? jobs.filter(predicate) : [];
+  return matches.length === 1 ? matches[0] : null;
+}
+
 export function verifyCnbReleaseChannel({ product, configured, root, repositoryRoot, fs, path }) {
   const errors = [];
-  const isRequired = (item) => item !== null && typeof item === "object" && !Array.isArray(item)
-    && ["allow_failure", "allowFailure", "if"].every((key) => !Object.hasOwn(item, key));
-  const hasRequiredStages = (job) => isRequired(job) && Array.isArray(job.stages) && job.stages.length > 0
-    && job.stages.every((stage) => isRequired(stage) && typeof stage.script === "string" && stage.script.trim().length > 0);
-  // 源码门禁名与候选触发名一律从产品清单声明的契约读取，绝不写死某个仓的栈名
-  //（此前硬编码 Tiger 的 py-gate/oss-gate/protocol-gate 与 api_tiger_native 候选触发，
-  // 在本仓清单切到 .cnb.yml 后会让门禁以错位的“缺少原生桌面门禁”信息 fail-closed）。
   const sourceNames = product.desktop?.sourceGates;
   const candidateTrigger = product.desktop?.nativeCandidateTrigger;
+
+  // 1) PR 源码门禁：清单声明的每个门禁都必须恰好有一个可执行实例。
+  //    PR 通道还承载交付器的只读审查作业（delivery-*-review），它们不是产品源码门禁，
+  //    因此这里校验“声明的门禁齐全且不重复”，而不是“通道里只有这三个”。
   const sourceJobs = configured?.["**"]?.pull_request;
   if (!Array.isArray(sourceNames) || !sourceNames.length || sourceNames.some((name) => typeof name !== "string" || !name)) {
     errors.push("产品清单缺少受控 CNB 源码门禁名（product.desktop.sourceGates）");
-  } else if (!Array.isArray(sourceJobs) || sourceJobs.length !== sourceNames.length
-      || sourceNames.some((name) => sourceJobs.filter((job) => job?.name === name && hasRequiredStages(job)).length !== 1)) {
-    errors.push(`CNB **/pull_request 必须仅包含清单声明的必需源码门禁：${sourceNames.join("、")}`);
+  } else if (!Array.isArray(sourceJobs)) {
+    errors.push(`CNB **/pull_request 缺少必需源码门禁：${sourceNames.join("、")}`);
+  } else {
+    for (const name of sourceNames) {
+      const matches = sourceJobs.filter((job) => job?.name === name && Array.isArray(job.stages) && job.stages.length > 0);
+      if (matches.length !== 1) {
+        errors.push(`CNB **/pull_request 缺少可执行的清单声明源码门禁：${name}（实际 ${matches.length} 个）`);
+      }
+    }
   }
+
+  // 2) 原生候选触发必须是顶层 `$` 下的确切实例；main 推送不得伪装成候选通道。
   if (typeof candidateTrigger !== "string" || !candidateTrigger) {
     errors.push("产品清单缺少受控 CNB 原生候选触发名（product.desktop.nativeCandidateTrigger）");
+  } else if (!eventJobs(configured, candidateTrigger)) {
+    errors.push(`CNB $/${candidateTrigger} 必须是非空的原生候选作业列表（清单声明的候选触发）`);
   }
-  for (const [trigger, event, candidate] of [["main", "push", false], ["**", candidateTrigger ?? "__missing_candidate_trigger__", true]]) {
-      const jobs = configured?.[trigger]?.[event];
-      for (const [platform, tags] of [["mac", ["mac", "arm64"]], ["win", ["windows"]]]) {
-        const nativePath = product.desktop?.nativeBuilders?.[platform];
-        if (typeof nativePath !== "string" || !/^scripts\/[A-Za-z0-9._-]+\.(?:sh|ps1)$/u.test(nativePath)) {
-          errors.push(`产品清单缺少受控 ${platform} 原生构建入口`);
-          continue;
-        }
-        const matches = Array.isArray(jobs) ? jobs.filter((job) => job?.runner?.namespace === "group"
-          && tags.every((tag) => Array.isArray(job.runner.tags) && job.runner.tags.includes(tag))) : [];
-        const job = matches[0];
-        const workflowEntry = path.relative(repositoryRoot, path.join(root, nativePath)).replaceAll("\\", "/");
-        const escapedEntry = workflowEntry.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-        const invocation = new RegExp(`^\\s*${platform === "mac" ? "bash" : "&"}\\s+(?:\\./)?${escapedEntry}(?:\\s+(.*))?$`, "u");
-        const commands = hasRequiredStages(job) ? job.stages.flatMap((stage) => stage.script.split(/\r?\n/u))
-          .map((line) => invocation.exec(line.replaceAll("\\", "/")))
-          .filter(Boolean) : [];
-        const argumentsText = commands[0]?.[1]?.trim() ?? "";
-        // Only a standalone switch passed to the controlled invocation selects
-        // candidate mode; a comment, quoted version or chained command cannot.
-        const argumentsOnly = argumentsText.replace(/(?:^|\s)#.*$/u, "").trim();
-        const argumentTokens = argumentsOnly.match(/"[^"\r\n]*"|'[^'\r\n]*'|[^\s"']+/gu) ?? [];
-        const validArguments = !/[;&|`]/u.test(argumentsOnly)
-          && argumentTokens.join(" ") === argumentsOnly.replace(/\s+/gu, " ");
-        const candidateArguments = argumentTokens.map((argument) => argument.replace(/^(?:"(.*)"|'(.*)')$/u, "$1$2"))
-          .filter((argument) => platform === "mac" ? /^--candidate(?:=|:|$)/u.test(argument) : /^-Candidate(?::|=|$)/iu.test(argument));
-        const validCandidate = candidateArguments.length === 1 && (platform === "mac"
-          ? candidateArguments[0] === "--candidate" : argumentTokens.some((argument) => /^-Candidate$/iu.test(argument)));
-        if (matches.length !== 1 || !hasRequiredStages(job) || Object.hasOwn(job, "docker")
-            || commands.length !== 1 || !validArguments || (candidate ? !validCandidate : candidateArguments.length !== 0)) {
-          errors.push(`CNB ${trigger}/${event} 缺少必需的 ${platform} 原生桌面门禁（受控入口 ${nativePath}）`);
-        }
+  const mainPush = configured?.main?.push;
+  for (const name of ["desktop-release-macos", "desktop-release-windows", "desktop-release-finalize"]) {
+    if (Array.isArray(mainPush) && mainPush.some((job) => job?.name === name)) {
+      errors.push(`CNB main/push 不得承载桌面候选作业：${name}（候选发布只走 ${candidateTrigger ?? "候选触发"}）`);
+    }
+  }
+
+  // 3) 原生候选作业必须真实执行签名/公证/Authenticode/载荷装配与首启冒烟。
+  const smokePath = product.desktop?.smokeRunner;
+  if (typeof smokePath !== "string" || !SAFE_NODE_SCRIPT.test(smokePath)) {
+    errors.push("产品清单缺少受控原生桌面冒烟入口（product.desktop.smokeRunner）");
+  }
+  const requires = [
+    { platform: "mac", job: "desktop-release-macos", label: "macOS 签名/公证", tags: ["mac", "arm64"],
+      markers: ["MAC_CSC_LINK", "MAC_CSC_KEY_PASSWORD", "APPLE_APP_SPECIFIC_PASSWORD", "APPLE_TEAM_ID",
+        "pack-electron-payload.sh", "--frozen-lockfile", "codesign --verify --deep --strict", "xcrun stapler validate"] },
+    { platform: "win", job: "desktop-release-windows", label: "Windows 签名/Authenticode", tags: ["windows"],
+      markers: ["WIN_CSC_LINK", "WIN_CSC_KEY_PASSWORD", "build-pgvector-win.ps1", "pack-electron-payload.sh",
+        "--frozen-lockfile", "Get-AuthenticodeSignature"] },
+  ];
+  for (const spec of requires) {
+    const markerList = [...spec.markers, ...(SAFE_NODE_SCRIPT.test(smokePath ?? "") ? [path.basename(smokePath)] : [])];
+    const job = typeof candidateTrigger === "string" && candidateTrigger
+      ? exactJob(eventJobs(configured, candidateTrigger), (entry) => entry?.name === spec.job
+          && spec.tags.every((tag) => runnerTags(entry).includes(tag)))
+      : null;
+    const statements = statementsOf(job);
+    if (!job || !statements) {
+      errors.push(`CNB $/${candidateTrigger ?? "候选触发"} 缺少受控的 ${spec.label} 作业（tags 需含 ${spec.tags.join("/")}）`);
+      continue;
+    }
+    for (const marker of markerList) {
+      if (!statements.some((statement) => statement.includes(marker))) {
+        errors.push(`CNB ${spec.label} 作业缺少安全门禁：${marker}`);
       }
     }
-    for (const [platform, markers] of [["mac", ["CSC_LINK", "APPLE_APP_SPECIFIC_PASSWORD", "codesign --verify --deep --strict", "xcrun stapler validate"]],
-      ["win", ["CSC_LINK", "Get-AuthenticodeSignature", "build-pgvector-win.ps1"]]]) {
-      const nativePath = product.desktop?.nativeBuilders?.[platform];
-      const file = typeof nativePath === "string" && /^scripts\/[A-Za-z0-9._-]+\.(?:sh|ps1)$/u.test(nativePath) ? path.join(root, nativePath) : null;
-      const source = file && fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
-      const smokePath = product.desktop?.smokeRunner;
-      if (typeof smokePath !== "string" || !/^scripts\/[A-Za-z0-9._-]+\.mjs$/u.test(smokePath) || !fs.existsSync(path.join(root, smokePath))) {
-        errors.push("产品清单缺少受控原生桌面冒烟入口");
-      }
-      for (const marker of [...markers, "--frozen-lockfile", "pack-electron-payload.sh", smokePath ?? "缺少原生冒烟入口", "--render"]) {
-        if (!source.includes(marker)) errors.push(`${platform} 原生构建入口缺少安全门禁：${marker}`);
-      }
-    }
+  }
   return errors;
 }
 

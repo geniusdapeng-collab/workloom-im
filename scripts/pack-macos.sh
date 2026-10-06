@@ -162,7 +162,7 @@ fi
 PAYLOAD_ROOT="$APP/Contents/Resources"
 printf '%s\n' "$VERSION" > "$PAYLOAD_ROOT/VERSION"
 printf '%s\n' "$VERSION" > "$PAYLOAD_ROOT/PAYLOAD_VERSION"
-node scripts/payload-markers.mjs "$PAYLOAD_ROOT"
+node scripts/payload-markers.mjs "$PAYLOAD_ROOT" --expected-version "$VERSION"
 if [ "$STRUCTURE_ONLY" = "0" ]; then
   INDUSTRY_PACKER="$(node -e 'const fs=require("node:fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const p=m.desktop?.industryPacker||"";if(p&&!/^scripts\/[A-Za-z0-9._-]+\.mjs$/.test(p))throw Error("行业载荷扩展路径无效");process.stdout.write(p)' "$PRODUCT_MANIFEST_PATH")"
   if [ -n "$INDUSTRY_PACKER" ]; then

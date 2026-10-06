@@ -193,7 +193,7 @@ done
 node scripts/payload-policy.mjs assert-runtime "$R"
 printf '%s\n' "$VERSION" > "$PKG/VERSION"
 printf '%s\n' "$VERSION" > "$PKG/PAYLOAD_VERSION"
-node scripts/payload-markers.mjs "$PKG"
+node scripts/payload-markers.mjs "$PKG" --expected-version "$VERSION"
 if [ "$STRUCTURE_ONLY" = "0" ]; then
   INDUSTRY_PACKER="$(node -e 'const fs=require("node:fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const p=m.desktop?.industryPacker||"";if(p&&!/^scripts\/[A-Za-z0-9._-]+\.mjs$/.test(p))throw Error("行业载荷扩展路径无效");process.stdout.write(p)' "$PRODUCT_MANIFEST_PATH")"
   if [ -n "$INDUSTRY_PACKER" ]; then

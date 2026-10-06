@@ -127,6 +127,9 @@ function lockPaths(root) {
 function inputFiles(root, product, policy) {
   const byPath = new Map();
   for (const [path] of runtimeDependencySources(root, policy)) byPath.set(path, join(root, path));
+  // 客户端 Vite 配置参与派生闭包（运行期是否导入 vitest/config 决定兼容依赖是否纳入），
+  // 必须与 manifest 的输入清单同源登记；否则它变了、锁没变，audit 看不出锁依赖过它。
+  for (const path of runtimeVitestConfigCandidates(root, policy)) byPath.set(path, join(root, path));
   byPath.set("pnpm-lock.yaml", join(root, "pnpm-lock.yaml"));
   for (const path of [
     "scripts/pack-nm-merge.mjs",
@@ -167,16 +170,29 @@ function expectedMetadata(root, product, policy, manifest, packageLock) {
  * 产品自身的客户端 Vite 配置是否在运行期导入 vitest/config。类型引用
  * （/// <reference types="vitest/config" />）与 test 段只依赖类型，不引入运行依赖。
  */
-export function runtimeImportsVitestConfig(root) {
-  const directories = new Set(runtimeDependencySources(root, { includePlatformOps: false })
-    .filter(project => project[3])
-    .map(project => dirname(join(root, project[0]))));
-  for (const directory of [...directories].sort()) {
-    const candidate = join(directory, "vite.config.ts");
-    if (!existsSync(candidate) || !statSync(candidate).isFile()) continue;
-    if (/^\s*import\s[^\n]*from\s*["']vitest\/config["']/mu.test(readFileSync(candidate, "utf8"))) return true;
-  }
-  return false;
+/** 客户端目录（runtimeDependencySources 的导入者口径）：兼容闭包只在产品客户端里判定。 */
+function runtimeClientDirectories(root, policy) {
+  const resolvedPolicy = policy ?? payloadPolicyFor(loadProductRuntime(root));
+  return [...new Set(runtimeDependencySources(root, resolvedPolicy)
+    .filter(project => project[3] && project[3] !== ".")
+    .map(project => dirname(join(root, project[0]))))].sort();
+}
+
+/**
+ * 可能参与兼容闭包判定的客户端 Vite 配置（相对路径，已排序）。
+ * platform-ops 只在产品身份允许时收集（与包来源同一判定），避免把运营中枢的
+ * 配置混进其他产品的锁输入。
+ */
+export function runtimeVitestConfigCandidates(root, policy = null) {
+  return runtimeClientDirectories(root, policy)
+    .map(directory => join(directory, "vite.config.ts"))
+    .filter(candidate => existsSync(candidate) && statSync(candidate).isFile())
+    .map(candidate => relative(root, candidate).split(sep).join("/"));
+}
+
+export function runtimeImportsVitestConfig(root, policy = null) {
+  return runtimeVitestConfigCandidates(root, policy)
+    .some(candidate => /^\s*import\s[^\n]*from\s*["']vitest\/config["']/mu.test(readFileSync(join(root, candidate), "utf8")));
 }
 
 export function buildRuntimeDepsManifest(root, policy) {
@@ -185,7 +201,7 @@ export function buildRuntimeDepsManifest(root, policy) {
   // 兼容闭包只在产品自身的客户端配置确实运行时导入 vitest/config 时才纳入
   // Vitest：仓根 package.json 不在 base-sync 分发范围内（子仓保留自有依赖），
   // 对只引用 Vitest 类型的配置无条件强制该依赖会阻断子仓的锁校验与桌面装配。
-  if (!runtimeImportsVitestConfig(root)) return manifest;
+  if (!runtimeImportsVitestConfig(root, policy)) return manifest;
   // 兼容闭包只采用仓根已声明且 pnpm 已锁定的 Vitest；不借用宿主开发依赖。
   const source = readJson(join(root, "package.json"), "package.json");
   const locked = loadPnpmRuntimeLock(root).importers?.["."]?.devDependencies?.vitest;

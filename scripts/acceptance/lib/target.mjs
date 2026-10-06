@@ -15,7 +15,8 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { inspectClientIdentity } from "./client-identity.mjs";
 import { diagnosticReason, publicDiagnostic, publicUrl, safeError, safeHttpEndpoint, sanitizePublic } from "./live/safety.mjs";
 
@@ -78,10 +79,29 @@ function urlsFromPorts(ports) {
 }
 
 /**
+ * 部署产品的权威身份：一律取本仓 `product.manifest.json`。
+ *
+ * profile 的 v2 契约（scripts/acceptance/lib/profile-contract.mjs）没有 productId 字段，
+ * 从 profile 推导只会得到 null，等于 client-runtime 从不校验“装的是不是本产品”。
+ * 清单缺失或身份非法时返回 null 并带出原因——调用方必须据此拒绝，而不是退化成“不校验”。
+ */
+export function repositoryProductIdentity(root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..")) {
+  const manifestPath = join(root, "product.manifest.json");
+  if (!existsSync(manifestPath)) return { productId: null, reason: "repository_product_manifest_missing" };
+  let manifest;
+  try { manifest = JSON.parse(readFileSync(manifestPath, "utf-8")); }
+  catch { return { productId: null, reason: "repository_product_manifest_invalid" }; }
+  const productId = manifest?.productId;
+  return typeof productId === "string" && /^[a-z0-9][a-z0-9-]{1,63}$/u.test(productId)
+    ? { productId, reason: null }
+    : { productId: null, reason: "repository_product_manifest_invalid" };
+}
+
+/**
  * 解析本次验收的环境档位。
  * 环境只允许一个事实值；CLI、父执行器和显式 profile 相互冲突时拒绝运行。
  */
-export function resolveEnvironment(profile, { flag = null, allowProdWrites = false } = {}) {
+export function resolveEnvironment(profile, { flag = null, allowProdWrites = false, repositoryRoot = null } = {}) {
   const declared = profile?.environment ?? DEFAULT_ENVIRONMENT;
   const inherited = process.env.ACCEPTANCE_ENV_KIND || null;
   const explicitProfileKind = profile?.environmentKindDeclared === false ? null : profile?.environment?.kind ?? null;
@@ -137,7 +157,17 @@ export function resolveEnvironment(profile, { flag = null, allowProdWrites = fal
     declaredTarget: kind === "client-runtime" ? true : declaredTarget,
     targetDeclaredExplicitly: declaredTarget,
     supportDir,
-    expectedProductId: profile?.productId ?? profile?.identity?.productId ?? null,
+    // client-runtime 必须校验“装的是本产品”；身份只认仓内产品清单这一事实源。
+    ...(kind === "client-runtime"
+      ? (() => {
+          const repository = repositoryProductIdentity(repositoryRoot ?? undefined);
+          const declared = profile?.productId ?? profile?.identity?.productId ?? null;
+          if (declared !== null && declared !== repository.productId) {
+            throw new Error(`profile 声明的产品身份与产品清单不一致（清单：${repository.productId ?? "缺失或非法"}）`);
+          }
+          return { expectedProductId: repository.productId, expectedProductIdSource: "product.manifest.json", expectedProductIdUnavailableReason: repository.reason };
+        })()
+      : { expectedProductId: null, expectedProductIdSource: null, expectedProductIdUnavailableReason: null }),
     allowWrites: Boolean(allowProdWrites || declared.allowWrites || process.env.ACCEPTANCE_ALLOW_PROD_WRITES === "1"),
     timeouts: { ...DEFAULT_ENVIRONMENT.timeouts, ...(declared.timeouts ?? {}) },
     /** 生产档位禁止的步骤：装依赖、迁移/种子复位、起本机预览、写演示夹具 */
@@ -207,7 +237,19 @@ async function probe(url, { timeoutMs, expect = "any", identity = null, requireS
 /** 目标可达性与身份探测：/health（server）+ 三端首页可加载 */
 export async function probeEnvironment({ env, timeoutMs = 8000 } = {}) {
   const checks = [];
-  const client = env.kind === "client-runtime" ? inspectClientIdentity({ supportDir: env.supportDir, urls: env.urls, expectedProductId: env.expectedProductId }) : null;
+  /**
+   * client-runtime 没有权威产品身份时不得探测：expectedProductId 为 null 会让
+   * inspectClientIdentity 跳过产品身份比对，等于任何自洽的“别的产品”安装态都能过。
+   * 这里直接判失败，不退回“不校验”。
+   */
+  if (env.kind === "client-runtime" && !env.expectedProductId) {
+    checks.push({ name: "client.identity", ok: false,
+      reason: "仓库产品清单缺失或身份非法，无法校验已安装客户端的 productId；拒绝把 client-runtime 判为可用",
+      diagnostic: { category: env.expectedProductIdUnavailableReason ?? "repository_product_identity_unavailable" } });
+  }
+  const client = env.kind === "client-runtime" && env.expectedProductId
+    ? inspectClientIdentity({ supportDir: env.supportDir, urls: env.urls, expectedProductId: env.expectedProductId })
+    : null;
   /**
    * Kind-scoped strictness:
    *   - local-preview：维持既有契约（JSON 健康页即可），不引入实例身份耦合；
@@ -243,7 +285,9 @@ export function fingerprintEnvironment({ repoRoot, env, profile, git = null }) {
   const envFile = loadEnvFile(join(repoRoot, ".env"));
   const clientEnv = env.supportDir ? loadEnvFile(join(env.supportDir, "runtime", ".env")) : {};
   const dshPkg = readJsonSafe(join(repoRoot, "packages", "runtime", "dsh-gate", "package.json"));
-  const client = env.kind === "client-runtime" ? inspectClientIdentity({ supportDir: env.supportDir, urls: env.urls, expectedProductId: env.expectedProductId }) : null;
+  const client = env.kind === "client-runtime" && env.expectedProductId
+    ? inspectClientIdentity({ supportDir: env.supportDir, urls: env.urls, expectedProductId: env.expectedProductId })
+    : null;
   const runtimeVersion = client?.ok ? client.identity.payloadVersion : null;
   const installState = client?.ok ? client.installState : null;
   const pick = (obj, keys) => Object.fromEntries(keys.map((k) => [k, k === "LLM_BASE_URL" ? obj?.[k] ? publicUrl(obj[k]) : "" : obj?.[k] ?? ""]));
