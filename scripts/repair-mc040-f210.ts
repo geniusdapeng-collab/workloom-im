@@ -2,7 +2,7 @@
  * MC-040 / F2.10 复现：名册缺 company-ceo 时，ceo.* 写动作必须被正确拒写；
  * 种子补齐岗位事实后必须能真实写入。两个方向都在真实私有 PG 上执行。
  *
- *   node --import tsx scripts/repair-mc040-f210.mts <before|after> <DATABASE_URL>
+ *   node --import tsx scripts/repair-mc040-f210.ts <before|after> <DATABASE_URL>
  *
  * before：名册无 company-ceo → 期待 gateway 段① 以「未声明 fence_bindings」拒绝；
  *         此时若无拒绝（即 F2.10 放行），脚本以非零退出——红。
@@ -11,11 +11,11 @@
 import pg from "pg";
 import { withPrivatePg } from "./private-pg.mts";
 import { ceoActor, runBriefingBeat } from "@workloom/base/captain";
-import { ensureCeoRosterRow } from "./seed-ceo-roster.js";
+import { ensureCeoRosterRow } from "./seed-ceo-roster.mjs";
 
 const mode = process.argv[2];
 if (!["before", "after"].includes(mode ?? "")) {
-  console.error("usage: repair-mc040-f210.mts <before|after>");
+  console.error("usage: repair-mc040-f210.ts <before|after>");
   process.exit(2);
 }
 

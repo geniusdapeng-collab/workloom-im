@@ -757,6 +757,18 @@ test("权威子仓清单的附加排除不会切断公共基座依赖闭包", ()
   const baseScope = loadScope(REAL_BASE);
   const inventory = JSON.parse(readFileSync(join(REAL_BASE, "sync/child-repos.json"), "utf8"));
   assert.ok(inventory.children.length > 0);
+  /**
+   * 逐仓排除项的两种语义必须被分开，不能互相掩护：
+   * ①「子仓保留实现」——基座仍然下发的文件依赖一个被某个子仓排除的目标（例如行业自己的网关组合根）。
+   *    它必须在 dependencyClosure.allowedExcludedTargets 里逐对登记，因为子仓必须真有这个文件；
+   * ②「子仓不消费」——文件本身被 extraExclude 从该子仓删掉（例如 andromeda 的 platform-ops/**）。
+   *    它的相对依赖在基座内成立、在该子仓里本就不存在，因此不得登记成逐对例外
+   *    （那会连带要求子仓存在该目标文件），只能登记为 dependencyClosure.selfContainedExcludedSources。
+   */
+  const allowedPairs = new Set((baseScope.raw.dependencyClosure?.allowedExcludedTargets ?? [])
+    .map((entry) => `${entry.importer}\0${entry.target}`));
+  const selfContained = new Set((baseScope.raw.dependencyClosure?.selfContainedExcludedSources ?? [])
+    .map((entry) => (typeof entry === "string" ? entry : entry?.path)));
   for (const child of inventory.children) {
     const scope = withExtraExclude(baseScope, child.extraExclude ?? []);
     assert.deepEqual(
@@ -764,6 +776,12 @@ test("权威子仓清单的附加排除不会切断公共基座依赖闭包", ()
       [],
       `${child.repo} 的 extraExclude 会切断公共基座相对依赖`,
     );
+    for (const importer of selfContained) {
+      assert.ok(
+        ![...allowedPairs].some((pair) => pair.startsWith(`${importer}\0`)),
+        `${importer} 是自包含排除源，不得再登记逐对例外`,
+      );
+    }
   }
 });
 

@@ -7,7 +7,7 @@
  * 与 H-04 因此全红。本文件把这两个语义固化成断言。
  */
 import { describe, expect, it } from "vitest";
-import { CEO_PRESET_KEY, ceoRosterId, ensureCeoRosterRow, type CeoRosterQuery } from "./seed-ceo-roster.js";
+import { CEO_PRESET_KEY, ceoRosterId, ensureCeoRosterRow, type CeoRosterQuery } from "./seed-ceo-roster.mjs";
 
 interface Row { id: string; workspace_id: string; preset_key: string; status: string }
 

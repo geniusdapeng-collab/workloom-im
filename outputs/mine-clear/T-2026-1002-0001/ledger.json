@@ -125,13 +125,13 @@
           "kind": "sample",
           "given": "私有 Unix 集群上名册无 company-ceo（before 方向）",
           "expect": "ceo.briefing 被 gateway 段① 以「未声明 fence_bindings」（F2.10）拒绝，且不留任何事件；actor 解析出空 fence_bindings",
-          "command": "node --import tsx scripts/repair-mc040-f210.mts before",
+          "command": "node --import tsx scripts/repair-mc040-f210.ts before",
           "exec": {
             "file": "node",
             "args": [
               "--import",
               "tsx",
-              "scripts/repair-mc040-f210.mts",
+              "scripts/repair-mc040-f210.ts",
               "before"
             ]
           },
@@ -151,13 +151,13 @@
           "kind": "property",
           "given": "同一私有集群上种子补齐 CEO 名册行（after 方向）",
           "expect": "ceo.briefing 真实落库并返回 eventId，事件可回读且 who.id=company-ceo，actor 取得声明围栏 R1/R2",
-          "command": "node --import tsx scripts/repair-mc040-f210.mts after",
+          "command": "node --import tsx scripts/repair-mc040-f210.ts after",
           "exec": {
             "file": "node",
             "args": [
               "--import",
               "tsx",
-              "scripts/repair-mc040-f210.mts",
+              "scripts/repair-mc040-f210.ts",
               "after"
             ]
           },
@@ -226,13 +226,13 @@
           "kind": "sample",
           "given": "私有 Unix 集群上 H-13 夹具不写 finally（before 方向）",
           "expect": "profiles.archive.dataMode 被永久写成 real，后续用例读到 real（复现连坐根因）",
-          "command": "node --import tsx scripts/repair-mc043-h13.mts before",
+          "command": "node --import tsx scripts/repair-mc043-h13.ts before",
           "exec": {
             "file": "node",
             "args": [
               "--import",
               "tsx",
-              "scripts/repair-mc043-h13.mts",
+              "scripts/repair-mc043-h13.ts",
               "before"
             ]
           },
@@ -252,13 +252,13 @@
           "kind": "property",
           "given": "同一夹具把复位放进 finally（after 方向）",
           "expect": "两个观察者都看到 simulated，archive 与复位前逐字节相同",
-          "command": "node --import tsx scripts/repair-mc043-h13.mts after",
+          "command": "node --import tsx scripts/repair-mc043-h13.ts after",
           "exec": {
             "file": "node",
             "args": [
               "--import",
               "tsx",
-              "scripts/repair-mc043-h13.mts",
+              "scripts/repair-mc043-h13.ts",
               "after"
             ]
           },
@@ -328,13 +328,13 @@
           "kind": "sample",
           "given": "种子补齐后按工作区派生 id 回读",
           "expect": "两个示例种子各自写入自己的 company-ceo 行，后写者不再被 ON CONFLICT 静默丢行",
-          "command": "node --import tsx scripts/repair-mc040-f210.mts after",
+          "command": "node --import tsx scripts/repair-mc040-f210.ts after",
           "exec": {
             "file": "node",
             "args": [
               "--import",
               "tsx",
-              "scripts/repair-mc040-f210.mts",
+              "scripts/repair-mc040-f210.ts",
               "after"
             ]
           },
@@ -354,13 +354,13 @@
           "kind": "property",
           "given": "补齐名册后 CEO 节拍真实写入",
           "expect": "ceo.briefing 返回 eventId，事件 who.id=company-ceo",
-          "command": "node --import tsx scripts/repair-mc040-f210.mts after",
+          "command": "node --import tsx scripts/repair-mc040-f210.ts after",
           "exec": {
             "file": "node",
             "args": [
               "--import",
               "tsx",
-              "scripts/repair-mc040-f210.mts",
+              "scripts/repair-mc040-f210.ts",
               "after"
             ]
           },
@@ -423,13 +423,13 @@
           "kind": "sample",
           "given": "H-13 夹具的写入在 finally 中按原字节复位",
           "expect": "复位后 archive 与夹具起点逐字节相同，工作区回到 simulated",
-          "command": "node --import tsx scripts/repair-mc043-h13.mts after",
+          "command": "node --import tsx scripts/repair-mc043-h13.ts after",
           "exec": {
             "file": "node",
             "args": [
               "--import",
               "tsx",
-              "scripts/repair-mc043-h13.mts",
+              "scripts/repair-mc043-h13.ts",
               "after"
             ]
           },

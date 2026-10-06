@@ -2,7 +2,7 @@
  * MC-043 / H-13 复现：onboarding 夹具若把工作区永久翻到 dataMode=real，
  * 后续 Quest 会拿不到模拟回执、线程被判 failed。夹具的写入必须在 finally 复位。
  *
- *   node --import tsx scripts/repair-mc043-h13.mts <before|after> <DATABASE_URL>
+ *   node --import tsx scripts/repair-mc043-h13.ts <before|after> <DATABASE_URL>
  *
  * before：模拟「门禁放行」把 profiles.archive.dataMode 写成 real 且不复位 →
  *         第二个写入者看到的仍是 real，H-13 之后的所有用例被连坐。非零退出。
@@ -14,7 +14,7 @@ import { withPrivatePg } from "./private-pg.mts";
 
 const mode = process.argv[2];
 if (!["before", "after"].includes(mode ?? "")) {
-  console.error("usage: repair-mc043-h13.mts <before|after>");
+  console.error("usage: repair-mc043-h13.ts <before|after>");
   process.exit(2);
 }
 
