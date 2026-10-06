@@ -69,8 +69,6 @@ export async function managedCheckout({ repo, token, directory }) {
     const staging = await mkdtemp(join(parent, '.preparing-')); const root = join(staging, 'repo');
     try {
       await git(['clone', '--quiet', '--no-checkout', '--filter=blob:none', '--branch', 'main', remote, root], { token, remote });
-      await git(['sparse-checkout', 'init', '--cone'], { cwd: root });
-      await git(['sparse-checkout', 'set', 'scripts/ci', 'scripts/delivery', 'scripts/tools', 'docs', '.cnb'], { cwd: root });
       await git(['checkout', '--quiet', '--detach', 'main'], { cwd: root });
       const file = await open(join(staging, 'owner.json'), 'wx', 0o600);
       try { await file.writeFile(JSON.stringify(identity)); } finally { await file.close(); }
@@ -84,6 +82,9 @@ export async function managedCheckout({ repo, token, directory }) {
   if (await git(['status', '--porcelain'], { cwd: root })) throw new Error('Account checkout contains uncommitted changes; preserve them');
   await git(['fetch', '--quiet', '--no-tags', remote, 'refs/heads/main'], { cwd: root, token, remote });
   await git(['checkout', '--quiet', '--detach', 'FETCH_HEAD'], { cwd: root });
+  // These are verified, task-owned clean clones. Materialize their complete
+  // product facts before the target's offline dependency inventory is refreshed.
+  await git(['sparse-checkout', 'disable'], { cwd: root });
   return root;
 }
 

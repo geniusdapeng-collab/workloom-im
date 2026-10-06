@@ -61,6 +61,32 @@ test('installation preflight rejects incomplete assets, invalid or missing produ
   const root = await fixture(t); const incomplete = { ...assets }; delete incomplete[CORE_ASSETS[0]];
   await assert.rejects(plan(root, { assets: incomplete }), /closure/);
 });
+test('real target offline inventory includes product facts and newly installed runtime/CI assets without replacing the target generator', async t => {
+  const root = await fixture(t); await mkdir(join(root, 'scripts')); await mkdir(join(root, 'docs')); await mkdir(join(root, 'product'));
+  const generator = await readFile(join(sourceRoot, 'scripts/oss-inventory.mjs'), 'utf8');
+  await writeFile(join(root, 'scripts/oss-inventory.mjs'), generator);
+  await writeFile(join(root, 'oss-components.json'), JSON.stringify({ components: [{ name: 'yaml', channel: 'npm', package: 'yaml' }] }));
+  await writeFile(join(root, 'product/package.json'), JSON.stringify({ dependencies: { 'actual-product-dependency': '1.2.3' } }));
+  await git(['init', '--quiet'], { cwd: root }); await git(['add', '.'], { cwd: root }); await git(['commit', '--quiet', '-m', 'actual product inventory fixture'], { cwd: root });
+  const result = await plan(root); assert.deepEqual(result.generatedPaths, ['docs/OPEN_SOURCE_COMPONENTS.md']);
+  const written = await applyInstallation(result, root); assert.ok(written.includes('docs/OPEN_SOURCE_COMPONENTS.md'));
+  const inventory = await readFile(join(root, 'docs/OPEN_SOURCE_COMPONENTS.md'), 'utf8');
+  assert.match(inventory, /actual-product-dependency/); assert.match(inventory, /scripts\/delivery\/runtime\/package.json/); assert.match(inventory, /node:24\.19\.0-bookworm/);
+  assert.equal(await readFile(join(root, 'scripts/oss-inventory.mjs'), 'utf8'), generator);
+  assert.equal((await plan(root)).changes.size, 0);
+});
+test('sparse product facts fail inventory preflight before installation writes and generator failure never returns a successful package', async t => {
+  const root = await fixture(t); await mkdir(join(root, 'scripts')); await mkdir(join(root, 'docs')); await mkdir(join(root, 'product'));
+  await cp(join(sourceRoot, 'scripts/oss-inventory.mjs'), join(root, 'scripts/oss-inventory.mjs'));
+  await writeFile(join(root, 'oss-components.json'), '{"components":[]}'); await writeFile(join(root, 'product/package.json'), '{}');
+  await git(['init', '--quiet'], { cwd: root }); await git(['add', '.'], { cwd: root }); await git(['commit', '--quiet', '-m', 'sparse inventory fixture'], { cwd: root });
+  await git(['sparse-checkout', 'set', '--cone', 'scripts', 'docs'], { cwd: root });
+  await assert.rejects(plan(root), /complete tracked checkout/); assert.equal(await readFile(join(root, '.cnb.yml'), 'utf8'), original);
+  await assert.rejects(readFile(join(root, INSTALL_MARKER)), { code: 'ENOENT' });
+  await git(['sparse-checkout', 'disable'], { cwd: root });
+  await assert.rejects(applyInstallation(await plan(root), root), /Target OSS generation failed/);
+  await assert.rejects(readFile(join(root, 'docs/OPEN_SOURCE_COMPONENTS.md')), { code: 'ENOENT' });
+});
 test('an unknown hardened Git/PR gate is preserved and rejected before target writes', async t => {
   const root = await fixture(t); await mkdir(join(root, 'scripts/ci'), { recursive: true });
   const hardened = 'export async function runLockGate() { throw new Error("Target-specific source binding"); }\n';
