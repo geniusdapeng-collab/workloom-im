@@ -495,6 +495,9 @@ test("B 端移动主导航与触控入口真实可用", async ({ page }) => {
 });
 
 test("B 端移动关键公共能力在窄屏、长中文与 200% 文字下不溢出", async ({ page }) => {
+  // 该门禁串行覆盖 10 个真实路由 × 2 个视口，且每个路由都重新整页加载并入帧检查；
+  // 与 PC 同形矩阵一致标记为慢测试，避免 CI 上真实加载耗时被误判为页面卡死（timeout）。
+  test.slow();
   const routes = ["/", "/inbox", "/tasks", "/operations", "/events", "/exams", "/memory", "/night", "/models", "/account"];
   await page.setViewportSize({ width: 390, height: 844 });
   await enterBMobileOwner(page);
