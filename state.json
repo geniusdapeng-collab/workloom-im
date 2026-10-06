@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 442,
+  "revision": 444,
   "tasks": {
     "231": {
       "number": 231,
@@ -1517,7 +1517,14 @@
       "reviewFailures": null,
       "blockedUntil": 0,
       "review": null,
-      "candidate": null,
+      "candidate": {
+        "number": 248,
+        "branch": "delivery/candidate/pr-243-8050895e5ec6eed9cc75aba5a56f0b6a",
+        "headSha": "d691e15cd9390e195def2a9896194d1b18a5b73d",
+        "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+        "marker": "delivery-origin:243:d691e15cd9390e195def2a9896194d1b18a5b73d:b949346721360f3c20f10c628d5c7b214bc2b95e",
+        "at": 1791247508098
+      },
       "headSha": "d691e15cd9390e195def2a9896194d1b18a5b73d",
       "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
       "branch": "task/T-2026-1006-1002",
@@ -12398,6 +12405,36 @@
       },
       "previous": "de006c0899040f2f102c0885c25d668eabf2e75f679884313d133edce204c0ab",
       "digest": "c3b6b362e6aa66fd04d21431419a05c37cab8af9e4e101c7366dbbfe80be04ff"
+    },
+    {
+      "sequence": 443,
+      "at": "2026-10-06T00:45:08.098Z",
+      "kind": "task",
+      "data": {
+        "number": 243,
+        "patch": {
+          "candidate": {
+            "number": 248,
+            "branch": "delivery/candidate/pr-243-8050895e5ec6eed9cc75aba5a56f0b6a",
+            "headSha": "d691e15cd9390e195def2a9896194d1b18a5b73d",
+            "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+            "marker": "delivery-origin:243:d691e15cd9390e195def2a9896194d1b18a5b73d:b949346721360f3c20f10c628d5c7b214bc2b95e",
+            "at": 1791247508098
+          }
+        }
+      },
+      "previous": "c3b6b362e6aa66fd04d21431419a05c37cab8af9e4e101c7366dbbfe80be04ff",
+      "digest": "7218bdbf527570152e7e3dd0e038be2ecd1a2844eb5dcf55ae54b6898a3870e9"
+    },
+    {
+      "sequence": 444,
+      "at": "2026-10-06T00:45:23.961Z",
+      "kind": "transaction",
+      "data": {
+        "id": "e00c3099-1344-4f89-b7a5-f18975f1ca6f"
+      },
+      "previous": "7218bdbf527570152e7e3dd0e038be2ecd1a2844eb5dcf55ae54b6898a3870e9",
+      "digest": "83357ede4f317463e2f90d1a151f50166c1b66f4ad5de775f1b6e0e3f6777660"
     }
   ]
 }
