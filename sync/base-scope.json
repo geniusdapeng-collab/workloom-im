@@ -377,15 +377,15 @@
       "reason": "种子预检负向测试连接固定的 127.0.0.1:1 不可达地址，用户名和密码均为 invalid。"
     },
     "scripts/seed-aipm.ts": {
-      "sha256": "45cdb04ab5c56d8144ac5c1e508a72d5c380944f2d8b9ac547dfa9e4516922c6",
+      "sha256": "e7a422b96eda3fd223c903da8c9d65a4649bbacb26c798848c6c4f3b10621a22",
       "findings": [
         {
           "rule": "credential-in-url",
-          "line": 30
+          "line": 31
         },
         {
           "rule": "credential-in-url",
-          "line": 32
+          "line": 33
         }
       ],
       "reason": "AI 产品经理示例种子只使用仓库 docker-compose 的本机 owner / gateway 测试默认值；生产值只能来自环境变量。"

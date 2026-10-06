@@ -22,6 +22,7 @@ import {
   loadVerifiedBundleWorkforcePresets,
 } from "@workloom/base/bundles";
 import { loadFencePack } from "@workloom/base/fence-engine";
+import { ensureCeoRosterRow } from "./seed-ceo-roster.js";
 
 import { fileURLToPath } from "node:url";
 const REPO_ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..");
@@ -151,14 +152,13 @@ export async function seedAiPm(): Promise<void> {
   /**
    * MC-040：数字 CEO 是基座公共岗位（CEO Loop 节拍），不由行业 Bundle 声明；
    * 名册缺行会让 ceo.* 写动作被 F2.10 拒绝。这里与酒店种子同口径地补齐 CEO 岗位事实。
+   * MC-121：名册 id 按工作区派生——`agents.id` 是全局主键，两个示例种子硬编码同一个裸 id
+   * 会让后写的那个静默丢行。
    */
-  await q(
-    `INSERT INTO agents (id, workspace_id, preset_key, name, version, kind, readonly, fence_bindings, skills, status, meta)
-     VALUES ('agt-'||$1||'-company-ceo',$1,'company-ceo','顾云峥','v1.0','commander',false,'["R1","R2"]','[]','ready',$2)
-     ON CONFLICT (id) DO NOTHING`,
-    [WS_ID, JSON.stringify({ description: "公司负责人：主持经营晨报与 L2 裁决节拍", night_shift: false, high_risk: false })],
-  );
-  console.log("✓ 数字 CEO 岗位入册（company-ceo，绑定基线围栏 R1/R2）");
+  const ceoId = await ensureCeoRosterRow(q, WS_ID, {
+    description: "公司负责人：主持经营晨报与 L2 裁决节拍", night_shift: false, high_risk: false,
+  });
+  console.log(`✓ 数字 CEO 岗位入册（${ceoId} / company-ceo，绑定基线围栏 R1/R2）`);
 
   // 示例团队也必须具备可运行的「档案 + 阶段 + 目标」三要素，不能出现首页看似
   // 就绪、首个任务却因缺档案被拒绝的断点。档案内容来自 ai-pm Bundle 种子，
