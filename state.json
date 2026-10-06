@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 2169,
+  "revision": 2171,
   "tasks": {
     "231": {
       "number": 231,
@@ -86888,6 +86888,43 @@
       },
       "previous": "0045606f7f77f155cb371d7d87757951770d2581125f06ed52a89f77f833d8c4",
       "digest": "23379908138eaa84e2deb1d0ff2937b8cbaa7f0571ad48b7e6c9f38f86655f48"
+    },
+    {
+      "sequence": 2170,
+      "at": "2026-10-06T17:21:44.965Z",
+      "kind": "platform_ai_disabled",
+      "data": {
+        "number": 264,
+        "merge": {
+          "sha": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+          "sourceSha": "b155e7b73e2fef5550985963c892531f29292c9d",
+          "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+          "checkSha": "2c265ed2a40e4f8bf2b85ce587ed72ff761b6285",
+          "mergedBy": "cnb.dYiF05kxAGA",
+          "verifiedAt": "2026-10-06T17:20:59.341Z"
+        },
+        "activation": {
+          "repo": "workloom-ai/workloom-im",
+          "mainSha": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+          "policyHash": "8b6db8edf768d3fa0245e8f8b068deec502ae326808d729e0143f73065d23818",
+          "humanClickRequired": false
+        },
+        "platformAI": false,
+        "reviewProvider": "codex",
+        "cronRestored": true
+      },
+      "previous": "23379908138eaa84e2deb1d0ff2937b8cbaa7f0571ad48b7e6c9f38f86655f48",
+      "digest": "7a54779eecdf0804bb537ad05cb6a385175509c837dc77480aef27cdb1d8c851"
+    },
+    {
+      "sequence": 2171,
+      "at": "2026-10-06T17:21:39.152Z",
+      "kind": "transaction",
+      "data": {
+        "id": "dbb558ac-fb01-4e57-97d7-d99f25a91c41"
+      },
+      "previous": "7a54779eecdf0804bb537ad05cb6a385175509c837dc77480aef27cdb1d8c851",
+      "digest": "4f9122ad091a5553e7553d34d4654fa3df48a7453e6d3ebd15667f7ebf0dbe62"
     }
   ]
 }
