@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 1111,
+  "revision": 1113,
   "tasks": {
     "231": {
       "number": 231,
@@ -375,17 +375,13 @@
         }
       },
       "recoveryCount": 1,
-      "recoveryIntent": {
-        "headSha": "5e0044fe54300ab43df526a457bb06f5d429edd9",
-        "reason": "不可修改候选 #256 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
-        "at": 1791266109207
-      },
+      "recoveryIntent": null,
       "error": "不可修改候选 #256 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
       "blockedUntil": 1791266709207,
       "recovery": {
-        "marker": "delivery-repair:edf027bbf9aba1815ea12230",
-        "reviewId": "2107325130036912128",
-        "dispatchedAt": 1791260437963
+        "marker": "delivery-repair:039b0e1ba074b175e82d2fbd",
+        "reviewId": "2107349026865844224",
+        "dispatchedAt": 1791266135428
       },
       "reviewFailures": null,
       "candidate": {
@@ -37750,6 +37746,34 @@
       },
       "previous": "31e8293bafc35d3a3b41db706d58c071144233d45000b9dd7ecbdc3052df5c76",
       "digest": "b256f1fe2c031fbd9d050d95e8c63cc14f946b03846bbed942c3ed53d3ac0b8a"
+    },
+    {
+      "sequence": 1112,
+      "at": "2026-10-06T05:55:09.207Z",
+      "kind": "task",
+      "data": {
+        "number": 232,
+        "patch": {
+          "recovery": {
+            "marker": "delivery-repair:039b0e1ba074b175e82d2fbd",
+            "reviewId": "2107349026865844224",
+            "dispatchedAt": 1791266135428
+          },
+          "recoveryIntent": null
+        }
+      },
+      "previous": "b256f1fe2c031fbd9d050d95e8c63cc14f946b03846bbed942c3ed53d3ac0b8a",
+      "digest": "b1673ccbda406059b8ac3342c74b9855bda0461917dc6a9db5081c00ede9782e"
+    },
+    {
+      "sequence": 1113,
+      "at": "2026-10-06T05:55:35.428Z",
+      "kind": "transaction",
+      "data": {
+        "id": "9ca7fc40-d612-49b3-9fa2-3a0c258c899a"
+      },
+      "previous": "b1673ccbda406059b8ac3342c74b9855bda0461917dc6a9db5081c00ede9782e",
+      "digest": "6e476fd53d836ee30d953347c6788e9ebe27cd6669e1b0ae4defc6977373d027"
     }
   ]
 }
