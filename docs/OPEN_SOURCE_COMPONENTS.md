@@ -314,7 +314,7 @@
 
 | 镜像 | 出现位置 |
 |---|---|
-| `node:24.19.0-bookworm` | .cnb.yml |
+| `node:24.19.0-bookworm` | .cnb.yml、scripts/delivery/bootstrap-cnb.yml、scripts/delivery/cnb.yml |
 | `pgvector/pgvector:pg17` | .cnb.yml、docker-compose.yml#postgres |
 
 ### 2.4 工具链
