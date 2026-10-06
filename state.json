@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 690,
+  "revision": 692,
   "tasks": {
     "231": {
       "number": 231,
@@ -131,7 +131,7 @@
     },
     "232": {
       "number": 232,
-      "status": "waiting_ci",
+      "status": "parked",
       "firstSeen": 1791242108737,
       "attempts": {},
       "headSha": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4",
@@ -361,10 +361,14 @@
           "sync": 35
         }
       },
-      "recoveryCount": 0,
-      "recoveryIntent": null,
-      "error": "检查/评审阻断：Required check db-gate missing/failed/ambiguous; No current complete AI review",
-      "blockedUntil": 0,
+      "recoveryCount": 1,
+      "recoveryIntent": {
+        "headSha": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4",
+        "reason": "不可修改候选 #251 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
+        "at": 1791252610826
+      },
+      "error": "不可修改候选 #251 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
+      "blockedUntil": 1791253210826,
       "recovery": {
         "marker": "delivery-repair:69b4f892cba49c16487ec5d4",
         "reviewId": "2107270944750473216",
@@ -21756,6 +21760,37 @@
       },
       "previous": "4dd944b83271662ac2e606b9ab60313062cfc9156d7bf5e4686687f2a49cbe68",
       "digest": "471f884bd97cf1b5b4b0aa179faaae464480c4945837d98c15522e9d91e42a61"
+    },
+    {
+      "sequence": 691,
+      "at": "2026-10-06T02:10:10.826Z",
+      "kind": "task",
+      "data": {
+        "number": 232,
+        "patch": {
+          "status": "parked",
+          "recoveryCount": 1,
+          "recoveryIntent": {
+            "headSha": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4",
+            "reason": "不可修改候选 #251 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
+            "at": 1791252610826
+          },
+          "error": "不可修改候选 #251 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
+          "blockedUntil": 1791253210826
+        }
+      },
+      "previous": "471f884bd97cf1b5b4b0aa179faaae464480c4945837d98c15522e9d91e42a61",
+      "digest": "029f625578ee7fdd6a5a140851765bb91a7f7e0239456a987a8a25a0ebf590b9"
+    },
+    {
+      "sequence": 692,
+      "at": "2026-10-06T02:10:27.124Z",
+      "kind": "transaction",
+      "data": {
+        "id": "e0086bec-6291-4571-8338-dace5218f1f6"
+      },
+      "previous": "029f625578ee7fdd6a5a140851765bb91a7f7e0239456a987a8a25a0ebf590b9",
+      "digest": "c6116efdff8ad78f77bdebcd02dfa9609fcedd290649be1c0e484a1c302025c9"
     }
   ]
 }
