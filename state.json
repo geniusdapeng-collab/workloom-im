@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 803,
+  "revision": 805,
   "tasks": {
     "231": {
       "number": 231,
@@ -2809,12 +2809,12 @@
     },
     "253": {
       "number": 253,
-      "status": "parked",
+      "status": "waiting_review",
       "firstSeen": 1791255908868,
       "attempts": {},
       "headSha": "3a185e26d2241f1f0951866bfafb13646280ba42",
       "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
-      "updatedAt": 1791256255967,
+      "updatedAt": 1791257108821,
       "admission": {
         "number": 253,
         "headSha": "3a185e26d2241f1f0951866bfafb13646280ba42",
@@ -2842,7 +2842,16 @@
       "reviewAttemptAt": 1791255926328,
       "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
       "reviewBuild": null,
-      "reviewDispatch": null,
+      "reviewDispatch": {
+        "headSha": "3a185e26d2241f1f0951866bfafb13646280ba42",
+        "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+        "at": 1791257108821,
+        "title": "WorkLoom AI review #253 289501dcc5e61740380d",
+        "knownBuilds": [
+          "cnb-8uq-1k47fjoan",
+          "cnb-4h1-1k47efce9"
+        ]
+      },
       "review": null,
       "error": "AI review did not pass without unresolved issues",
       "reviewFailures": {
@@ -25737,6 +25746,39 @@
       },
       "previous": "398a5ce40cfa6ff6928a99a65f5da489c885e7f9e1349e8b235f941722213601",
       "digest": "17932deaf54589e9cd17d393c0cfab47eca842a1e4ffd14c47103a27516c84b4"
+    },
+    {
+      "sequence": 804,
+      "at": "2026-10-06T03:25:08.821Z",
+      "kind": "task",
+      "data": {
+        "number": 253,
+        "patch": {
+          "status": "waiting_review",
+          "reviewDispatch": {
+            "headSha": "3a185e26d2241f1f0951866bfafb13646280ba42",
+            "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+            "at": 1791257108821,
+            "title": "WorkLoom AI review #253 289501dcc5e61740380d",
+            "knownBuilds": [
+              "cnb-8uq-1k47fjoan",
+              "cnb-4h1-1k47efce9"
+            ]
+          }
+        }
+      },
+      "previous": "17932deaf54589e9cd17d393c0cfab47eca842a1e4ffd14c47103a27516c84b4",
+      "digest": "4e359fefd50d9bb8bcb7057174870d4de2ed09ba163275fca20a71471c40ea94"
+    },
+    {
+      "sequence": 805,
+      "at": "2026-10-06T03:25:17.821Z",
+      "kind": "transaction",
+      "data": {
+        "id": "88a70c9d-dcb0-494f-98f3-a0bb48aad0c7"
+      },
+      "previous": "4e359fefd50d9bb8bcb7057174870d4de2ed09ba163275fca20a71471c40ea94",
+      "digest": "52c2021e2a94e4bc6a2b3c9ed6703fc46b6697067908d1dd8371e3bfd4964f75"
     }
   ]
 }
