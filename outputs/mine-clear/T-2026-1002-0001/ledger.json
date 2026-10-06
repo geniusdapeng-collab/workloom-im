@@ -5,7 +5,7 @@
   "repo_path": "/workspace",
   "title": "",
   "created_at": "2026-10-06T00:45:15.713Z",
-  "updated_at": "2026-10-06T02:38:51.238Z",
+  "updated_at": "2026-10-06T02:40:19.173Z",
   "baseline": {
     "audit": {
       "commit": "67129d3b870cf2572aa0ad2e3bfaae7d04170923",
@@ -16,8 +16,8 @@
       "notes": "审计基线 = 修复提交 67129d3（本轮源码改动全覆盖）；台账本身另以文档提交记录。"
     },
     "repair": {
-      "commit": "d751d370c52a6158a97378df4fc3e85a3067272c",
-      "notes": "repair 基线 = 本轮修复提交（含 server 专属 runner、证据重绑与自带私有集群的复现脚本）"
+      "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab",
+      "notes": "repair 基线 = 本轮修复提交（server 专属 runner、证据重绑、自带私有集群的复现脚本）"
     },
     "acceptance": {
       "commit": null,
@@ -137,14 +137,14 @@
           },
           "last_result": "pass",
           "run": {
-            "path": "runs/MC-040-0-1791254301866.json",
-            "sha256": "104dd2b44f7ef0b8bef974a0095cdf73c006a96b15ef53d6d7e017ec870e1471",
-            "commit": "d751d370c52a6158a97378df4fc3e85a3067272c"
+            "path": "runs/MC-040-0-1791254388315.json",
+            "sha256": "b1ecddf5a11f6d12efc58ef6d9fe14d7aa8976c16259636f6a543b1e8af9703f",
+            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
           },
           "evidence": {
-            "path": "evidence/MC-040-0-1791254301866.txt",
+            "path": "evidence/MC-040-0-1791254388315.txt",
             "sha256": "763b4c8927f44b226adc823f9d94fe390a3694f0146fa3055818f7606efdad96",
-            "commit": "d751d370c52a6158a97378df4fc3e85a3067272c"
+            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
           }
         },
         {
@@ -163,14 +163,14 @@
           },
           "last_result": "pass",
           "run": {
-            "path": "runs/MC-040-1-1791254305713.json",
-            "sha256": "da631314516452026565561943af8c85908770cc753040245016aba34bd75440",
-            "commit": "d751d370c52a6158a97378df4fc3e85a3067272c"
+            "path": "runs/MC-040-1-1791254392185.json",
+            "sha256": "a0ce418786da912f9a61d80d352e90ee3a5e22056157bdf55627897cc2aac675",
+            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
           },
           "evidence": {
-            "path": "evidence/MC-040-1-1791254305713.txt",
+            "path": "evidence/MC-040-1-1791254392185.txt",
             "sha256": "fb5896a324e257a0a1fcfc841c75217abe7153f10bcdb68a72e2e8664b140c03",
-            "commit": "d751d370c52a6158a97378df4fc3e85a3067272c"
+            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
           }
         }
       ],
@@ -183,9 +183,9 @@
         "actor": "codebuddy",
         "role": "repair",
         "result": "pass",
-        "at": "2026-10-06T02:38:21.865Z",
-        "commit": "d751d370c52a6158a97378df4fc3e85a3067272c",
-        "finished_at": "2026-10-06T02:38:29.554Z"
+        "at": "2026-10-06T02:39:48.315Z",
+        "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab",
+        "finished_at": "2026-10-06T02:39:56.087Z"
       },
       "fixed_by": "codebuddy",
       "verified_by": null,
@@ -238,14 +238,14 @@
           },
           "last_result": "pass",
           "run": {
-            "path": "runs/MC-043-0-1791254309616.json",
-            "sha256": "215804c47e6efaebecabcfdebfb9684c7d1a6d4ff7e9b044ffeb6e128eb2c149",
-            "commit": "d751d370c52a6158a97378df4fc3e85a3067272c"
+            "path": "runs/MC-043-0-1791254396145.json",
+            "sha256": "e4597ae9135fa92591557fab29464c9e5476f370febddb88a096b378ee8d8f2f",
+            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
           },
           "evidence": {
-            "path": "evidence/MC-043-0-1791254309616.txt",
+            "path": "evidence/MC-043-0-1791254396145.txt",
             "sha256": "41b8414f481361a283c2c3910ee063248334040603feb71bca673ce80e080d5b",
-            "commit": "d751d370c52a6158a97378df4fc3e85a3067272c"
+            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
           }
         },
         {
@@ -264,14 +264,14 @@
           },
           "last_result": "pass",
           "run": {
-            "path": "runs/MC-043-1-1791254313600.json",
-            "sha256": "9864ca88056633284c0757a3765dd980bfec82f16b64e4f4ad9b3b0823f71d77",
-            "commit": "d751d370c52a6158a97378df4fc3e85a3067272c"
+            "path": "runs/MC-043-1-1791254399833.json",
+            "sha256": "3147cbc29abde7791254ea20881a4711238fb4d28bdfc25fede9d1a7c5f01231",
+            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
           },
           "evidence": {
-            "path": "evidence/MC-043-1-1791254313600.txt",
+            "path": "evidence/MC-043-1-1791254399833.txt",
             "sha256": "b82cc2f428e9c82467b9ee22249c041a804cf50c2c019f1043262a1eca47f813",
-            "commit": "d751d370c52a6158a97378df4fc3e85a3067272c"
+            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
           }
         }
       ],
@@ -284,9 +284,9 @@
         "actor": "codebuddy",
         "role": "repair",
         "result": "pass",
-        "at": "2026-10-06T02:38:29.616Z",
-        "commit": "d751d370c52a6158a97378df4fc3e85a3067272c",
-        "finished_at": "2026-10-06T02:38:37.517Z"
+        "at": "2026-10-06T02:39:56.145Z",
+        "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab",
+        "finished_at": "2026-10-06T02:40:03.872Z"
       },
       "fixed_by": "codebuddy",
       "verified_by": null,
@@ -340,14 +340,14 @@
           },
           "last_result": "pass",
           "run": {
-            "path": "runs/MC-101-0-1791254317580.json",
-            "sha256": "e430edccbf795bbc9d2683295787a94762ccd61c89fc0783391fe3cb44d95609",
-            "commit": "d751d370c52a6158a97378df4fc3e85a3067272c"
+            "path": "runs/MC-101-0-1791254403931.json",
+            "sha256": "350777247fb97b177cf9d934d1c27432acd77ffd8f07c4fe98fb08e0166235f2",
+            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
           },
           "evidence": {
-            "path": "evidence/MC-101-0-1791254317580.txt",
+            "path": "evidence/MC-101-0-1791254403931.txt",
             "sha256": "fb5896a324e257a0a1fcfc841c75217abe7153f10bcdb68a72e2e8664b140c03",
-            "commit": "d751d370c52a6158a97378df4fc3e85a3067272c"
+            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
           }
         },
         {
@@ -366,14 +366,14 @@
           },
           "last_result": "pass",
           "run": {
-            "path": "runs/MC-101-1-1791254322032.json",
-            "sha256": "8faad14d5ae2e12b82cf5fe139f3bb783cf86e37dfbdee55e74b6b745b8b3dea",
-            "commit": "d751d370c52a6158a97378df4fc3e85a3067272c"
+            "path": "runs/MC-101-1-1791254408533.json",
+            "sha256": "26714dd3b877074497214cae6dabc89f1916c0ade936afea5744150b8d097190",
+            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
           },
           "evidence": {
-            "path": "evidence/MC-101-1-1791254322032.txt",
+            "path": "evidence/MC-101-1-1791254408533.txt",
             "sha256": "fb5896a324e257a0a1fcfc841c75217abe7153f10bcdb68a72e2e8664b140c03",
-            "commit": "d751d370c52a6158a97378df4fc3e85a3067272c"
+            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
           }
         }
       ],
@@ -388,9 +388,9 @@
         "actor": "codebuddy",
         "role": "repair",
         "result": "pass",
-        "at": "2026-10-06T02:38:37.580Z",
-        "commit": "d751d370c52a6158a97378df4fc3e85a3067272c",
-        "finished_at": "2026-10-06T02:38:46.537Z"
+        "at": "2026-10-06T02:40:03.931Z",
+        "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab",
+        "finished_at": "2026-10-06T02:40:14.960Z"
       },
       "verified_by": null,
       "verified_at": null,
@@ -435,14 +435,14 @@
           },
           "last_result": "pass",
           "run": {
-            "path": "runs/MC-102-0-1791254326602.json",
-            "sha256": "59ce4c4b4290ec64b37d28a3f92287526ea96f9bf634f59c116dd4143ce3d7ff",
-            "commit": "d751d370c52a6158a97378df4fc3e85a3067272c"
+            "path": "runs/MC-102-0-1791254415033.json",
+            "sha256": "4628cd366e903f797f72c07b002d3f3fccce6e217b8e8cd925613f20b0de98ec",
+            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
           },
           "evidence": {
-            "path": "evidence/MC-102-0-1791254326602.txt",
+            "path": "evidence/MC-102-0-1791254415033.txt",
             "sha256": "b82cc2f428e9c82467b9ee22249c041a804cf50c2c019f1043262a1eca47f813",
-            "commit": "d751d370c52a6158a97378df4fc3e85a3067272c"
+            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
           }
         }
       ],
@@ -457,9 +457,9 @@
         "actor": "codebuddy",
         "role": "repair",
         "result": "pass",
-        "at": "2026-10-06T02:38:46.602Z",
-        "commit": "d751d370c52a6158a97378df4fc3e85a3067272c",
-        "finished_at": "2026-10-06T02:38:51.238Z"
+        "at": "2026-10-06T02:40:15.033Z",
+        "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab",
+        "finished_at": "2026-10-06T02:40:19.173Z"
       },
       "verified_by": null,
       "verified_at": null,
