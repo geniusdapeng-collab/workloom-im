@@ -44,13 +44,17 @@ for (const hook of ["configureServer", "configurePreviewServer"]) {
   });
 }
 
-test("the published type declaration names every hook the plugin actually implements", () => {
+test("the published declaration binds the plugin to Vite's real types", () => {
   const plugin = workloomProductVite("测试客户端").plugin;
-  const declaration = readFileSync(new URL("./vite-product.d.mts", import.meta.url), "utf8");
-  const declared = declaration.slice(declaration.indexOf("interface WorkLoomViteProduct"));
   for (const hook of ["configureServer", "configurePreviewServer", "transformIndexHtml"]) {
     assert.equal(typeof plugin[hook], "function", `Implementation is missing ${hook}`);
-    // A declared-but-unlisted hook type-checks as absent for every TS consumer.
-    assert.ok(new RegExp(`\\b${hook}\\b`, "u").test(declared), `Declaration omits ${hook}`);
   }
+  const declaration = readFileSync(new URL("./vite-product.d.mts", import.meta.url), "utf8");
+  // 声明必须拿 Vite 真实 Plugin 契约兜底，而不是自造缩减结构。
+  // 真正的可赋值性由 apps/web/vite-plugin-proof.ts 在 typecheck 里编译期证明；此处的
+  // 文本断言只保证声明没有回退到手写结构（那正是 #255 审查指出的缺陷）。
+  assert.match(declaration, /import type \{ Plugin \} from "vite"/u, "声明必须引用 Vite 的 Plugin 类型");
+  assert.match(declaration, /readonly plugin: Plugin\b/u, "plugin 必须声明为 Vite Plugin");
+  assert.equal(/\binterface WorkLoomViteDevServer\b/u.test(declaration), false, "不得再手写缩减的 DevServer 结构");
+  assert.equal(/\binterface WorkLoomViteMiddleware\b/u.test(declaration), false, "不得再手写缩减的 connect 结构");
 });

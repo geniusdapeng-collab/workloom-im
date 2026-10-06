@@ -77,25 +77,65 @@ if (product) {
   }
   const desktopWorkflow = fs.existsSync(desktopWorkflowPath) ? fs.readFileSync(desktopWorkflowPath, "utf8") : "";
   if (product.release?.workflow === ".cnb.yml") {
-    // 未激活分支：产品清单尚未切到 .cnb.yml 发布通道，下方的 CNB 门禁校验
-    // 在当前清单下不会执行。它只在清单声明 workflow === ".cnb.yml" 时生效。
-    // 切换批次必须补齐 product.desktop.nativeBuilders 与 product.desktop.smokeRunner，
-    // 并把 sourceNames 对齐到 .cnb.yml 实际源码门禁名，否则该分支一律拒绝。
-
     let configured;
     try { configured = YAML.parse(desktopWorkflow); }
     catch (error) { errors.push(`CNB 桌面发布工作流无法解析：${error instanceof Error ? error.message : String(error)}`); }
-    const isRequired = (item) => item !== null && typeof item === "object" && !Array.isArray(item)
-      && ["allow_failure", "allowFailure", "if"].every((key) => !Object.hasOwn(item, key));
-    const hasRequiredStages = (job) => isRequired(job) && Array.isArray(job.stages) && job.stages.length > 0
-      && job.stages.every((stage) => isRequired(stage) && typeof stage.script === "string" && stage.script.trim().length > 0);
-    const sourceJobs = configured?.["**"]?.pull_request;
-    const sourceNames = ["py-gate", "oss-gate", "protocol-gate"];
-    if (!Array.isArray(sourceJobs) || sourceJobs.length !== sourceNames.length
-        || sourceNames.some((name) => sourceJobs.filter((job) => job?.name === name && hasRequiredStages(job)).length !== 1)) {
-      errors.push("CNB **/pull_request 必须仅包含必需的 py-gate、oss-gate、protocol-gate 源码门禁");
+    for (const error of verifyCnbReleaseChannel({ product, configured, root, repositoryRoot, fs, path })) errors.push(error);
+  } else {
+    for (const marker of ["MAC_CSC_LINK", "APPLE_APP_SPECIFIC_PASSWORD", "codesign --verify --deep --strict",
+      "xcrun stapler validate", "WIN_CSC_LINK", "Get-AuthenticodeSignature", "pnpm bundle:release"]) {
+      if (!desktopWorkflow.includes(marker)) errors.push(`桌面发布工作流缺少安全门禁：${marker}`);
     }
-    for (const [trigger, event, candidate] of [["main", "push", false], ["**", "api_trigger_tiger_native_candidate", true]]) {
+  }
+
+  const releaseScript = path.join(root, "scripts/release.sh");
+  if (fs.existsSync(releaseScript)) {
+    const releaseSource = fs.readFileSync(releaseScript, "utf8");
+    if (!releaseSource.includes("本地/长期令牌 Release 通道已封禁") || !/^exit 1$/mu.test(releaseSource)) {
+      errors.push("release.sh 必须保持 fail-closed，正式发行只允许受保护 workflow 单一发布者");
+    }
+    if (/GH_TOKEN|api\.github\.com|uploads\.github\.com|\bcurl\b|\bgh\s+release\b/u.test(releaseSource)) {
+      errors.push("release.sh 不得保留任何令牌或 GitHub Release 网络写入通道");
+    }
+  }
+  const siteRoot = path.resolve(root, product.release?.website ?? "");
+  for (const file of ["index.html", "en.html"]) {
+    const siteFile = path.join(siteRoot, file);
+    if (fs.existsSync(siteFile) && !fs.readFileSync(siteFile, "utf8").includes(`github.com/${product.repository}`)) {
+      errors.push(`${path.relative(root, siteFile)} 下载/仓库地址与产品清单不一致`);
+    }
+  }
+}
+
+/**
+ * CNB 发布通道门禁校验：清单声明 release.workflow === ".cnb.yml" 时生效。
+ *
+ * 抽成纯函数是为了能用真实夹具单测——此前该分支在当前清单下永远不执行，里面的
+ * 假设（源码门禁名、原生候选触发、原生入口）无人验证，等于休眠地雷。现在门禁名
+ * 与触发名一律取自 product.desktop.*，错误信息带出受控入口，不再错位误导。
+ */
+export function verifyCnbReleaseChannel({ product, configured, root, repositoryRoot, fs, path }) {
+  const errors = [];
+  const isRequired = (item) => item !== null && typeof item === "object" && !Array.isArray(item)
+    && ["allow_failure", "allowFailure", "if"].every((key) => !Object.hasOwn(item, key));
+  const hasRequiredStages = (job) => isRequired(job) && Array.isArray(job.stages) && job.stages.length > 0
+    && job.stages.every((stage) => isRequired(stage) && typeof stage.script === "string" && stage.script.trim().length > 0);
+  // 源码门禁名与候选触发名一律从产品清单声明的契约读取，绝不写死某个仓的栈名
+  //（此前硬编码 Tiger 的 py-gate/oss-gate/protocol-gate 与 api_tiger_native 候选触发，
+  // 在本仓清单切到 .cnb.yml 后会让门禁以错位的“缺少原生桌面门禁”信息 fail-closed）。
+  const sourceNames = product.desktop?.sourceGates;
+  const candidateTrigger = product.desktop?.nativeCandidateTrigger;
+  const sourceJobs = configured?.["**"]?.pull_request;
+  if (!Array.isArray(sourceNames) || !sourceNames.length || sourceNames.some((name) => typeof name !== "string" || !name)) {
+    errors.push("产品清单缺少受控 CNB 源码门禁名（product.desktop.sourceGates）");
+  } else if (!Array.isArray(sourceJobs) || sourceJobs.length !== sourceNames.length
+      || sourceNames.some((name) => sourceJobs.filter((job) => job?.name === name && hasRequiredStages(job)).length !== 1)) {
+    errors.push(`CNB **/pull_request 必须仅包含清单声明的必需源码门禁：${sourceNames.join("、")}`);
+  }
+  if (typeof candidateTrigger !== "string" || !candidateTrigger) {
+    errors.push("产品清单缺少受控 CNB 原生候选触发名（product.desktop.nativeCandidateTrigger）");
+  }
+  for (const [trigger, event, candidate] of [["main", "push", false], ["**", candidateTrigger ?? "__missing_candidate_trigger__", true]]) {
       const jobs = configured?.[trigger]?.[event];
       for (const [platform, tags] of [["mac", ["mac", "arm64"]], ["win", ["windows"]]]) {
         const nativePath = product.desktop?.nativeBuilders?.[platform];
@@ -125,7 +165,7 @@ if (product) {
           ? candidateArguments[0] === "--candidate" : argumentTokens.some((argument) => /^-Candidate$/iu.test(argument)));
         if (matches.length !== 1 || !hasRequiredStages(job) || Object.hasOwn(job, "docker")
             || commands.length !== 1 || !validArguments || (candidate ? !validCandidate : candidateArguments.length !== 0)) {
-          errors.push(`CNB ${trigger}/${event} 缺少必需的 ${platform} 原生桌面门禁`);
+          errors.push(`CNB ${trigger}/${event} 缺少必需的 ${platform} 原生桌面门禁（受控入口 ${nativePath}）`);
         }
       }
     }
@@ -142,30 +182,7 @@ if (product) {
         if (!source.includes(marker)) errors.push(`${platform} 原生构建入口缺少安全门禁：${marker}`);
       }
     }
-  } else {
-    for (const marker of ["MAC_CSC_LINK", "APPLE_APP_SPECIFIC_PASSWORD", "codesign --verify --deep --strict",
-      "xcrun stapler validate", "WIN_CSC_LINK", "Get-AuthenticodeSignature", "pnpm bundle:release"]) {
-      if (!desktopWorkflow.includes(marker)) errors.push(`桌面发布工作流缺少安全门禁：${marker}`);
-    }
-  }
-
-  const releaseScript = path.join(root, "scripts/release.sh");
-  if (fs.existsSync(releaseScript)) {
-    const releaseSource = fs.readFileSync(releaseScript, "utf8");
-    if (!releaseSource.includes("本地/长期令牌 Release 通道已封禁") || !/^exit 1$/mu.test(releaseSource)) {
-      errors.push("release.sh 必须保持 fail-closed，正式发行只允许受保护 workflow 单一发布者");
-    }
-    if (/GH_TOKEN|api\.github\.com|uploads\.github\.com|\bcurl\b|\bgh\s+release\b/u.test(releaseSource)) {
-      errors.push("release.sh 不得保留任何令牌或 GitHub Release 网络写入通道");
-    }
-  }
-  const siteRoot = path.resolve(root, product.release?.website ?? "");
-  for (const file of ["index.html", "en.html"]) {
-    const siteFile = path.join(siteRoot, file);
-    if (fs.existsSync(siteFile) && !fs.readFileSync(siteFile, "utf8").includes(`github.com/${product.repository}`)) {
-      errors.push(`${path.relative(root, siteFile)} 下载/仓库地址与产品清单不一致`);
-    }
-  }
+  return errors;
 }
 
 function requireSource(relativePath, checks) {
