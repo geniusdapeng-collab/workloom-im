@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 712,
+  "revision": 714,
   "tasks": {
     "231": {
       "number": 231,
@@ -92,15 +92,11 @@
       "error": "不可修改候选 #252 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
       "blockedUntil": 1791254108455,
       "recoveryCount": 1,
-      "recoveryIntent": {
-        "headSha": "f40717bd39aff4629b071c989a3fe05552e0163b",
-        "reason": "不可修改候选 #252 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
-        "at": 1791253508455
-      },
+      "recoveryIntent": null,
       "recovery": {
-        "marker": "delivery-repair:0c0d4e87ac958aee59931471",
-        "reviewId": "2107272188579713024",
-        "dispatchedAt": 1791247815740
+        "marker": "delivery-repair:39456084f78ee5d9da4b98eb",
+        "reviewId": "2107296105834913792",
+        "dispatchedAt": 1791253518077
       },
       "admission": {
         "number": 231,
@@ -22305,6 +22301,34 @@
       },
       "previous": "d487a3bd55ec28e41e0ad45886fb06f42663a0bdcf37ae678999d76fd0e67666",
       "digest": "91e242fcc1a1f36976500b0de0c5c762d3d837d6fb4e3cdb0d8fa262a897c7d5"
+    },
+    {
+      "sequence": 713,
+      "at": "2026-10-06T02:25:08.455Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "recovery": {
+            "marker": "delivery-repair:39456084f78ee5d9da4b98eb",
+            "reviewId": "2107296105834913792",
+            "dispatchedAt": 1791253518077
+          },
+          "recoveryIntent": null
+        }
+      },
+      "previous": "91e242fcc1a1f36976500b0de0c5c762d3d837d6fb4e3cdb0d8fa262a897c7d5",
+      "digest": "68e7dc7fd73e8228a138e7077e809d9500c9050bc8412b63fcb55390c14d28b8"
+    },
+    {
+      "sequence": 714,
+      "at": "2026-10-06T02:25:18.077Z",
+      "kind": "transaction",
+      "data": {
+        "id": "a95ba7e1-2be0-4132-b070-89214402a085"
+      },
+      "previous": "68e7dc7fd73e8228a138e7077e809d9500c9050bc8412b63fcb55390c14d28b8",
+      "digest": "894e33102c8df08fb35922395aff12abe3c161164f28db2f6ba798863c1c0837"
     }
   ]
 }
