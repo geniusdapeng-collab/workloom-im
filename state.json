@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 2155,
+  "revision": 2158,
   "tasks": {
     "231": {
       "number": 231,
@@ -3942,16 +3942,16 @@
   },
   "leases": {
     "protocol": {
-      "owner": null,
-      "generation": 74,
-      "acquiredAt": 1791307230012,
-      "expiresAt": 1791307230012
+      "owner": "platform-ai-migration/pr-264",
+      "generation": 75,
+      "acquiredAt": 1791307249895,
+      "expiresAt": 1791308149895
     },
     "sync": {
-      "owner": null,
-      "generation": 70,
-      "acquiredAt": 1791307230012,
-      "expiresAt": 1791307230012
+      "owner": "platform-ai-migration/pr-264",
+      "generation": 71,
+      "acquiredAt": 1791307249895,
+      "expiresAt": 1791308149895
     },
     "dependencies": {
       "owner": null,
@@ -85218,6 +85218,53 @@
       },
       "previous": "3e5434bd31ac6bc50b007e9e39fd13569187205f3c280b6a403dc56448dcce0e",
       "digest": "d741556372bd670d201e604744b85c792c43b3e21ba7e91cb38f1d19d28eb322"
+    },
+    {
+      "sequence": 2156,
+      "at": "2026-10-06T17:20:49.895Z",
+      "kind": "lease_acquire",
+      "data": {
+        "scopes": [
+          "protocol",
+          "sync"
+        ],
+        "owner": "platform-ai-migration/pr-264",
+        "generation": {
+          "protocol": 75,
+          "sync": 71
+        }
+      },
+      "previous": "d741556372bd670d201e604744b85c792c43b3e21ba7e91cb38f1d19d28eb322",
+      "digest": "52791713eb930b46319d1bcb3f5034998d9bdec81259757fb8097959bc0d0803"
+    },
+    {
+      "sequence": 2157,
+      "at": "2026-10-06T17:20:49.895Z",
+      "kind": "platform_ai_migration_lease",
+      "data": {
+        "number": 264,
+        "owner": "platform-ai-migration/pr-264",
+        "scopes": [
+          "protocol",
+          "sync"
+        ],
+        "generation": {
+          "protocol": 75,
+          "sync": 71
+        }
+      },
+      "previous": "52791713eb930b46319d1bcb3f5034998d9bdec81259757fb8097959bc0d0803",
+      "digest": "b0eecd67b5f9f10b947814f3cfb947155316c4499dfb3ad99ff18d79f198d9c0"
+    },
+    {
+      "sequence": 2158,
+      "at": "2026-10-06T17:20:44.158Z",
+      "kind": "transaction",
+      "data": {
+        "id": "be6a1d0e-b2c5-448b-860e-12c0b2471459"
+      },
+      "previous": "b0eecd67b5f9f10b947814f3cfb947155316c4499dfb3ad99ff18d79f198d9c0",
+      "digest": "9ba9aee6e8dc4b46f7b6d2130466cc389a01a6df088d3af761893160eb456c37"
     }
   ]
 }
