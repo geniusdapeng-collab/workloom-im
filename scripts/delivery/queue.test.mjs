@@ -619,6 +619,30 @@ test('immutable candidate creation reuses exact protected refs/PRs and rejects s
   platform.request = async (_repo, path) => path.includes('branch-protections') ? [{ id: 'candidate-rule', rule: 'delivery/candidate/**', allow_creation: true, allow_master_creation: true, allow_pushes: false, allow_master_pushes: false, allow_force_pushes: false, allow_master_force_pushes: false, allow_deletions: false, allow_master_deletions: false }] : path === '/-/git/branches' ? Promise.reject(new Error('already exists')) : { commit: { sha: main }, protected: true };
   await assert.rejects(platform.ensureCandidate(s), /already exists/);
 });
+test('real CNB summary bodies do not erase actual PR handoff, age or explicit dependencies', async () => {
+  const created = '2026-10-05T00:00:00Z';
+  const body = '<!-- workloom-delivery\n' + JSON.stringify({ ready: true, depends_on: [2], releases: [] }) + '\n-->';
+  const platform = new Platform(repo, undefined, async (_repo, path) => {
+    if (path.startsWith('/-/pulls?')) return [{ number: '1', body: '', created_at: created, head: { ref: 'task/one' } }];
+    if (path === '/-/pulls/1') return { ...snapshot().pull, body };
+    if (path === '/-/pulls/2') return { number: 2, is_merged: false };
+    throw new Error(`Unexpected ${path}`);
+  });
+  const pulls = await platform.pulls(); assert.equal(pulls[0].body, body); assert.equal(pulls[0].created_at, created);
+  assert.deepEqual((await dependencies(platform, pulls, emptyState(repo))).get(1).pending, [2]);
+  platform.request = async (_repo, path) => path.startsWith('/-/pulls?') ? [{ number: 1, body: '' }] : { number: 1, body: null };
+  await assert.rejects(platform.pulls(), /detail body is unreadable/);
+});
+test('PR summary hydration propagates read failures and refuses a detail for another identity', async () => {
+  const rows = [{ number: 1, body: '' }];
+  const platform = new Platform(repo, undefined, async (_repo, path) => {
+    if (path.startsWith('/-/pulls?')) return rows;
+    throw Object.assign(new Error('Actual detail permission denied'), { status: 403 });
+  });
+  await assert.rejects(platform.pulls(), /permission denied/);
+  platform.request = async (_repo, path) => path.startsWith('/-/pulls?') ? rows : { number: 2, body: '' };
+  await assert.rejects(platform.pulls(), /identity is invalid/);
+});
 test('positive merge readback requires actual is_merged and exact tested parent order', async () => {
   const platform = new Platform(repo); platform.pull = async () => ({ is_merged: true, head: { sha: head }, merged_by: { username: 'npc' } }); platform.commit = async () => ({ parents: [{ sha: main }, { sha: head }] });
   assert.equal((await platform.verifyMerge(snapshot(), { sha: mergedSha })).sha, mergedSha);
