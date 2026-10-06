@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 1129,
+  "revision": 1131,
   "tasks": {
     "231": {
       "number": 231,
@@ -97,15 +97,11 @@
       "error": "不可修改候选 #257 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
       "blockedUntil": 1791267610314,
       "recoveryCount": 1,
-      "recoveryIntent": {
-        "headSha": "a83ad4c3018ec5859552a146ae7205e68295f676",
-        "reason": "不可修改候选 #257 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
-        "at": 1791267010314
-      },
+      "recoveryIntent": null,
       "recovery": {
-        "marker": "delivery-repair:6ce82d87e126a1cc6c889065",
-        "reviewId": "2107332663648624640",
-        "dispatchedAt": 1791262234148
+        "marker": "delivery-repair:f1bb539aa3543aca214b9f5f",
+        "reviewId": "2107352776489738240",
+        "dispatchedAt": 1791267029391
       },
       "admission": {
         "number": 231,
@@ -38242,6 +38238,34 @@
       },
       "previous": "3b16f027673dfd27281adada82a44b40dae28a310e4cdfae7975369e8fce12f0",
       "digest": "ae4ca04945ea445df9683bc5990200801a2788c56cff1cd38b2a3cb377147de5"
+    },
+    {
+      "sequence": 1130,
+      "at": "2026-10-06T06:10:10.314Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "recovery": {
+            "marker": "delivery-repair:f1bb539aa3543aca214b9f5f",
+            "reviewId": "2107352776489738240",
+            "dispatchedAt": 1791267029391
+          },
+          "recoveryIntent": null
+        }
+      },
+      "previous": "ae4ca04945ea445df9683bc5990200801a2788c56cff1cd38b2a3cb377147de5",
+      "digest": "632b98eba9ff9aba5baf17444b8ac5aa73fc5145c6eef35f1fac361d7210a68d"
+    },
+    {
+      "sequence": 1131,
+      "at": "2026-10-06T06:10:29.392Z",
+      "kind": "transaction",
+      "data": {
+        "id": "49fe5792-2ff5-4440-a917-85d03a8bff60"
+      },
+      "previous": "632b98eba9ff9aba5baf17444b8ac5aa73fc5145c6eef35f1fac361d7210a68d",
+      "digest": "b0cf27c08eb22d4a76f92e2344276288d046169c726e4b9a6c2517854d2075fa"
     }
   ]
 }
