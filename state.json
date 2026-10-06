@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 1560,
+  "revision": 1562,
   "tasks": {
     "231": {
       "number": 231,
@@ -381,17 +381,13 @@
         }
       },
       "recoveryCount": 1,
-      "recoveryIntent": {
-        "headSha": "643a96edc8a4a819a682020ea8f52b8783d898e3",
-        "reason": "不可修改候选 #263 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
-        "at": 1791279908507
-      },
+      "recoveryIntent": null,
       "error": "不可修改候选 #263 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
       "blockedUntil": 1791280508507,
       "recovery": {
-        "marker": "delivery-repair:339bed8bec469fc66edb70f8",
-        "reviewId": "2107388165610967040",
-        "dispatchedAt": 1791275466832
+        "marker": "delivery-repair:632d1dfa0c5c36c258d30af2",
+        "reviewId": "2107406966847086592",
+        "dispatchedAt": 1791279949379
       },
       "reviewFailures": null,
       "candidate": {
@@ -55196,6 +55192,34 @@
       },
       "previous": "dbbaddc40b89d018a9b3e7b40be3c5830fa5d90d24f302c86c376c1c34fc1d1d",
       "digest": "cfc8ea879f498e90c100ebb8054ed82f36441896b3e3f0b218d87d09af1d7c4e"
+    },
+    {
+      "sequence": 1561,
+      "at": "2026-10-06T09:45:08.507Z",
+      "kind": "task",
+      "data": {
+        "number": 232,
+        "patch": {
+          "recovery": {
+            "marker": "delivery-repair:632d1dfa0c5c36c258d30af2",
+            "reviewId": "2107406966847086592",
+            "dispatchedAt": 1791279949379
+          },
+          "recoveryIntent": null
+        }
+      },
+      "previous": "cfc8ea879f498e90c100ebb8054ed82f36441896b3e3f0b218d87d09af1d7c4e",
+      "digest": "519f8aa06cd87283a21c2f3de1be3da6f80105b2252da954f3c591f84b9424f8"
+    },
+    {
+      "sequence": 1562,
+      "at": "2026-10-06T09:45:49.379Z",
+      "kind": "transaction",
+      "data": {
+        "id": "d563fcfb-1250-480f-89c6-0a3fdc89e294"
+      },
+      "previous": "519f8aa06cd87283a21c2f3de1be3da6f80105b2252da954f3c591f84b9424f8",
+      "digest": "36f8a20ec95ce79f762c20e7b794e7381adae2074c7122face2457304271591f"
     }
   ]
 }
