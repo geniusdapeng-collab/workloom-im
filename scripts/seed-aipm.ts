@@ -154,7 +154,7 @@ export async function seedAiPm(): Promise<void> {
    */
   await q(
     `INSERT INTO agents (id, workspace_id, preset_key, name, version, kind, readonly, fence_bindings, skills, status, meta)
-     VALUES ('agt-company-ceo',$1,'company-ceo','顾云峥','v1.0','commander',false,'["R1","R2"]','[]','ready',$2)
+     VALUES ('agt-'||$1||'-company-ceo',$1,'company-ceo','顾云峥','v1.0','commander',false,'["R1","R2"]','[]','ready',$2)
      ON CONFLICT (id) DO NOTHING`,
     [WS_ID, JSON.stringify({ description: "公司负责人：主持经营晨报与 L2 裁决节拍", night_shift: false, high_risk: false })],
   );

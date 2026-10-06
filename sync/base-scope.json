@@ -377,7 +377,7 @@
       "reason": "种子预检负向测试连接固定的 127.0.0.1:1 不可达地址，用户名和密码均为 invalid。"
     },
     "scripts/seed-aipm.ts": {
-      "sha256": "265b07207c30eefe99ed270520e94defa7a3b4e1aa1992d3a6833639a0ddf2ad",
+      "sha256": "45cdb04ab5c56d8144ac5c1e508a72d5c380944f2d8b9ac547dfa9e4516922c6",
       "findings": [
         {
           "rule": "credential-in-url",
