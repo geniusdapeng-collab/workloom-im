@@ -167,6 +167,144 @@ function expectedMetadata(root, product, policy, manifest, packageLock) {
 }
 
 /**
+ * 客户端配置文本里以**运行期**模块说明符出现的 vitest/config 位置（按出现顺序）。
+ *
+ * 该判定决定发行载荷是否必须携带 Vitest：只要漏判一种受控写法，载荷就会缺少
+ * 运行期依赖，直到真实启动才失败（发行即坏载荷）。因此判定的是
+ * “vitest/config 是运行期模块说明符”，而不是某一种 import 写法：
+ *   - `import ... from "vitest/config"` / `import{...}from"vitest/config"`（静态导入）
+ *   - `import "vitest/config"`（副作用导入）
+ *   - `import("vitest/config")`（动态导入）
+ *   - `require("vitest/config")`（CJS）
+ *
+ * 判定的关键在“说明符字面量是否由语法上下文引入”，而不是字面量本身落在哪个
+ * 区间：`from`、`import`(、`require`( 以及裸 `import` 之后的字符串字面量才是
+ * 模块说明符。`// import "vitest/config"` 这类注释、`const x = "vitest/config"`
+ * 这类普通字符串、以及 `/// <reference types="vitest/config" />` 类型引用都不
+ * 产生模块加载，把它们算成运行期导入会让只引用类型的产品被强行拉入 Vitest。
+ */
+function vitestConfigRuntimeUsages(source) {
+  const text = String(source);
+  const found = [];
+  const comments = commentSpans(text);
+  const literals = literalSpans(text);
+  const inComment = (index) => comments.some(([start, end]) => index >= start && index < end);
+  const literalAt = (index) => literals.find(([start, end]) => index >= start && index < end) ?? null;
+
+  // 语法上下文 = 必须是真实代码（不在注释/字符串里），且字面量正好是那个说明符。
+  const covered = [];
+  const record = (keyword, keywordIndex, literalIndex) => {
+    if (inComment(keywordIndex) || !literalAt(literalIndex)) return;
+    covered.push({ index: keywordIndex, end: literalIndex + 'vitest/config'.length });
+  };
+
+  // from "vitest/config"（静态导入，含 import{...}from"..." 无空格形式）
+  for (const match of text.matchAll(/\bfrom\b/gu)) {
+    if (inComment(match.index)) continue;
+    const literal = skipWhitespace(text, match.index + match[0].length);
+    if (matchesSpecifier(text, literal)) record('from', match.index, literal);
+  }
+  // import "vitest/config"（副作用导入）/ import("vitest/config")（动态导入）
+  for (const match of text.matchAll(/\bimport\b/gu)) {
+    if (inComment(match.index)) continue;
+    let cursor = skipWhitespace(text, match.index + match[0].length);
+    if (text[cursor] === '(') {
+      // 动态导入：import( "vitest/config" )
+      cursor = skipWhitespace(text, cursor + 1);
+      if (matchesSpecifier(text, cursor)) record('import(', match.index, cursor);
+      continue;
+    }
+    if (matchesSpecifier(text, cursor)) record('import', match.index, cursor);
+  }
+  // require("vitest/config")（CJS）
+  for (const match of text.matchAll(/\brequire\b/gu)) {
+    if (inComment(match.index)) continue;
+    let cursor = skipWhitespace(text, match.index + match[0].length);
+    if (text[cursor] !== '(') continue;
+    cursor = skipWhitespace(text, cursor + 1);
+    if (matchesSpecifier(text, cursor)) record('require(', match.index, cursor);
+  }
+  return covered.sort((left, right) => left.index - right.index);
+}
+
+/** 从 index 起跳过空白，返回第一个非空白字符位置。 */
+function skipWhitespace(text, index) {
+  let cursor = index;
+  while (cursor < text.length && /\s/u.test(text[cursor])) cursor += 1;
+  return cursor;
+}
+
+/** index 处是否是正好等于 vitest/config 的字符串字面量（引号紧邻）。 */
+function matchesSpecifier(text, index) {
+  const quote = text[index];
+  if (quote !== '"' && quote !== "'") return false;
+  const body = text.slice(index + 1, index + 1 + 'vitest/config'.length);
+  if (body !== 'vitest/config') return false;
+  return text[index + 1 + 'vitest/config'.length] === quote;
+}
+
+/** 代码里的注释跨度（行注释与块注释），用于把注释中的同名说明符排除出去。 */
+function commentSpans(text) {
+  const spans = [];
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === '"' || char === "'" || char === '`') { index = skipLiteral(text, index) - 1; continue; }
+    if (char !== '/') continue;
+    const next = text[index + 1];
+    if (next === '/') {
+      const end = text.indexOf('\n', index);
+      spans.push([index, end < 0 ? text.length : end]);
+      index = end < 0 ? text.length : end - 1;
+    } else if (next === '*') {
+      const end = text.indexOf('*/', index + 2);
+      const stop = end < 0 ? text.length : end + 2;
+      spans.push([index, stop]);
+      index = stop - 1;
+    }
+  }
+  return spans;
+}
+
+/** 字符串与模板字面量的跨度，用于区分说明符字面量与普通文本。 */
+function literalSpans(text) {
+  const spans = [];
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char !== '"' && char !== "'" && char !== '`') continue;
+    const end = skipLiteral(text, index);
+    spans.push([index, end]);
+    index = end - 1;
+  }
+  return spans;
+}
+
+/** 跳过一个字符串/模板字面量，返回其结束位置（不含结束引号之后）。 */
+function skipLiteral(text, start) {
+  const quote = text[start];
+  let index = start + 1;
+  while (index < text.length) {
+    const char = text[index];
+    if (char === '\\') { index += 2; continue; }
+    if (char === quote) return index + 1;
+    // 模板字面量里的 ${...} 可能再嵌字符串：递归跳过，保持跨度正确。
+    if (quote === '`' && char === '$' && text[index + 1] === '{') {
+      let depth = 1; index += 2;
+      while (index < text.length && depth > 0) {
+        const inner = text[index];
+        if (inner === '{') depth += 1;
+        else if (inner === '}') depth -= 1;
+        else if (inner === '"' || inner === "'" || inner === '`') { index = skipLiteral(text, index); continue; }
+        index += 1;
+      }
+      continue;
+    }
+    if (char === '\n' && quote !== '`') return index;
+    index += 1;
+  }
+  return text.length;
+}
+
+/**
  * 产品自身的客户端 Vite 配置是否在运行期导入 vitest/config。类型引用
  * （/// <reference types="vitest/config" />）与 test 段只依赖类型，不引入运行依赖。
  */
@@ -192,7 +330,7 @@ export function runtimeVitestConfigCandidates(root, policy = null) {
 
 export function runtimeImportsVitestConfig(root, policy = null) {
   return runtimeVitestConfigCandidates(root, policy)
-    .some(candidate => /^\s*import\s[^\n]*from\s*["']vitest\/config["']/mu.test(readFileSync(join(root, candidate), "utf8")));
+    .some(candidate => vitestConfigRuntimeUsages(readFileSync(join(root, candidate), "utf8")).length > 0);
 }
 
 export function buildRuntimeDepsManifest(root, policy) {

@@ -511,3 +511,55 @@ test("当前产品的锁输入清单必须登记参与兼容判定的客户端 V
     assert.equal(input.sha256, runtimeInputSha256(readFileSync(join(REPOSITORY_ROOT, candidate))), candidate);
   }
 });
+
+// 兼容闭包漏判一种运行期写法 = 发行可能缺少 Vitest，直到真实启动才失败。
+// 这里把所有受控写法与“不算运行期导入”的对照写法一起钉死。
+test("运行期 vitest/config 判定覆盖全部受控写法，且不把注释/普通字符串/类型引用算进来", { timeout: 75_000 }, async () => {
+  const { buildRuntimeDepsManifest } = await import("./runtime-deps-lock.mjs");
+  const root = mkdtempSync(join(tmpdir(), "workloom-runtime-vitest-forms-"));
+  const policy = { includePlatformOps: false };
+  const version = "5.0.1";
+  const source = { private: true, devDependencies: { vitest: "^5.0.1" } };
+  const lock = { lockfileVersion: "9.0", importers: { ".": { devDependencies: { vitest: { specifier: "^5.0.1", version: `${version}(vite@8.3.0)` } } } } };
+  try {
+    mkdirSync(join(root, "packages"));
+    for (const app of ["server", "web"]) {
+      mkdirSync(join(root, "apps", app), { recursive: true });
+      writeFileSync(join(root, "apps", app, "package.json"), '{"private":true}\n');
+    }
+    writeFileSync(join(root, "package.json"), `${JSON.stringify(source)}\n`);
+    writeFileSync(join(root, "pnpm-lock.yaml"), `${JSON.stringify(lock)}\n`);
+    const config = join(root, "apps", "web", "vite.config.ts");
+    const runtimeForms = [
+      ['import { defineConfig } from "vitest/config";\n', "具名导入"],
+      ['import{defineConfig}from "vitest/config";\n', "具名导入（无空格）"],
+      ['import "vitest/config";\n', "副作用导入"],
+      ['const m = await import("vitest/config");\n', "动态导入"],
+      ['const m = require("vitest/config");\n', "require"],
+      ['import defineConfig from "vitest/config";\n', "默认导入"],
+      ['import {\n  defineConfig,\n} from "vitest/config";\n', "多行静态导入"],
+      ["import { defineConfig } from 'vitest/config';\n", "单引号"],
+      ['import type { X } from "vitest/config";\n', "类型导入（仍会加载模块）"],
+    ];
+    for (const [text, label] of runtimeForms) {
+      writeFileSync(config, text);
+      assert.equal(runtimeImportsVitestConfig(root, policy), true, `${label} 必须判为运行期导入：${JSON.stringify(text)}`);
+      // 判定为真时必须真的把精确 Vitest 版本纳入兼容闭包，不能只返回 true。
+      assert.deepEqual(buildRuntimeDepsManifest(root, policy).dependencies, { vitest: version }, label);
+    }
+    const nonRuntime = [
+      ['/// <reference types="vitest/config" />\nimport { defineConfig } from "vite";\n', "类型引用"],
+      ['// 生产不导入 vitest/config\nimport { defineConfig } from "vite";\n', "行注释"],
+      ['/* import "vitest/config" */\nimport { defineConfig } from "vite";\n', "块注释"],
+      ['const s = "vitest/config";\nimport { defineConfig } from "vite";\n', "普通字符串"],
+      ['const s = `vitest/config`;\nimport { defineConfig } from "vite";\n', "模板字面量"],
+    ];
+    for (const [text, label] of nonRuntime) {
+      writeFileSync(config, text);
+      assert.equal(runtimeImportsVitestConfig(root, policy), false, `${label} 不得判为运行期导入：${JSON.stringify(text)}`);
+      assert.ok(!("vitest" in buildRuntimeDepsManifest(root, policy).dependencies), label);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

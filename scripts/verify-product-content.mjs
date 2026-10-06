@@ -77,10 +77,16 @@ if (product) {
   }
   const desktopWorkflow = fs.existsSync(desktopWorkflowPath) ? fs.readFileSync(desktopWorkflowPath, "utf8") : "";
   if (product.release?.workflow === ".cnb.yml") {
-    let configured;
-    try { configured = YAML.parse(desktopWorkflow); }
+    // 必须与 CNB 实际生效的结构一致：.cnb.yml 的 include 会追加/合并进顶层键，
+    // 只 YAML.parse 原始文本看不到被 include 的作业与阶段，门禁会在真实运行前
+    // 给出与平台不同的（通常更宽的）结论。这里走同一个受控解析入口，
+    // 由 loadCnbReleaseChannelConfig 负责把 include 展开成生效配置。
+    let configured = null;
+    try { configured = await loadCnbReleaseChannelConfig({ desktopWorkflow, repositoryRoot, root, fs, path }); }
     catch (error) { errors.push(`CNB 桌面发布工作流无法解析：${error instanceof Error ? error.message : String(error)}`); }
-    for (const error of verifyCnbReleaseChannel({ product, configured, root, repositoryRoot, fs, path })) errors.push(error);
+    if (configured) {
+      for (const error of verifyCnbReleaseChannel({ product, configured, root, repositoryRoot, fs, path })) errors.push(error);
+    }
   } else {
     for (const marker of ["MAC_CSC_LINK", "APPLE_APP_SPECIFIC_PASSWORD", "codesign --verify --deep --strict",
       "xcrun stapler validate", "WIN_CSC_LINK", "Get-AuthenticodeSignature", "pnpm bundle:release"]) {
@@ -105,6 +111,31 @@ if (product) {
       errors.push(`${path.relative(root, siteFile)} 下载/仓库地址与产品清单不一致`);
     }
   }
+}
+
+/**
+ * CNB 发布通道生效配置的唯一入口：生产门禁与它的测试必须走同一条解析路径。
+ *
+ * CNB 对 include 的语义是“数组追加、对象合并”（见官方语法手册），因此
+ * `.cnb.yml` 真正生效的结构不等于 `YAML.parse` 原文得到的结构：只解析原文会
+ * 看不到被 include 的作业与阶段，于是门禁可能在一个平台上并不存在的结构上判绿，
+ * 测试却因为展开 include 而全绿——同一个门禁给出两套口径。
+ *
+ * 这里统一用受控的 resolvePipelineConfig 递归展开 include（相对路径限于仓库内、
+ * 拒绝越界/网络/循环），生产与测试都只能通过它拿到 configured。
+ */
+export async function loadCnbReleaseChannelConfig({ desktopWorkflow, repositoryRoot, root = repositoryRoot, fs, path }) {
+  if (typeof desktopWorkflow !== "string" || !desktopWorkflow.trim()) throw new Error("CNB 桌面发布工作流为空");
+  // 动态 import 保持本文件顶层语句的既有同步执行序（门禁脚本按顺序累积 errors，
+  // 引入顶层 await 会把上方的顶层检查推到异步之后，改变门禁语义）。
+  const { resolvePipelineConfig } = await import("./delivery/queue-policy.mjs");
+  const readLocal = (relative) => {
+    const absolute = path.resolve(root, relative);
+    const delta = path.relative(root, absolute);
+    if (delta === ".." || delta.startsWith(`..${path.sep}`)) throw new Error(`CNB include 越出仓库：${relative}`);
+    return fs.readFileSync(absolute, "utf8");
+  };
+  return resolvePipelineConfig(desktopWorkflow, { readLocal });
 }
 
 /**

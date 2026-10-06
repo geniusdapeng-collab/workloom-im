@@ -4,21 +4,20 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
-import { resolvePipelineConfig } from "./delivery/queue-policy.mjs";
-import { verifyCnbReleaseChannel } from "./verify-product-content.mjs";
+import YAML from "yaml";
+import { loadCnbReleaseChannelConfig, verifyCnbReleaseChannel } from "./verify-product-content.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 
 /**
- * 夹具一律从**真实的 .cnb.yml / product.manifest.json** 派生（include 递归解析），
- * 不再手写一份与实现同源的结构：否则门禁与真实工作流脱节也照绿。
+ * 夹具一律从**真实的 .cnb.yml / product.manifest.json** 派生，并且必须走生产
+ * 门禁自己的解析入口：若测试自行解析，include 的展开口径一变，测试就会在一个
+ * 生产从未见到的结构上判绿（既有缺陷：测试递归展开 include，生产只解析原文）。
+ * 这里只调用 loadCnbReleaseChannelConfig，保证“测试绿 = 生产绿”是同一份代码。
  */
 async function realConfig() {
   const text = await readFile(path.join(repoRoot, ".cnb.yml"), "utf8");
-  const configured = await resolvePipelineConfig(text, {
-    readLocal: (relative) => readFile(path.join(repoRoot, relative), "utf8"),
-  });
-  return configured;
+  return loadCnbReleaseChannelConfig({ desktopWorkflow: text, repositoryRoot: repoRoot, root: repoRoot, fs, path });
 }
 
 async function manifest() {
@@ -96,4 +95,92 @@ test("冒烟入口不受控时拒绝，且不把任意路径拼进判定", async
     const errors = verifyCnbReleaseChannel({ product: mutated, configured, root: repoRoot, repositoryRoot: repoRoot, fs, path });
     assert.ok(errors.some((error) => error.includes("product.desktop.smokeRunner")), `${String(value)}: ${errors.join("\n")}`);
   }
+});
+
+test("测试与生产必须用同一份解析入口，include 展开口径不得分叉", async () => {
+  const text = await readFile(path.join(repoRoot, ".cnb.yml"), "utf8");
+  // 生产门禁的构建路径与被测的夹具路径必须是同一个函数：此前夹具自行
+  // resolvePipelineConfig（展开 include），生产直接 YAML.parse 原文（不展开），
+  // 同一个门禁在“被 include 的作业/阶段”上给出两套结论。
+  const configured = await realConfig();
+  const raw = YAML.parse(text);
+  const declared = (await manifest()).desktop.sourceGates;
+  // 真实结构下二者的可见作业集合本就不同（bootstrap review 只存在于 include 中）；
+  // 断言的是“生产读到的就是展开后的生效结构”，并保留这条差异作为可复核证据。
+  const includeOnly = ["delivery-bootstrap-review"];
+  for (const name of includeOnly) {
+    assert.ok(!(raw["**"]?.pull_request ?? []).some((job) => job?.name === name), `原文不应直接看到 ${name}`);
+    assert.ok((configured["**"]?.pull_request ?? []).some((job) => job?.name === name), `生效配置必须看到 ${name}`);
+  }
+  for (const name of declared) {
+    assert.ok((configured["**"]?.pull_request ?? []).some((job) => job?.name === name && Array.isArray(job.stages) && job.stages.length), `生效配置必须看到门禁 ${name}`);
+  }
+});
+
+test("门禁必须在 include 展开后的生效结构上判定，而不是只看 .cnb.yml 原文", async () => {
+  const text = await readFile(path.join(repoRoot, ".cnb.yml"), "utf8");
+  const raw = YAML.parse(text);
+  const effective = await realConfig();
+
+  // 分叉的可复核证据：delivery-* 与 delivery-bootstrap-review 都由 include 提供，
+  // 只解析原文看不到它们。此前生产门禁用 YAML.parse(原文)，测试用展开 include，
+  // 同一个门禁因此在“被 include 的作业/阶段”上给出两套结论。
+  // delivery-source-admission / delivery-ai-review 挂在 pull_request.target（merge 事件），
+  // 不在 **/pull_request 上；**/pull_request 里由 include 新增的只有 bootstrap review。
+  const includeOnly = ["delivery-bootstrap-review"];
+  const rawPr = (raw["**"]?.pull_request ?? []).map((job) => job?.name);
+  const effectivePr = (effective["**"]?.pull_request ?? []).map((job) => job?.name);
+  for (const name of includeOnly) {
+    assert.ok(!rawPr.includes(name), `原文不应直接看到 ${name}，实际：${JSON.stringify(rawPr)}`);
+    assert.ok(effectivePr.includes(name), `生效配置必须看到 ${name}，实际：${JSON.stringify(effectivePr)}`);
+  }
+
+  // 生效结构上的判定必须与真实结构一致：清单声明的门禁齐全且各恰好一个可执行实例。
+  const product = await manifest();
+  assert.deepEqual(await run(effective), [], "真实生效结构不得报出门禁错误");
+  for (const name of product.desktop.sourceGates) {
+    const matches = (effective["**"]?.pull_request ?? []).filter((job) => job?.name === name && Array.isArray(job.stages) && job.stages.length);
+    assert.equal(matches.length, 1, `生效配置必须恰好看到一个可执行的 ${name}`);
+  }
+
+  // 反向自证：把生效结构里被 include 提供的 PR 门禁删掉，门禁必须点名单个缺失项，
+  // 证明它确实读到了 include 提供的内容（而不是在原文上空跑）。
+  const broken = structuredClone(effective);
+  broken["**"].pull_request = broken["**"].pull_request.filter((job) => job?.name !== "delivery-bootstrap-review");
+  const errors = await run(broken);
+  assert.equal(errors.some((error) => error.includes("delivery-bootstrap-review")), false,
+    "delivery-* 不是清单声明的产品源码门禁，删除它不应被误报为源码门禁缺失");
+
+  // 删掉一个由 include 提供的候选作业后，门禁必须点名缺失 —— 证明它读的确实是
+  // 展开后的结构，而不是在原文上空跑出“通过”。
+  const missingJob = structuredClone(effective);
+  missingJob["$"].api_trigger_desktop_release = missingJob["$"].api_trigger_desktop_release
+    .filter((job) => job?.name !== "desktop-release-macos");
+  const jobErrors = await run(missingJob);
+  assert.ok(jobErrors.some((error) => error.includes("macOS 签名/公证")), jobErrors.join("\n"));
+});
+
+test("解析入口拒绝越出仓库/不存在的 include，且解析失败时不放行", async () => {
+  await assert.rejects(
+    loadCnbReleaseChannelConfig({
+      desktopWorkflow: 'include: ../outside.yml\nmain:\n  push: []\n',
+      repositoryRoot: repoRoot, root: repoRoot, fs, path,
+    }),
+    /越出|include|安全/u,
+  );
+  await assert.rejects(
+    loadCnbReleaseChannelConfig({
+      desktopWorkflow: 'include: scripts/delivery/does-not-exist.yml\nmain:\n  push: []\n',
+      repositoryRoot: repoRoot, root: repoRoot, fs, path,
+    }),
+    /ENOENT|include|无法读取/u,
+  );
+  await assert.rejects(
+    loadCnbReleaseChannelConfig({ desktopWorkflow: "- just\n- a\n- list\n", repositoryRoot: repoRoot, root: repoRoot, fs, path }),
+    /映射|mapping|CI/u,
+  );
+  await assert.rejects(
+    loadCnbReleaseChannelConfig({ desktopWorkflow: "   \n", repositoryRoot: repoRoot, root: repoRoot, fs, path }),
+    /为空/u,
+  );
 });
