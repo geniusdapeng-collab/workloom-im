@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 1414,
+  "revision": 1416,
   "tasks": {
     "231": {
       "number": 231,
@@ -3213,12 +3213,12 @@
     },
     "261": {
       "number": 261,
-      "status": "waiting_review",
+      "status": "parked",
       "firstSeen": 1791274209665,
       "attempts": {},
       "headSha": "fef68f9abf7801ceb5a76bbd8b6cae7e7876cabc",
       "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
-      "updatedAt": 1791275452668,
+      "updatedAt": 1791275708507,
       "admission": {
         "number": 261,
         "headSha": "fef68f9abf7801ceb5a76bbd8b6cae7e7876cabc",
@@ -3245,22 +3245,17 @@
       },
       "reviewAttemptAt": 1791275452668,
       "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
-      "reviewBuild": {
-        "sn": "cnb-lnc-1k485c5hn",
-        "headSha": "fef68f9abf7801ceb5a76bbd8b6cae7e7876cabc",
-        "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
-        "at": 1791275452668
-      },
+      "reviewBuild": null,
       "reviewDispatch": null,
       "review": null,
-      "error": "AI review did not pass without unresolved issues",
+      "error": "AI build error without a complete review receipt",
       "reviewFailures": {
         "headSha": "fef68f9abf7801ceb5a76bbd8b6cae7e7876cabc",
         "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
-        "lastBuild": "cnb-v49-1k48471gp",
-        "count": 1
+        "count": 2,
+        "lastBuild": "cnb-lnc-1k485c5hn"
       },
-      "blockedUntil": 1791275197701
+      "blockedUntil": 1791276308507
     }
   },
   "leases": {
@@ -49511,6 +49506,39 @@
       },
       "previous": "b9b1fc045b2ffa0dd951b962c82247e920a847618e18dd7fe53aeea3aa3f1aa9",
       "digest": "18d8c80dff9caba4e164efb4fc290d7afb7ea60a4ec18a7945c8d354e85dcbb3"
+    },
+    {
+      "sequence": 1415,
+      "at": "2026-10-06T08:35:08.507Z",
+      "kind": "task",
+      "data": {
+        "number": 261,
+        "patch": {
+          "status": "parked",
+          "reviewBuild": null,
+          "reviewDispatch": null,
+          "reviewFailures": {
+            "headSha": "fef68f9abf7801ceb5a76bbd8b6cae7e7876cabc",
+            "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+            "count": 2,
+            "lastBuild": "cnb-lnc-1k485c5hn"
+          },
+          "blockedUntil": 1791276308507,
+          "error": "AI build error without a complete review receipt"
+        }
+      },
+      "previous": "18d8c80dff9caba4e164efb4fc290d7afb7ea60a4ec18a7945c8d354e85dcbb3",
+      "digest": "7e75af0300b405d3b6d3941b8473eade3672c70a8ccf92ca7e66fc797c0c5431"
+    },
+    {
+      "sequence": 1416,
+      "at": "2026-10-06T08:35:36.001Z",
+      "kind": "transaction",
+      "data": {
+        "id": "bfe0dde0-52b7-4322-8715-20a97eec1680"
+      },
+      "previous": "7e75af0300b405d3b6d3941b8473eade3672c70a8ccf92ca7e66fc797c0c5431",
+      "digest": "72a897948222eef5dabf34e92609d6efa98628f20f27197f51f818b207a120ba"
     }
   ]
 }
