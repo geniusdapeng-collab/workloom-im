@@ -544,6 +544,8 @@
     "scripts/hp01-repro.mts",
     "scripts/hp02-repro.mts",
     "scripts/hp02-action-inventory.mts",
+    "scripts/repair-mc*.mts",
+    "scripts/private-pg.mts",
     "scripts/bundle-governance.test.ts",
     "scripts/hotel-seed-preflight.ts",
     "scripts/hotel-seed-preflight.test.ts",
