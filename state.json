@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 2299,
+  "revision": 2302,
   "tasks": {
     "231": {
       "number": 231,
@@ -4670,7 +4670,7 @@
     },
     "269": {
       "number": 269,
-      "status": "developing",
+      "status": "waiting_ci",
       "firstSeen": 1791311619348,
       "attempts": {},
       "admission": {
@@ -4686,15 +4686,157 @@
           "protocol": 83
         }
       },
-      "updatedAt": 1791311709417,
+      "updatedAt": 1791311837900,
       "headSha": "aac6f97cb196e900912e53ae842962ec0386ac7d",
       "intent": {
         "taskId": "T-2026-1007-1002",
-        "ready": false,
+        "ready": true,
         "dependsOn": [
           267
         ],
         "releases": []
+      },
+      "mainSha": "83ac6ef9466e93704725f469c366cfd7b54f0a99",
+      "branch": "task/T-2026-1007-1002",
+      "developerReview": {
+        "schemaVersion": 1,
+        "provider": "codex",
+        "repo": "workloom-ai/workloom-im",
+        "number": 269,
+        "headSha": "aac6f97cb196e900912e53ae842962ec0386ac7d",
+        "mainSha": "83ac6ef9466e93704725f469c366cfd7b54f0a99",
+        "policyHash": "8b6db8edf768d3fa0245e8f8b068deec502ae326808d729e0143f73065d23818",
+        "reviewedFiles": [
+          "scripts/delivery/git-state.mjs",
+          "scripts/delivery/queue.test.mjs"
+        ],
+        "filesHash": "9df293360727889c944bd76ed3b7850d922b284133738b38c7c7c315222d50e3",
+        "dependsOn": [
+          267
+        ],
+        "ciPolicyChanges": [
+          {
+            "id": "CI-001",
+            "rationale": "Read the complete original regression file in this task and the complete current change. Added ten tests for decoded/text immutable-SHA reads, positive-only missing branch, permission/transport/hidden main, malformed SHA/content, foreign/corrupt chains, bounded 429 read recovery/exhaustion and rejection of write retries. The existing actual activate/admit CLI fixture now returns the exact commit and state bytes from its real bare Git repository; all prior assertions, six-writer CAS and lost push acknowledgement checks remain. All 290 canonical post-commit cases passed; no test/gate was disabled or reclassified to pass."
+          },
+          {
+            "id": "CI-002",
+            "rationale": "Read complete current Git store and exact change plus queue-model validation and official cnb-api transport. Read-only canonical authenticated access pins state.json to the observed full SHA and validates the entire existing chain; branch absence needs a separate readable main proof. Permission, transport, malformed SHA/content and cross-repo/chain errors stay failures. Mutation still fetches real Git objects, performs ordinary fast-forward CAS, detects the exact durable transaction after lost acknowledgement and never blindly retries an external write. Only explicit 429 from ls-remote/fetch receives two bounded delays. Actual live CNB decoded-object contract was queried, and real bare Git CAS/lost-ack and CLI integration remain exercised."
+          }
+        ],
+        "ciPolicyChangesHash": "476cc99d377b78a34088e9fe9ead5277ecbf7905dfc5afe3839bc064124bd153",
+        "tests": [
+          {
+            "headSha": "aac6f97cb196e900912e53ae842962ec0386ac7d",
+            "command": "node --test scripts/delivery/queue.test.mjs scripts/delivery/install-repository.test.mjs scripts/delivery/install-account.test.mjs scripts/ci/protocol-rules.test.mjs scripts/oss-watch.test.mjs sync/fanout-safety.test.mjs sync/fanout-rules.test.mjs sync/merge-sync-prs.test.mjs scripts/tools/provision-safety.test.mjs scripts/tools/fleet-rules.test.mjs sync/base-sync.test.mjs scripts/oss-inventory.test.mjs",
+            "exitCode": 0,
+            "finishedAt": "2026-10-06T18:34:29.779704+00:00",
+            "result": "，不带基座专属尾部 (0.267792ms)\n✔ 认证不进入 URL，错误输出会脱敏 (0.561333ms)\n✔ @workloom/ui 由稳定制品升级维护，锚点合并保留子仓精确版本 (0.208333ms)\n✔ 缺少 B 端移动客户端时只报告第一阶段迁移，绝不伪装三端合规 (2.520125ms)\n✔ v19 scope 明确保护产品身份、仓级发布器、桌面发布封口器、同步认证、产品派生锁、依赖闭包与 Bundle 装配契约 (3.729875ms)\n✔ v19 scope 登记排雷、真实证据和预算受控资产，并保持显式审查边界 (1.062209ms)\n✔ v19 required-only 分发包含持久交付器、AI 审查、租约与独立发布的完整运行闭包 (0.416583ms)\n✔ 权威子仓清单的附加排除不会切断公共基座依赖闭包 (900.067083ms)\n✔ 基座自身的下发面必须先通过依赖闭包，不能把断链留到九个子仓分别失败 (81.950542ms)\n✔ UI 治理受管文件一旦重新进入普通 base-sync，scope 契约立即 fail closed (298.837458ms)\n✔ 公共追加资产只补齐缺失文件，同路径异内容冲突失败关闭 (936.9335ms)\n✔ 完整同步对相对依赖断链和缺失的子仓保留实现均 fail closed (828.1085ms)\n✔ 相同 base SHA 仍逐项验真；Tiger required assets 写根目录且 state 同提交迁移 (2237.215958ms)\n✔ 内容一致但 state 缺失时 detect 退出 2，pull 创建 state-only 提交 (981.374916ms)\n✔ --required-only --no-commit 允许脏树但只写根资产/state且不暂存 (519.075042ms)\n✔ 默认自动提交拒绝既有脏工作树 (279.2555ms)\n✔ 本地 --base-dir 只允许受控来源与 HEAD 一致，无关脏文件不阻塞 (402.444959ms)\n✔ 源 required asset 为 dangling symlink 时 fail closed (316.012625ms)\n✔ 目标 dangling symlink 与 pathPrefix symlink escape 均被拒绝 (547.094417ms)\n✔ lockfile 刷新故障 fail closed：显式 ignore-scripts，且不写 state/不提交 (453.093042ms)\n✔ 普通 copy 的 package.json 变更也先刷新子仓 lockfile，再允许提交 (2997.5495ms)\n✔ 产品派生 runtime lock 不从基座复制，而是在子仓事务内刷新、验真并提交 (1093.033083ms)\n✔ pre-commit staged secret scan 失败时不写假 state、不提交且不留 staged (489.530125ms)\n✔ --no-commit 密钥扫描失败时回滚本次 required assets，保留同步前工作树 (446.621583ms)\n✔ --no-commit 只扫描相对事务快照的新增行，不误报目标文件既有敏感样例 (520.736208ms)\n✔ 自动提交路径按新增行扫描并保留二次 staged 防线 (887.231541ms)\n✔ 新增文件中的密钥仍 fail closed 并完整回滚 (445.026333ms)\n✔ 基座已评审 finding 仅在源文件摘要、规则和行号完全匹配时接受 (1297.790459ms)\n✔ 纯删除与普通含 NUL 图片遵循差异扫描边界 (554.636584ms)\n✔ base-sync 对含 NUL 二进制中的高置信 token 失败关闭并回滚 (445.593834ms)\n✔ 临时 base/child clone 在失败与 dry-run 路径都清理 (524.331042ms)\n✔ push 对 manifest pathPrefix symlink（含 dangling）fail closed (478.073083ms)\n✔ adopt 支持 .git 为文件的 linked worktree，并且不提交 (749.234167ms)\n✔ adopt 对已定制的 AGENTS.repo 与同名 workflow 均保留不覆盖 (432.682667ms)\n✔ 新行业缺少消费 CI 工程契约时零写入 fail closed (684.989791ms)\n✔ 最小新行业仓一次完成 full 基座、三端稳定壳与消费门禁资产 (3040.111875ms)\n✔ full 同步在依赖变更后重算子仓开源组件清单并纳入提交 (2065.558292ms)\n✔ UI 消费仓 full 同步重算 lockfile 后重新绑定稳定制品 SHA-512 (3411.671625ms)\n✔ 新行业后置 verifier 失败时恢复原有 staged、unstaged、untracked 与全部接入资产 (2900.961666ms)\n✔ 新行业后置失败不得覆盖被 ignore 的既有 UI state (3043.609708ms)\n✔ 新行业 lockfile 安装失败时回滚 pnpm 写入与所有先前阶段 (2570.097292ms)\n✔ 新行业已有任意 workspace node_modules 时在写入前 fail closed (687.291916ms)\n✔ 新行业已有冲突解析器版本时在基座写入前 fail closed (717.5195ms)\n✔ 新行业已有自定义 verifier 时在基座写入前 fail closed (739.8885ms)\n✔ 只换生成器（不动 package.json / lockfile）也必须重算开源组件清单 (1381.97975ms)\n✔ 新租约门禁只下发到已准备账本的仓；权限、损坏或不同仓账本不能放行 (3.042417ms)\n✔ 实际 fanout CLI 对既有订阅仓缺首装回执返回非零及可恢复动作，不把跳过计为健康 (142.984667ms)\n✔ 实际 fanout 的真实权限/传输错误优先于首装等待，不被 78 或容忍开关隐藏 (10846.356709ms)\n✔ 隔离副本不下发：即使误写进 children 也在 fanout 入口被拦下 (0.24825ms)\n✔ glob：** 跨目录，* 不跨目录 (0.239542ms)\n✔ 免审白名单只覆盖非执行性根级资产；治理路径保留显式审查 (0.183959ms)\n✔ 纯同步 PR：白名单文件 + 门禁全绿 → 允许自动合并 (0.214292ms)\n✔ 自动合并拒绝：门禁红 / 非 sync 分支 / 文件出圈 / 无门禁结果 / 平台不可合并 (0.136291ms)\n✔ 攻击样例：伪同步分支改合并器，即使门禁绿也不得免审或回落代码车道 (0.478917ms)\n✔ 纯同步分支缺风险标签、可合并状态或处于 WIP 时失败关闭 (0.156375ms)\n✔ 在途同步 PR 检测：只认 sync/base-* 前缀 (0.078416ms)\n✔ refs/heads 前缀必须被规范化（CNB 列表接口原样返回） (0.060291ms)\n✔ 存量文档分发分支只在显式开启 legacy 时才可自动合并 (0.05925ms)\n✔ 代码 PR：门禁全绿 + 冷却期已过 + 无风险标签 → 允许串行合并 (0.317542ms)\n✔ 代码 PR 拒绝：risk/review、risk/block、WIP (0.118792ms)\n✔ 代码 PR 拒绝：门禁红 / 无门禁结果 / 冲突 / 冷却期内 / 非任务车道 (0.21525ms)\n✔ 代码 PR 拒绝：治理与高风险路径不由无人值守扫描合并 (0.288416ms)\n✔ 同步回落车道：受控资产（allowPaths 命中）不算治理路径，其余治理路径仍拦截 (0.157792ms)\n✔ required-only 漂移只看资产摘要，full 还看基座发布点 (0.098916ms)\n✔ requiredAssetDigests 与 base-sync 的 state 口径一致（整文件 + 复制文件 + 受控块） (1.387833ms)\n✔ full 波次跳过 paused 波次仓（获客实验车道），其余仓照常下发 (0.088625ms)\n✔ base-sync 的仓级成功必须同时具备零退出码和完整报告 (1.280959ms)\n✔ fanout rejects a foreign, insecure or credential-bearing origin before requesting credentials (1.081541ms)\n✔ fanout error logs remove the actual Basic credential as well as the original token (1.918625ms)\n✔ CNB Git authentication is scoped to the canonical HTTPS origin and disables persistent helpers (0.125666ms)\n✔ first-install execution closure is delivered before a ledger exists, then exact preparation enables fanout without claiming activation (1827.005584ms)\n✔ fleet dispatch never enters isolated or unsubscribed repositories (2.369541ms)\n✔ old entry point dispatches trusted main and has no direct merge operation (0.369041ms)\n✔ dry-run and absent installation cannot issue writes; missing build ack remains failed (0.181584ms)\nℹ tests 290\nℹ suites 8\nℹ pass 290\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 43156.749875\n",
+            "log": "work/queue-ledger-rate-committed-core.txt"
+          }
+        ],
+        "reviewedAt": "2026-10-06T18:37:12.026Z",
+        "summary": "Actual current Codex review of both complete changed files and their direct dependencies, with the complete post-commit 290-case regression. Resolves the observed fleet Git read throttle without changing platform AI revocation, required product CI, immutable candidates, exact source/main binding or Git CAS safety. No unresolved blocking findings in the change.",
+        "passed": true,
+        "id": "3ae1dae64fe8206510fb52a11ece154d1d049d725002e95be92c625b7b9a02a4"
+      },
+      "reviewSnapshot": {
+        "repo": "workloom-ai/workloom-im",
+        "number": 269,
+        "pull": {
+          "number": 269,
+          "state": "open",
+          "title": "fix(base): 修复舰队账本读取限流 [T-2026-1007-1002]",
+          "body": "十二仓五分钟任务的真实平台记录连续出现 Git 读取 HTTP 429。普通只读账本改用已实测的官方 branch + 准确 immutable SHA raw API，继续校验仓库身份和完整事件摘要链。只有有证据的缺控制分支才可返回空状态；权限、网络、坏 SHA、缺内容和损坏状态明确失败。\n\n真实 Git 写入、普通 fast-forward CAS、事务去重和未知写确认回读保持原逻辑；仅 ls-remote/fetch 的明确 429 最多两次退避，push/merge 不进入该重试通道。CLI API fixture 从真实 bare Git 精确提交回读，真实并发与丢失确认回归保留。当前 Codex 审查与实际回归回执成立后，经原有机器门禁和不可修改候选普通集成。任务卡 #268。平台 AI/NPC 均保持关闭。\n\n<!-- delivery-ledger-read-rate:20261007 -->\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1007-1002\",\n  \"ready\": true,\n  \"depends_on\": [\n    267\n  ],\n  \"releases\": []\n}\n-->",
+          "author": {
+            "username": "cnb.dYiF05kxAGA",
+            "nickname": "Genius",
+            "email": "XYpmztfpCvez6l8z5BBAvJ+cnb.dYiF05kxAGA@noreply.cnb.cool",
+            "is_npc": false
+          },
+          "reviewers": [],
+          "labels": [],
+          "base": {
+            "ref": "refs/heads/main",
+            "sha": "83ac6ef9466e93704725f469c366cfd7b54f0a99",
+            "repo": {
+              "id": "2100396957109968896",
+              "name": "workloom-im",
+              "path": "workloom-ai/workloom-im",
+              "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+            }
+          },
+          "head": {
+            "ref": "refs/heads/task/T-2026-1007-1002",
+            "sha": "aac6f97cb196e900912e53ae842962ec0386ac7d",
+            "repo": {
+              "id": "2100396957109968896",
+              "name": "workloom-im",
+              "path": "workloom-ai/workloom-im",
+              "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+            }
+          },
+          "blocked_on": "unblocked",
+          "merged_by": {
+            "is_npc": false
+          },
+          "mergeable_state": "mergeable",
+          "is_wip": false,
+          "is_merged": false,
+          "is_force_merged": false,
+          "statuses": {}
+        },
+        "headSha": "aac6f97cb196e900912e53ae842962ec0386ac7d",
+        "mainSha": "83ac6ef9466e93704725f469c366cfd7b54f0a99",
+        "files": [
+          "scripts/delivery/git-state.mjs",
+          "scripts/delivery/queue.test.mjs"
+        ],
+        "intent": {
+          "taskId": "T-2026-1007-1002",
+          "ready": true,
+          "dependsOn": [
+            267
+          ],
+          "releases": []
+        },
+        "headTime": 1791311544000,
+        "mergeBase": "83ac6ef9466e93704725f469c366cfd7b54f0a99",
+        "checkErrors": [],
+        "checkSha": null,
+        "hasFailedChecks": false,
+        "ciPolicyChanges": [
+          {
+            "id": "CI-001",
+            "file": "scripts/delivery/queue.test.mjs",
+            "before": {
+              "ref": "83ac6ef9466e93704725f469c366cfd7b54f0a99",
+              "path": "scripts/delivery/queue.test.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "aac6f97cb196e900912e53ae842962ec0386ac7d",
+              "path": "scripts/delivery/queue.test.mjs",
+              "absent": false
+            },
+            "digest": "37e6390c13864637f2f34dca1b2a1319412f956eafa545d8b024ad4709c940da"
+          },
+          {
+            "id": "CI-002",
+            "file": "scripts/delivery/git-state.mjs",
+            "before": {
+              "ref": "83ac6ef9466e93704725f469c366cfd7b54f0a99",
+              "path": "scripts/delivery/git-state.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "aac6f97cb196e900912e53ae842962ec0386ac7d",
+              "path": "scripts/delivery/git-state.mjs",
+              "absent": false
+            },
+            "digest": "43b1ec98ac17d1e93ba7b521ad09d2b29147147af9ac3463b00dd747de7a17dd"
+          }
+        ]
       }
     }
   },
@@ -92938,6 +93080,193 @@
       },
       "previous": "75333e9dd285cef4caca251797aef8e16be622eba98f880cfaf35fdd17d9074e",
       "digest": "8105b56e3f19da09e6685ba0d55e9bf24c1ff56783f4967951b158b553a36a28"
+    },
+    {
+      "sequence": 2300,
+      "at": "2026-10-06T18:37:17.899Z",
+      "kind": "developer_review",
+      "data": {
+        "number": 269,
+        "id": "3ae1dae64fe8206510fb52a11ece154d1d049d725002e95be92c625b7b9a02a4",
+        "headSha": "aac6f97cb196e900912e53ae842962ec0386ac7d",
+        "mainSha": "83ac6ef9466e93704725f469c366cfd7b54f0a99"
+      },
+      "previous": "8105b56e3f19da09e6685ba0d55e9bf24c1ff56783f4967951b158b553a36a28",
+      "digest": "9c0b4aff837df1bcd5e62e8207b03d4072ee5f9455efd895d2390b89d1d204e4"
+    },
+    {
+      "sequence": 2301,
+      "at": "2026-10-06T18:37:17.900Z",
+      "kind": "task",
+      "data": {
+        "number": 269,
+        "patch": {
+          "status": "waiting_ci",
+          "headSha": "aac6f97cb196e900912e53ae842962ec0386ac7d",
+          "mainSha": "83ac6ef9466e93704725f469c366cfd7b54f0a99",
+          "branch": "task/T-2026-1007-1002",
+          "intent": {
+            "taskId": "T-2026-1007-1002",
+            "ready": true,
+            "dependsOn": [
+              267
+            ],
+            "releases": []
+          },
+          "developerReview": {
+            "schemaVersion": 1,
+            "provider": "codex",
+            "repo": "workloom-ai/workloom-im",
+            "number": 269,
+            "headSha": "aac6f97cb196e900912e53ae842962ec0386ac7d",
+            "mainSha": "83ac6ef9466e93704725f469c366cfd7b54f0a99",
+            "policyHash": "8b6db8edf768d3fa0245e8f8b068deec502ae326808d729e0143f73065d23818",
+            "reviewedFiles": [
+              "scripts/delivery/git-state.mjs",
+              "scripts/delivery/queue.test.mjs"
+            ],
+            "filesHash": "9df293360727889c944bd76ed3b7850d922b284133738b38c7c7c315222d50e3",
+            "dependsOn": [
+              267
+            ],
+            "ciPolicyChanges": [
+              {
+                "id": "CI-001",
+                "rationale": "Read the complete original regression file in this task and the complete current change. Added ten tests for decoded/text immutable-SHA reads, positive-only missing branch, permission/transport/hidden main, malformed SHA/content, foreign/corrupt chains, bounded 429 read recovery/exhaustion and rejection of write retries. The existing actual activate/admit CLI fixture now returns the exact commit and state bytes from its real bare Git repository; all prior assertions, six-writer CAS and lost push acknowledgement checks remain. All 290 canonical post-commit cases passed; no test/gate was disabled or reclassified to pass."
+              },
+              {
+                "id": "CI-002",
+                "rationale": "Read complete current Git store and exact change plus queue-model validation and official cnb-api transport. Read-only canonical authenticated access pins state.json to the observed full SHA and validates the entire existing chain; branch absence needs a separate readable main proof. Permission, transport, malformed SHA/content and cross-repo/chain errors stay failures. Mutation still fetches real Git objects, performs ordinary fast-forward CAS, detects the exact durable transaction after lost acknowledgement and never blindly retries an external write. Only explicit 429 from ls-remote/fetch receives two bounded delays. Actual live CNB decoded-object contract was queried, and real bare Git CAS/lost-ack and CLI integration remain exercised."
+              }
+            ],
+            "ciPolicyChangesHash": "476cc99d377b78a34088e9fe9ead5277ecbf7905dfc5afe3839bc064124bd153",
+            "tests": [
+              {
+                "headSha": "aac6f97cb196e900912e53ae842962ec0386ac7d",
+                "command": "node --test scripts/delivery/queue.test.mjs scripts/delivery/install-repository.test.mjs scripts/delivery/install-account.test.mjs scripts/ci/protocol-rules.test.mjs scripts/oss-watch.test.mjs sync/fanout-safety.test.mjs sync/fanout-rules.test.mjs sync/merge-sync-prs.test.mjs scripts/tools/provision-safety.test.mjs scripts/tools/fleet-rules.test.mjs sync/base-sync.test.mjs scripts/oss-inventory.test.mjs",
+                "exitCode": 0,
+                "finishedAt": "2026-10-06T18:34:29.779704+00:00",
+                "result": "，不带基座专属尾部 (0.267792ms)\n✔ 认证不进入 URL，错误输出会脱敏 (0.561333ms)\n✔ @workloom/ui 由稳定制品升级维护，锚点合并保留子仓精确版本 (0.208333ms)\n✔ 缺少 B 端移动客户端时只报告第一阶段迁移，绝不伪装三端合规 (2.520125ms)\n✔ v19 scope 明确保护产品身份、仓级发布器、桌面发布封口器、同步认证、产品派生锁、依赖闭包与 Bundle 装配契约 (3.729875ms)\n✔ v19 scope 登记排雷、真实证据和预算受控资产，并保持显式审查边界 (1.062209ms)\n✔ v19 required-only 分发包含持久交付器、AI 审查、租约与独立发布的完整运行闭包 (0.416583ms)\n✔ 权威子仓清单的附加排除不会切断公共基座依赖闭包 (900.067083ms)\n✔ 基座自身的下发面必须先通过依赖闭包，不能把断链留到九个子仓分别失败 (81.950542ms)\n✔ UI 治理受管文件一旦重新进入普通 base-sync，scope 契约立即 fail closed (298.837458ms)\n✔ 公共追加资产只补齐缺失文件，同路径异内容冲突失败关闭 (936.9335ms)\n✔ 完整同步对相对依赖断链和缺失的子仓保留实现均 fail closed (828.1085ms)\n✔ 相同 base SHA 仍逐项验真；Tiger required assets 写根目录且 state 同提交迁移 (2237.215958ms)\n✔ 内容一致但 state 缺失时 detect 退出 2，pull 创建 state-only 提交 (981.374916ms)\n✔ --required-only --no-commit 允许脏树但只写根资产/state且不暂存 (519.075042ms)\n✔ 默认自动提交拒绝既有脏工作树 (279.2555ms)\n✔ 本地 --base-dir 只允许受控来源与 HEAD 一致，无关脏文件不阻塞 (402.444959ms)\n✔ 源 required asset 为 dangling symlink 时 fail closed (316.012625ms)\n✔ 目标 dangling symlink 与 pathPrefix symlink escape 均被拒绝 (547.094417ms)\n✔ lockfile 刷新故障 fail closed：显式 ignore-scripts，且不写 state/不提交 (453.093042ms)\n✔ 普通 copy 的 package.json 变更也先刷新子仓 lockfile，再允许提交 (2997.5495ms)\n✔ 产品派生 runtime lock 不从基座复制，而是在子仓事务内刷新、验真并提交 (1093.033083ms)\n✔ pre-commit staged secret scan 失败时不写假 state、不提交且不留 staged (489.530125ms)\n✔ --no-commit 密钥扫描失败时回滚本次 required assets，保留同步前工作树 (446.621583ms)\n✔ --no-commit 只扫描相对事务快照的新增行，不误报目标文件既有敏感样例 (520.736208ms)\n✔ 自动提交路径按新增行扫描并保留二次 staged 防线 (887.231541ms)\n✔ 新增文件中的密钥仍 fail closed 并完整回滚 (445.026333ms)\n✔ 基座已评审 finding 仅在源文件摘要、规则和行号完全匹配时接受 (1297.790459ms)\n✔ 纯删除与普通含 NUL 图片遵循差异扫描边界 (554.636584ms)\n✔ base-sync 对含 NUL 二进制中的高置信 token 失败关闭并回滚 (445.593834ms)\n✔ 临时 base/child clone 在失败与 dry-run 路径都清理 (524.331042ms)\n✔ push 对 manifest pathPrefix symlink（含 dangling）fail closed (478.073083ms)\n✔ adopt 支持 .git 为文件的 linked worktree，并且不提交 (749.234167ms)\n✔ adopt 对已定制的 AGENTS.repo 与同名 workflow 均保留不覆盖 (432.682667ms)\n✔ 新行业缺少消费 CI 工程契约时零写入 fail closed (684.989791ms)\n✔ 最小新行业仓一次完成 full 基座、三端稳定壳与消费门禁资产 (3040.111875ms)\n✔ full 同步在依赖变更后重算子仓开源组件清单并纳入提交 (2065.558292ms)\n✔ UI 消费仓 full 同步重算 lockfile 后重新绑定稳定制品 SHA-512 (3411.671625ms)\n✔ 新行业后置 verifier 失败时恢复原有 staged、unstaged、untracked 与全部接入资产 (2900.961666ms)\n✔ 新行业后置失败不得覆盖被 ignore 的既有 UI state (3043.609708ms)\n✔ 新行业 lockfile 安装失败时回滚 pnpm 写入与所有先前阶段 (2570.097292ms)\n✔ 新行业已有任意 workspace node_modules 时在写入前 fail closed (687.291916ms)\n✔ 新行业已有冲突解析器版本时在基座写入前 fail closed (717.5195ms)\n✔ 新行业已有自定义 verifier 时在基座写入前 fail closed (739.8885ms)\n✔ 只换生成器（不动 package.json / lockfile）也必须重算开源组件清单 (1381.97975ms)\n✔ 新租约门禁只下发到已准备账本的仓；权限、损坏或不同仓账本不能放行 (3.042417ms)\n✔ 实际 fanout CLI 对既有订阅仓缺首装回执返回非零及可恢复动作，不把跳过计为健康 (142.984667ms)\n✔ 实际 fanout 的真实权限/传输错误优先于首装等待，不被 78 或容忍开关隐藏 (10846.356709ms)\n✔ 隔离副本不下发：即使误写进 children 也在 fanout 入口被拦下 (0.24825ms)\n✔ glob：** 跨目录，* 不跨目录 (0.239542ms)\n✔ 免审白名单只覆盖非执行性根级资产；治理路径保留显式审查 (0.183959ms)\n✔ 纯同步 PR：白名单文件 + 门禁全绿 → 允许自动合并 (0.214292ms)\n✔ 自动合并拒绝：门禁红 / 非 sync 分支 / 文件出圈 / 无门禁结果 / 平台不可合并 (0.136291ms)\n✔ 攻击样例：伪同步分支改合并器，即使门禁绿也不得免审或回落代码车道 (0.478917ms)\n✔ 纯同步分支缺风险标签、可合并状态或处于 WIP 时失败关闭 (0.156375ms)\n✔ 在途同步 PR 检测：只认 sync/base-* 前缀 (0.078416ms)\n✔ refs/heads 前缀必须被规范化（CNB 列表接口原样返回） (0.060291ms)\n✔ 存量文档分发分支只在显式开启 legacy 时才可自动合并 (0.05925ms)\n✔ 代码 PR：门禁全绿 + 冷却期已过 + 无风险标签 → 允许串行合并 (0.317542ms)\n✔ 代码 PR 拒绝：risk/review、risk/block、WIP (0.118792ms)\n✔ 代码 PR 拒绝：门禁红 / 无门禁结果 / 冲突 / 冷却期内 / 非任务车道 (0.21525ms)\n✔ 代码 PR 拒绝：治理与高风险路径不由无人值守扫描合并 (0.288416ms)\n✔ 同步回落车道：受控资产（allowPaths 命中）不算治理路径，其余治理路径仍拦截 (0.157792ms)\n✔ required-only 漂移只看资产摘要，full 还看基座发布点 (0.098916ms)\n✔ requiredAssetDigests 与 base-sync 的 state 口径一致（整文件 + 复制文件 + 受控块） (1.387833ms)\n✔ full 波次跳过 paused 波次仓（获客实验车道），其余仓照常下发 (0.088625ms)\n✔ base-sync 的仓级成功必须同时具备零退出码和完整报告 (1.280959ms)\n✔ fanout rejects a foreign, insecure or credential-bearing origin before requesting credentials (1.081541ms)\n✔ fanout error logs remove the actual Basic credential as well as the original token (1.918625ms)\n✔ CNB Git authentication is scoped to the canonical HTTPS origin and disables persistent helpers (0.125666ms)\n✔ first-install execution closure is delivered before a ledger exists, then exact preparation enables fanout without claiming activation (1827.005584ms)\n✔ fleet dispatch never enters isolated or unsubscribed repositories (2.369541ms)\n✔ old entry point dispatches trusted main and has no direct merge operation (0.369041ms)\n✔ dry-run and absent installation cannot issue writes; missing build ack remains failed (0.181584ms)\nℹ tests 290\nℹ suites 8\nℹ pass 290\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 43156.749875\n",
+                "log": "work/queue-ledger-rate-committed-core.txt"
+              }
+            ],
+            "reviewedAt": "2026-10-06T18:37:12.026Z",
+            "summary": "Actual current Codex review of both complete changed files and their direct dependencies, with the complete post-commit 290-case regression. Resolves the observed fleet Git read throttle without changing platform AI revocation, required product CI, immutable candidates, exact source/main binding or Git CAS safety. No unresolved blocking findings in the change.",
+            "passed": true,
+            "id": "3ae1dae64fe8206510fb52a11ece154d1d049d725002e95be92c625b7b9a02a4"
+          },
+          "reviewSnapshot": {
+            "repo": "workloom-ai/workloom-im",
+            "number": 269,
+            "pull": {
+              "number": 269,
+              "state": "open",
+              "title": "fix(base): 修复舰队账本读取限流 [T-2026-1007-1002]",
+              "body": "十二仓五分钟任务的真实平台记录连续出现 Git 读取 HTTP 429。普通只读账本改用已实测的官方 branch + 准确 immutable SHA raw API，继续校验仓库身份和完整事件摘要链。只有有证据的缺控制分支才可返回空状态；权限、网络、坏 SHA、缺内容和损坏状态明确失败。\n\n真实 Git 写入、普通 fast-forward CAS、事务去重和未知写确认回读保持原逻辑；仅 ls-remote/fetch 的明确 429 最多两次退避，push/merge 不进入该重试通道。CLI API fixture 从真实 bare Git 精确提交回读，真实并发与丢失确认回归保留。当前 Codex 审查与实际回归回执成立后，经原有机器门禁和不可修改候选普通集成。任务卡 #268。平台 AI/NPC 均保持关闭。\n\n<!-- delivery-ledger-read-rate:20261007 -->\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1007-1002\",\n  \"ready\": true,\n  \"depends_on\": [\n    267\n  ],\n  \"releases\": []\n}\n-->",
+              "author": {
+                "username": "cnb.dYiF05kxAGA",
+                "nickname": "Genius",
+                "email": "XYpmztfpCvez6l8z5BBAvJ+cnb.dYiF05kxAGA@noreply.cnb.cool",
+                "is_npc": false
+              },
+              "reviewers": [],
+              "labels": [],
+              "base": {
+                "ref": "refs/heads/main",
+                "sha": "83ac6ef9466e93704725f469c366cfd7b54f0a99",
+                "repo": {
+                  "id": "2100396957109968896",
+                  "name": "workloom-im",
+                  "path": "workloom-ai/workloom-im",
+                  "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+                }
+              },
+              "head": {
+                "ref": "refs/heads/task/T-2026-1007-1002",
+                "sha": "aac6f97cb196e900912e53ae842962ec0386ac7d",
+                "repo": {
+                  "id": "2100396957109968896",
+                  "name": "workloom-im",
+                  "path": "workloom-ai/workloom-im",
+                  "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+                }
+              },
+              "blocked_on": "unblocked",
+              "merged_by": {
+                "is_npc": false
+              },
+              "mergeable_state": "mergeable",
+              "is_wip": false,
+              "is_merged": false,
+              "is_force_merged": false,
+              "statuses": {}
+            },
+            "headSha": "aac6f97cb196e900912e53ae842962ec0386ac7d",
+            "mainSha": "83ac6ef9466e93704725f469c366cfd7b54f0a99",
+            "files": [
+              "scripts/delivery/git-state.mjs",
+              "scripts/delivery/queue.test.mjs"
+            ],
+            "intent": {
+              "taskId": "T-2026-1007-1002",
+              "ready": true,
+              "dependsOn": [
+                267
+              ],
+              "releases": []
+            },
+            "headTime": 1791311544000,
+            "mergeBase": "83ac6ef9466e93704725f469c366cfd7b54f0a99",
+            "checkErrors": [],
+            "checkSha": null,
+            "hasFailedChecks": false,
+            "ciPolicyChanges": [
+              {
+                "id": "CI-001",
+                "file": "scripts/delivery/queue.test.mjs",
+                "before": {
+                  "ref": "83ac6ef9466e93704725f469c366cfd7b54f0a99",
+                  "path": "scripts/delivery/queue.test.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "aac6f97cb196e900912e53ae842962ec0386ac7d",
+                  "path": "scripts/delivery/queue.test.mjs",
+                  "absent": false
+                },
+                "digest": "37e6390c13864637f2f34dca1b2a1319412f956eafa545d8b024ad4709c940da"
+              },
+              {
+                "id": "CI-002",
+                "file": "scripts/delivery/git-state.mjs",
+                "before": {
+                  "ref": "83ac6ef9466e93704725f469c366cfd7b54f0a99",
+                  "path": "scripts/delivery/git-state.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "aac6f97cb196e900912e53ae842962ec0386ac7d",
+                  "path": "scripts/delivery/git-state.mjs",
+                  "absent": false
+                },
+                "digest": "43b1ec98ac17d1e93ba7b521ad09d2b29147147af9ac3463b00dd747de7a17dd"
+              }
+            ]
+          }
+        }
+      },
+      "previous": "9c0b4aff837df1bcd5e62e8207b03d4072ee5f9455efd895d2390b89d1d204e4",
+      "digest": "948e319ed9df55427b5e712660827f9848cfbee99f3b40046ab71840330f5542"
+    },
+    {
+      "sequence": 2302,
+      "at": "2026-10-06T18:37:14.203Z",
+      "kind": "transaction",
+      "data": {
+        "id": "000dc159-4f39-496f-b457-959670757131"
+      },
+      "previous": "948e319ed9df55427b5e712660827f9848cfbee99f3b40046ab71840330f5542",
+      "digest": "2c4077bd1abdab5226820bc1daba70a38620ae59100bdd9e74d566c9f4ff85f2"
     }
   ]
 }
