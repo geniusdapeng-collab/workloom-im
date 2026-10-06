@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 2339,
+  "revision": 2341,
   "tasks": {
     "231": {
       "number": 231,
-      "status": "aligning",
+      "status": "waiting_ci",
       "firstSeen": 1791242108737,
       "attempts": {},
-      "headSha": "56aebb80bb644b4d0b9ff0354f1cce7ae0f656e4",
+      "headSha": "aef23b5ca4a8665582a188db65cfdc21c1ae5a12",
       "mainSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
       "branch": "task/T-2026-1002-9004",
       "intent": {
@@ -94,14 +94,10 @@
         "sync/base-scope.json",
         "tests/ui/workloom-clients.spec.ts"
       ],
-      "ciSince": 1791309117484,
+      "ciSince": 1791312443365,
       "updatedAt": 1791312443365,
       "alignmentCount": 1,
-      "alignmentIntent": {
-        "headSha": "56aebb80bb644b4d0b9ff0354f1cce7ae0f656e4",
-        "mainSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
-        "at": 1791312443365
-      },
+      "alignmentIntent": null,
       "review": null,
       "error": "不可修改候选 #262 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
       "blockedUntil": 0,
@@ -131,10 +127,10 @@
       "reviewFailures": null,
       "candidate": null,
       "alignment": {
-        "sha": "56aebb80bb644b4d0b9ff0354f1cce7ae0f656e4",
-        "previousHead": "15bebee7bbc2dd2ee10f4362e30e1d1e9ba78295",
-        "mainSha": "83ac6ef9466e93704725f469c366cfd7b54f0a99",
-        "verifiedAt": "2026-10-06T17:52:29.114Z"
+        "sha": "aef23b5ca4a8665582a188db65cfdc21c1ae5a12",
+        "previousHead": "56aebb80bb644b4d0b9ff0354f1cce7ae0f656e4",
+        "mainSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+        "verifiedAt": "2026-10-06T18:47:39.407Z"
       },
       "developerReview": null
     },
@@ -94777,6 +94773,38 @@
       },
       "previous": "897512e3b388b834185f3cd588a930d5e8eec6abcc29da62914fb42ea4109f1f",
       "digest": "60d2b081ab38eecdad82143a16a12dbbc34c6871d4479e533bbfc7ff7a1198a4"
+    },
+    {
+      "sequence": 2340,
+      "at": "2026-10-06T18:47:23.365Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "status": "waiting_ci",
+          "alignment": {
+            "sha": "aef23b5ca4a8665582a188db65cfdc21c1ae5a12",
+            "previousHead": "56aebb80bb644b4d0b9ff0354f1cce7ae0f656e4",
+            "mainSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+            "verifiedAt": "2026-10-06T18:47:39.407Z"
+          },
+          "alignmentIntent": null,
+          "headSha": "aef23b5ca4a8665582a188db65cfdc21c1ae5a12",
+          "ciSince": 1791312443365
+        }
+      },
+      "previous": "60d2b081ab38eecdad82143a16a12dbbc34c6871d4479e533bbfc7ff7a1198a4",
+      "digest": "3e22472b0f47a9c9f95a08de4b7b38148f7cfe04c5ec45fec0d62a15b7647796"
+    },
+    {
+      "sequence": 2341,
+      "at": "2026-10-06T18:47:39.436Z",
+      "kind": "transaction",
+      "data": {
+        "id": "14bfcee3-2d7e-47ef-b3db-81a69ddd83ee"
+      },
+      "previous": "3e22472b0f47a9c9f95a08de4b7b38148f7cfe04c5ec45fec0d62a15b7647796",
+      "digest": "27e01e434b12492fc3eb45ee33539168229f0f8344588d272ffe6e2e3d707058"
     }
   ]
 }
