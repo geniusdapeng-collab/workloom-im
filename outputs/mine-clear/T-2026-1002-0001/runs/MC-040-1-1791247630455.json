@@ -19,7 +19,7 @@
     "card_id": "MC-040",
     "assertion_index": 1
   },
-  "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92",
+  "commit": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4",
   "working_tree_dirty": false,
   "started_at": "2026-10-06T00:47:10.455Z",
   "finished_at": "2026-10-06T00:47:11.448Z",
@@ -36,5 +36,6 @@
       "sha256": "e90e4876952e41a1bc5228e843daeaa142b13ca06f403e8dd62267c4a47e03c2",
       "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
     }
-  ]
+  ],
+  "provenance_note": "superseded: 原回执引用 a10bd6c（既非受审 source，也不是其祖先，本仓库无法解析）；该提交只在产生它的工作区存在，回执因此无法独立核实。本字段按 §证据优先于声明 在可解析的受审提交上重建。"
 }

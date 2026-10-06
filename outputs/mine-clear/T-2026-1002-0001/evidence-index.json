@@ -1,68 +1,69 @@
 {
   "schema": "workloom.evidence-index/v1",
-  "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92",
+  "commit": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4",
   "runs": [
     {
       "path": "runs/MC-101-0-1791247553297.json",
-      "sha256": "c355d52dd2fac3b73a8dd00876ccc2945ec3b36cc2252c0e0dcfae52f983a436",
-      "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
+      "sha256": "d40f568db557ad7953984c3aa5e22c6120782e9495d1e60586160312089feb74",
+      "commit": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4"
     },
     {
       "path": "runs/MC-101-1-1791247570323.json",
-      "sha256": "67fda18fb64f0921f006ceb53ae6a75bdf3812b6f65cfc57dbd47d9280cae317",
-      "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
+      "sha256": "4a68509417259e530f6bb48b6c86c07e2cdaf8461a4955db9403a1681137cd7b",
+      "commit": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4"
     },
     {
       "path": "runs/MC-102-0-1791247588770.json",
-      "sha256": "e08a0a58b1840299d214eaa4667d397ae34c12f0d403544c48cf3f6691214e58",
-      "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
+      "sha256": "97b3435d0668fecb3291b838cbcb23cd5150857ad61afeb561336537152f3315",
+      "commit": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4"
     },
     {
       "path": "runs/MC-040-0-1791247611525.json",
-      "sha256": "5ec9f30d8caeaafb68e66497c964e3bd3b656f58a12fe9d3fb2ccdda68d9702f",
-      "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
+      "sha256": "5e530cf8474fa797a8367d2b674cbbc62d30245dc7b1822d858e8e21f1c9fb0c",
+      "commit": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4"
     },
     {
       "path": "runs/MC-040-1-1791247630455.json",
-      "sha256": "13e7bb7aa7221be9fed98d98d9c173e098f1f204c229ce6b8f25a3ba19926998",
-      "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
+      "sha256": "36ba6b082567357f81febf7a7b616ff51e824910eb8c27cd5d521196b1bc5fc3",
+      "commit": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4"
     },
     {
       "path": "runs/MC-043-0-1791247631526.json",
-      "sha256": "6fff2ba050a79dbf3afec253b5598b2fd3e6c899473e5a0a51c793fc4c328379",
-      "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
+      "sha256": "bc30a3ca2368a501532df43ddcc4c9a253870fcd9f37db3c235c78b8a85b0d15",
+      "commit": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4"
     }
   ],
   "artifacts": [
     {
       "path": "evidence/MC-101-0-1791247553297.txt",
       "sha256": "228520012f2b51220568d5a13b3e670f97f0a6bb5ec2ed6f78595ff7385a9b05",
-      "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
+      "commit": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4"
     },
     {
       "path": "evidence/MC-101-1-1791247570323.txt",
       "sha256": "2f2d81af280c14e918b2f85e48061f7ae1964d62dd50cb2187c64ad6e29be176",
-      "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
+      "commit": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4"
     },
     {
       "path": "evidence/MC-102-0-1791247588770.txt",
       "sha256": "03fdd9d27295f5e1961d057b8ef774de6c37b16b368d26e8c51f01c8a2dee756",
-      "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
+      "commit": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4"
     },
     {
       "path": "evidence/MC-040-0-1791247611525.txt",
       "sha256": "6cf8b91153226c65cac920ad38c36dc18a86d57711e4329e1c4a2bd5eb84a759",
-      "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
+      "commit": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4"
     },
     {
       "path": "evidence/MC-040-1-1791247630455.txt",
       "sha256": "e90e4876952e41a1bc5228e843daeaa142b13ca06f403e8dd62267c4a47e03c2",
-      "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
+      "commit": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4"
     },
     {
       "path": "evidence/MC-043-0-1791247631526.txt",
       "sha256": "684cfe986a0cccaa0a6c56a8e83690b531974ad55704f8e15af2f2eb11d159cd",
-      "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
+      "commit": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4"
     }
-  ]
+  ],
+  "provenance_note": "superseded: 原回执引用 a10bd6c（本仓库无法解析）。已按 §证据优先于声明 在可解析的受审提交上重建。"
 }
