@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 648,
+  "revision": 650,
   "tasks": {
     "231": {
       "number": 231,
@@ -2740,14 +2740,17 @@
       },
       "reviewAttemptAt": 1791249625184,
       "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
-      "reviewBuild": null,
-      "reviewDispatch": {
+      "reviewBuild": {
+        "sn": "cnb-4h1-1k47efce9",
+        "buildLogUrl": "https://cnb.cool/workloom-ai/workloom-im/-/build/logs/cnb-4h1-1k47efce9",
+        "event": "api_trigger_delivery_review",
+        "message": "cnb received, but didn't finish build yet",
+        "success": true,
         "headSha": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4",
         "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
-        "at": 1791251409507,
-        "title": "WorkLoom AI review #251 2d56851e5171e107b144",
-        "knownBuilds": []
+        "at": 1791251409507
       },
+      "reviewDispatch": null,
       "admission": {
         "number": 251,
         "headSha": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4",
@@ -20057,6 +20060,39 @@
       },
       "previous": "8f4d606b2dabbd99e28fd22bb10c064eb47022db2aec9552807ffe67d7a7bb2e",
       "digest": "5ce8677a07aa3cd8f920a1c14961d57a26b44a318c416e42b8aee969aa22d097"
+    },
+    {
+      "sequence": 649,
+      "at": "2026-10-06T01:50:09.507Z",
+      "kind": "task",
+      "data": {
+        "number": 251,
+        "patch": {
+          "reviewBuild": {
+            "sn": "cnb-4h1-1k47efce9",
+            "buildLogUrl": "https://cnb.cool/workloom-ai/workloom-im/-/build/logs/cnb-4h1-1k47efce9",
+            "event": "api_trigger_delivery_review",
+            "message": "cnb received, but didn't finish build yet",
+            "success": true,
+            "headSha": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4",
+            "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+            "at": 1791251409507
+          },
+          "reviewDispatch": null
+        }
+      },
+      "previous": "5ce8677a07aa3cd8f920a1c14961d57a26b44a318c416e42b8aee969aa22d097",
+      "digest": "2a3ae03552446d6539b332b89523adfa64a188eee3c0cb1a55632c2ecbb20d36"
+    },
+    {
+      "sequence": 650,
+      "at": "2026-10-06T01:50:27.937Z",
+      "kind": "transaction",
+      "data": {
+        "id": "c5dbe65a-787f-4bf4-a6c6-29f04bef998f"
+      },
+      "previous": "2a3ae03552446d6539b332b89523adfa64a188eee3c0cb1a55632c2ecbb20d36",
+      "digest": "a518c42cbde6155f39d071d5f639492952168bb47285f18d7a9cec909ef6cea3"
     }
   ]
 }
