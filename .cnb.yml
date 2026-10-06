@@ -181,7 +181,10 @@ include:
     - name: server 专属 PostgreSQL 契约（独立 Unix socket）
       script: |
         set -eu
-        REPORT_DIR="$(mktemp -d /tmp/wl-owned-server-report-XXXXXX)"
+        # 回执目录必须由 runner 首次创建（既有证据不可变）：这里只取唯一父目录，
+        # REPORT_DIR 本身在调用前不存在，由 runner mkdir 并写入 result.json。
+        REPORT_PARENT="$(mktemp -d /tmp/wl-owned-server-evidence-XXXXXX)"
+        REPORT_DIR="${REPORT_PARENT}/receipts"
         node scripts/test-owned-server-pg.mjs --report-dir "$REPORT_DIR"
         echo "owned server PG receipts: $REPORT_DIR"
 
