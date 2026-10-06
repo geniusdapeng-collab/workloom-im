@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 436,
+  "revision": 438,
   "tasks": {
     "231": {
       "number": 231,
@@ -130,7 +130,7 @@
     },
     "232": {
       "number": 232,
-      "status": "waiting_ci",
+      "status": "parked",
       "firstSeen": 1791242108737,
       "attempts": {},
       "headSha": "351a3f6082f37296159126644ebc9b9cd78617c9",
@@ -358,10 +358,14 @@
           "sync": 29
         }
       },
-      "recoveryCount": 0,
-      "recoveryIntent": null,
-      "error": "检查/评审阻断：Required check static-gate missing/failed/ambiguous; Required check db-gate missing/failed/ambiguous; No current complete AI review",
-      "blockedUntil": 0,
+      "recoveryCount": 1,
+      "recoveryIntent": {
+        "headSha": "351a3f6082f37296159126644ebc9b9cd78617c9",
+        "reason": "检查/评审阻断：Required check db-gate missing/failed/ambiguous; No current complete AI review",
+        "at": 1791247508098
+      },
+      "error": "检查/评审阻断：Required check db-gate missing/failed/ambiguous; No current complete AI review",
+      "blockedUntil": 1791248108098,
       "recovery": {
         "marker": "delivery-repair:0c2c07091d532cd4e0e8b72b",
         "reviewId": "2107252041840238592",
@@ -12297,6 +12301,37 @@
       },
       "previous": "f8795d6efa0d915099878339920dcd8f0329ed25c9c4752bad03363584f8af03",
       "digest": "8f2d96bc817d9245600e27cc716549964e3b1ac79285534b315fc0b114e72859"
+    },
+    {
+      "sequence": 437,
+      "at": "2026-10-06T00:45:08.098Z",
+      "kind": "task",
+      "data": {
+        "number": 232,
+        "patch": {
+          "status": "parked",
+          "recoveryCount": 1,
+          "recoveryIntent": {
+            "headSha": "351a3f6082f37296159126644ebc9b9cd78617c9",
+            "reason": "检查/评审阻断：Required check db-gate missing/failed/ambiguous; No current complete AI review",
+            "at": 1791247508098
+          },
+          "error": "检查/评审阻断：Required check db-gate missing/failed/ambiguous; No current complete AI review",
+          "blockedUntil": 1791248108098
+        }
+      },
+      "previous": "8f2d96bc817d9245600e27cc716549964e3b1ac79285534b315fc0b114e72859",
+      "digest": "65b0a654bfbe4f75bce60492f3ba877e4082a269cde5b057fd65244cae93453d"
+    },
+    {
+      "sequence": 438,
+      "at": "2026-10-06T00:45:18.154Z",
+      "kind": "transaction",
+      "data": {
+        "id": "91fab12c-a21c-4951-b7c0-1bce80fc8adf"
+      },
+      "previous": "65b0a654bfbe4f75bce60492f3ba877e4082a269cde5b057fd65244cae93453d",
+      "digest": "c7714aefe652ec379dc2c8e6330ce530ae1fd3d84d6312605a19d69e6d706dda"
     }
   ]
 }
