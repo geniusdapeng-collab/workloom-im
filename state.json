@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 694,
+  "revision": 696,
   "tasks": {
     "231": {
       "number": 231,
@@ -362,17 +362,13 @@
         }
       },
       "recoveryCount": 1,
-      "recoveryIntent": {
-        "headSha": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4",
-        "reason": "不可修改候选 #251 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
-        "at": 1791252610826
-      },
+      "recoveryIntent": null,
       "error": "不可修改候选 #251 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
       "blockedUntil": 1791253210826,
       "recovery": {
-        "marker": "delivery-repair:69b4f892cba49c16487ec5d4",
-        "reviewId": "2107270944750473216",
-        "dispatchedAt": 1791247519218
+        "marker": "delivery-repair:cfa169db20a977d331d56776",
+        "reviewId": "2107292373919375360",
+        "dispatchedAt": 1791252628323
       },
       "reviewFailures": null,
       "candidate": {
@@ -21828,6 +21824,34 @@
       },
       "previous": "f3c1f191fef7c20acebdece1b5cac4e10c6a548a1770169146d8c7e2bff84395",
       "digest": "d28e5e65997fe9be047cf6d51aa876dfe5d353c8f46e46fa5d684bf48024c974"
+    },
+    {
+      "sequence": 695,
+      "at": "2026-10-06T02:10:10.826Z",
+      "kind": "task",
+      "data": {
+        "number": 232,
+        "patch": {
+          "recovery": {
+            "marker": "delivery-repair:cfa169db20a977d331d56776",
+            "reviewId": "2107292373919375360",
+            "dispatchedAt": 1791252628323
+          },
+          "recoveryIntent": null
+        }
+      },
+      "previous": "d28e5e65997fe9be047cf6d51aa876dfe5d353c8f46e46fa5d684bf48024c974",
+      "digest": "72f230b05d6bc2c0f9d3e4246642eb40d0c786dc0439e012d4f4bf850a1ca335"
+    },
+    {
+      "sequence": 696,
+      "at": "2026-10-06T02:10:28.323Z",
+      "kind": "transaction",
+      "data": {
+        "id": "b11f6365-e90e-47c0-899a-acc50b22d50b"
+      },
+      "previous": "72f230b05d6bc2c0f9d3e4246642eb40d0c786dc0439e012d4f4bf850a1ca335",
+      "digest": "68212542cfa3bc49b45ba79c416b73fbb12fc4b25ff68f73b69c46379210e202"
     }
   ]
 }
