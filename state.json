@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 859,
+  "revision": 861,
   "tasks": {
     "231": {
       "number": 231,
@@ -2864,12 +2864,12 @@
     },
     "254": {
       "number": 254,
-      "status": "waiting_review",
+      "status": "parked",
       "firstSeen": 1791257709559,
       "attempts": {},
       "headSha": "e2ca569a44f45beedf8f6ec250c3445d66f47c8b",
       "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
-      "updatedAt": 1791257737636,
+      "updatedAt": 1791258609841,
       "admission": {
         "number": 254,
         "headSha": "e2ca569a44f45beedf8f6ec250c3445d66f47c8b",
@@ -2898,13 +2898,16 @@
       },
       "reviewAttemptAt": 1791257737636,
       "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
-      "reviewBuild": {
-        "sn": "cnb-ho9-1k47kfhr4",
+      "reviewBuild": null,
+      "reviewDispatch": null,
+      "reviewFailures": {
         "headSha": "e2ca569a44f45beedf8f6ec250c3445d66f47c8b",
         "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
-        "at": 1791257737636
+        "count": 1,
+        "lastBuild": "cnb-ho9-1k47kfhr4"
       },
-      "reviewDispatch": null
+      "blockedUntil": 1791259209841,
+      "error": "AI build error without a complete review receipt"
     }
   },
   "leases": {
@@ -27875,6 +27878,39 @@
       },
       "previous": "d0b17e98a10d929fd6b4ca3174f6129bc186880ec9635aec343fac6b6aa2f468",
       "digest": "01e36ddac166b06ccfbba9c25dc6b631680aa2080a0319fd5fba1b6c2c472058"
+    },
+    {
+      "sequence": 860,
+      "at": "2026-10-06T03:50:09.841Z",
+      "kind": "task",
+      "data": {
+        "number": 254,
+        "patch": {
+          "status": "parked",
+          "reviewBuild": null,
+          "reviewDispatch": null,
+          "reviewFailures": {
+            "headSha": "e2ca569a44f45beedf8f6ec250c3445d66f47c8b",
+            "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+            "count": 1,
+            "lastBuild": "cnb-ho9-1k47kfhr4"
+          },
+          "blockedUntil": 1791259209841,
+          "error": "AI build error without a complete review receipt"
+        }
+      },
+      "previous": "01e36ddac166b06ccfbba9c25dc6b631680aa2080a0319fd5fba1b6c2c472058",
+      "digest": "8d33f5f658051f15765c96d817961ec2aa78da5dea63e826fa0af2ce818015a3"
+    },
+    {
+      "sequence": 861,
+      "at": "2026-10-06T03:50:22.469Z",
+      "kind": "transaction",
+      "data": {
+        "id": "294c3380-0b8a-4bba-9065-ab12b155284d"
+      },
+      "previous": "8d33f5f658051f15765c96d817961ec2aa78da5dea63e826fa0af2ce818015a3",
+      "digest": "b83f95213b4cc2aac5861a71456dab2c9e7c4ac117737e4c9dbcfeb94239913a"
     }
   ]
 }
