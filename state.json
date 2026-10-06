@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 409,
+  "revision": 411,
   "tasks": {
     "231": {
       "number": 231,
@@ -1527,12 +1527,12 @@
     },
     "244": {
       "number": 244,
-      "status": "parked",
+      "status": "waiting_review",
       "firstSeen": 1791245708190,
       "attempts": {},
       "headSha": "336ac33066e5b861e61b239df2e44fa882fb0127",
       "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
-      "updatedAt": 1791246067303,
+      "updatedAt": 1791246908288,
       "admission": {
         "number": 244,
         "headSha": "336ac33066e5b861e61b239df2e44fa882fb0127",
@@ -1558,7 +1558,13 @@
       "reviewAttemptAt": 1791245720843,
       "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
       "reviewBuild": null,
-      "reviewDispatch": null,
+      "reviewDispatch": {
+        "headSha": "336ac33066e5b861e61b239df2e44fa882fb0127",
+        "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+        "at": 1791246908288,
+        "title": "WorkLoom AI review #244 0812cdef81ec7028526c",
+        "knownBuilds": []
+      },
       "review": null,
       "error": "AI review did not pass without unresolved issues",
       "reviewFailures": {
@@ -11467,6 +11473,36 @@
       },
       "previous": "7061db1d6120f518e4664856f6c91d4f47ea1be5825fe0301510c2189154543e",
       "digest": "5d56ed611305e572b8cb2c30b944a9915c335f178dc3874eb4b35ed3bdb4ecf3"
+    },
+    {
+      "sequence": 410,
+      "at": "2026-10-06T00:35:08.288Z",
+      "kind": "task",
+      "data": {
+        "number": 244,
+        "patch": {
+          "status": "waiting_review",
+          "reviewDispatch": {
+            "headSha": "336ac33066e5b861e61b239df2e44fa882fb0127",
+            "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+            "at": 1791246908288,
+            "title": "WorkLoom AI review #244 0812cdef81ec7028526c",
+            "knownBuilds": []
+          }
+        }
+      },
+      "previous": "5d56ed611305e572b8cb2c30b944a9915c335f178dc3874eb4b35ed3bdb4ecf3",
+      "digest": "ba8c047dd6a3221a2388de69be13314bd644bae917266907211587f4f1637ec7"
+    },
+    {
+      "sequence": 411,
+      "at": "2026-10-06T00:35:15.028Z",
+      "kind": "transaction",
+      "data": {
+        "id": "07be2fd4-768c-4cc4-b3b0-9f74e06f0805"
+      },
+      "previous": "ba8c047dd6a3221a2388de69be13314bd644bae917266907211587f4f1637ec7",
+      "digest": "be3015d991a3f37831946d6d7cea49aafd760098da8786cddd76b8d800030c47"
     }
   ]
 }
