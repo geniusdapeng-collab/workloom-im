@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 2208,
+  "revision": 2211,
   "tasks": {
     "231": {
       "number": 231,
@@ -4364,7 +4364,7 @@
     },
     "266": {
       "number": 266,
-      "status": "developing",
+      "status": "waiting_ci",
       "firstSeen": 1791308427595,
       "attempts": {},
       "admission": {
@@ -4380,15 +4380,141 @@
           "protocol": 78
         }
       },
-      "updatedAt": 1791308409404,
+      "updatedAt": 1791308665953,
       "headSha": "716eb682583f0dbb00ff577d77ce850294973f30",
       "intent": {
         "taskId": "T-2026-1007-1001",
-        "ready": false,
+        "ready": true,
         "dependsOn": [
           264
         ],
         "releases": []
+      },
+      "mainSha": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+      "branch": "task/T-2026-1007-1001",
+      "developerReview": {
+        "schemaVersion": 1,
+        "provider": "codex",
+        "repo": "workloom-ai/workloom-im",
+        "number": 266,
+        "headSha": "716eb682583f0dbb00ff577d77ce850294973f30",
+        "mainSha": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+        "policyHash": "8b6db8edf768d3fa0245e8f8b068deec502ae326808d729e0143f73065d23818",
+        "reviewedFiles": [
+          "scripts/delivery/install-protocol.mjs"
+        ],
+        "filesHash": "1e314743f6bd3ad3d5f0cce93d726f8db4924c58b440332a713b3b7626ba4dc9",
+        "dependsOn": [
+          264
+        ],
+        "ciPolicyChanges": [
+          {
+            "id": "CI-001",
+            "rationale": "Add only exact paired hashes of the independently inspected hardened target checker and tests at 8c19e677. Retain old reviewed pair; reject mixed versions and altered bytes before any installation writes. Keep four other known hashes and migration anchors exact. Target implementation is preserved unchanged and does not enter the base. Actual target installation regression 254 pass/1 explicitly non-applicable skip, four negative mixes/tampers, old pair support, zero-change replay and unchanged checker/test bytes all passed; original installer/account regression 39 passed."
+          }
+        ],
+        "ciPolicyChangesHash": "7336c7cde37c655c60c9b85377febbd93d3034f7dc3883c850155131d61f070c",
+        "tests": [
+          {
+            "command": "node --test scripts/delivery/install-repository.test.mjs scripts/delivery/install-account.test.mjs",
+            "exitCode": 0,
+            "headSha": "716eb682583f0dbb00ff577d77ce850294973f30",
+            "finishedAt": "2026-10-06T17:38:26.410619+00:00",
+            "result": "stallation source must read back before a merge; a weak existing rule or replaced ref is rejected (0.156542ms)\n✔ an activated package update preserves verified Codex/CI main policy without restoring the human approval counter (0.986917ms)\n✔ merge recovery traces actual first-parent ancestry and exact tested parents, never a fabricated Pull merge field (0.327209ms)\n✔ an unknown installation merge survives restart and never sends a second merge (2.471667ms)\n✔ only a later exact positive merge rejection resolves the persisted installation request (0.1435ms)\n✔ verified installation policy refresh creates one frozen same-source PR, prepares it immediately and preserves the original (1.83425ms)\n✔ an active repository update uses its native immutable delivery instead of the privileged first-install merger (1.359125ms)\n✔ source propagation times out without protection writes or false preparation (0.175334ms)\n✔ first-install merge rejects changed body, readiness, source, main, scope, dependencies and CI after review (0.4485ms)\n✔ manifest rejects partial execution, foreign targets, unknown assets, incomplete adapters and altered digests (16.59225ms)\n✔ actual Git manifest binds committed bytes and upstream provenance separately from the target installer SHA (1175.675917ms)\n✔ missing target manifest cannot prepare an installed execution closure or claim complete provenance (56.10425ms)\nℹ tests 39\nℹ suites 0\nℹ pass 39\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 13366.206583\n"
+          },
+          {
+            "command": "node work/test-bound-protocol.mjs (actual target fixture and mixed/tampered rejection)",
+            "exitCode": 0,
+            "finishedAt": "2026-10-06T17:37:10.901Z",
+            "result": "334ms)\n✔ unknown merge acknowledgement pauses later integration; never repeats the write (0.851459ms)\n✔ an explicit 409 with positive unmerged readback releases integration while unreadable or changed readbacks stay unknown (1.706875ms)\n✔ sensitive integration always acquires a fenced lease, even when developers did not opt in (1.359125ms)\n✔ red oldest PR and failed release do not stop a later healthy PR candidate (1.329167ms)\n✔ task receipt cannot close an unmerged task or a task with declared unverified release (0.113459ms)\n✔ a lease acquired by another developer during snapshot reading blocks candidate creation (0.229916ms)\n✔ a reused task id or a ready PR body cannot release a developer lease or admit a candidate (0.230291ms)\n✔ candidate body or origin mutation is rejected before sending a platform merge (0.76025ms)\n✔ runner deadline uses elapsed time independently of injected lease/calendar time and preserves the exact boundary (0.319417ms)\n✔ legacy review capacity never reads paid build history and cannot block unrelated reviewed source (0.040667ms)\n✔ release enqueue is idempotent by frozen source/kind/version and keeps integration separate (0.11825ms)\n✔ both UI and desktop dispatch pass the explicit frozen SHA to the whole build, independently of current branch SHA (0.619833ms)\n﹣ manual UI event and delivery dispatch use the same actual publishing job and native lock; the scheduler only launches and observes (5.7795ms) # This product has no shared UI publishing lane\n✔ release launch intent survives lost acknowledgement and forbids duplicate publication (0.411959ms)\n✔ release failures use the latest durable attempt count and park after two launches (0.198167ms)\n✔ lost release launch cannot adopt a different manual build with the same source/event (0.194875ms)\n✔ UI release verifies the real Platform API JSON decoding contract and rejects unreadable registration or different bytes (1.78025ms)\n✔ release verifies actual tag source, manifest identity and every downloaded digest (0.251542ms)\n✔ private release download authenticates only the official first request and hashes the actual redirected bytes (0.416875ms)\n✔ private release permission, unsafe redirect, empty/oversized stream and malformed manifest remain explicit failures (0.78625ms)\n✔ a release redirect loop is bounded and every later same-origin or foreign request omits the token (0.178291ms)\nℹ tests 255\nℹ suites 9\nℹ pass 254\nℹ fail 0\nℹ cancelled 0\nℹ skipped 1\nℹ todo 0\nℹ duration_ms 46764.027125\n"
+          }
+        ],
+        "reviewedAt": "2026-10-06T17:44:08.189Z",
+        "summary": "Current Codex completely read the one changed installer migration module and its hash/dependent installation execution paths, and reviewed the target original commit verifier/tests. Change only registers two exact independently reviewed checker/test pairs and requires a whole pair; unknown, mixed or altered bytes remain rejected. Target stricter raw CNB merge title and original ordered-parent checks stay byte-identical; isolation stays unchanged. Post-commit actual target fixture/regression, four negative cases, legacy input support, idempotency and existing base installer/account regression passed. No unresolved blocking finding. Native original source/candidate machine CI and exact normal two-parent integration remain required; no paid platform model is used.",
+        "passed": true,
+        "id": "baf72fc478653d33f281a9fa08a58f14e75286365c455ed290b9513f1053bf50"
+      },
+      "reviewSnapshot": {
+        "repo": "workloom-ai/workloom-im",
+        "number": 266,
+        "pull": {
+          "number": 266,
+          "state": "open",
+          "title": "fix(base): 保留目标原始合并证明加固 [T-2026-1007-1001]",
+          "body": "加强版目标 main 8c19e677122398fee9b9751d18ac1d5811307d2f 新增严格 CNB 原始合并标题/双亲校验。安装器只登记已精读与实际测试的新校验器/测试准确摘要，要求成对匹配；目标实现原字节保留，不回流隔离仓实现。原协议、未知/混配/篡改拒绝、Git/PR/路径/租约证明及平台 AI 禁用规则继续保留。\n\n当前 Codex 已跑新校验器 109 项；完整实际安装副本 255 项中 254 通过、1 项因无共享 UI 发布通道跳过，四项混配/篡改拒绝与旧版支持、重复安装幂等、新校验器及测试字节保留均验证。原有机器门禁与准确当前会话回执成立后，由不可修改候选普通集成。任务卡 #265。\n\n<!-- delivery-reviewed-bound-input:20261007 -->\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1007-1001\",\n  \"ready\": true,\n  \"depends_on\": [\n    264\n  ],\n  \"releases\": []\n}\n-->",
+          "author": {
+            "username": "cnb.dYiF05kxAGA",
+            "nickname": "Genius",
+            "email": "XYpmztfpCvez6l8z5BBAvJ+cnb.dYiF05kxAGA@noreply.cnb.cool",
+            "is_npc": false
+          },
+          "reviewers": [],
+          "labels": [],
+          "base": {
+            "ref": "refs/heads/main",
+            "sha": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+            "repo": {
+              "id": "2100396957109968896",
+              "name": "workloom-im",
+              "path": "workloom-ai/workloom-im",
+              "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+            }
+          },
+          "head": {
+            "ref": "refs/heads/task/T-2026-1007-1001",
+            "sha": "716eb682583f0dbb00ff577d77ce850294973f30",
+            "repo": {
+              "id": "2100396957109968896",
+              "name": "workloom-im",
+              "path": "workloom-ai/workloom-im",
+              "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+            }
+          },
+          "blocked_on": "unblocked",
+          "merged_by": {
+            "is_npc": false
+          },
+          "mergeable_state": "mergeable",
+          "is_wip": false,
+          "is_merged": false,
+          "is_force_merged": false,
+          "statuses": {}
+        },
+        "headSha": "716eb682583f0dbb00ff577d77ce850294973f30",
+        "mainSha": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+        "files": [
+          "scripts/delivery/install-protocol.mjs"
+        ],
+        "intent": {
+          "taskId": "T-2026-1007-1001",
+          "ready": true,
+          "dependsOn": [
+            264
+          ],
+          "releases": []
+        },
+        "headTime": 1791308009000,
+        "mergeBase": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+        "checkErrors": [],
+        "checkSha": null,
+        "hasFailedChecks": false,
+        "ciPolicyChanges": [
+          {
+            "id": "CI-001",
+            "file": "scripts/delivery/install-protocol.mjs",
+            "before": {
+              "ref": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+              "path": "scripts/delivery/install-protocol.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "716eb682583f0dbb00ff577d77ce850294973f30",
+              "path": "scripts/delivery/install-protocol.mjs",
+              "absent": false
+            },
+            "digest": "8b277d5d3757e4456d9a5eab2ee6ccb7fdb055606ad94ee26d69babd8404618b"
+          }
+        ]
       }
     }
   },
@@ -88425,6 +88551,177 @@
       },
       "previous": "b054e448867bb581740d15ee9e9571060d1251853857e4ed37a8a613d0dd40f0",
       "digest": "4cd0a8e57244783cf755201708c35ff06766288cde56eb0761bb7da6f1836109"
+    },
+    {
+      "sequence": 2209,
+      "at": "2026-10-06T17:44:25.953Z",
+      "kind": "developer_review",
+      "data": {
+        "number": 266,
+        "id": "baf72fc478653d33f281a9fa08a58f14e75286365c455ed290b9513f1053bf50",
+        "headSha": "716eb682583f0dbb00ff577d77ce850294973f30",
+        "mainSha": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0"
+      },
+      "previous": "4cd0a8e57244783cf755201708c35ff06766288cde56eb0761bb7da6f1836109",
+      "digest": "82090689953f1bc0de3884367722a1d2c33893e40372bba87695c213b9518343"
+    },
+    {
+      "sequence": 2210,
+      "at": "2026-10-06T17:44:25.953Z",
+      "kind": "task",
+      "data": {
+        "number": 266,
+        "patch": {
+          "status": "waiting_ci",
+          "headSha": "716eb682583f0dbb00ff577d77ce850294973f30",
+          "mainSha": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+          "branch": "task/T-2026-1007-1001",
+          "intent": {
+            "taskId": "T-2026-1007-1001",
+            "ready": true,
+            "dependsOn": [
+              264
+            ],
+            "releases": []
+          },
+          "developerReview": {
+            "schemaVersion": 1,
+            "provider": "codex",
+            "repo": "workloom-ai/workloom-im",
+            "number": 266,
+            "headSha": "716eb682583f0dbb00ff577d77ce850294973f30",
+            "mainSha": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+            "policyHash": "8b6db8edf768d3fa0245e8f8b068deec502ae326808d729e0143f73065d23818",
+            "reviewedFiles": [
+              "scripts/delivery/install-protocol.mjs"
+            ],
+            "filesHash": "1e314743f6bd3ad3d5f0cce93d726f8db4924c58b440332a713b3b7626ba4dc9",
+            "dependsOn": [
+              264
+            ],
+            "ciPolicyChanges": [
+              {
+                "id": "CI-001",
+                "rationale": "Add only exact paired hashes of the independently inspected hardened target checker and tests at 8c19e677. Retain old reviewed pair; reject mixed versions and altered bytes before any installation writes. Keep four other known hashes and migration anchors exact. Target implementation is preserved unchanged and does not enter the base. Actual target installation regression 254 pass/1 explicitly non-applicable skip, four negative mixes/tampers, old pair support, zero-change replay and unchanged checker/test bytes all passed; original installer/account regression 39 passed."
+              }
+            ],
+            "ciPolicyChangesHash": "7336c7cde37c655c60c9b85377febbd93d3034f7dc3883c850155131d61f070c",
+            "tests": [
+              {
+                "command": "node --test scripts/delivery/install-repository.test.mjs scripts/delivery/install-account.test.mjs",
+                "exitCode": 0,
+                "headSha": "716eb682583f0dbb00ff577d77ce850294973f30",
+                "finishedAt": "2026-10-06T17:38:26.410619+00:00",
+                "result": "stallation source must read back before a merge; a weak existing rule or replaced ref is rejected (0.156542ms)\n✔ an activated package update preserves verified Codex/CI main policy without restoring the human approval counter (0.986917ms)\n✔ merge recovery traces actual first-parent ancestry and exact tested parents, never a fabricated Pull merge field (0.327209ms)\n✔ an unknown installation merge survives restart and never sends a second merge (2.471667ms)\n✔ only a later exact positive merge rejection resolves the persisted installation request (0.1435ms)\n✔ verified installation policy refresh creates one frozen same-source PR, prepares it immediately and preserves the original (1.83425ms)\n✔ an active repository update uses its native immutable delivery instead of the privileged first-install merger (1.359125ms)\n✔ source propagation times out without protection writes or false preparation (0.175334ms)\n✔ first-install merge rejects changed body, readiness, source, main, scope, dependencies and CI after review (0.4485ms)\n✔ manifest rejects partial execution, foreign targets, unknown assets, incomplete adapters and altered digests (16.59225ms)\n✔ actual Git manifest binds committed bytes and upstream provenance separately from the target installer SHA (1175.675917ms)\n✔ missing target manifest cannot prepare an installed execution closure or claim complete provenance (56.10425ms)\nℹ tests 39\nℹ suites 0\nℹ pass 39\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 13366.206583\n"
+              },
+              {
+                "command": "node work/test-bound-protocol.mjs (actual target fixture and mixed/tampered rejection)",
+                "exitCode": 0,
+                "finishedAt": "2026-10-06T17:37:10.901Z",
+                "result": "334ms)\n✔ unknown merge acknowledgement pauses later integration; never repeats the write (0.851459ms)\n✔ an explicit 409 with positive unmerged readback releases integration while unreadable or changed readbacks stay unknown (1.706875ms)\n✔ sensitive integration always acquires a fenced lease, even when developers did not opt in (1.359125ms)\n✔ red oldest PR and failed release do not stop a later healthy PR candidate (1.329167ms)\n✔ task receipt cannot close an unmerged task or a task with declared unverified release (0.113459ms)\n✔ a lease acquired by another developer during snapshot reading blocks candidate creation (0.229916ms)\n✔ a reused task id or a ready PR body cannot release a developer lease or admit a candidate (0.230291ms)\n✔ candidate body or origin mutation is rejected before sending a platform merge (0.76025ms)\n✔ runner deadline uses elapsed time independently of injected lease/calendar time and preserves the exact boundary (0.319417ms)\n✔ legacy review capacity never reads paid build history and cannot block unrelated reviewed source (0.040667ms)\n✔ release enqueue is idempotent by frozen source/kind/version and keeps integration separate (0.11825ms)\n✔ both UI and desktop dispatch pass the explicit frozen SHA to the whole build, independently of current branch SHA (0.619833ms)\n﹣ manual UI event and delivery dispatch use the same actual publishing job and native lock; the scheduler only launches and observes (5.7795ms) # This product has no shared UI publishing lane\n✔ release launch intent survives lost acknowledgement and forbids duplicate publication (0.411959ms)\n✔ release failures use the latest durable attempt count and park after two launches (0.198167ms)\n✔ lost release launch cannot adopt a different manual build with the same source/event (0.194875ms)\n✔ UI release verifies the real Platform API JSON decoding contract and rejects unreadable registration or different bytes (1.78025ms)\n✔ release verifies actual tag source, manifest identity and every downloaded digest (0.251542ms)\n✔ private release download authenticates only the official first request and hashes the actual redirected bytes (0.416875ms)\n✔ private release permission, unsafe redirect, empty/oversized stream and malformed manifest remain explicit failures (0.78625ms)\n✔ a release redirect loop is bounded and every later same-origin or foreign request omits the token (0.178291ms)\nℹ tests 255\nℹ suites 9\nℹ pass 254\nℹ fail 0\nℹ cancelled 0\nℹ skipped 1\nℹ todo 0\nℹ duration_ms 46764.027125\n"
+              }
+            ],
+            "reviewedAt": "2026-10-06T17:44:08.189Z",
+            "summary": "Current Codex completely read the one changed installer migration module and its hash/dependent installation execution paths, and reviewed the target original commit verifier/tests. Change only registers two exact independently reviewed checker/test pairs and requires a whole pair; unknown, mixed or altered bytes remain rejected. Target stricter raw CNB merge title and original ordered-parent checks stay byte-identical; isolation stays unchanged. Post-commit actual target fixture/regression, four negative cases, legacy input support, idempotency and existing base installer/account regression passed. No unresolved blocking finding. Native original source/candidate machine CI and exact normal two-parent integration remain required; no paid platform model is used.",
+            "passed": true,
+            "id": "baf72fc478653d33f281a9fa08a58f14e75286365c455ed290b9513f1053bf50"
+          },
+          "reviewSnapshot": {
+            "repo": "workloom-ai/workloom-im",
+            "number": 266,
+            "pull": {
+              "number": 266,
+              "state": "open",
+              "title": "fix(base): 保留目标原始合并证明加固 [T-2026-1007-1001]",
+              "body": "加强版目标 main 8c19e677122398fee9b9751d18ac1d5811307d2f 新增严格 CNB 原始合并标题/双亲校验。安装器只登记已精读与实际测试的新校验器/测试准确摘要，要求成对匹配；目标实现原字节保留，不回流隔离仓实现。原协议、未知/混配/篡改拒绝、Git/PR/路径/租约证明及平台 AI 禁用规则继续保留。\n\n当前 Codex 已跑新校验器 109 项；完整实际安装副本 255 项中 254 通过、1 项因无共享 UI 发布通道跳过，四项混配/篡改拒绝与旧版支持、重复安装幂等、新校验器及测试字节保留均验证。原有机器门禁与准确当前会话回执成立后，由不可修改候选普通集成。任务卡 #265。\n\n<!-- delivery-reviewed-bound-input:20261007 -->\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1007-1001\",\n  \"ready\": true,\n  \"depends_on\": [\n    264\n  ],\n  \"releases\": []\n}\n-->",
+              "author": {
+                "username": "cnb.dYiF05kxAGA",
+                "nickname": "Genius",
+                "email": "XYpmztfpCvez6l8z5BBAvJ+cnb.dYiF05kxAGA@noreply.cnb.cool",
+                "is_npc": false
+              },
+              "reviewers": [],
+              "labels": [],
+              "base": {
+                "ref": "refs/heads/main",
+                "sha": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+                "repo": {
+                  "id": "2100396957109968896",
+                  "name": "workloom-im",
+                  "path": "workloom-ai/workloom-im",
+                  "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+                }
+              },
+              "head": {
+                "ref": "refs/heads/task/T-2026-1007-1001",
+                "sha": "716eb682583f0dbb00ff577d77ce850294973f30",
+                "repo": {
+                  "id": "2100396957109968896",
+                  "name": "workloom-im",
+                  "path": "workloom-ai/workloom-im",
+                  "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+                }
+              },
+              "blocked_on": "unblocked",
+              "merged_by": {
+                "is_npc": false
+              },
+              "mergeable_state": "mergeable",
+              "is_wip": false,
+              "is_merged": false,
+              "is_force_merged": false,
+              "statuses": {}
+            },
+            "headSha": "716eb682583f0dbb00ff577d77ce850294973f30",
+            "mainSha": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+            "files": [
+              "scripts/delivery/install-protocol.mjs"
+            ],
+            "intent": {
+              "taskId": "T-2026-1007-1001",
+              "ready": true,
+              "dependsOn": [
+                264
+              ],
+              "releases": []
+            },
+            "headTime": 1791308009000,
+            "mergeBase": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+            "checkErrors": [],
+            "checkSha": null,
+            "hasFailedChecks": false,
+            "ciPolicyChanges": [
+              {
+                "id": "CI-001",
+                "file": "scripts/delivery/install-protocol.mjs",
+                "before": {
+                  "ref": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+                  "path": "scripts/delivery/install-protocol.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "716eb682583f0dbb00ff577d77ce850294973f30",
+                  "path": "scripts/delivery/install-protocol.mjs",
+                  "absent": false
+                },
+                "digest": "8b277d5d3757e4456d9a5eab2ee6ccb7fdb055606ad94ee26d69babd8404618b"
+              }
+            ]
+          }
+        }
+      },
+      "previous": "82090689953f1bc0de3884367722a1d2c33893e40372bba87695c213b9518343",
+      "digest": "7224d72865e91a71ea4233abe96c9abd28a128aef9df8391edc1ee4e5fc415ae"
+    },
+    {
+      "sequence": 2211,
+      "at": "2026-10-06T17:44:22.799Z",
+      "kind": "transaction",
+      "data": {
+        "id": "99b60ded-149d-4b5d-ab4d-04ba9b9a4095"
+      },
+      "previous": "7224d72865e91a71ea4233abe96c9abd28a128aef9df8391edc1ee4e5fc415ae",
+      "digest": "bfd7c5d3953f1f885bd57105012ff4dfa2e86d0dab81a919de58e329950b637f"
     }
   ]
 }
