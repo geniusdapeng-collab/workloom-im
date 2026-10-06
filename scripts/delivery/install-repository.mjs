@@ -75,13 +75,14 @@ export async function createOnce({ list, match, create }) {
   }
 }
 
-/** Issue lists omit body; search the task identity, then validate actual detail. */
+/** Scan every issue title, then hydrate matching tasks; keyword indexing is not a collision proof. */
 export async function installationIssues(platform, taskId) {
   if (!/^T-\d{4}-\d{4}-\d{4}$/.test(taskId ?? '')) throw new Error('Installation task identity is invalid');
-  const keyword = encodeURIComponent(taskId);
-  const summaries = [...await platform.list(`/-/issues?state=open&keyword=${keyword}`), ...await platform.list(`/-/issues?state=closed&keyword=${keyword}`)];
+  const summaries = [...await platform.list('/-/issues?state=open'), ...await platform.list('/-/issues?state=closed')];
   const issues = [];
   for (const summary of summaries) {
+    if (typeof summary.title !== 'string') throw new Error('Installation issue summary title is unreadable');
+    if (!summary.title.includes(taskId)) continue;
     const number = Number(summary.number);
     if (!Number.isSafeInteger(number) || number <= 0) throw new Error('Installation issue list identity is invalid');
     const detail = await platform.call(`/-/issues/${number}`);

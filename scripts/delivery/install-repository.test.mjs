@@ -153,7 +153,7 @@ test('actual CNB issue summaries without bodies recover the exact task and a los
   const taskId = 'T-2026-1006-1002'; const marker = '<!-- delivery-install:exact -->';
   let rows = []; let detail; let writes = 0;
   const platform = { list: async path => {
-    assert.ok(path.includes('keyword=' + taskId));
+    assert.ok(!path.includes('keyword='));
     return path.includes('state=open') ? rows : [];
   }, call: async path => { assert.equal(path, '/-/issues/9'); return detail; } };
   const options = { list: () => installationIssues(platform, taskId), match: item => item.body.includes(marker), create: async () => {
@@ -164,6 +164,13 @@ test('actual CNB issue summaries without bodies recover the exact task and a los
   detail = { ...detail, body: undefined }; await assert.rejects(installationIssues(platform, taskId), /unreadable/);
   detail = { ...detail, body: marker, number: 10 }; await assert.rejects(installationIssues(platform, taskId), /identity/);
   await assert.rejects(installationIssues(platform, 'invalid'), /identity/); assert.equal(writes, 1);
+});
+test('full issue-title coverage catches a colliding task even when keyword indexing would omit it', async () => {
+  const taskId = 'T-2026-1006-1002'; let hydrated = 0;
+  const platform = { list: async path => path.includes('state=open') ? [{ number: 20, title: `[${taskId}] Another task` }, { number: 21, title: 'Unrelated task' }] : [],
+    call: async path => { assert.equal(path, '/-/issues/20'); hydrated++; return { number: 20, title: `[${taskId}] Another task`, body: 'Different ownership marker' }; } };
+  const issues = await installationIssues(platform, taskId);
+  assert.equal(issues.length, 1); assert.equal(hydrated, 1); assert.ok(!issues[0].body.includes('delivery-install:expected'));
 });
 test('empty CNB PR summary bodies recover only the exact installer branch; failures never become absent objects', async () => {
   const branch = 'chore/protocol-onboarding-exact'; const marker = '<!-- delivery-install:exact -->';
