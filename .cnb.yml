@@ -119,8 +119,9 @@ include:
         node --test scripts/acceptance/lib/profile-contract.test.mjs scripts/acceptance/profile-check.test.mjs scripts/acceptance/outcome.test.mjs scripts/acceptance/fleet-run.test.mjs scripts/acceptance/lib/environment-safety.test.mjs scripts/acceptance/lib/outcome-contract.test.mjs scripts/acceptance/lib/live/budget.test.mjs scripts/acceptance/lib/live/live-truth.test.mjs scripts/acceptance/lib/live/providers.test.mjs scripts/acceptance/lib/live/usage.test.mjs scripts/acceptance/lib/live/audit.test.mjs scripts/acceptance/lib/live/providers-http.test.mjs scripts/acceptance/lib/live/dsh-process.test.mjs scripts/acceptance/lib/live/live-cli-wire.test.mjs scripts/acceptance/lib/live/product.test.mjs scripts/acceptance/lib/live/media-negative.test.mjs scripts/acceptance/lib/live/live-cli.test.mjs scripts/acceptance/lib/live/safety.test.mjs scripts/acceptance/lib/client-identity.test.mjs
         node --test scripts/capability-status.test.mjs scripts/tools/provision-safety.test.mjs scripts/ui-release-registration.test.mjs scripts/verify-product-content.test.mjs
         # 桌面/打包契约必须真实执行：行业契约不得覆盖桌面受管配置、载荷版本标记需早失败、
-        # vite-product 声明与实现一致；此前这些用例只被本地 test:desktop-bootstrap 引用。
-        node --test apps/desktop/electron/bootstrap.test.cjs apps/desktop/electron/desktop-safety.test.cjs apps/desktop/electron/industry-runtime.test.cjs scripts/desktop-bootstrap-db.test.mjs scripts/vite-product.test.mjs scripts/payload-markers.test.mjs scripts/native-smoke.test.mjs
+        # vite-product 声明与实现一致、窗口导航 origin 边界与冒烟握手、运行时身份与进程组回收；
+        # 此前这些用例只被本地 test:desktop-bootstrap 的 glob 引用，必需流水线零覆盖。
+        node --test apps/desktop/electron/bootstrap.test.cjs apps/desktop/electron/desktop-safety.test.cjs apps/desktop/electron/industry-runtime.test.cjs apps/desktop/electron/desktop-navigation.test.cjs apps/desktop/electron/runtime-identity.test.cjs scripts/desktop-bootstrap-db.test.mjs scripts/vite-product.test.mjs scripts/payload-markers.test.mjs scripts/native-smoke.test.mjs
 
     - name: 持续交付与不可变发布回归
       script: |

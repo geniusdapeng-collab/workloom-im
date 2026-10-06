@@ -122,7 +122,12 @@ http.createServer((request,response)=>{response.setHeader('x-workloom-product-id
     environment: { INDUSTRY_MODE: "fixture" }, selftests: [{ name: "offline_fixture", executable: { root: "support", path: "python/bin/python3" }, args: [], expectedStdout: "offline-fixture-ok" }] }));
   const identity = generatePayloadIntegrity(payload);
   const start = (actualPorts, { resourcesDir = payload } = {}) => {
-    const env = { PATH: "", FIXTURE_GRANDCHILD_STATE: grandchildState, ...Object.fromEntries(Object.entries(actualPorts).map(([name, value]) => [`WORKLOOM_${name.toUpperCase()}_PORT`, String(value)])) };
+    // Keep the isolated child env (no ambient variables) but leave PATH unset
+    // rather than empty. An empty PATH also disables the system tar's own
+    // _CS_PATH fallback to its gzip child, a state no real launch produces;
+    // an unset PATH still proves the bootstrap never resolves tools from an
+    // ambient user PATH. The archive read must work in the real desktop case.
+    const env = { FIXTURE_GRANDCHILD_STATE: grandchildState, ...Object.fromEntries(Object.entries(actualPorts).map(([name, value]) => [`WORKLOOM_${name.toUpperCase()}_PORT`, String(value)])) };
     const child = spawn(process.execPath, [path.join(__dirname, "bootstrap.cjs"), "--resources", resourcesDir, "--support", support], { env, stdio: ["ignore", "pipe", "pipe"] });
     activeChildren.add(child);
     let output = "";
