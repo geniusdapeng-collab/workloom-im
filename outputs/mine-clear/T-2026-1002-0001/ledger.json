@@ -5,7 +5,7 @@
   "repo_path": "/workspace",
   "title": "",
   "created_at": "2026-10-06T00:45:15.713Z",
-  "updated_at": "2026-10-06T06:11:45.584Z",
+  "updated_at": "2026-10-06T06:16:56.629Z",
   "baseline": {
     "audit": {
       "commit": "67129d3b870cf2572aa0ad2e3bfaae7d04170923",
@@ -16,12 +16,12 @@
       "notes": "审计基线 = 修复提交 67129d3（本轮源码改动全覆盖）；台账本身另以文档提交记录。"
     },
     "repair": {
-      "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e",
+      "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c",
       "notes": ""
     },
     "acceptance": {
-      "commit": null,
-      "is_descendant_of_repair": null
+      "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c",
+      "is_descendant_of_repair": true
     }
   },
   "environment": {
@@ -97,7 +97,7 @@
       "level": "L3",
       "severity": "P1",
       "batch": 1,
-      "state": "fixed",
+      "state": "verified",
       "title": "演示名册缺 company-ceo 岗，CEO 节拍全部被 F2.10 正确拒写",
       "evidence": [
         {
@@ -137,14 +137,14 @@
           },
           "last_result": "pass",
           "run": {
-            "path": "runs/MC-040-0-1791267073254.json",
-            "sha256": "f9d716618da38cca746ab876a7fc84c6086ab8e0fde780195c06300273dd9fc5",
-            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+            "path": "runs/MC-040-0-1791267387729.json",
+            "sha256": "71c9d4477e9977b723e28aecb7c7c1def14578849f5747ebf1ba5261e29cf933",
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
           },
           "evidence": {
-            "path": "evidence/MC-040-0-1791267073254.txt",
+            "path": "evidence/MC-040-0-1791267387729.txt",
             "sha256": "763b4c8927f44b226adc823f9d94fe390a3694f0146fa3055818f7606efdad96",
-            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
           }
         },
         {
@@ -163,14 +163,14 @@
           },
           "last_result": "pass",
           "run": {
-            "path": "runs/MC-040-1-1791267077344.json",
-            "sha256": "3bd32d8aa4cab4e414b507af94a09b66231c9252cc6e4ce3e7dbc8178bc1826e",
-            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+            "path": "runs/MC-040-1-1791267391958.json",
+            "sha256": "9c5b36aeef09d608a9bff53ef568c20d628a0a2e6c847bf09c27a5138ab17b14",
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
           },
           "evidence": {
-            "path": "evidence/MC-040-1-1791267077344.txt",
+            "path": "evidence/MC-040-1-1791267391958.txt",
             "sha256": "fb5896a324e257a0a1fcfc841c75217abe7153f10bcdb68a72e2e8664b140c03",
-            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
           }
         }
       ],
@@ -180,17 +180,38 @@
         "evidence": null
       },
       "last_assertion_attempt": {
-        "actor": "codebuddy",
-        "role": "repair",
+        "actor": "session-acceptance",
+        "role": "acceptance",
         "result": "pass",
-        "at": "2026-10-06T06:11:13.253Z",
-        "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e",
-        "finished_at": "2026-10-06T06:11:21.487Z"
+        "at": "2026-10-06T06:16:27.729Z",
+        "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c",
+        "finished_at": "2026-10-06T06:16:36.084Z"
       },
-      "fixed_by": "codebuddy",
-      "verified_by": null,
-      "verified_at": null,
-      "verification_evidence": null
+      "fixed_by": "session-repair",
+      "verified_by": "session-acceptance",
+      "verified_at": "2026-10-06T06:16:36.084Z",
+      "verification_evidence": {
+        "path": "runs/MC-040-0-1791267387729.json",
+        "sha256": "71c9d4477e9977b723e28aecb7c7c1def14578849f5747ebf1ba5261e29cf933",
+        "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
+      },
+      "last_verification_attempt": {
+        "actor": "session-acceptance",
+        "result": "pass",
+        "at": "2026-10-06T06:16:36.084Z",
+        "runs": [
+          {
+            "path": "runs/MC-040-0-1791267387729.json",
+            "sha256": "71c9d4477e9977b723e28aecb7c7c1def14578849f5747ebf1ba5261e29cf933",
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
+          },
+          {
+            "path": "runs/MC-040-1-1791267391958.json",
+            "sha256": "9c5b36aeef09d608a9bff53ef568c20d628a0a2e6c847bf09c27a5138ab17b14",
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
+          }
+        ]
+      }
     },
     {
       "id": "MC-043",
@@ -198,7 +219,7 @@
       "level": "L3",
       "severity": "P1",
       "batch": 1,
-      "state": "fixed",
+      "state": "verified",
       "title": "H-13 夹具把工作区永久翻到 dataMode=real，连坐 O/H 域 5 条用例假红",
       "evidence": [
         {
@@ -238,14 +259,14 @@
           },
           "last_result": "pass",
           "run": {
-            "path": "runs/MC-043-0-1791267085346.json",
-            "sha256": "7d0883a2680484375c87ebed4b0727fd247fd4ce888205bd565b0a73afcc9adb",
-            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+            "path": "runs/MC-043-0-1791267396159.json",
+            "sha256": "b20c099055492e45666fca17014e62cd92c0fd91988d0097a332d7fd5385cd8b",
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
           },
           "evidence": {
-            "path": "evidence/MC-043-0-1791267085346.txt",
+            "path": "evidence/MC-043-0-1791267396159.txt",
             "sha256": "41b8414f481361a283c2c3910ee063248334040603feb71bca673ce80e080d5b",
-            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
           }
         },
         {
@@ -264,14 +285,14 @@
           },
           "last_result": "pass",
           "run": {
-            "path": "runs/MC-043-1-1791267089267.json",
-            "sha256": "460ce0af06fdc9b7187aa2746dfc7b536f319f2bd237f3c9018c97838c8c2255",
-            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+            "path": "runs/MC-043-1-1791267400781.json",
+            "sha256": "0e1031dafaf4464407a97395175ced3f0cd6d61429ca5078dfa65cb5c371fc19",
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
           },
           "evidence": {
-            "path": "evidence/MC-043-1-1791267089267.txt",
+            "path": "evidence/MC-043-1-1791267400781.txt",
             "sha256": "b82cc2f428e9c82467b9ee22249c041a804cf50c2c019f1043262a1eca47f813",
-            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
           }
         }
       ],
@@ -281,23 +302,44 @@
         "evidence": null
       },
       "last_assertion_attempt": {
-        "actor": "codebuddy",
-        "role": "repair",
+        "actor": "session-acceptance",
+        "role": "acceptance",
         "result": "pass",
-        "at": "2026-10-06T06:11:25.345Z",
-        "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e",
-        "finished_at": "2026-10-06T06:11:33.304Z"
+        "at": "2026-10-06T06:16:36.158Z",
+        "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c",
+        "finished_at": "2026-10-06T06:16:44.672Z"
       },
-      "fixed_by": "codebuddy",
-      "verified_by": null,
-      "verified_at": null,
-      "verification_evidence": null
+      "fixed_by": "session-repair",
+      "verified_by": "session-acceptance",
+      "verified_at": "2026-10-06T06:16:44.672Z",
+      "verification_evidence": {
+        "path": "runs/MC-043-0-1791267396159.json",
+        "sha256": "b20c099055492e45666fca17014e62cd92c0fd91988d0097a332d7fd5385cd8b",
+        "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
+      },
+      "last_verification_attempt": {
+        "actor": "session-acceptance",
+        "result": "pass",
+        "at": "2026-10-06T06:16:44.672Z",
+        "runs": [
+          {
+            "path": "runs/MC-043-0-1791267396159.json",
+            "sha256": "b20c099055492e45666fca17014e62cd92c0fd91988d0097a332d7fd5385cd8b",
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
+          },
+          {
+            "path": "runs/MC-043-1-1791267400781.json",
+            "sha256": "0e1031dafaf4464407a97395175ced3f0cd6d61429ca5078dfa65cb5c371fc19",
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
+          }
+        ]
+      }
     },
     {
       "id": "MC-101",
       "kind": "fix",
       "batch": 1,
-      "state": "fixed",
+      "state": "verified",
       "title": "补齐公司负责人名册行（seed/seed-aipm）+ suite 直连注入读名册",
       "covers": [
         "MC-040"
@@ -340,14 +382,14 @@
           },
           "last_result": "pass",
           "run": {
-            "path": "runs/MC-101-0-1791267093369.json",
-            "sha256": "4591e05e0f691d9d9dcb3d385c83b5439942e4b1d1fe2b73b3f68ddba768a6ab",
-            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+            "path": "runs/MC-101-0-1791267404755.json",
+            "sha256": "e20500229f776c855a0b87e550a919794891436ece4a47923efef975033b644e",
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
           },
           "evidence": {
-            "path": "evidence/MC-101-0-1791267093369.txt",
+            "path": "evidence/MC-101-0-1791267404755.txt",
             "sha256": "fb5896a324e257a0a1fcfc841c75217abe7153f10bcdb68a72e2e8664b140c03",
-            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
           }
         },
         {
@@ -366,14 +408,14 @@
           },
           "last_result": "pass",
           "run": {
-            "path": "runs/MC-101-1-1791267097382.json",
-            "sha256": "7a41773b0186ca64344820ff1021e7bfcf44404e6cdf5e95e4563820ed9523b9",
-            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+            "path": "runs/MC-101-1-1791267408664.json",
+            "sha256": "55db3efcc7352c8a2e3af7f768f6e27b851365cf53e094888f11b277c9e293c0",
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
           },
           "evidence": {
-            "path": "evidence/MC-101-1-1791267097382.txt",
+            "path": "evidence/MC-101-1-1791267408664.txt",
             "sha256": "fb5896a324e257a0a1fcfc841c75217abe7153f10bcdb68a72e2e8664b140c03",
-            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
           }
         }
       ],
@@ -382,25 +424,46 @@
         "evidence": null
       },
       "rollback": "revert 149c93c92110（按文件 revert 本提交）",
-      "fixed_by": "codebuddy",
+      "fixed_by": "session-repair",
       "notes": "",
       "last_assertion_attempt": {
-        "actor": "codebuddy",
-        "role": "repair",
+        "actor": "session-acceptance",
+        "role": "acceptance",
         "result": "pass",
-        "at": "2026-10-06T06:11:33.369Z",
-        "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e",
-        "finished_at": "2026-10-06T06:11:41.695Z"
+        "at": "2026-10-06T06:16:44.755Z",
+        "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c",
+        "finished_at": "2026-10-06T06:16:52.672Z"
       },
-      "verified_by": null,
-      "verified_at": null,
-      "verification_evidence": null
+      "verified_by": "session-acceptance",
+      "verified_at": "2026-10-06T06:16:52.672Z",
+      "verification_evidence": {
+        "path": "runs/MC-101-0-1791267404755.json",
+        "sha256": "e20500229f776c855a0b87e550a919794891436ece4a47923efef975033b644e",
+        "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
+      },
+      "last_verification_attempt": {
+        "actor": "session-acceptance",
+        "result": "pass",
+        "at": "2026-10-06T06:16:52.672Z",
+        "runs": [
+          {
+            "path": "runs/MC-101-0-1791267404755.json",
+            "sha256": "e20500229f776c855a0b87e550a919794891436ece4a47923efef975033b644e",
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
+          },
+          {
+            "path": "runs/MC-101-1-1791267408664.json",
+            "sha256": "55db3efcc7352c8a2e3af7f768f6e27b851365cf53e094888f11b277c9e293c0",
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
+          }
+        ]
+      }
     },
     {
       "id": "MC-102",
       "kind": "fix",
       "batch": 1,
-      "state": "fixed",
+      "state": "verified",
       "title": "H-13 夹具 finally 复位工作区 archive",
       "covers": [
         "MC-043"
@@ -435,14 +498,14 @@
           },
           "last_result": "pass",
           "run": {
-            "path": "runs/MC-102-0-1791267101763.json",
-            "sha256": "d017a6ff349164333793967b67bf05abd505c284d70de463261f64bf494d69b2",
-            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+            "path": "runs/MC-102-0-1791267412750.json",
+            "sha256": "8982d938932f17bc57dfdca92ecf093bfee599fa7bf05164e092eb7d41738eab",
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
           },
           "evidence": {
-            "path": "evidence/MC-102-0-1791267101763.txt",
+            "path": "evidence/MC-102-0-1791267412750.txt",
             "sha256": "b82cc2f428e9c82467b9ee22249c041a804cf50c2c019f1043262a1eca47f813",
-            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
           }
         }
       ],
@@ -451,19 +514,35 @@
         "evidence": null
       },
       "rollback": "revert 149c93c92110（按文件 revert 本提交）",
-      "fixed_by": "codebuddy",
+      "fixed_by": "session-repair",
       "notes": "",
       "last_assertion_attempt": {
-        "actor": "codebuddy",
-        "role": "repair",
+        "actor": "session-acceptance",
+        "role": "acceptance",
         "result": "pass",
-        "at": "2026-10-06T06:11:41.763Z",
-        "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e",
-        "finished_at": "2026-10-06T06:11:45.584Z"
+        "at": "2026-10-06T06:16:52.749Z",
+        "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c",
+        "finished_at": "2026-10-06T06:16:56.629Z"
       },
-      "verified_by": null,
-      "verified_at": null,
-      "verification_evidence": null
+      "verified_by": "session-acceptance",
+      "verified_at": "2026-10-06T06:16:56.629Z",
+      "verification_evidence": {
+        "path": "runs/MC-102-0-1791267412750.json",
+        "sha256": "8982d938932f17bc57dfdca92ecf093bfee599fa7bf05164e092eb7d41738eab",
+        "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
+      },
+      "last_verification_attempt": {
+        "actor": "session-acceptance",
+        "result": "pass",
+        "at": "2026-10-06T06:16:56.629Z",
+        "runs": [
+          {
+            "path": "runs/MC-102-0-1791267412750.json",
+            "sha256": "8982d938932f17bc57dfdca92ecf093bfee599fa7bf05164e092eb7d41738eab",
+            "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
+          }
+        ]
+      }
     }
   ],
   "gates": []

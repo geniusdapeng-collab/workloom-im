@@ -1,6 +1,6 @@
 {
   "schema": "workloom.evidence-run/v1",
-  "id": "MC-101-0-1791267093369",
+  "id": "MC-101-0-1791267375428",
   "command": "node --import tsx scripts/repair-mc040-f210.mts after",
   "exec": {
     "file": "node",
@@ -11,16 +11,16 @@
       "after"
     ]
   },
-  "actor": "codebuddy",
+  "actor": "session-repair",
   "role": "repair",
   "subject": {
     "card_id": "MC-101",
     "assertion_index": 0
   },
-  "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e",
+  "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c",
   "working_tree_dirty": false,
-  "started_at": "2026-10-06T06:11:33.370Z",
-  "finished_at": "2026-10-06T06:11:37.367Z",
+  "started_at": "2026-10-06T06:16:15.428Z",
+  "finished_at": "2026-10-06T06:16:19.523Z",
   "exit_code": 0,
   "signal": null,
   "validation": {
@@ -30,9 +30,9 @@
   "result": "pass",
   "outputs": [
     {
-      "path": "evidence/MC-101-0-1791267093369.txt",
+      "path": "evidence/MC-101-0-1791267375428.txt",
       "sha256": "fb5896a324e257a0a1fcfc841c75217abe7153f10bcdb68a72e2e8664b140c03",
-      "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+      "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
     }
   ]
 }
