@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 1339,
+  "revision": 1341,
   "tasks": {
     "231": {
       "number": 231,
@@ -3158,12 +3158,12 @@
     },
     "260": {
       "number": 260,
-      "status": "waiting_review",
+      "status": "parked",
       "firstSeen": 1791273011212,
       "attempts": {},
       "headSha": "bd865cc91b7ee8e28b2c585daf1f34d834c95bf2",
       "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
-      "updatedAt": 1791273039776,
+      "updatedAt": 1791273947539,
       "branch": "delivery/candidate/pr-232-de22b9c20891c890504f8468acf5ca5b",
       "intent": {
         "taskId": "T-2026-1002-0001",
@@ -3173,12 +3173,7 @@
       },
       "reviewAttemptAt": 1791273036638,
       "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
-      "reviewBuild": {
-        "sn": "cnb-v6a-1k4832g6h",
-        "headSha": "bd865cc91b7ee8e28b2c585daf1f34d834c95bf2",
-        "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
-        "at": 1791273036638
-      },
+      "reviewBuild": null,
       "reviewDispatch": null,
       "admission": {
         "number": 260,
@@ -3198,7 +3193,16 @@
           "protocol": 64,
           "sync": 60
         }
-      }
+      },
+      "review": null,
+      "error": "AI review did not pass without unresolved issues",
+      "reviewFailures": {
+        "headSha": "bd865cc91b7ee8e28b2c585daf1f34d834c95bf2",
+        "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+        "lastBuild": "cnb-v6a-1k4832g6h",
+        "count": 1
+      },
+      "blockedUntil": 1791274547539
     }
   },
   "leases": {
@@ -46746,6 +46750,40 @@
       },
       "previous": "d9a8002798bd09322d2f1a1284b0e460447bcab026f10cb4d02455458b6daa17",
       "digest": "cfb19aa755cde23e0006cd053d8c9ca593dfd162e2b94f496f9b372241ab26eb"
+    },
+    {
+      "sequence": 1340,
+      "at": "2026-10-06T08:05:47.539Z",
+      "kind": "task",
+      "data": {
+        "number": 260,
+        "patch": {
+          "status": "parked",
+          "review": null,
+          "reviewBuild": null,
+          "reviewDispatch": null,
+          "error": "AI review did not pass without unresolved issues",
+          "reviewFailures": {
+            "headSha": "bd865cc91b7ee8e28b2c585daf1f34d834c95bf2",
+            "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+            "lastBuild": "cnb-v6a-1k4832g6h",
+            "count": 1
+          },
+          "blockedUntil": 1791274547539
+        }
+      },
+      "previous": "cfb19aa755cde23e0006cd053d8c9ca593dfd162e2b94f496f9b372241ab26eb",
+      "digest": "598667b289e55fa9764ff64073c893d4f8bd30db220f086ff36fe5c38cc41a9f"
+    },
+    {
+      "sequence": 1341,
+      "at": "2026-10-06T08:05:46.068Z",
+      "kind": "transaction",
+      "data": {
+        "id": "6dbe534b-27a1-4e95-a504-4220f76e13a1"
+      },
+      "previous": "598667b289e55fa9764ff64073c893d4f8bd30db220f086ff36fe5c38cc41a9f",
+      "digest": "23122f74f24866b4dd5bdf03dfb0f5be96bb1f2c4280e567c31dc9793020796d"
     }
   ]
 }
