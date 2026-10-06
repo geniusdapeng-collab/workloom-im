@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 636,
+  "revision": 638,
   "tasks": {
     "231": {
       "number": 231,
@@ -2773,12 +2773,12 @@
     },
     "252": {
       "number": 252,
-      "status": "waiting_review",
+      "status": "parked",
       "firstSeen": 1791250807776,
       "attempts": {},
       "headSha": "f40717bd39aff4629b071c989a3fe05552e0163b",
       "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
-      "updatedAt": 1791250825092,
+      "updatedAt": 1791251277096,
       "admission": {
         "number": 252,
         "headSha": "f40717bd39aff4629b071c989a3fe05552e0163b",
@@ -2803,13 +2803,17 @@
       },
       "reviewAttemptAt": 1791250825092,
       "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
-      "reviewBuild": {
-        "sn": "cnb-49b-1k47dslmk",
+      "reviewBuild": null,
+      "reviewDispatch": null,
+      "review": null,
+      "error": "AI review did not pass without unresolved issues",
+      "reviewFailures": {
         "headSha": "f40717bd39aff4629b071c989a3fe05552e0163b",
         "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
-        "at": 1791250825092
+        "lastBuild": "cnb-49b-1k47dslmk",
+        "count": 1
       },
-      "reviewDispatch": null
+      "blockedUntil": 1791251877096
     }
   },
   "leases": {
@@ -19602,6 +19606,40 @@
       },
       "previous": "a57a5cae87c9569127fd6772ef6514d405e1bfad8e428ee2b8c43c309d4588ba",
       "digest": "ccddee2bdc8abeefbfbdfaf3ca06dfd39a05bfbfabc1e95aaca7a2affb661bc5"
+    },
+    {
+      "sequence": 637,
+      "at": "2026-10-06T01:47:57.096Z",
+      "kind": "task",
+      "data": {
+        "number": 252,
+        "patch": {
+          "status": "parked",
+          "review": null,
+          "reviewBuild": null,
+          "reviewDispatch": null,
+          "error": "AI review did not pass without unresolved issues",
+          "reviewFailures": {
+            "headSha": "f40717bd39aff4629b071c989a3fe05552e0163b",
+            "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+            "lastBuild": "cnb-49b-1k47dslmk",
+            "count": 1
+          },
+          "blockedUntil": 1791251877096
+        }
+      },
+      "previous": "ccddee2bdc8abeefbfbdfaf3ca06dfd39a05bfbfabc1e95aaca7a2affb661bc5",
+      "digest": "a9d416bce5b7ac068a5e8261f2b080b062bf61f24a036de0e4861217bea9ce16"
+    },
+    {
+      "sequence": 638,
+      "at": "2026-10-06T01:47:56.360Z",
+      "kind": "transaction",
+      "data": {
+        "id": "3516fad5-6844-4d31-b551-6d3b04193aba"
+      },
+      "previous": "a9d416bce5b7ac068a5e8261f2b080b062bf61f24a036de0e4861217bea9ce16",
+      "digest": "b9d24b8f4709695bc0822176d19e64d5601bbe4f8d56ca86f6a577dbb3bdb46f"
     }
   ]
 }
