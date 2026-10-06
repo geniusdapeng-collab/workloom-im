@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 455,
+  "revision": 457,
   "tasks": {
     "231": {
       "number": 231,
@@ -1664,12 +1664,12 @@
     },
     "248": {
       "number": 248,
-      "status": "waiting_review",
+      "status": "waiting_ci",
       "firstSeen": 1791247508098,
       "attempts": {},
       "headSha": "d691e15cd9390e195def2a9896194d1b18a5b73d",
       "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
-      "updatedAt": 1791247532219,
+      "updatedAt": 1791247634797,
       "admission": {
         "number": 248,
         "headSha": "d691e15cd9390e195def2a9896194d1b18a5b73d",
@@ -1700,7 +1700,87 @@
         "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
         "at": 1791247532219
       },
-      "reviewDispatch": null
+      "reviewDispatch": null,
+      "review": {
+        "id": "0d94713e-e63c-4ec7-9585-d73cdb5242cc",
+        "number": 248,
+        "headSha": "d691e15cd9390e195def2a9896194d1b18a5b73d",
+        "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+        "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+        "filesHash": "c93d1fea2b55a5f65b17a9f6834d4492f110143253b74d50331a6d050277b2c7",
+        "resultHash": "799770226aa0d95205ecff493ef72a7b53aead88762d5330a02e57a51a61d730",
+        "dependsOn": [
+          236
+        ],
+        "ciPolicyChangesHash": "516b1f8fbb67c413c12a1942295a937838d5223cf84589f7defc8ed50f21bf2b",
+        "passed": true,
+        "platformReview": {
+          "id": "2107271424138452992",
+          "author": "CodeBuddy",
+          "creator": "OCI",
+          "isNpc": true,
+          "createdAt": "2026-10-06T00:47:13Z"
+        },
+        "result": {
+          "status": "passed",
+          "issues": [],
+          "reviewed_files": [
+            "scripts/delivery/install-repository.mjs",
+            "scripts/delivery/install-repository.test.mjs",
+            "scripts/delivery/queue-platform.mjs",
+            "scripts/delivery/queue.test.mjs"
+          ],
+          "head_sha": "d691e15cd9390e195def2a9896194d1b18a5b73d",
+          "base_sha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+          "policy_hash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+          "depends_on": [
+            236
+          ],
+          "ci_policy_changes": [
+            {
+              "id": "CI-001",
+              "rationale": "install-repository.mjs now matches installation issues and PRs only through hydrated exact identities (installationIssues/installationPulls) instead of list stubs whose bodies are empty. Every changed call site (prepareRepository existing-PR reuse at line 225, collision check at lines 244-245, issue/PR createOnce recovery at lines 246 and 273, refreshInstallerPolicy replacement at line 167) now fails closed on unreadable or drifted identity via explicit throws. This preserves and strengthens the prior validation rather than removing it: the same branch/marker guarantees are retained, with added number/title/branch readback and body readability assertions."
+            },
+            {
+              "id": "CI-002",
+              "rationale": "queue-platform.mjs pulls() now returns real detail bodies for open PRs while retaining list-only age fields and rejecting a non-string detail body. The only production consumer (queue-controller.mjs:292 reconcile) depends on body-derived handoff intent (parseIntent ready/depends_on) and created_at age; the previous empty summary bodies could silently drop dependencies and handoff. The contract's exact-intent requirement is preserved and improved; no check is weakened."
+            },
+            {
+              "id": "CI-003",
+              "rationale": "queue.test.mjs adds positive and negative assertions for summary-body hydration: real body preserved, age preserved, dependencies derived from the hydrated handoff, and fail-closed rejection on unreadable/foreign detail. This increases required-check coverage of the Platform change; it does not relax any existing assertion or stage identity."
+            },
+            {
+              "id": "CI-004",
+              "rationale": "install-repository.test.mjs adds assertions that issue and PR hydration recover the exact object once on lost acknowledgement, catch a colliding task via full issue-title coverage, reject changed-branch details, and propagate permission failures instead of treating them as absent objects. These strengthen the install-coordinator gates; the pre-existing policy-refresh test mock was updated only to serve the newly hydrated detail reads. No required check is bypassed or removed."
+            }
+          ],
+          "notes": [
+            "CI-001 scripts/delivery/install-repository.mjs: reviewed both blobs. Adds installationIssues() (lines 78-93) which enumerates open+closed issue titles, hydrates each title-matching issue via /-/issues/{number}, and rejects unreadable/identity-mismatched details; and installationPulls() (lines 95-106) which lists state=all&base_ref=main, filters to the exact chore/protocol-onboarding-* branch, hydrates details and rejects a detail whose branch changed. createOnce() lost-ack recovery is preserved. The task-number collision check (line 245) now runs against hydrated bodies, so it correctly distinguishes an own-marker issue from a foreign task that shares the id. This is fail-closed: unreadable detail, regex-invalid taskId, and identity drift all throw. No bypass introduced.",
+            "CI-002 scripts/delivery/queue-platform.mjs: reviewed both blobs. pulls() (lines 44-55) now hydrates each open PR summary through this.pull(number) because CNB list rows carry empty bodies, merges summary+detail so list-only age fields (created_at) survive, and throws when a detail body is not a string. Consumer queue-controller.mjs:292 uses created_at for age ordering and parseIntent(pull) for depends_on/ready, both of which require real bodies; previously-empty summary bodies would silently erase handoff intent. Fix is correct and matches the contract that delivery intent must come from actual details. Noted (not a defect): this issues one detail call per open PR per reconcile, a bounded amplification proportional to the open-PR count.",
+            "CI-003 scripts/delivery/queue.test.mjs: reviewed the added block (lines 622-645). Asserts hydrated body equals the real detail body while created_at age is preserved, that dependencies() derives pending [2] from the hydrated handoff, that a null detail body is rejected, that a 403 detail propagates, and that a detail whose number differs from the summary is rejected as an invalid identity. These cover the exact regression being fixed and add negative fail-closed assertions.",
+            "CI-004 scripts/delivery/install-repository.test.mjs: reviewed the added block (lines 152-187) plus the modified refresh-mock (line 242). Asserts (a) issue hydration recovers the exact task and a lost create acknowledgement exactly once, refusing unreadable/null bodies and identity drift, (b) full issue-title coverage hydrates a colliding task that keyword indexing would omit and observes only the title-matching row, (c) PR hydration recovers only the exact installer branch, rejects a changed-branch detail and propagates a 403 without turning a read failure into an absent object. The updated platform.pull mock serves details by number, consistent with the new hydration behavior.",
+            "Direct dependencies read and unchanged at this tuple: scripts/delivery/queue-model.mjs (branchName/parseIntent/hash, parseIntent regex/validation), scripts/delivery/queue-controller.mjs (dependencies() and reconcile() consumers of platform.pulls()), scripts/delivery/install-assets.mjs (INSTALL_MARKER/packageHash), scripts/tools/cnb-api.mjs. Complete changed set across the whole tree is exactly the four supplied paths (numstat: 35/5, 38/2, 12/1, 24/0); .cnb.yml is unchanged and the existing required stages `node --test scripts/delivery/*.test.mjs` (.cnb.yml:118) and `node --test scripts/delivery/queue.test.mjs ...` under '持续交付与不可变发布回归' (.cnb.yml:123-126) already execute the modified tests, so no pipeline or stage identity changes are required.",
+            "Policy contract: the authorized product contract replaces permanent open-PR/path locks with bounded sensitive leases, immutable candidates, serialized integration and exact current-main checks. These four changes align with that contract by binding all matching to actual hydrated details and exact branch/task identity instead of list-stub markers, with fail-closed behavior on unreadable or drifted identities. No weakening or unproven removal of a required check was found; base_sha/head_sha are ancestor-related with mandatory prerequisite #236 present in this history."
+          ],
+          "batches": [
+            {
+              "index": 0,
+              "files": [
+                "scripts/delivery/install-repository.mjs",
+                "scripts/delivery/install-repository.test.mjs",
+                "scripts/delivery/queue-platform.mjs",
+                "scripts/delivery/queue.test.mjs"
+              ],
+              "status": "passed",
+              "toolUseCount": 37,
+              "turnCount": 59
+            }
+          ]
+        },
+        "approvedAt": 1791247634797
+      },
+      "error": null,
+      "blockedUntil": 0
     }
   },
   "leases": {
@@ -12671,6 +12751,119 @@
       },
       "previous": "409700d4c41ad204cbc11adfc574e824533ba3b15102b81af886d71dabdfc6c7",
       "digest": "384ba98c4f8b9b09a42f79aa8eea534f70db8eb8b49d760dd4eeb7e0dee5fd62"
+    },
+    {
+      "sequence": 456,
+      "at": "2026-10-06T00:47:14.797Z",
+      "kind": "task",
+      "data": {
+        "number": 248,
+        "patch": {
+          "status": "waiting_ci",
+          "review": {
+            "id": "0d94713e-e63c-4ec7-9585-d73cdb5242cc",
+            "number": 248,
+            "headSha": "d691e15cd9390e195def2a9896194d1b18a5b73d",
+            "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+            "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+            "filesHash": "c93d1fea2b55a5f65b17a9f6834d4492f110143253b74d50331a6d050277b2c7",
+            "resultHash": "799770226aa0d95205ecff493ef72a7b53aead88762d5330a02e57a51a61d730",
+            "dependsOn": [
+              236
+            ],
+            "ciPolicyChangesHash": "516b1f8fbb67c413c12a1942295a937838d5223cf84589f7defc8ed50f21bf2b",
+            "passed": true,
+            "platformReview": {
+              "id": "2107271424138452992",
+              "author": "CodeBuddy",
+              "creator": "OCI",
+              "isNpc": true,
+              "createdAt": "2026-10-06T00:47:13Z"
+            },
+            "result": {
+              "status": "passed",
+              "issues": [],
+              "reviewed_files": [
+                "scripts/delivery/install-repository.mjs",
+                "scripts/delivery/install-repository.test.mjs",
+                "scripts/delivery/queue-platform.mjs",
+                "scripts/delivery/queue.test.mjs"
+              ],
+              "head_sha": "d691e15cd9390e195def2a9896194d1b18a5b73d",
+              "base_sha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+              "policy_hash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+              "depends_on": [
+                236
+              ],
+              "ci_policy_changes": [
+                {
+                  "id": "CI-001",
+                  "rationale": "install-repository.mjs now matches installation issues and PRs only through hydrated exact identities (installationIssues/installationPulls) instead of list stubs whose bodies are empty. Every changed call site (prepareRepository existing-PR reuse at line 225, collision check at lines 244-245, issue/PR createOnce recovery at lines 246 and 273, refreshInstallerPolicy replacement at line 167) now fails closed on unreadable or drifted identity via explicit throws. This preserves and strengthens the prior validation rather than removing it: the same branch/marker guarantees are retained, with added number/title/branch readback and body readability assertions."
+                },
+                {
+                  "id": "CI-002",
+                  "rationale": "queue-platform.mjs pulls() now returns real detail bodies for open PRs while retaining list-only age fields and rejecting a non-string detail body. The only production consumer (queue-controller.mjs:292 reconcile) depends on body-derived handoff intent (parseIntent ready/depends_on) and created_at age; the previous empty summary bodies could silently drop dependencies and handoff. The contract's exact-intent requirement is preserved and improved; no check is weakened."
+                },
+                {
+                  "id": "CI-003",
+                  "rationale": "queue.test.mjs adds positive and negative assertions for summary-body hydration: real body preserved, age preserved, dependencies derived from the hydrated handoff, and fail-closed rejection on unreadable/foreign detail. This increases required-check coverage of the Platform change; it does not relax any existing assertion or stage identity."
+                },
+                {
+                  "id": "CI-004",
+                  "rationale": "install-repository.test.mjs adds assertions that issue and PR hydration recover the exact object once on lost acknowledgement, catch a colliding task via full issue-title coverage, reject changed-branch details, and propagate permission failures instead of treating them as absent objects. These strengthen the install-coordinator gates; the pre-existing policy-refresh test mock was updated only to serve the newly hydrated detail reads. No required check is bypassed or removed."
+                }
+              ],
+              "notes": [
+                "CI-001 scripts/delivery/install-repository.mjs: reviewed both blobs. Adds installationIssues() (lines 78-93) which enumerates open+closed issue titles, hydrates each title-matching issue via /-/issues/{number}, and rejects unreadable/identity-mismatched details; and installationPulls() (lines 95-106) which lists state=all&base_ref=main, filters to the exact chore/protocol-onboarding-* branch, hydrates details and rejects a detail whose branch changed. createOnce() lost-ack recovery is preserved. The task-number collision check (line 245) now runs against hydrated bodies, so it correctly distinguishes an own-marker issue from a foreign task that shares the id. This is fail-closed: unreadable detail, regex-invalid taskId, and identity drift all throw. No bypass introduced.",
+                "CI-002 scripts/delivery/queue-platform.mjs: reviewed both blobs. pulls() (lines 44-55) now hydrates each open PR summary through this.pull(number) because CNB list rows carry empty bodies, merges summary+detail so list-only age fields (created_at) survive, and throws when a detail body is not a string. Consumer queue-controller.mjs:292 uses created_at for age ordering and parseIntent(pull) for depends_on/ready, both of which require real bodies; previously-empty summary bodies would silently erase handoff intent. Fix is correct and matches the contract that delivery intent must come from actual details. Noted (not a defect): this issues one detail call per open PR per reconcile, a bounded amplification proportional to the open-PR count.",
+                "CI-003 scripts/delivery/queue.test.mjs: reviewed the added block (lines 622-645). Asserts hydrated body equals the real detail body while created_at age is preserved, that dependencies() derives pending [2] from the hydrated handoff, that a null detail body is rejected, that a 403 detail propagates, and that a detail whose number differs from the summary is rejected as an invalid identity. These cover the exact regression being fixed and add negative fail-closed assertions.",
+                "CI-004 scripts/delivery/install-repository.test.mjs: reviewed the added block (lines 152-187) plus the modified refresh-mock (line 242). Asserts (a) issue hydration recovers the exact task and a lost create acknowledgement exactly once, refusing unreadable/null bodies and identity drift, (b) full issue-title coverage hydrates a colliding task that keyword indexing would omit and observes only the title-matching row, (c) PR hydration recovers only the exact installer branch, rejects a changed-branch detail and propagates a 403 without turning a read failure into an absent object. The updated platform.pull mock serves details by number, consistent with the new hydration behavior.",
+                "Direct dependencies read and unchanged at this tuple: scripts/delivery/queue-model.mjs (branchName/parseIntent/hash, parseIntent regex/validation), scripts/delivery/queue-controller.mjs (dependencies() and reconcile() consumers of platform.pulls()), scripts/delivery/install-assets.mjs (INSTALL_MARKER/packageHash), scripts/tools/cnb-api.mjs. Complete changed set across the whole tree is exactly the four supplied paths (numstat: 35/5, 38/2, 12/1, 24/0); .cnb.yml is unchanged and the existing required stages `node --test scripts/delivery/*.test.mjs` (.cnb.yml:118) and `node --test scripts/delivery/queue.test.mjs ...` under '持续交付与不可变发布回归' (.cnb.yml:123-126) already execute the modified tests, so no pipeline or stage identity changes are required.",
+                "Policy contract: the authorized product contract replaces permanent open-PR/path locks with bounded sensitive leases, immutable candidates, serialized integration and exact current-main checks. These four changes align with that contract by binding all matching to actual hydrated details and exact branch/task identity instead of list-stub markers, with fail-closed behavior on unreadable or drifted identities. No weakening or unproven removal of a required check was found; base_sha/head_sha are ancestor-related with mandatory prerequisite #236 present in this history."
+              ],
+              "batches": [
+                {
+                  "index": 0,
+                  "files": [
+                    "scripts/delivery/install-repository.mjs",
+                    "scripts/delivery/install-repository.test.mjs",
+                    "scripts/delivery/queue-platform.mjs",
+                    "scripts/delivery/queue.test.mjs"
+                  ],
+                  "status": "passed",
+                  "toolUseCount": 37,
+                  "turnCount": 59
+                }
+              ]
+            },
+            "approvedAt": 1791247634797
+          },
+          "headSha": "d691e15cd9390e195def2a9896194d1b18a5b73d",
+          "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+          "intent": {
+            "taskId": "T-2026-1006-1002",
+            "ready": true,
+            "dependsOn": [
+              236
+            ],
+            "releases": []
+          },
+          "error": null,
+          "blockedUntil": 0
+        }
+      },
+      "previous": "384ba98c4f8b9b09a42f79aa8eea534f70db8eb8b49d760dd4eeb7e0dee5fd62",
+      "digest": "65f9124e763dd00ae05ee849010e69f0c193bf697674cdbe2b5c2022022d648a"
+    },
+    {
+      "sequence": 457,
+      "at": "2026-10-06T00:47:14.458Z",
+      "kind": "transaction",
+      "data": {
+        "id": "d35c43ec-e9b4-4399-bb97-e70682bc0304"
+      },
+      "previous": "65f9124e763dd00ae05ee849010e69f0c193bf697674cdbe2b5c2022022d648a",
+      "digest": "6f04c5791038bdab03093d48fe68e51fc2f3427a3681b865d06b7a7159f95892"
     }
   ]
 }
