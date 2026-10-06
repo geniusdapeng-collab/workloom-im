@@ -205,8 +205,6 @@ export async function prepareRepository({ repo, token, sourceRoot, sourceSha, so
     if (!SHA_RE.test(mainSha ?? '')) throw new Error('Repository has no verifiable main branch');
     if (!checkout) {
       await git(['clone', '--quiet', '--no-checkout', '--filter=blob:none', '--branch', 'main', remote, root], { token, remote });
-      await git(['sparse-checkout', 'init', '--cone'], { cwd: root });
-      await git(['sparse-checkout', 'set', 'scripts/ci', 'scripts/delivery', 'scripts/tools', 'docs', '.cnb'], { cwd: root });
       await git(['checkout', '--quiet', 'main'], { cwd: root });
     }
     if (await git(['status', '--porcelain'], { cwd: root })) throw new Error('Installation checkout has uncommitted changes');
@@ -245,7 +243,7 @@ export async function prepareRepository({ repo, token, sourceRoot, sourceSha, so
     if (issues.some(issue => String(issue.title).includes(taskId) && !String(issue.body).includes(marker))) throw new Error('Installation task number collides with another task');
     const issue = await createOnce({ list: () => installationIssues(platform, taskId),
       match: item => String(item.body).includes(`<!-- ${marker} -->`),
-      create: () => platform.call('/-/issues', { method: 'POST', body: { title: `[${taskId}] 安装普通研发自动交付`, body: taskCard(taskId, repo, plan.marker, [...plan.changes.keys()]) } }) });
+      create: () => platform.call('/-/issues', { method: 'POST', body: { title: `[${taskId}] 安装普通研发自动交付`, body: taskCard(taskId, repo, plan.marker, [...new Set([...plan.changes.keys(), ...plan.generatedPaths])]) } }) });
     if (!Number.isSafeInteger(Number(issue.number)) || Number(issue.number) <= 0) throw new Error('Installation issue receipt is invalid');
     const refs = await git(['ls-remote', remote, `refs/heads/${branch}`], { cwd: root, token, remote });
     if (refs) {
