@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 1035,
+  "revision": 1037,
   "tasks": {
     "231": {
       "number": 231,
@@ -2969,12 +2969,12 @@
     },
     "256": {
       "number": 256,
-      "status": "waiting_review",
+      "status": "parked",
       "firstSeen": 1791262815385,
       "attempts": {},
       "headSha": "5e0044fe54300ab43df526a457bb06f5d429edd9",
       "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
-      "updatedAt": 1791262858502,
+      "updatedAt": 1791264008263,
       "admission": {
         "number": 256,
         "headSha": "5e0044fe54300ab43df526a457bb06f5d429edd9",
@@ -3003,13 +3003,16 @@
       },
       "reviewAttemptAt": 1791262858502,
       "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
-      "reviewBuild": {
-        "sn": "cnb-oqa-1k47pbplc",
+      "reviewBuild": null,
+      "reviewDispatch": null,
+      "reviewFailures": {
         "headSha": "5e0044fe54300ab43df526a457bb06f5d429edd9",
         "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
-        "at": 1791262858502
+        "count": 1,
+        "lastBuild": "cnb-oqa-1k47pbplc"
       },
-      "reviewDispatch": null
+      "blockedUntil": 1791264608263,
+      "error": "AI build error without a complete review receipt"
     },
     "257": {
       "number": 257,
@@ -34638,6 +34641,39 @@
       },
       "previous": "bdeec8f2d80697da760d0fd5d7e33a2fc6a61fe6b16af6a07b78d18a64431bef",
       "digest": "d1e9649e2a7528091d9696d55dd50194f0945a6b381a740a6ff3f8800038cf79"
+    },
+    {
+      "sequence": 1036,
+      "at": "2026-10-06T05:20:08.263Z",
+      "kind": "task",
+      "data": {
+        "number": 256,
+        "patch": {
+          "status": "parked",
+          "reviewBuild": null,
+          "reviewDispatch": null,
+          "reviewFailures": {
+            "headSha": "5e0044fe54300ab43df526a457bb06f5d429edd9",
+            "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+            "count": 1,
+            "lastBuild": "cnb-oqa-1k47pbplc"
+          },
+          "blockedUntil": 1791264608263,
+          "error": "AI build error without a complete review receipt"
+        }
+      },
+      "previous": "d1e9649e2a7528091d9696d55dd50194f0945a6b381a740a6ff3f8800038cf79",
+      "digest": "a2aa2d382aa81686b7376fb4cd7c57e640b2b917f519ac0e1d7c6a243148ce95"
+    },
+    {
+      "sequence": 1037,
+      "at": "2026-10-06T05:20:54.221Z",
+      "kind": "transaction",
+      "data": {
+        "id": "3f9cb16a-e683-44c8-87a2-b75043ec2fae"
+      },
+      "previous": "a2aa2d382aa81686b7376fb4cd7c57e640b2b917f519ac0e1d7c6a243148ce95",
+      "digest": "0779bf317cd0221508ec26ab5fbbac2caa386b7961103917fac63ddc79939eaa"
     }
   ]
 }
