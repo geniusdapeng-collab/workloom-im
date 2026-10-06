@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 370,
+  "revision": 372,
   "tasks": {
     "231": {
       "number": 231,
@@ -1491,7 +1491,7 @@
           "protocol": 28
         }
       },
-      "updatedAt": 1791246007570,
+      "updatedAt": 1791246307622,
       "alignmentCount": 0,
       "recoveryCount": 0,
       "reviewFailures": null,
@@ -10428,6 +10428,48 @@
       },
       "previous": "e1eab8a76adae981566d406e1952b5666e1a4be3b2c4411b530c9937a7090a1e",
       "digest": "6db9b7b81ebab102cd7e7d74b240b75272c48481dafb8dff1eda0e5cdbafcfe1"
+    },
+    {
+      "sequence": 371,
+      "at": "2026-10-06T00:25:07.622Z",
+      "kind": "task",
+      "data": {
+        "number": 243,
+        "patch": {
+          "headSha": "dbc002361775b510673249145ce117f273085d49",
+          "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+          "branch": "task/T-2026-1006-1002",
+          "intent": {
+            "taskId": "T-2026-1006-1002",
+            "ready": true,
+            "dependsOn": [
+              236
+            ],
+            "releases": []
+          },
+          "originalBody": "真实首装恢复发现 CNB Issue 列表不含 body、PR 列表 body 为空。Issue 按任务号查询后读取准确详情，PR 安装恢复只读取准确分支详情；原生候选队列读取真实 handoff/depends_on，同时保留列表的年龄字段。丢失创建响应先按详情恢复，权限或身份错误不当作不存在。任务卡 Issue #242。\n\n验证：149 项核心、安装器、协议与舰队回归通过，包含实际列表摘要契约的丢失响应、重复执行、依赖与权限用例；4 文件秘密扫描与 diff 检查通过。\n\n<!-- delivery-live-list-contract:20261006 -->\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1006-1002\",\n  \"ready\": true,\n  \"depends_on\": [\n    236\n  ],\n  \"releases\": []\n}\n-->",
+          "files": [
+            "scripts/delivery/install-repository.mjs",
+            "scripts/delivery/install-repository.test.mjs",
+            "scripts/delivery/queue-platform.mjs",
+            "scripts/delivery/queue.test.mjs"
+          ],
+          "status": "waiting_ci",
+          "ciSince": 1791245408538
+        }
+      },
+      "previous": "6db9b7b81ebab102cd7e7d74b240b75272c48481dafb8dff1eda0e5cdbafcfe1",
+      "digest": "30b7f75fbaba9ff3e0e6549525c7890c8f3dfab671610676715c4d009cd33dc5"
+    },
+    {
+      "sequence": 372,
+      "at": "2026-10-06T00:25:16.544Z",
+      "kind": "transaction",
+      "data": {
+        "id": "bccd78ce-8bf8-4e3a-a034-0719b0d612b1"
+      },
+      "previous": "30b7f75fbaba9ff3e0e6549525c7890c8f3dfab671610676715c4d009cd33dc5",
+      "digest": "d9a95a7ef2a2d1ecd3de19045870324854bea3597e58ade542c408b6cd3a6572"
     }
   ]
 }
