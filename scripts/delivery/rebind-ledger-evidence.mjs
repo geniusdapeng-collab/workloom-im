@@ -61,21 +61,26 @@ const errors = [];
 const show = (path, commit) => execFileSync("git", ["show", `${commit}:${repoPath(path)}`], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
 
 if (write) {
+  // --target 是承载回执实体的提交；缺省用当前 HEAD。回执只能指向真正包含它的提交。
+  const target = resolveCommit(root, arg("--target", revision.commit));
   const missing = [];
   for (const { label, ref } of receipts) {
-    if (!existsSync(resolve(artifactRoot, ref.path))) { missing.push(label); continue; }
-    ref.commit = resolveCommit(root, ref.commit ?? revision.commit);
-    ref.sha256 = hashBytes(readFileSync(resolve(artifactRoot, ref.path)));
+    const absolute = resolve(artifactRoot, ref.path);
+    if (!existsSync(absolute)) { missing.push(`${label}（磁盘缺文件）`); continue; }
+    try { execFileSync("git", ["cat-file", "-e", `${target}:${repoPath(ref.path)}`], { cwd: root, stdio: ["ignore", "pipe", "pipe"] }); }
+    catch { missing.push(`${label}（${target.slice(0, 8)} 的树里没有 ${ref.path}）`); continue; }
+    ref.commit = target;
+    ref.sha256 = hashBytes(readFileSync(absolute));
   }
   if (missing.length) {
-    console.error(`✗ 有 ${missing.length} 份回执在磁盘上不存在（先落盘再重绑）：`);
+    console.error(`✗ 有 ${missing.length} 份回执无法绑定到 ${target.slice(0, 8)}：`);
     for (const label of missing.slice(0, 5)) console.error(`  - ${label}`);
     process.exit(1);
   }
-  index.commit = resolveCommit(root, index.commit ?? revision.commit);
+  index.commit = target;
   writeFileSync(resolve(ledgerPath), `${JSON.stringify(ledger, null, 2)}\n`);
   writeFileSync(indexPath, `${JSON.stringify(index, null, 2)}\n`);
-  console.log(`✓ ${receipts.length} 份回执已按其声明提交对齐 sha256（index@${index.commit.slice(0, 8)}）`);
+  console.log(`✓ ${receipts.length} 份回执已绑定到 ${target.slice(0, 8)}（含 sha256 刷新）`);
   process.exit(0);
 }
 
