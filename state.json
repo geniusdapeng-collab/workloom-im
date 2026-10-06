@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 840,
+  "revision": 842,
   "tasks": {
     "231": {
       "number": 231,
@@ -97,15 +97,11 @@
       "error": "不可修改候选 #253 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
       "blockedUntil": 1791258612265,
       "recoveryCount": 1,
-      "recoveryIntent": {
-        "headSha": "3a185e26d2241f1f0951866bfafb13646280ba42",
-        "reason": "不可修改候选 #253 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
-        "at": 1791258012265
-      },
+      "recoveryIntent": null,
       "recovery": {
-        "marker": "delivery-repair:39456084f78ee5d9da4b98eb",
-        "reviewId": "2107296105834913792",
-        "dispatchedAt": 1791253518077
+        "marker": "delivery-repair:95643f4222924e88eb01bc0f",
+        "reviewId": "2107315008011149312",
+        "dispatchedAt": 1791258024684
       },
       "admission": {
         "number": 231,
@@ -27013,6 +27009,34 @@
       },
       "previous": "65ce8064f0e9ef4f6ab490e4c23ef04d2de712f0374650bc3b3c976b03fd21b2",
       "digest": "69b2ca579db1e6e8d116240c43a897270526b591dd870d51f4429dff2e4119d8"
+    },
+    {
+      "sequence": 841,
+      "at": "2026-10-06T03:40:12.265Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "recovery": {
+            "marker": "delivery-repair:95643f4222924e88eb01bc0f",
+            "reviewId": "2107315008011149312",
+            "dispatchedAt": 1791258024684
+          },
+          "recoveryIntent": null
+        }
+      },
+      "previous": "69b2ca579db1e6e8d116240c43a897270526b591dd870d51f4429dff2e4119d8",
+      "digest": "f61866de4d3675913fc93a90318a619f5290b0bbd763bbb054052c884f09ce28"
+    },
+    {
+      "sequence": 842,
+      "at": "2026-10-06T03:40:24.684Z",
+      "kind": "transaction",
+      "data": {
+        "id": "32574c9f-1ee7-4ec0-9bdc-6ee3dea63445"
+      },
+      "previous": "f61866de4d3675913fc93a90318a619f5290b0bbd763bbb054052c884f09ce28",
+      "digest": "2e37bb687160f73bdf2ef4a0c539d9eec5bb5144b1f00081b78cba66ae51d826"
     }
   ]
 }
