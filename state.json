@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 483,
+  "revision": 486,
   "tasks": {
     "231": {
       "number": 231,
@@ -1495,7 +1495,7 @@
     },
     "243": {
       "number": 243,
-      "status": "merging",
+      "status": "integrated",
       "firstSeen": 1791245280309,
       "attempts": {},
       "admission": {
@@ -1621,7 +1621,7 @@
         "scripts/delivery/queue.test.mjs"
       ],
       "ciSince": 1791246908288,
-      "mergePhase": "merge_verified",
+      "mergePhase": null,
       "mergeSnapshot": {
         "number": 248,
         "pull": {
@@ -1769,7 +1769,18 @@
         "checkSha": "108cdd2c697427cfb06741fbc69fbce0ea6cc06e",
         "mergedBy": "cnb.dYiF05kxAGA",
         "verifiedAt": "2026-10-06T00:50:24.380Z"
-      }
+      },
+      "error": null,
+      "integrationHistory": [
+        {
+          "sha": "d20bbbf6f5f7347647484208227251cc01b02c21",
+          "sourceSha": "d691e15cd9390e195def2a9896194d1b18a5b73d",
+          "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+          "checkSha": "108cdd2c697427cfb06741fbc69fbce0ea6cc06e",
+          "mergedBy": "cnb.dYiF05kxAGA",
+          "verifiedAt": "2026-10-06T00:50:24.380Z"
+        }
+      ]
     },
     "244": {
       "number": 244,
@@ -2011,10 +2022,10 @@
   },
   "leases": {
     "protocol": {
-      "owner": "integration/pr-243",
+      "owner": null,
       "generation": 35,
       "acquiredAt": 1791247809520,
-      "expiresAt": 1791248709520
+      "expiresAt": 1791247809520
     },
     "sync": {
       "owner": null,
@@ -13795,6 +13806,65 @@
       },
       "previous": "3cb7742ee6d092a1481946cf1a754fabe3dce2bc5ea9f5f98bd04578d0ff3ba3",
       "digest": "f0c6be913b96e18b8c982f2e5ebc44c46305852f210a02a0524fb8f49a764905"
+    },
+    {
+      "sequence": 484,
+      "at": "2026-10-06T00:50:09.520Z",
+      "kind": "lease_release",
+      "data": {
+        "scopes": [
+          "protocol"
+        ],
+        "owner": "integration/pr-243",
+        "generation": {
+          "protocol": 35
+        }
+      },
+      "previous": "f0c6be913b96e18b8c982f2e5ebc44c46305852f210a02a0524fb8f49a764905",
+      "digest": "6c94f9a00f19ef4119bf58d1ce2d21cd0d243984027bae802cd1075d51c88360"
+    },
+    {
+      "sequence": 485,
+      "at": "2026-10-06T00:50:09.520Z",
+      "kind": "task",
+      "data": {
+        "number": 243,
+        "patch": {
+          "status": "integrated",
+          "merge": {
+            "sha": "d20bbbf6f5f7347647484208227251cc01b02c21",
+            "sourceSha": "d691e15cd9390e195def2a9896194d1b18a5b73d",
+            "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+            "checkSha": "108cdd2c697427cfb06741fbc69fbce0ea6cc06e",
+            "mergedBy": "cnb.dYiF05kxAGA",
+            "verifiedAt": "2026-10-06T00:50:24.380Z"
+          },
+          "mergePhase": null,
+          "error": null,
+          "integrationHistory": [
+            {
+              "sha": "d20bbbf6f5f7347647484208227251cc01b02c21",
+              "sourceSha": "d691e15cd9390e195def2a9896194d1b18a5b73d",
+              "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+              "checkSha": "108cdd2c697427cfb06741fbc69fbce0ea6cc06e",
+              "mergedBy": "cnb.dYiF05kxAGA",
+              "verifiedAt": "2026-10-06T00:50:24.380Z"
+            }
+          ]
+        }
+      },
+      "previous": "6c94f9a00f19ef4119bf58d1ce2d21cd0d243984027bae802cd1075d51c88360",
+      "digest": "9f40d02d13567bb459115bf708369dbda89e20626bcf9dfa6a8bdfe930fd967f"
+    },
+    {
+      "sequence": 486,
+      "at": "2026-10-06T00:50:25.639Z",
+      "kind": "transaction",
+      "data": {
+        "id": "25ba30e7-89f3-46ef-b528-968f63508954"
+      },
+      "previous": "9f40d02d13567bb459115bf708369dbda89e20626bcf9dfa6a8bdfe930fd967f",
+      "digest": "9e546f4be6e670543ea56baf48d32bc69c11b757b61678172b46f20bc9faa662"
     }
   ]
 }
