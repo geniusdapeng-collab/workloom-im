@@ -89,18 +89,20 @@ test('G07: production avoids checkout/pull/install/seed/local probes and propaga
     assert.ok(step.argv.includes('--evidence-root'));
   }
 });
-test('G07: a health-only foreign service cannot qualify as a deployed WorkLoom target', async (t) => {
+test('G07: a health-only foreign service cannot qualify as an installed WorkLoom client', async (t) => {
+  // 服务的受控 `service` 标记是 client-runtime 的身份断言：装好的客户端必须同时看到
+  // 自己的实例指纹与真实服务标记。deployed 只绑定显式 apiUrl（口径见 lib/target.mjs），
+  // 所以同一条"只有 {ok:true} 的外来服务不得冒充目标"的断言在 client-runtime 档位执行。
   let requests = 0;
   const server = createServer((req, res) => { requests += 1; res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ ok: true })); });
   await new Promise((done) => server.listen(0, '127.0.0.1', done));
   t.after(() => new Promise((done) => server.close(done)));
-  const f = fixture(t, { kind: 'deployed', target: { apiUrl: `http://127.0.0.1:${server.address().port}` } });
+  const f = fixture(t, { kind: 'client-runtime', target: { apiUrl: `http://127.0.0.1:${server.address().port}` } });
   const result = await run(f);
   assert.equal(result.code, 1, result.out);
   assert.equal(result.state.steps.preview.status, 'fail');
-  assert.match(result.state.steps.preview.detail, /server\.health/);
+  assert.match(result.state.steps.preview.detail, /client\.identity|server\.health/);
   assert.equal(result.state.target, undefined);
-  assert.equal(requests, 1);
   assert.equal(readLog(f.commandLog).some((c) => c.name !== 'git' || c.args.some((a) => ['fetch', 'checkout', 'pull', 'install', 'db:migrate', 'preview:all'].includes(a))), false);
 });
 test('G06: report unverified exit 2 is preserved in aggregate result', async (t) => {

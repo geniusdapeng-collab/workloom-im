@@ -29,7 +29,7 @@
     "test:release-assets": "node --test scripts/release-assets.test.mjs",
     "test:action-trust": "node --test scripts/action-trust-policy.test.mjs",
     "test:release-policy": "node --test scripts/release-publisher-policy.test.mjs scripts/desktop-release-policy.test.mjs scripts/desktop-release-state.test.mjs scripts/desktop-workflow-path.test.mjs scripts/desktop-release-finalizer.test.mjs",
-    "test:desktop-bootstrap": "node --test apps/desktop/electron/*.test.cjs scripts/desktop-bootstrap-db.test.mjs scripts/payload-integrity.test.mjs scripts/payload-markers.test.mjs scripts/vite-product.test.mjs",
+    "test:desktop-bootstrap": "node --test apps/desktop/electron/*.test.cjs scripts/desktop-bootstrap-db.test.mjs scripts/payload-integrity.test.mjs scripts/payload-markers.test.mjs scripts/vite-product.test.mjs scripts/runtime-deps-lock.test.mjs",
     "db:verify-chain": "tsx --env-file=.env scripts/verify-chain.ts",
     "suite": "TOOL_UNVERIFIED_RATE=0 tsx --env-file=.env scripts/suite.ts",
     "release:gate": "tsx --env-file=.env scripts/release-gate.ts",
