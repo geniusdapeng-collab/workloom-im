@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 2217,
+  "revision": 2219,
   "tasks": {
     "231": {
       "number": 231,
@@ -4520,7 +4520,15 @@
       "files": [
         "scripts/delivery/install-protocol.mjs"
       ],
-      "ciSince": 1791308708799
+      "ciSince": 1791308708799,
+      "candidate": {
+        "number": 267,
+        "branch": "delivery/candidate/pr-266-71174a32502aede16842d4dfbb6ccf48",
+        "headSha": "716eb682583f0dbb00ff577d77ce850294973f30",
+        "mainSha": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+        "marker": "delivery-origin:266:716eb682583f0dbb00ff577d77ce850294973f30:2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+        "at": 1791308708799
+      }
     }
   },
   "leases": {
@@ -89104,6 +89112,36 @@
       },
       "previous": "391c4945bbc57eda748c5be7b2d5381a3177a9ea5006957790c25ad2ae347c48",
       "digest": "cd56415552ba7dd3750e327dd4f3407b0fcd86115fcf1b987668aefae3acabda"
+    },
+    {
+      "sequence": 2218,
+      "at": "2026-10-06T17:45:08.799Z",
+      "kind": "task",
+      "data": {
+        "number": 266,
+        "patch": {
+          "candidate": {
+            "number": 267,
+            "branch": "delivery/candidate/pr-266-71174a32502aede16842d4dfbb6ccf48",
+            "headSha": "716eb682583f0dbb00ff577d77ce850294973f30",
+            "mainSha": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+            "marker": "delivery-origin:266:716eb682583f0dbb00ff577d77ce850294973f30:2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+            "at": 1791308708799
+          }
+        }
+      },
+      "previous": "cd56415552ba7dd3750e327dd4f3407b0fcd86115fcf1b987668aefae3acabda",
+      "digest": "aa25646ae35b84c1006db764c9c664f9905380b76f02449befb9c3ff41370f56"
+    },
+    {
+      "sequence": 2219,
+      "at": "2026-10-06T17:46:00.572Z",
+      "kind": "transaction",
+      "data": {
+        "id": "33e4a142-052d-40eb-ba5a-0160db2c0635"
+      },
+      "previous": "aa25646ae35b84c1006db764c9c664f9905380b76f02449befb9c3ff41370f56",
+      "digest": "9c289ce995ec1ed64a72227ee8ec105f0d45d24ae863186fa009ec9fe66296bd"
     }
   ]
 }
