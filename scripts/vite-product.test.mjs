@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { workloomProductVite } from "./vite-product.mjs";
+import { readFileSync } from "node:fs";
 import { loadProductRuntime } from "./product-runtime.mjs";
 const product = loadProductRuntime(resolve(dirname(fileURLToPath(import.meta.url)), ".."));
 
@@ -42,3 +43,14 @@ for (const hook of ["configureServer", "configurePreviewServer"]) {
     }
   });
 }
+
+test("the published type declaration names every hook the plugin actually implements", () => {
+  const plugin = workloomProductVite("测试客户端").plugin;
+  const declaration = readFileSync(new URL("./vite-product.d.mts", import.meta.url), "utf8");
+  const declared = declaration.slice(declaration.indexOf("interface WorkLoomViteProduct"));
+  for (const hook of ["configureServer", "configurePreviewServer", "transformIndexHtml"]) {
+    assert.equal(typeof plugin[hook], "function", `Implementation is missing ${hook}`);
+    // A declared-but-unlisted hook type-checks as absent for every TS consumer.
+    assert.ok(new RegExp(`\\b${hook}\\b`, "u").test(declared), `Declaration omits ${hook}`);
+  }
+});

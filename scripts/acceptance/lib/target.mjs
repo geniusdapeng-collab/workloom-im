@@ -170,7 +170,7 @@ async function boundedProbeText(response, limit) {
   } finally { reader.releaseLock(); }
 }
 
-async function probe(url, { timeoutMs, expect = "any", identity = null } = {}) {
+async function probe(url, { timeoutMs, expect = "any", identity = null, requireService = false } = {}) {
   const started = Date.now();
   const visibleUrl = publicUrl(url);
   if (!safeHttpEndpoint(url)) return { url: visibleUrl, status: 0, ok: false, ms: 0, detail: "探测目标 URL 含无效协议或凭据/查询/片段" };
@@ -184,7 +184,14 @@ async function probe(url, { timeoutMs, expect = "any", identity = null } = {}) {
     const text = await boundedProbeText(res, expect === "json" ? 64_000 : 2_000_000);
     let json = null;
     try { json = JSON.parse(text); } catch { /* 非 JSON 健康页（HTML 预览）按文本判定 */ }
-    const serviceMatches = json?.ok === true && json?.service === "workloom-im-server";
+    /**
+     * The strict `service` marker is a *client-runtime identity* assertion, not a
+     * property of every JSON health endpoint: local-preview and older deployed
+     * builds may legitimately expose `{ ok: true }` without it. Requiring the
+     * marker unconditionally silently converts an existing preview run into a
+     * failed probe, so it is opt-in per environment kind.
+     */
+    const serviceMatches = json?.ok === true && (!requireService || json?.service === "workloom-im-server");
     const instanceMatches = !identity || json?.instanceId === identity.instanceId;
     const surfaceMatches = !identity || res.headers.get("x-workloom-instance-id") === identity.instanceId
       && res.headers.get("x-workloom-product-id") === identity.productId
@@ -201,8 +208,16 @@ async function probe(url, { timeoutMs, expect = "any", identity = null } = {}) {
 export async function probeEnvironment({ env, timeoutMs = 8000 } = {}) {
   const checks = [];
   const client = env.kind === "client-runtime" ? inspectClientIdentity({ supportDir: env.supportDir, urls: env.urls, expectedProductId: env.expectedProductId }) : null;
+  /**
+   * Kind-scoped strictness:
+   *   - local-preview：维持既有契约（JSON 健康页即可），不引入实例身份耦合；
+   *   - client-runtime：必须回显实例指纹，且 server 必须声明受控 service 标记；
+   *   - deployed：允许回显实例指纹，但不强制 service 标记（旧部署健康页口径不同）。
+   */
+  const identity = client?.ok ? client.identity : null;
+  const requireService = env.kind === "client-runtime";
   if (env.urls.api) {
-    const apiHealth = await probe(`${env.urls.api}/health`, { timeoutMs, expect: "json", identity: client?.ok ? client.identity : null });
+    const apiHealth = await probe(`${env.urls.api}/health`, { timeoutMs, expect: "json", identity, requireService });
     checks.push({ name: "server.health", ...apiHealth });
   } else {
     checks.push({ name: "server.health", ok: false, detail: "未声明 apiUrl（生产部署档位必须显式声明）" });
@@ -210,7 +225,7 @@ export async function probeEnvironment({ env, timeoutMs = 8000 } = {}) {
   if (client) checks.push({ name: "client.identity", ...client });
   for (const [name, url] of Object.entries({ pc: env.urls.pc, bMobile: env.urls.bMobile, cMobile: env.urls.cMobile })) {
     if (!url) continue;
-    const r = await probe(url, { timeoutMs, identity: client?.ok ? client.identity : null });
+    const r = await probe(url, { timeoutMs, identity });
     checks.push({ name: `surface.${name}`, ...r });
   }
   return { ok: checks.every((c) => c.ok === true), checks };

@@ -9,12 +9,28 @@ import { resolveEnvironment, probeEnvironment } from './target.mjs';
 
 test('MC150: foreign service, missing service and non-boolean ready health are never accepted', async () => {
   const previous = globalThis.fetch;
-  const env = { kind: 'deployed', urls: { api: 'https://synthetic.invalid' }, supportDir: null };
+  // Identity-strictness lives in the client-runtime lane; an installed client must
+  // always see its own current instance and a genuine service marker.
+  const env = { kind: 'client-runtime', urls: { api: 'https://synthetic.invalid' }, supportDir: null };
   try {
     for (const health of [{ ok: true }, { ok: true, service: 'foreign-service' }, { ok: 'true', service: 'workloom-im-server' }, { ok: false, service: 'workloom-im-server' }]) {
       globalThis.fetch = async () => new Response(JSON.stringify(health));
       assert.equal((await probeEnvironment({ env })).ok, false);
     }
+  } finally { globalThis.fetch = previous; }
+});
+
+test('MC150: the strict server service marker is scoped to client-runtime, not every JSON health page', async () => {
+  const previous = globalThis.fetch;
+  try {
+    // A preview/older deployment publishes { ok: true } without the service marker.
+    globalThis.fetch = async () => new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json' } });
+    assert.equal((await probeEnvironment({ env: { kind: 'local-preview', urls: { api: 'https://synthetic.invalid' }, supportDir: null } })).ok, true);
+    assert.equal((await probeEnvironment({ env: { kind: 'deployed', urls: { api: 'https://synthetic.invalid' }, supportDir: null } })).ok, true);
+    // With an identified client the instance fingerprint is still mandatory.
+    const identified = await probeEnvironment({ env: { kind: 'client-runtime', urls: { api: 'https://synthetic.invalid' }, supportDir: null } });
+    assert.equal(identified.ok, false);
+    assert.ok(identified.checks.some((row) => row.name === 'client.identity' && row.ok === false));
   } finally { globalThis.fetch = previous; }
 });
 

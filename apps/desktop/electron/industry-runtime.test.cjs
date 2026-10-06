@@ -3,7 +3,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
-const { readIndustryContract, requiredIndustryParts, runtimeReference, resolveIndustryRuntime } = require("./industry-runtime.cjs");
+const { readIndustryContract, requiredIndustryParts, reservedEnvKey, runtimeReference, resolveIndustryRuntime } = require("./industry-runtime.cjs");
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "workloom-industry-runtime-"));
@@ -129,6 +129,28 @@ test("industry extension cannot overwrite host environment or inject NUL values"
     item.contract.environment = { INDUSTRY_MODE: "offline\0unsafe" };
     item.save();
     assert.throws(item.resolve, /环境值/u);
+  } finally { item.close(); }
+});
+
+test("industry extension cannot overwrite desktop-managed product configuration", () => {
+  const item = fixture();
+  try {
+    // bootstrap spreads industryEnv after the derived .env values, so a contract
+    // that names these keys would silently replace the runtime's own database
+    // target, generated secrets or ports.
+    for (const key of ["DATABASE_URL", "DATABASE_APP_URL", "DATABASE_GATEWAY_URL", "APP_DB_PASSWORD", "GATEWAY_DB_PASSWORD",
+      "JWT_SECRET", "PII_SALT", "SERVICE_C_SECRET", "SERVICE_C_DEMO_AUTH", "WORKLOOM_SERVER_PORT", "WORKLOOM_INSTANCE_ID",
+      "INDUSTRY_SECRET", "INDUSTRY_API_KEY", "INDUSTRY_TOKEN", "INDUSTRY_PASSWORD"]) {
+      item.contract.environment = { INDUSTRY_MODE: "offline", [key]: "hostile-override" };
+      item.save();
+      assert.throws(item.resolve, /桌面受管配置/u, `Reserved key accepted: ${key}`);
+    }
+    // The same contract without a reserved key still resolves.
+    item.contract.environment = { INDUSTRY_MODE: "offline", INDUSTRY_NAME: "fixture" };
+    item.save();
+    assert.deepEqual(item.resolve().environment, { INDUSTRY_MODE: "offline", INDUSTRY_NAME: "fixture" });
+    assert.equal(reservedEnvKey("DATABASE_URL"), true);
+    assert.equal(reservedEnvKey("INDUSTRY_MODE"), false);
   } finally { item.close(); }
 });
 

@@ -58,11 +58,36 @@ export function credentialValues({ env = process.env, credentialEnvs = [], secre
     .filter((value) => typeof value === "string" && value.length > 0))];
 }
 
+/**
+ * Percent-encoding is not canonical: every `%XX` escape has an upper- and a
+ * lower-case spelling, and URL/query serialization adds spellings the literal
+ * credential does not contain (`%20` and `+` for a space, `%20` for `+` after a
+ * decode). A provider that echoes the credential inside a URL can therefore
+ * return a byte sequence that matches none of the literal/encode/base64 forms.
+ * Enumerate both hex cases for both encodeURI/encodeURIComponent families so
+ * "contains the credential" stays true however the transport spelled it.
+ */
+function encodedSpellings(value) {
+  const component = encodeURIComponent(value);
+  const uri = encodeURI(value);
+  const reduce = (text) => text.replace(/%[0-9A-Fa-f]{2}/gu, (part) => part.toLowerCase());
+  const raise = (text) => text.replace(/%[0-9A-Fa-f]{2}/gu, (part) => part.toUpperCase());
+  return [component, uri, ...new Set([component, uri].flatMap((form) => [reduce(form), raise(form)]))];
+}
+
 export function secretVariants(options = {}) {
   return [...new Set(credentialValues(options).flatMap((value) => {
-    const encoded = encodeURIComponent(value);
-    return [value, encoded, encoded.replace(/%[A-F0-9]{2}/gu, (part) => part.toLowerCase()), encodeURIComponent(encoded), encodeURI(value),
-      Buffer.from(value).toString("base64"), Buffer.from(value).toString("base64url"), JSON.stringify(value).slice(1, -1)];
+    const forms = new Set([value, JSON.stringify(value).slice(1, -1), Buffer.from(value).toString("base64"), Buffer.from(value).toString("base64url")]);
+    for (const encoded of encodedSpellings(value)) {
+      // A provider that decodes once before echoing exposes the double-encoded form.
+      forms.add(encoded);
+      forms.add(encodeURIComponent(encoded));
+    }
+    // URL form serialization materializes a space as '+' (and '+' back as '%2B').
+    if (value.includes(" ")) {
+      for (const form of [...forms]) if (form.includes("%20")) forms.add(form.replaceAll("%20", "+"));
+    }
+    return [...forms];
   }))].sort((a, b) => b.length - a.length);
 }
 

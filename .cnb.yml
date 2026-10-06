@@ -116,9 +116,11 @@ include:
         set -eu
         node --test scripts/verify-ui-consumer.test.mjs sync/base-sync.test.mjs sync/direct-push.test.mjs sync/client-foundation.test.mjs sync/set-ui-version.test.mjs sync/ui-upgrade-pr.test.mjs sync/fanout-rules.test.mjs sync/fanout-safety.test.mjs sync/merge-sync-prs.test.mjs
         node --test scripts/delivery/*.test.mjs
-        node --test scripts/acceptance/lib/profile-contract.test.mjs scripts/acceptance/profile-check.test.mjs scripts/acceptance/outcome.test.mjs scripts/acceptance/fleet-run.test.mjs scripts/acceptance/lib/environment-safety.test.mjs scripts/acceptance/lib/outcome-contract.test.mjs scripts/acceptance/lib/live/budget.test.mjs scripts/acceptance/lib/live/live-truth.test.mjs scripts/acceptance/lib/live/providers.test.mjs scripts/acceptance/lib/live/usage.test.mjs scripts/acceptance/lib/live/audit.test.mjs scripts/acceptance/lib/live/providers-http.test.mjs scripts/acceptance/lib/live/dsh-process.test.mjs scripts/acceptance/lib/live/live-cli-wire.test.mjs scripts/acceptance/lib/live/product.test.mjs scripts/acceptance/lib/live/media-negative.test.mjs scripts/acceptance/lib/live/live-cli.test.mjs
+        node --test scripts/acceptance/lib/profile-contract.test.mjs scripts/acceptance/profile-check.test.mjs scripts/acceptance/outcome.test.mjs scripts/acceptance/fleet-run.test.mjs scripts/acceptance/lib/environment-safety.test.mjs scripts/acceptance/lib/outcome-contract.test.mjs scripts/acceptance/lib/live/budget.test.mjs scripts/acceptance/lib/live/live-truth.test.mjs scripts/acceptance/lib/live/providers.test.mjs scripts/acceptance/lib/live/usage.test.mjs scripts/acceptance/lib/live/audit.test.mjs scripts/acceptance/lib/live/providers-http.test.mjs scripts/acceptance/lib/live/dsh-process.test.mjs scripts/acceptance/lib/live/live-cli-wire.test.mjs scripts/acceptance/lib/live/product.test.mjs scripts/acceptance/lib/live/media-negative.test.mjs scripts/acceptance/lib/live/live-cli.test.mjs scripts/acceptance/lib/live/safety.test.mjs scripts/acceptance/lib/client-identity.test.mjs
         node --test scripts/capability-status.test.mjs scripts/tools/provision-safety.test.mjs scripts/ui-release-registration.test.mjs
-        node --test apps/desktop/electron/bootstrap.test.cjs scripts/desktop-bootstrap-db.test.mjs
+        # 桌面/打包契约必须真实执行：行业契约不得覆盖桌面受管配置、载荷版本标记需早失败、
+        # vite-product 声明与实现一致；此前这些用例只被本地 test:desktop-bootstrap 引用。
+        node --test apps/desktop/electron/bootstrap.test.cjs apps/desktop/electron/desktop-safety.test.cjs apps/desktop/electron/industry-runtime.test.cjs scripts/desktop-bootstrap-db.test.mjs scripts/vite-product.test.mjs scripts/payload-markers.test.mjs
 
     - name: 持续交付与不可变发布回归
       script: |

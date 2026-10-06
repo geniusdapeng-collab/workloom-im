@@ -951,9 +951,10 @@ async function httpOk(url, expected = {}) {
   } catch { return false; }
   finally {
     clearTimeout(timer);
-    if (response?.body) {
-      try { await response.body.cancel(); } catch { return false; }
-    }
+    // Releasing the body is best-effort cleanup only. A `return` here would
+    // override an already-successful check from the try block, so a benign
+    // cancel() rejection must never turn a verified readiness into a failure.
+    if (response?.body) { try { await response.body.cancel(); } catch { /* body already released or aborted */ } }
   }
 }
 

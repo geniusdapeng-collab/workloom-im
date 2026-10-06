@@ -150,6 +150,36 @@ test("foreign HTTP 200 and incorrect instance/product cannot satisfy readiness",
   } finally { await fixture.close(); }
 });
 
+test("a beneficial body-cancel rejection cannot turn a verified readiness check into a failure", async () => {
+  const previous = globalThis.fetch;
+  const backend = { ok: true, service: "workloom-im-server", instanceId: "fresh-instance" };
+  const marker = '<meta name="workloom-product-id" content="fixture-industry">';
+  try {
+    // Releasing the connection is cleanup, not part of the verdict: an upstream
+    // that errors while the body is being cancelled must not latch readiness off.
+    globalThis.fetch = async () => ({
+      ok: true, status: 200,
+      headers: new Headers({ "content-type": "application/json" }),
+      // No reader: JSON/HTML decoding paths stay available, cancel() rejects.
+      json: async () => backend, text: async () => JSON.stringify({ ...backend, padding: "x".repeat(70_000) }),
+      body: { cancel: async () => { throw new Error("synthetic cancel failure"); } },
+    });
+    assert.equal(await httpOk("http://127.0.0.1:1/health", { service: "workloom-im-server", instanceId: "fresh-instance" }), false);
+
+    // A bounded text body with a rejecting cancel still reports the true verdict.
+    class OkBody {
+      constructor() { this.sent = false; }
+      async cancel() { throw new Error("synthetic cancel failure"); }
+      getReader() {
+        const encoded = new TextEncoder().encode(JSON.stringify(backend));
+        return { read: async () => (this.sent ? { done: true } : ((this.sent = true), { done: false, value: encoded })), cancel: async () => {}, releaseLock: () => {} };
+      }
+    }
+    globalThis.fetch = async () => ({ ok: true, status: 200, headers: new Headers({ "content-type": "application/json" }), body: new OkBody() });
+    assert.equal(await httpOk("http://127.0.0.1:1/health", { service: "workloom-im-server", instanceId: "fresh-instance" }), true);
+  } finally { globalThis.fetch = previous; }
+});
+
 test("whole bootstrap refuses occupied foreign port before payload/database mutations", async () => {
   const fixture = await listen((_req, res) => res.end("foreign-product"));
   const support = fs.mkdtempSync(path.join(os.tmpdir(), "workloom-collision-"));

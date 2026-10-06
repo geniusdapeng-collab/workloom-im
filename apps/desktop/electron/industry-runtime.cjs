@@ -5,6 +5,29 @@ const path = require("node:path");
 const SCHEMA = "workloom.industry-runtime/v1";
 const PAYLOAD_PARTS = new Set(["runtime", "node", "pg", "nats", "python"]);
 const SYSTEM_ENV = new Set(["HOME", "USERPROFILE", "CODEX_HOME", "PATH", "SYSTEMROOT", "WINDIR", "COMSPEC", "TEMP", "TMP"]);
+/**
+ * Desktop-managed product configuration. `industryEnv` is layered on top of the
+ * .env values that bootstrap itself derives (database URLs, generated secrets,
+ * ports), so an industry contract that is allowed to name these keys would be
+ * able to point the runtime at another database or replace a generated secret.
+ * The spread order is therefore not the only defence: the contract is refused
+ * outright, and every platform-managed family stays reserved.
+ */
+const RESERVED_ENV = Object.freeze([
+  /^DATABASE_URL$/u,
+  /^DATABASE_APP_URL$/u,
+  /^DATABASE_GATEWAY_URL$/u,
+  /^(?:APP|GATEWAY)_DB_PASSWORD$/u,
+  /^JWT_SECRET$/u,
+  /^PII_SALT$/u,
+  /^SERVICE_C_/u,
+  /^WORKLOOM_/u,
+  /_(?:SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|KEY|SALT)$/u,
+]);
+
+function reservedEnvKey(key) {
+  return RESERVED_ENV.some((pattern) => pattern.test(key));
+}
 
 function readIndustryContract(runtimeRoot) {
   const file = path.join(runtimeRoot, "industry-runtime.json");
@@ -58,6 +81,7 @@ function resolveIndustryRuntime({ runtimeRoot, supportDir, platform = process.pl
   const environment = {};
   for (const [key, value] of Object.entries(contract.environment)) {
     if (!/^[A-Z][A-Z0-9_]{1,63}$/u.test(key) || SYSTEM_ENV.has(key)) throw new Error("行业运行契约不得覆盖宿主系统环境");
+    if (reservedEnvKey(key)) throw new Error("行业运行契约不得覆盖桌面受管配置");
     if (typeof value === "string") {
       if (value.includes("\0") || value.length > 10000) throw new Error("行业运行环境值无效");
       environment[key] = value;
@@ -75,4 +99,4 @@ function resolveIndustryRuntime({ runtimeRoot, supportDir, platform = process.pl
   return { environment, selftests };
 }
 
-module.exports = { readIndustryContract, requiredIndustryParts, runtimeReference, resolveIndustryRuntime };
+module.exports = { readIndustryContract, requiredIndustryParts, reservedEnvKey, runtimeReference, resolveIndustryRuntime };

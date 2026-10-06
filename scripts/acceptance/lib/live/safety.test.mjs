@@ -10,7 +10,7 @@ import { apply, readDshAudit } from "./audit.plugin.mjs";
 import { normalizeBudgets, createBudget } from "./budget.mjs";
 import { foldDshUsage } from "./usage.mjs";
 import { downloadArtifact } from "./media.mjs";
-import { credentialValues, diagnosticReason, publicDiagnostic, PublicBoundaryError, publicResult, publicUrl, safeHttpEndpoint, sanitizePublic, secretVariants } from "./safety.mjs";
+import { credentialValues, diagnosticReason, publicDiagnostic, PublicBoundaryError, publicResult, publicUrl, redactText, safeHttpEndpoint, sanitizePublic, secretVariants } from "./safety.mjs";
 
 const secret = ["SYNTHETIC", "MC150", "secret:/+="].join("_");
 const external = ["SYNTHETIC", "unknown-driver-detail"].join("_");
@@ -154,6 +154,29 @@ test("public safety: product event evidence requiring credential redaction is bl
 test("public safety: root assets include the safety module and its proof tests", async () => {
   const scope = JSON.parse(readFileSync(new URL("../../../../sync/base-scope.json", import.meta.url)));
   for (const path of ["scripts/acceptance/lib/live/safety.mjs", "scripts/acceptance/lib/live/safety.test.mjs", "scripts/acceptance/lib/client-identity.mjs", "scripts/acceptance/lib/client-identity.test.mjs"]) assert.ok(scope.requiredRootAssets.files.includes(path), `Missing controlled root asset ${path}`);
+});
+
+test("public safety helper: a secret echoed in any percent-encoding spelling is still redacted and still flips changed", () => {
+  // Providers echo credentials inside URLs and convert URL spellings on the way
+  // back, so the guard must not depend on one canonical escape spelling.
+  for (const value of ["SYNTHETIC json_bearer secret:/+= a b", "SYNTHETIC_space secret value", "SYNTHETIC_hex secret/b+c?d"]) {
+    const options = { env: { CUSTOM_MODEL_ACCESS: value }, credentialEnvs: ["CUSTOM_MODEL_ACCESS"] };
+    const spellings = new Set([value, encodeURIComponent(value), encodeURI(value), Buffer.from(value).toString("base64"), Buffer.from(value).toString("base64url")]);
+    for (const form of [...spellings]) {
+      spellings.add(form.replace(/%[0-9A-Fa-f]{2}/gu, (part) => part.toLowerCase()));
+      spellings.add(form.replace(/%[0-9A-Fa-f]{2}/gu, (part) => part.toUpperCase()));
+      if (form.includes("%20")) spellings.add(form.replaceAll("%20", "+"));
+    }
+    for (const spelling of spellings) {
+      const surface = { detail: `upstream echoed ${spelling} inside a transport URL` };
+      const clean = sanitizePublic(surface, options);
+      assert.equal(clean.changed, true, `Unredacted percent-encoding spelling: ${spelling}`);
+      assert.equal(clean.value.detail.includes(spelling), false);
+      assert.equal(redactText(`echo ${spelling}`, options).includes(spelling), false);
+    }
+    // Cross-family escapes must stay distinguishable: an unrelated clean hostname survives.
+    assert.equal(sanitizePublic({ text: "https://api.deepseek.com/v1/chat" }, options).value.text, "https://api.deepseek.com/v1/chat");
+  }
 });
 
 test("public safety helper: short, custom, escaped and encoded secrets are removed without censoring clean hostnames", () => {

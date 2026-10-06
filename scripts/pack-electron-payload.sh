@@ -223,6 +223,8 @@ echo "✓ 载荷自检通过"
 #      不受目录过滤规则影响，bootstrap 首启按需解压） ----------
 echo "$VERSION" > "$OUT/PAYLOAD_VERSION"
 printf '%s\n' "$VERSION" > "$OUT/VERSION"
+# 先自证三个版本标记一致：标记漂移必须在打包步骤点名失败，而不是拖到完整性校验报笼统拒绝
+node scripts/payload-markers.mjs "$OUT"
 node scripts/payload-integrity.mjs generate --payload-dir "$OUT"
 node scripts/payload-integrity.mjs verify --payload-dir "$OUT"
 rm -f dist-payload.tar.gz
