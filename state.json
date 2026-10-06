@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 2319,
+  "revision": 2321,
   "tasks": {
     "231": {
       "number": 231,
@@ -4686,7 +4686,7 @@
           "protocol": 83
         }
       },
-      "updatedAt": 1791312011765,
+      "updatedAt": 1791312309558,
       "headSha": "aac6f97cb196e900912e53ae842962ec0386ac7d",
       "intent": {
         "taskId": "T-2026-1007-1002",
@@ -94134,6 +94134,46 @@
       },
       "previous": "2b5cda679e19c397d8b36077d9054fd42f908e959dbf72a1fd8c4aa469b9bf46",
       "digest": "8f43f6a3da7ddf2b027bf24c35263c8f3d72d61988af011981ed1317083d8e7d"
+    },
+    {
+      "sequence": 2320,
+      "at": "2026-10-06T18:45:09.558Z",
+      "kind": "task",
+      "data": {
+        "number": 269,
+        "patch": {
+          "headSha": "aac6f97cb196e900912e53ae842962ec0386ac7d",
+          "mainSha": "83ac6ef9466e93704725f469c366cfd7b54f0a99",
+          "branch": "task/T-2026-1007-1002",
+          "intent": {
+            "taskId": "T-2026-1007-1002",
+            "ready": true,
+            "dependsOn": [
+              267
+            ],
+            "releases": []
+          },
+          "originalBody": "十二仓五分钟任务的真实平台记录连续出现 Git 读取 HTTP 429。普通只读账本改用已实测的官方 branch + 准确 immutable SHA raw API，继续校验仓库身份和完整事件摘要链。只有有证据的缺控制分支才可返回空状态；权限、网络、坏 SHA、缺内容和损坏状态明确失败。\n\n真实 Git 写入、普通 fast-forward CAS、事务去重和未知写确认回读保持原逻辑；仅 ls-remote/fetch 的明确 429 最多两次退避，push/merge 不进入该重试通道。CLI API fixture 从真实 bare Git 精确提交回读，真实并发与丢失确认回归保留。当前 Codex 审查与实际回归回执成立后，经原有机器门禁和不可修改候选普通集成。任务卡 #268。平台 AI/NPC 均保持关闭。\n\n<!-- delivery-ledger-read-rate:20261007 -->\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1007-1002\",\n  \"ready\": true,\n  \"depends_on\": [\n    267\n  ],\n  \"releases\": []\n}\n-->",
+          "files": [
+            "scripts/delivery/git-state.mjs",
+            "scripts/delivery/queue.test.mjs"
+          ],
+          "status": "waiting_ci",
+          "ciSince": 1791312011765
+        }
+      },
+      "previous": "8f43f6a3da7ddf2b027bf24c35263c8f3d72d61988af011981ed1317083d8e7d",
+      "digest": "ce4912bbcfb118776225128f210194bc25357d77bd749bc2330d90b1eb11fe14"
+    },
+    {
+      "sequence": 2321,
+      "at": "2026-10-06T18:46:10.685Z",
+      "kind": "transaction",
+      "data": {
+        "id": "5fe06dc0-103d-4543-be32-b687d33b3f10"
+      },
+      "previous": "ce4912bbcfb118776225128f210194bc25357d77bd749bc2330d90b1eb11fe14",
+      "digest": "00a4ff3f34961cac3c7347630c7a3edf534c113334dbaff341652a017dcda931"
     }
   ]
 }
