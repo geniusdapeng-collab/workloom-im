@@ -9,21 +9,17 @@
  * after ：种子写入名册行 → 期待 ceo.briefing 真实落库、事件可读回、链完整。
  */
 import pg from "pg";
+import { withPrivatePg } from "./private-pg.mts";
 import { ceoActor, runBriefingBeat } from "@workloom/base/captain";
 import { ensureCeoRosterRow } from "./seed-ceo-roster.js";
 
 const mode = process.argv[2];
-// 私有集群 URL 由包装器经 DATABASE_URL 注入；绝不接受共享库地址。
-const url = process.argv[3] ?? process.env.DATABASE_URL;
-if (!["before", "after"].includes(mode ?? "") || !url) {
-  console.error("usage: repair-mc040-f210.mts <before|after> [DATABASE_URL]");
-  process.exit(2);
-}
-if (!/tmp%2Fwl-|tmp\/wl-/.test(url)) {
-  console.error("refusing: DATABASE_URL is not a runner-owned private Unix socket");
+if (!["before", "after"].includes(mode ?? "")) {
+  console.error("usage: repair-mc040-f210.mts <before|after>");
   process.exit(2);
 }
 
+const exitCode = await withPrivatePg(async ({ databaseUrl: url }) => {
 const scope = { tenantId: `mc040-probe-${mode}`, workspaceId: `mc040-probe-ws-${mode}` };
 const client = new pg.Client({ connectionString: url });
 await client.connect();
@@ -79,7 +75,10 @@ try {
     const pool = new pg.Pool({ connectionString: url, max: 1 });
     try {
       await runBriefingBeat(pool, scope, "daily");
-    } catch (error) { rejected = error; }
+    } catch (error) { rejected = error; } finally {
+      // 集群在 withPrivatePg 退出时会被停止；连接池必须先关闭，否则 idle 连接会被终止。
+      await pool.end();
+    }
     const message = rejected instanceof Error ? `${rejected.name}: ${rejected.message}` : String(rejected ?? "");
     console.log(`rejection=${message}`);
     check(rejected !== null, "缺岗时 ceo.briefing 被拒绝（没有静默放行）");
@@ -101,6 +100,7 @@ try {
 } finally {
   await client.end();
 }
-
-console.log(JSON.stringify({ mode, failures: failures.length, result: failures.length ? "fail" : "pass" }));
-process.exitCode = failures.length ? 1 : 0;
+return failures.length;
+});
+console.log(JSON.stringify({ mode, failures: exitCode, result: exitCode ? "fail" : "pass" }));
+process.exitCode = exitCode ? 1 : 0;

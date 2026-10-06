@@ -10,19 +10,15 @@
  *         且 archive 与复位前逐字节相同。两个观察者都成立才算绿。
  */
 import pg from "pg";
+import { withPrivatePg } from "./private-pg.mts";
 
 const mode = process.argv[2];
-// 私有集群 URL 由包装器经 DATABASE_URL 注入；绝不接受共享库地址。
-const url = process.argv[3] ?? process.env.DATABASE_URL;
-if (!["before", "after"].includes(mode ?? "") || !url) {
-  console.error("usage: repair-mc043-h13.mts <before|after> [DATABASE_URL]");
-  process.exit(2);
-}
-if (!/tmp%2Fwl-|tmp\/wl-/.test(url)) {
-  console.error("refusing: DATABASE_URL is not a runner-owned private Unix socket");
+if (!["before", "after"].includes(mode ?? "")) {
+  console.error("usage: repair-mc043-h13.mts <before|after>");
   process.exit(2);
 }
 
+const exitCode = await withPrivatePg(async ({ databaseUrl: url }) => {
 const workspaceId = `mc043-h13-${mode}`;
 const tenantId = `mc043-tenant-${mode}`;
 const client = new pg.Client({ connectionString: url });
@@ -67,6 +63,7 @@ try {
 } finally {
   await client.end();
 }
-
-console.log(JSON.stringify({ mode, failures: failures.length, result: failures.length ? "fail" : "pass" }));
-process.exitCode = failures.length ? 1 : 0;
+return failures.length;
+});
+console.log(JSON.stringify({ mode, failures: exitCode, result: exitCode ? "fail" : "pass" }));
+process.exitCode = exitCode ? 1 : 0;
