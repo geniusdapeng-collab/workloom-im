@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 337,
+  "revision": 339,
   "tasks": {
     "231": {
       "number": 231,
@@ -1463,7 +1463,7 @@
     },
     "243": {
       "number": 243,
-      "status": "developing",
+      "status": "waiting_ci",
       "firstSeen": 1791245280309,
       "attempts": {},
       "admission": {
@@ -1479,7 +1479,32 @@
           "protocol": 28
         }
       },
-      "updatedAt": 1791245280309
+      "updatedAt": 1791245408538,
+      "alignmentCount": 0,
+      "recoveryCount": 0,
+      "reviewFailures": null,
+      "blockedUntil": 0,
+      "review": null,
+      "candidate": null,
+      "headSha": "dbc002361775b510673249145ce117f273085d49",
+      "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+      "branch": "task/T-2026-1006-1002",
+      "intent": {
+        "taskId": "T-2026-1006-1002",
+        "ready": true,
+        "dependsOn": [
+          236
+        ],
+        "releases": []
+      },
+      "originalBody": "真实首装恢复发现 CNB Issue 列表不含 body、PR 列表 body 为空。Issue 按任务号查询后读取准确详情，PR 安装恢复只读取准确分支详情；原生候选队列读取真实 handoff/depends_on，同时保留列表的年龄字段。丢失创建响应先按详情恢复，权限或身份错误不当作不存在。任务卡 Issue #242。\n\n验证：149 项核心、安装器、协议与舰队回归通过，包含实际列表摘要契约的丢失响应、重复执行、依赖与权限用例；4 文件秘密扫描与 diff 检查通过。\n\n<!-- delivery-live-list-contract:20261006 -->\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1006-1002\",\n  \"ready\": true,\n  \"depends_on\": [\n    236\n  ],\n  \"releases\": []\n}\n-->",
+      "files": [
+        "scripts/delivery/install-repository.mjs",
+        "scripts/delivery/install-repository.test.mjs",
+        "scripts/delivery/queue-platform.mjs",
+        "scripts/delivery/queue.test.mjs"
+      ],
+      "ciSince": 1791245408538
     }
   },
   "leases": {
@@ -9223,6 +9248,54 @@
       },
       "previous": "768c29c620568f34635a12a8c52a6076d26e7493eb4324c540de86a66da924c2",
       "digest": "9763a4c954c182ed23b40e0d50ff7273cf8b1c728106d42ef3759936a0de99f6"
+    },
+    {
+      "sequence": 338,
+      "at": "2026-10-06T00:10:08.538Z",
+      "kind": "task",
+      "data": {
+        "number": 243,
+        "patch": {
+          "alignmentCount": 0,
+          "recoveryCount": 0,
+          "reviewFailures": null,
+          "blockedUntil": 0,
+          "review": null,
+          "candidate": null,
+          "headSha": "dbc002361775b510673249145ce117f273085d49",
+          "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+          "branch": "task/T-2026-1006-1002",
+          "intent": {
+            "taskId": "T-2026-1006-1002",
+            "ready": true,
+            "dependsOn": [
+              236
+            ],
+            "releases": []
+          },
+          "originalBody": "真实首装恢复发现 CNB Issue 列表不含 body、PR 列表 body 为空。Issue 按任务号查询后读取准确详情，PR 安装恢复只读取准确分支详情；原生候选队列读取真实 handoff/depends_on，同时保留列表的年龄字段。丢失创建响应先按详情恢复，权限或身份错误不当作不存在。任务卡 Issue #242。\n\n验证：149 项核心、安装器、协议与舰队回归通过，包含实际列表摘要契约的丢失响应、重复执行、依赖与权限用例；4 文件秘密扫描与 diff 检查通过。\n\n<!-- delivery-live-list-contract:20261006 -->\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1006-1002\",\n  \"ready\": true,\n  \"depends_on\": [\n    236\n  ],\n  \"releases\": []\n}\n-->",
+          "files": [
+            "scripts/delivery/install-repository.mjs",
+            "scripts/delivery/install-repository.test.mjs",
+            "scripts/delivery/queue-platform.mjs",
+            "scripts/delivery/queue.test.mjs"
+          ],
+          "status": "waiting_ci",
+          "ciSince": 1791245408538
+        }
+      },
+      "previous": "9763a4c954c182ed23b40e0d50ff7273cf8b1c728106d42ef3759936a0de99f6",
+      "digest": "ffd8cc8647d29938e4f8ba8d8c942e2d021c445fc25df635e76aae12ca6502b7"
+    },
+    {
+      "sequence": 339,
+      "at": "2026-10-06T00:10:11.624Z",
+      "kind": "transaction",
+      "data": {
+        "id": "8bd50ae0-768e-42a9-9823-6ba1187525c9"
+      },
+      "previous": "ffd8cc8647d29938e4f8ba8d8c942e2d021c445fc25df635e76aae12ca6502b7",
+      "digest": "d2bb1ebeaddcc2beae1a4fd0b6c276dbc25d0a8ba3497d146e51a8e7c7e40d66"
     }
   ]
 }
