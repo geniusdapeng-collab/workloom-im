@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, posix, win32 } from "node:path";
+import { dirname, join, posix, win32 } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
@@ -162,11 +162,26 @@ test("正式与应急装配线统一使用每产品 lock、目标 OS/CPU 和身�
   }
 });
 
+function isInside(root, target) {
+  return target === root || target.startsWith(`${root}/`);
+}
+
+// 在 fixture 内建出实体（非符号链接）的中间目录，供在其下挂载只读依赖链接。
+function materialize(fixture, path) {
+  let current = fixture;
+  for (const segment of path.split("/")) {
+    current = join(current, segment);
+    rmSync(current, { recursive: true, force: true });
+    mkdirSync(current, { recursive: true });
+  }
+  return current;
+}
+
 async function verifyProductionPreview({ legacy, withVitest = legacy, rejectMissingVitest = false }) {
   // legacy 档位复现“已发布稳定客户端”的 vitest/config 运行时导入：只有当前
   // 兼容闭包确实包含 Vitest 时才能指望它在缺少该依赖的隔离目录里成功启动。
-  const [{ spawnSync }, { copyFileSync, existsSync, realpathSync, symlinkSync }, { dirname }, { createRequire }] = await Promise.all([
-    import("node:child_process"), import("node:fs"), import("node:path"), import("node:module"),
+  const [{ spawnSync }, { copyFileSync, existsSync, realpathSync, symlinkSync }, { createRequire }] = await Promise.all([
+    import("node:child_process"), import("node:fs"), import("node:module"),
   ]);
   const verified = verifyRuntimeDepsLock(REPOSITORY_ROOT);
   // 兼容闭包只在客户端配置运行期导入 vitest/config 时存在；两种档位都要求
@@ -175,46 +190,73 @@ async function verifyProductionPreview({ legacy, withVitest = legacy, rejectMiss
     assert.match(verified.manifest.dependencies.vitest, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u);
   }
   assert.match(String(verified.manifest.dependencies.vite), /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u);
-  const resolvers = [
-    createRequire(join(REPOSITORY_ROOT, "apps/web/package.json")),
-    createRequire(join(REPOSITORY_ROOT, "node_modules/.pnpm/node_modules/package.json")),
-  ];
+  // 生产预览的依赖必须由生产依赖闭包拼出（生产载荷是 npm ci 的扁平布局），
+  // 不得借用宿主开发依赖。此前写死的 node_modules/.pnpm/node_modules 链接目录
+  // 在生产载荷里并不存在，解析会先后落到仓 `node_modules`，于是“无 Vitest”的
+  // 发行档位在开发机上假通过、在干净环境里整片失败。
+  // runtimeRoot 是生产依赖的安装根（pnpm 的 <root>/node_modules/<name> 链接
+  // 指向此处），用它区分生产闭包里的包与仓 node_modules 链接/开发依赖。
+  const runtimeRoot = realpathSync(join(REPOSITORY_ROOT, "node_modules", ".pnpm"));
+  const runtimeCache = new Map();
   const runtimePackage = (name) => {
-    for (const resolver of resolvers) {
-      let entry;
-      try { entry = resolver.resolve(name); }
-      catch (error) {
-        if (error.code === "MODULE_NOT_FOUND") continue;
-        throw error;
+    if (runtimeCache.has(name)) return runtimeCache.get(name);
+    const expected = verified.manifest.dependencies[name];
+    assert.equal(typeof expected, "string", `生产依赖闭包缺少：${name}`);
+    const resolver = createRequire(join(REPOSITORY_ROOT, "apps/web/package.json"));
+    let entry;
+    try { entry = resolver.resolve(name); }
+    catch (error) { throw new Error(`缺少已安装的生产预览依赖：${name}`, { cause: error }); }
+    // 先 realpath 到包本体（pnpm 链接指向 .pnpm/<id>/node_modules/<name>），
+    // 而不是仓 node_modules 的链接本身；后者会成为解析根并带回开发依赖。
+    // 入口文件由发布包自身的 exports 决定（不一定是 index.js），故按真实
+    // manifest.name 向上回溯到包根目录，而不是假定入口文件名。
+    const entryPath = realpathSync(entry);
+    let cursor = dirname(entryPath);
+    let manifest = null;
+    while (true) {
+      const manifestPath = join(cursor, "package.json");
+      if (existsSync(manifestPath)) {
+        const value = JSON.parse(readFileSync(manifestPath, "utf8"));
+        if (value.name === name) { manifest = value; break; }
       }
-      let directory = dirname(realpathSync(entry));
-      while (true) {
-        const manifestPath = join(directory, "package.json");
-        if (existsSync(manifestPath)) {
-          const value = JSON.parse(readFileSync(manifestPath, "utf8"));
-          if (value.name === name) {
-            assert.equal(value.version, verified.manifest.dependencies[name], `${name} 必须使用当前生产锁版本`);
-            return directory;
-          }
-        }
-        const parent = dirname(directory);
-        if (parent === directory) break;
-        directory = parent;
-      }
+      const parent = dirname(cursor);
+      if (parent === cursor) break;
+      cursor = parent;
     }
-    throw new Error(`缺少已安装的生产预览依赖：${name}`);
+    assert.ok(manifest, `缺少已安装的生产预览依赖：${name}`);
+    assert.equal(manifest.version, expected, `${name} 必须使用当前生产锁版本`);
+    assert.ok(isInside(runtimeRoot, cursor), `${name} 必须来自已安装的生产依赖闭包，而不是仓 node_modules 链接`);
+    assert.ok(isInside(runtimeRoot, entryPath) || entryPath.startsWith(dirname(runtimeRoot)), `${name} 入口必须在生产依赖目录内`);
+    runtimeCache.set(name, cursor);
+    return cursor;
+  };
+  const linkRuntime = (name, fromPackage) => {
+    // fixture 内的同级解析上下文：先实体化包目录，再在其下的 node_modules
+    // 只读链接自身直接依赖；解析不会从链接目录再回落到本仓。
+    assert.ok(Object.hasOwn(verified.manifest.dependencies, name), `生产依赖闭包缺少：${name}`);
+    const destination = fromPackage
+      ? join(materialize(fixture, fromPackage), "node_modules", ...name.split("/"))
+      : join(fixture, "node_modules", ...name.split("/"));
+    mkdirSync(dirname(destination), { recursive: true });
+    rmSync(destination, { recursive: true, force: true });
+    symlinkSync(runtimePackage(name), destination, process.platform === "win32" ? "junction" : "dir");
+    return destination;
   };
   const product = loadProductRuntime(REPOSITORY_ROOT);
   const fixture = mkdtempSync(join(tmpdir(), "workloom-runtime-preview-"));
   try {
     // 实体 node_modules 留给 Vite 写自己的配置缓存；依赖目录只读链接到真实包。
     // 不链接整个开发 node_modules，避免 Vitest 恰好存在而掩盖发行版故障。
-    for (const name of ["vite", "@vitejs/plugin-react", "@tailwindcss/vite", ...(withVitest ? ["vitest"] : [])]) {
-      assert.ok(Object.hasOwn(verified.manifest.dependencies, name));
-      const target = join(fixture, "node_modules", ...name.split("/"));
-      mkdirSync(dirname(target), { recursive: true });
-      symlinkSync(runtimePackage(name), target, process.platform === "win32" ? "junction" : "dir");
+    for (const name of ["@vitejs/plugin-react", "@tailwindcss/vite"]) {
+      linkRuntime(name);
+      // 包自身依赖的 Vite 与生产载荷同版本；Vite 的解析器从包内发起，
+      // 需要可解析入口，否则生产预览插件加载失败。
+      linkRuntime("vite", name);
+      // 测试框架只作为隔离 fixture 里“已发布稳定客户端”的既有导入出现：
+      // 当前产品配置已不再运行期导入它，故兼容闭包中没有该依赖。
+      if (name === "@vitejs/plugin-react" && withVitest) linkRuntime("vitest", name);
     }
+    linkRuntime("vite");
     writeFileSync(join(fixture, "package.json"), '{"private":true,"type":"module"}\n');
     for (const path of ["product.manifest.json", "scripts/product-runtime.mjs", "scripts/vite-product.mjs", "apps/web/vite.config.ts"]) {
       const target = join(fixture, ...path.split("/"));
@@ -237,7 +279,10 @@ async function verifyProductionPreview({ legacy, withVitest = legacy, rejectMiss
     mkdirSync(join(fixture, "apps/web/dist"), { recursive: true });
     const html = "<!doctype html><title data-workloom-product-title>生产预览回归</title><p>runtime-preview-regression</p>";
     writeFileSync(join(fixture, "apps/web/dist/index.html"), html);
-    const probe = join(fixture, "preview-probe.mjs");
+    // 探针放在实体的 apps/web 下：它需要从 fixture 的 node_modules 解析 Vite。
+    // 若落在 node_modules 目录内部，Node 会先向仓 node_modules 或 .pnpm 链接目录
+    // 求值，等于借用宿主开发依赖，掩盖发行版故障。
+    const probe = join(fixture, "apps", "web", "preview-probe.mjs");
     writeFileSync(probe, `
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
@@ -248,7 +293,8 @@ const expected = JSON.parse(process.argv[2]);
 const resolver = createRequire(import.meta.url);
 if (expected.withVitest) assert.ok(resolver.resolve("vitest/config"));
 else assert.throws(() => resolver.resolve("vitest/config"), { code: "MODULE_NOT_FOUND" });
-const root = join(import.meta.dirname, "apps/web");
+// 探针位于 <fixture>/apps/web，根目录是 fixture 根（不是探针目录）。
+const root = join(import.meta.dirname, "..", "..", "apps", "web");
 const configFile = join(root, "vite.config.ts");
 if (expected.rejectMissingVitest) {
   assert.equal(expected.legacy, true);
@@ -337,10 +383,11 @@ test("当前产品配置派生的纯类型 Vitest 导入在无 Vitest 的隔离�
   await verifyProductionPreview({ legacy: false });
 });
 
-// 当前产品配置只引用 Vitest 类型，兼容闭包里没有 Vitest；稳定客户端的
-// vitest/config 运行时导入由下面的隔离 fixture 用例证明（不需要新增依赖）。
-test("当前产品配置不携带 Vitest 运行时兼容依赖，仍在真实 preview 中服务", { timeout: 75_000 }, async () => {
-  await verifyProductionPreview({ legacy: true, withVitest: false });
+// 当前产品配置只引用 Vitest 类型，兼容闭包里没有 Vitest：已发布稳定客户端的
+// vitest/config 运行时导入必须在启动前失败闭合（下一条用例的隔离 fixture 证明），
+// 而不是被开发机上的 node_modules 假通过成“能服务”。
+test("当前产品配置不携带 Vitest 运行时兼容依赖，legacy 变体在启动前失败闭合", { timeout: 75_000 }, async () => {
+  await verifyProductionPreview({ legacy: true, withVitest: false, rejectMissingVitest: true });
 });
 
 test("只引用 Vitest 类型的产品不强制兼容依赖，运行期导入才要求并校验", { timeout: 75_000 }, async () => {
