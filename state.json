@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 1465,
+  "revision": 1467,
   "tasks": {
     "231": {
       "number": 231,
@@ -3279,9 +3279,25 @@
           "sync": 65
         }
       },
-      "updatedAt": 1791277811015,
+      "updatedAt": 1791277863152,
       "headSha": "0aeae01c49aa00ee81ad9537c6b0a9c4a22462d0",
-      "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8"
+      "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+      "branch": "delivery/candidate/pr-231-5b4c8960119b12a2ad2356f131f515de",
+      "intent": {
+        "taskId": "T-2026-1002-9004",
+        "ready": true,
+        "dependsOn": [],
+        "releases": []
+      },
+      "reviewAttemptAt": 1791277863152,
+      "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+      "reviewBuild": {
+        "sn": "cnb-imr-1k487ldf1",
+        "headSha": "0aeae01c49aa00ee81ad9537c6b0a9c4a22462d0",
+        "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+        "at": 1791277863152
+      },
+      "reviewDispatch": null
     }
   },
   "leases": {
@@ -51436,6 +51452,47 @@
       },
       "previous": "eff98e6a221ace339d1cb6a98d3a6cb8f353c47446b650a450f66887854cb709",
       "digest": "94e26fa457ae1b9e8816ee7a2c0b20cd435a7a18f09d36999912eda257142d0f"
+    },
+    {
+      "sequence": 1466,
+      "at": "2026-10-06T09:11:03.152Z",
+      "kind": "task",
+      "data": {
+        "number": 262,
+        "patch": {
+          "status": "waiting_review",
+          "headSha": "0aeae01c49aa00ee81ad9537c6b0a9c4a22462d0",
+          "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+          "branch": "delivery/candidate/pr-231-5b4c8960119b12a2ad2356f131f515de",
+          "intent": {
+            "taskId": "T-2026-1002-9004",
+            "ready": true,
+            "dependsOn": [],
+            "releases": []
+          },
+          "reviewAttemptAt": 1791277863152,
+          "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+          "reviewBuild": {
+            "sn": "cnb-imr-1k487ldf1",
+            "headSha": "0aeae01c49aa00ee81ad9537c6b0a9c4a22462d0",
+            "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+            "at": 1791277863152
+          },
+          "reviewDispatch": null
+        }
+      },
+      "previous": "94e26fa457ae1b9e8816ee7a2c0b20cd435a7a18f09d36999912eda257142d0f",
+      "digest": "1cc3510756e5655be4df2d72fbf7228cec13bc930986dd891bbb12c6b2f1ef15"
+    },
+    {
+      "sequence": 1467,
+      "at": "2026-10-06T09:10:52.733Z",
+      "kind": "transaction",
+      "data": {
+        "id": "0c09cde3-aba9-40f2-a425-09c7ab136912"
+      },
+      "previous": "1cc3510756e5655be4df2d72fbf7228cec13bc930986dd891bbb12c6b2f1ef15",
+      "digest": "07c258d5d00b058686825442c07a2b6102c5bc0454aa2af15a8706a70d2635a8"
     }
   ]
 }
