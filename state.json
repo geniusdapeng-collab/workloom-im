@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 539,
+  "revision": 541,
   "tasks": {
     "231": {
       "number": 231,
@@ -2050,12 +2050,12 @@
     },
     "249": {
       "number": 249,
-      "status": "waiting_review",
+      "status": "waiting_ci",
       "firstSeen": 1791248409854,
       "attempts": {},
       "headSha": "4d9806c6ae1e540a417d5542b081e42c79dbae05",
       "mainSha": "d20bbbf6f5f7347647484208227251cc01b02c21",
-      "updatedAt": 1791248438655,
+      "updatedAt": 1791248694683,
       "branch": "delivery/candidate/pr-247-401a4f2c11e90d8173318ca9adf36376",
       "intent": {
         "taskId": "T-2026-1006-1003",
@@ -2086,7 +2086,171 @@
         "generation": {
           "protocol": 38
         }
-      }
+      },
+      "review": {
+        "id": "953f4093-5516-41ee-948d-42009afce533",
+        "number": 249,
+        "headSha": "4d9806c6ae1e540a417d5542b081e42c79dbae05",
+        "mainSha": "d20bbbf6f5f7347647484208227251cc01b02c21",
+        "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+        "filesHash": "5291d462d170dcc8d1861c86d5e020a6f17309fdb6dc96fb78134e5dd8ee7dcd",
+        "resultHash": "b7905b981b70040035153fcdaf558423928cda00cfc1b5a7a9469b6e54f84415",
+        "dependsOn": [
+          243
+        ],
+        "ciPolicyChangesHash": "fda27941cb8ac2e15479de42b232dde491252ed84e72273b187b04d50461951e",
+        "passed": true,
+        "platformReview": {
+          "id": "2107275869366685696",
+          "author": "CodeBuddy",
+          "creator": "OCI",
+          "isNpc": true,
+          "createdAt": "2026-10-06T01:04:53Z"
+        },
+        "result": {
+          "status": "passed",
+          "issues": [],
+          "reviewed_files": [
+            "scripts/ci/verify-lock-conflict.mjs",
+            "scripts/delivery/install-account.mjs",
+            "scripts/delivery/install-assets.mjs",
+            "scripts/delivery/install-inventory.mjs",
+            "scripts/delivery/install-repository.mjs",
+            "scripts/delivery/install-repository.test.mjs",
+            "scripts/delivery/queue-controller.mjs",
+            "scripts/delivery/queue-model.mjs",
+            "scripts/delivery/queue-release.mjs",
+            "scripts/delivery/queue-runner.mjs",
+            "scripts/delivery/queue.test.mjs",
+            "scripts/tools/cnb-api.mjs"
+          ],
+          "head_sha": "4d9806c6ae1e540a417d5542b081e42c79dbae05",
+          "base_sha": "d20bbbf6f5f7347647484208227251cc01b02c21",
+          "policy_hash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+          "depends_on": [
+            243
+          ],
+          "ci_policy_changes": [
+            {
+              "id": "CI-001",
+              "rationale": "install-account.mjs: the installer clone is no longer sparse; the two sparse-checkout init/set calls are removed and a final 'sparse-checkout disable' is added on the verified, task-owned clean clone so the complete tracked checkout (product manifests, oss-components.json, .cnb.yml includes) is materialized before the target's offline dependency inventory is refreshed. Verification is preserved and strengthened: the exact current-main checkout, ownership marker, remote and clean-tree assertions remain, and completeness is now independently re-proven by install-inventory.verifyInventoryCheckout, so no required identity or stage is weakened."
+            },
+            {
+              "id": "CI-002",
+              "rationale": "install-repository.test.mjs: adds regression coverage for the new target OSS inventory refresh (product facts plus newly installed runtime/CI assets are included, the target generator is not replaced, and a second plan is a no-op), for sparse-checkout preflight refusal before any target write, for generator failure returning no successful package, for the installer-manifest repository binding, and for the handoff CLI. Existing product-CI/isolation/frozen-text assertions are unchanged, so the required check identities and their proof are preserved and extended."
+            },
+            {
+              "id": "CI-003",
+              "rationale": "queue.test.mjs: adds unit coverage for the new merge gates and transport semantics - independent CodeBuddy platform approval freshness/creator binding in eligibility, read-only transport retry versus single-attempt writes and 403, rawFile 404-only-absent plus credential redaction, candidate origin/body mutation refusal before any platform merge, same-owner/reused-task-id leases not being auto-released, the real handoff CLI rejecting source drift/draft and never releasing a task lease, and release parking on the latest durable attempt count. No assertion was removed; the changed eligibility/mergeCandidate/release expectations are re-pointed at the stronger contract."
+            },
+            {
+              "id": "CI-004",
+              "rationale": "queue-controller.mjs: reconcile now blocks on ANY live sensitive lease instead of exempting the current task id or auto-releasing on a ready handoff, and mergeCandidate adds an immutable-candidate origin/body/marker check bound to the exact head/main before issuing the platform merge. Both are additive hard gates; failure path preserves existing fencing and receipt handling. No required check or stage identity is removed."
+            },
+            {
+              "id": "CI-005",
+              "rationale": "queue-release.mjs: the failed-release branch reads attempts from the freshly mutated current state (current.releases[item.key].attempts) instead of the stale pre-launch snapshot (release.attempts), so parking after two launches is decided on the latest durable attempt count. This is a correctness fix to an existing gate; the pending/parked/retryAfter semantics and the independent release executor remain unchanged."
+            },
+            {
+              "id": "CI-006",
+              "rationale": "queue-runner.mjs: prepare-install now rejects an installer checkout whose .workloom-delivery-install.json belongs to another repository; handoff now requires an open, non-draft, exact-SHA source, accepts an explicit --head expectation, verifies the source/state did not change on readback, and no longer auto-releases developer leases. These tighten identity binding and remove an implicit lease bypass, consistent with the bounded explicit owner/generation lease contract; all required pipelines, stage names and the trusted-runner lock checks are unchanged."
+            },
+            {
+              "id": "CI-007",
+              "rationale": "install-inventory.mjs is added: it refreshes the target's own docs/OPEN_SOURCE_COMPONENTS.md strictly offline after new runtime/CI assets are installed, refuses a sparse/incomplete tracked checkout, requires an explicit compatible generator adapter, isolates the target generator in a temp dir with only the locked delivery 'yaml' parser, strips credential-bearing environment variables before spawn, redacts credentials on generator failure, and rejects an empty document. It adds a mandatory preflight (verifyInventoryCheckout) and does not remove or relax any existing required check or pipeline stage."
+            },
+            {
+              "id": "CI-008",
+              "rationale": "queue-model.mjs: eligibility now additionally requires a read-back independent CodeBuddy platform approval (npc author matching /codebuddy/i, same PR creator, distinct author/creator, finite createdAt no earlier than the head commit time) in addition to the existing complete review receipt, filesHash, policyHash and CI-migration-hash checks. This strictly strengthens the integration gate; no reason string or prior condition was dropped."
+            },
+            {
+              "id": "CI-009",
+              "rationale": "verify-lock-conflict.mjs: the PR/push lock gate replaces its private unretried fetch helper with the shared cnb-api client (read-only retries plus credential redaction) and keeps the origin allowlist, empty-response rejection and JSON-object assertions. The sensitive-path gate still requires live lease admission receipts and the fail-closed legacy fallback is intact, so the required lock-conflict check is preserved and made more robust."
+            },
+            {
+              "id": "CI-010",
+              "rationale": "install-assets.mjs: the delivery document now states the installer lives only in workloom-ai/workloom-im and is not copied to industry/isolated repos, and requires an explicit 'lease --action release' with exact owner/generation before CI/review plus executor-held short fenced generations for admission and integration. installationPlan adds generatedPaths with a preflight completeness check, and applyInstallation refreshes the target inventory after writing assets. Product CI, isolation and frozen-upstream assertions are unchanged; the change documents and enforces the bounded-lease contract and adds no bypass."
+            },
+            {
+              "id": "CI-011",
+              "rationale": "cnb-api.mjs: read-only requests now retry on transport failures with backoff while writes remain single-attempt (callers reconcile by identity); api() redacts credentials from transport errors; rawFile now treats only HTTP 404 as absent and raises redacted errors on transport/permission failures. These harden credential handling and fail-closed reads without weakening any required check or stage identity."
+            },
+            {
+              "id": "CI-012",
+              "rationale": "install-repository.mjs: the privileged installer clone drops sparse-checkout so the complete target tree (needed for the offline OSS inventory and include resolution) is present, and the installation task card's scope now lists both changed files and generatedPaths. The required-checks closure check, immutable task identity, exact-source freeze and activation read-back are unchanged, so the installer gate is preserved and its evidence is made more complete."
+            }
+          ],
+          "notes": [
+            {
+              "severity": "info",
+              "file": "scripts/delivery/install-inventory.mjs",
+              "start_line": 20,
+              "end_line": 43,
+              "problem": "New offline inventory refresh executes the target repository's own scripts/oss-inventory.mjs during a privileged (session-credential) installation run. The environment is filtered of TOKEN/SECRET/PASSWORD/API_KEY/PRIVATE_KEY/NODE_OPTIONS/NODE_PATH before spawn, so credentials are not propagated, and the executed file is the target's own committed main artefact. Residual exposure is only that the target's generator runs unsandboxed with write access under the target checkout (cwd=root, OSS_REPO_ROOT=root) and could write arbitrary paths, not only docs/OPEN_SOURCE_COMPONENTS.md."
+            },
+            {
+              "severity": "info",
+              "file": "scripts/delivery/install-inventory.mjs",
+              "start_line": 30,
+              "end_line": 32,
+              "problem": "require.resolve('yaml/package.json') relative to scripts/delivery/runtime/package.json and the earlier readFile of the copied generator are outside the try/catch that wraps generation; a missing runtime/node_modules dependency throws an unredacted MODULE_NOT_FOUND. The message exposes only filesystem paths (no secret), and the same resolution is already a hard prerequisite via queue-policy.parser(), so no new credential-leak or availability regression was found."
+            },
+            {
+              "severity": "info",
+              "file": "scripts/ci/verify-lock-conflict.mjs",
+              "start_line": 56,
+              "end_line": 62,
+              "problem": "apiJson({raw:true}) now returns JSON.stringify(value) when the fetched raw body parses as JSON, instead of exact bytes. All raw call sites in this file (readLeases .cnb.yml string checks) consume plain string content, and the state.json path does not use raw:true, so there is no observed behavioural regression; noted for future raw-byte consumers."
+            },
+            {
+              "severity": "info",
+              "file": "scripts/tools/cnb-api.mjs",
+              "start_line": 55,
+              "end_line": 55,
+              "problem": "api() now forces retries=0 for every non-GET method and ignores options.retries in that branch. All in-tree callers (queue-platform.call, cnb-release-publish) already pass retries:0 for writes, and verify-lock-conflict passes retries:4 only on a GET, so no caller is silently downgraded; noted so a future write caller is not surprised that options.retries is ignored."
+            },
+            {
+              "severity": "info",
+              "file": "scripts/delivery/install-assets.mjs",
+              "start_line": 166,
+              "end_line": 175,
+              "problem": "applyInstallation writes plan.changes first and then runs refreshTargetInventory; if the target OSS generation fails after the writes, a task-owned managed checkout (install-account path) is left dirty and managedCheckout deliberately refuses to reset uncommitted changes, so a retry is blocked until an operator cleans the checkout. The failure is surfaced loudly and the never-reset choice is an intentional fail-safe; listed as a recovery observation, not a correctness or safety defect."
+            },
+            {
+              "severity": "info",
+              "file": "scripts/delivery/queue-model.mjs",
+              "start_line": 195,
+              "end_line": 201,
+              "problem": "The new independentApproval predicate compares approval.creator to pull.author?.username, while platformReview.creator is itself derived from the live pull author in queue-work.independentCodeBuddyApproval; the comparison is therefore largely self-consistent by construction and its real strength is the isNpc/author-match/time-freshness binding to a live read-back. On the origin task the copied candidate review does not satisfy creator===origin author, but that path only needs the single 'No current complete AI review' reason to route into the candidate flow, and mergeCandidate re-evaluates against the candidate pull, so no deadlock was found."
+            }
+          ],
+          "batches": [
+            {
+              "index": 0,
+              "files": [
+                "scripts/ci/verify-lock-conflict.mjs",
+                "scripts/delivery/install-account.mjs",
+                "scripts/delivery/install-assets.mjs",
+                "scripts/delivery/install-inventory.mjs",
+                "scripts/delivery/install-repository.mjs",
+                "scripts/delivery/install-repository.test.mjs",
+                "scripts/delivery/queue-controller.mjs",
+                "scripts/delivery/queue-model.mjs",
+                "scripts/delivery/queue-release.mjs",
+                "scripts/delivery/queue-runner.mjs",
+                "scripts/delivery/queue.test.mjs",
+                "scripts/tools/cnb-api.mjs"
+              ],
+              "status": "passed",
+              "toolUseCount": 60,
+              "turnCount": 103
+            }
+          ]
+        },
+        "approvedAt": 1791248694683
+      },
+      "error": null,
+      "blockedUntil": 0
     }
   },
   "leases": {
@@ -15141,6 +15305,203 @@
       },
       "previous": "64092fb56e4f749c5d869dc2ea45fdff8cdb00cf5139af325e6cc59c3ab40a7e",
       "digest": "6b39302207785c2aada509a80853464ce4f137d1ff5385086e353d06bb61207d"
+    },
+    {
+      "sequence": 540,
+      "at": "2026-10-06T01:04:54.683Z",
+      "kind": "task",
+      "data": {
+        "number": 249,
+        "patch": {
+          "status": "waiting_ci",
+          "review": {
+            "id": "953f4093-5516-41ee-948d-42009afce533",
+            "number": 249,
+            "headSha": "4d9806c6ae1e540a417d5542b081e42c79dbae05",
+            "mainSha": "d20bbbf6f5f7347647484208227251cc01b02c21",
+            "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+            "filesHash": "5291d462d170dcc8d1861c86d5e020a6f17309fdb6dc96fb78134e5dd8ee7dcd",
+            "resultHash": "b7905b981b70040035153fcdaf558423928cda00cfc1b5a7a9469b6e54f84415",
+            "dependsOn": [
+              243
+            ],
+            "ciPolicyChangesHash": "fda27941cb8ac2e15479de42b232dde491252ed84e72273b187b04d50461951e",
+            "passed": true,
+            "platformReview": {
+              "id": "2107275869366685696",
+              "author": "CodeBuddy",
+              "creator": "OCI",
+              "isNpc": true,
+              "createdAt": "2026-10-06T01:04:53Z"
+            },
+            "result": {
+              "status": "passed",
+              "issues": [],
+              "reviewed_files": [
+                "scripts/ci/verify-lock-conflict.mjs",
+                "scripts/delivery/install-account.mjs",
+                "scripts/delivery/install-assets.mjs",
+                "scripts/delivery/install-inventory.mjs",
+                "scripts/delivery/install-repository.mjs",
+                "scripts/delivery/install-repository.test.mjs",
+                "scripts/delivery/queue-controller.mjs",
+                "scripts/delivery/queue-model.mjs",
+                "scripts/delivery/queue-release.mjs",
+                "scripts/delivery/queue-runner.mjs",
+                "scripts/delivery/queue.test.mjs",
+                "scripts/tools/cnb-api.mjs"
+              ],
+              "head_sha": "4d9806c6ae1e540a417d5542b081e42c79dbae05",
+              "base_sha": "d20bbbf6f5f7347647484208227251cc01b02c21",
+              "policy_hash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+              "depends_on": [
+                243
+              ],
+              "ci_policy_changes": [
+                {
+                  "id": "CI-001",
+                  "rationale": "install-account.mjs: the installer clone is no longer sparse; the two sparse-checkout init/set calls are removed and a final 'sparse-checkout disable' is added on the verified, task-owned clean clone so the complete tracked checkout (product manifests, oss-components.json, .cnb.yml includes) is materialized before the target's offline dependency inventory is refreshed. Verification is preserved and strengthened: the exact current-main checkout, ownership marker, remote and clean-tree assertions remain, and completeness is now independently re-proven by install-inventory.verifyInventoryCheckout, so no required identity or stage is weakened."
+                },
+                {
+                  "id": "CI-002",
+                  "rationale": "install-repository.test.mjs: adds regression coverage for the new target OSS inventory refresh (product facts plus newly installed runtime/CI assets are included, the target generator is not replaced, and a second plan is a no-op), for sparse-checkout preflight refusal before any target write, for generator failure returning no successful package, for the installer-manifest repository binding, and for the handoff CLI. Existing product-CI/isolation/frozen-text assertions are unchanged, so the required check identities and their proof are preserved and extended."
+                },
+                {
+                  "id": "CI-003",
+                  "rationale": "queue.test.mjs: adds unit coverage for the new merge gates and transport semantics - independent CodeBuddy platform approval freshness/creator binding in eligibility, read-only transport retry versus single-attempt writes and 403, rawFile 404-only-absent plus credential redaction, candidate origin/body mutation refusal before any platform merge, same-owner/reused-task-id leases not being auto-released, the real handoff CLI rejecting source drift/draft and never releasing a task lease, and release parking on the latest durable attempt count. No assertion was removed; the changed eligibility/mergeCandidate/release expectations are re-pointed at the stronger contract."
+                },
+                {
+                  "id": "CI-004",
+                  "rationale": "queue-controller.mjs: reconcile now blocks on ANY live sensitive lease instead of exempting the current task id or auto-releasing on a ready handoff, and mergeCandidate adds an immutable-candidate origin/body/marker check bound to the exact head/main before issuing the platform merge. Both are additive hard gates; failure path preserves existing fencing and receipt handling. No required check or stage identity is removed."
+                },
+                {
+                  "id": "CI-005",
+                  "rationale": "queue-release.mjs: the failed-release branch reads attempts from the freshly mutated current state (current.releases[item.key].attempts) instead of the stale pre-launch snapshot (release.attempts), so parking after two launches is decided on the latest durable attempt count. This is a correctness fix to an existing gate; the pending/parked/retryAfter semantics and the independent release executor remain unchanged."
+                },
+                {
+                  "id": "CI-006",
+                  "rationale": "queue-runner.mjs: prepare-install now rejects an installer checkout whose .workloom-delivery-install.json belongs to another repository; handoff now requires an open, non-draft, exact-SHA source, accepts an explicit --head expectation, verifies the source/state did not change on readback, and no longer auto-releases developer leases. These tighten identity binding and remove an implicit lease bypass, consistent with the bounded explicit owner/generation lease contract; all required pipelines, stage names and the trusted-runner lock checks are unchanged."
+                },
+                {
+                  "id": "CI-007",
+                  "rationale": "install-inventory.mjs is added: it refreshes the target's own docs/OPEN_SOURCE_COMPONENTS.md strictly offline after new runtime/CI assets are installed, refuses a sparse/incomplete tracked checkout, requires an explicit compatible generator adapter, isolates the target generator in a temp dir with only the locked delivery 'yaml' parser, strips credential-bearing environment variables before spawn, redacts credentials on generator failure, and rejects an empty document. It adds a mandatory preflight (verifyInventoryCheckout) and does not remove or relax any existing required check or pipeline stage."
+                },
+                {
+                  "id": "CI-008",
+                  "rationale": "queue-model.mjs: eligibility now additionally requires a read-back independent CodeBuddy platform approval (npc author matching /codebuddy/i, same PR creator, distinct author/creator, finite createdAt no earlier than the head commit time) in addition to the existing complete review receipt, filesHash, policyHash and CI-migration-hash checks. This strictly strengthens the integration gate; no reason string or prior condition was dropped."
+                },
+                {
+                  "id": "CI-009",
+                  "rationale": "verify-lock-conflict.mjs: the PR/push lock gate replaces its private unretried fetch helper with the shared cnb-api client (read-only retries plus credential redaction) and keeps the origin allowlist, empty-response rejection and JSON-object assertions. The sensitive-path gate still requires live lease admission receipts and the fail-closed legacy fallback is intact, so the required lock-conflict check is preserved and made more robust."
+                },
+                {
+                  "id": "CI-010",
+                  "rationale": "install-assets.mjs: the delivery document now states the installer lives only in workloom-ai/workloom-im and is not copied to industry/isolated repos, and requires an explicit 'lease --action release' with exact owner/generation before CI/review plus executor-held short fenced generations for admission and integration. installationPlan adds generatedPaths with a preflight completeness check, and applyInstallation refreshes the target inventory after writing assets. Product CI, isolation and frozen-upstream assertions are unchanged; the change documents and enforces the bounded-lease contract and adds no bypass."
+                },
+                {
+                  "id": "CI-011",
+                  "rationale": "cnb-api.mjs: read-only requests now retry on transport failures with backoff while writes remain single-attempt (callers reconcile by identity); api() redacts credentials from transport errors; rawFile now treats only HTTP 404 as absent and raises redacted errors on transport/permission failures. These harden credential handling and fail-closed reads without weakening any required check or stage identity."
+                },
+                {
+                  "id": "CI-012",
+                  "rationale": "install-repository.mjs: the privileged installer clone drops sparse-checkout so the complete target tree (needed for the offline OSS inventory and include resolution) is present, and the installation task card's scope now lists both changed files and generatedPaths. The required-checks closure check, immutable task identity, exact-source freeze and activation read-back are unchanged, so the installer gate is preserved and its evidence is made more complete."
+                }
+              ],
+              "notes": [
+                {
+                  "severity": "info",
+                  "file": "scripts/delivery/install-inventory.mjs",
+                  "start_line": 20,
+                  "end_line": 43,
+                  "problem": "New offline inventory refresh executes the target repository's own scripts/oss-inventory.mjs during a privileged (session-credential) installation run. The environment is filtered of TOKEN/SECRET/PASSWORD/API_KEY/PRIVATE_KEY/NODE_OPTIONS/NODE_PATH before spawn, so credentials are not propagated, and the executed file is the target's own committed main artefact. Residual exposure is only that the target's generator runs unsandboxed with write access under the target checkout (cwd=root, OSS_REPO_ROOT=root) and could write arbitrary paths, not only docs/OPEN_SOURCE_COMPONENTS.md."
+                },
+                {
+                  "severity": "info",
+                  "file": "scripts/delivery/install-inventory.mjs",
+                  "start_line": 30,
+                  "end_line": 32,
+                  "problem": "require.resolve('yaml/package.json') relative to scripts/delivery/runtime/package.json and the earlier readFile of the copied generator are outside the try/catch that wraps generation; a missing runtime/node_modules dependency throws an unredacted MODULE_NOT_FOUND. The message exposes only filesystem paths (no secret), and the same resolution is already a hard prerequisite via queue-policy.parser(), so no new credential-leak or availability regression was found."
+                },
+                {
+                  "severity": "info",
+                  "file": "scripts/ci/verify-lock-conflict.mjs",
+                  "start_line": 56,
+                  "end_line": 62,
+                  "problem": "apiJson({raw:true}) now returns JSON.stringify(value) when the fetched raw body parses as JSON, instead of exact bytes. All raw call sites in this file (readLeases .cnb.yml string checks) consume plain string content, and the state.json path does not use raw:true, so there is no observed behavioural regression; noted for future raw-byte consumers."
+                },
+                {
+                  "severity": "info",
+                  "file": "scripts/tools/cnb-api.mjs",
+                  "start_line": 55,
+                  "end_line": 55,
+                  "problem": "api() now forces retries=0 for every non-GET method and ignores options.retries in that branch. All in-tree callers (queue-platform.call, cnb-release-publish) already pass retries:0 for writes, and verify-lock-conflict passes retries:4 only on a GET, so no caller is silently downgraded; noted so a future write caller is not surprised that options.retries is ignored."
+                },
+                {
+                  "severity": "info",
+                  "file": "scripts/delivery/install-assets.mjs",
+                  "start_line": 166,
+                  "end_line": 175,
+                  "problem": "applyInstallation writes plan.changes first and then runs refreshTargetInventory; if the target OSS generation fails after the writes, a task-owned managed checkout (install-account path) is left dirty and managedCheckout deliberately refuses to reset uncommitted changes, so a retry is blocked until an operator cleans the checkout. The failure is surfaced loudly and the never-reset choice is an intentional fail-safe; listed as a recovery observation, not a correctness or safety defect."
+                },
+                {
+                  "severity": "info",
+                  "file": "scripts/delivery/queue-model.mjs",
+                  "start_line": 195,
+                  "end_line": 201,
+                  "problem": "The new independentApproval predicate compares approval.creator to pull.author?.username, while platformReview.creator is itself derived from the live pull author in queue-work.independentCodeBuddyApproval; the comparison is therefore largely self-consistent by construction and its real strength is the isNpc/author-match/time-freshness binding to a live read-back. On the origin task the copied candidate review does not satisfy creator===origin author, but that path only needs the single 'No current complete AI review' reason to route into the candidate flow, and mergeCandidate re-evaluates against the candidate pull, so no deadlock was found."
+                }
+              ],
+              "batches": [
+                {
+                  "index": 0,
+                  "files": [
+                    "scripts/ci/verify-lock-conflict.mjs",
+                    "scripts/delivery/install-account.mjs",
+                    "scripts/delivery/install-assets.mjs",
+                    "scripts/delivery/install-inventory.mjs",
+                    "scripts/delivery/install-repository.mjs",
+                    "scripts/delivery/install-repository.test.mjs",
+                    "scripts/delivery/queue-controller.mjs",
+                    "scripts/delivery/queue-model.mjs",
+                    "scripts/delivery/queue-release.mjs",
+                    "scripts/delivery/queue-runner.mjs",
+                    "scripts/delivery/queue.test.mjs",
+                    "scripts/tools/cnb-api.mjs"
+                  ],
+                  "status": "passed",
+                  "toolUseCount": 60,
+                  "turnCount": 103
+                }
+              ]
+            },
+            "approvedAt": 1791248694683
+          },
+          "headSha": "4d9806c6ae1e540a417d5542b081e42c79dbae05",
+          "mainSha": "d20bbbf6f5f7347647484208227251cc01b02c21",
+          "intent": {
+            "taskId": "T-2026-1006-1003",
+            "ready": true,
+            "dependsOn": [
+              243
+            ],
+            "releases": []
+          },
+          "error": null,
+          "blockedUntil": 0
+        }
+      },
+      "previous": "6b39302207785c2aada509a80853464ce4f137d1ff5385086e353d06bb61207d",
+      "digest": "1547fbf3cec81daa0c5eb68ae6b06caf50908ea3cd41b58b4908ec267440a513"
+    },
+    {
+      "sequence": 541,
+      "at": "2026-10-06T01:04:54.253Z",
+      "kind": "transaction",
+      "data": {
+        "id": "de6f676d-cbec-4f5a-a4e0-f2b9a197454a"
+      },
+      "previous": "1547fbf3cec81daa0c5eb68ae6b06caf50908ea3cd41b58b4908ec267440a513",
+      "digest": "756dc38fa7045a5544e37a01d7a102159627bccf33ceec4f42bb34a0ee5eb065"
     }
   ]
 }
