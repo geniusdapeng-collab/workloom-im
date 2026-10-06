@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 2160,
+  "revision": 2162,
   "tasks": {
     "231": {
       "number": 231,
@@ -3346,7 +3346,7 @@
     },
     "264": {
       "number": 264,
-      "status": "waiting_ci",
+      "status": "integrated",
       "firstSeen": 1791305687146,
       "attempts": {},
       "admission": {
@@ -3364,7 +3364,7 @@
           "sync": 70
         }
       },
-      "updatedAt": 1791307242107,
+      "updatedAt": 1791307264725,
       "headSha": "b155e7b73e2fef5550985963c892531f29292c9d",
       "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
       "branch": "task/T-2026-1006-1004",
@@ -3937,7 +3937,437 @@
             "digest": "da85df7d5304a5bfdb4fdca68921b8dfa49a04ecdc51f8cd9db6906059e200f6"
           }
         ]
-      }
+      },
+      "merge": {
+        "sha": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+        "sourceSha": "b155e7b73e2fef5550985963c892531f29292c9d",
+        "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+        "checkSha": "2c265ed2a40e4f8bf2b85ce587ed72ff761b6285",
+        "mergedBy": "cnb.dYiF05kxAGA",
+        "verifiedAt": "2026-10-06T17:20:59.341Z"
+      },
+      "mergeSnapshot": {
+        "repo": "workloom-ai/workloom-im",
+        "number": 264,
+        "pull": {
+          "number": 264,
+          "state": "open",
+          "title": "fix(delivery): 取消平台付费 AI 并核验会话实测 [T-2026-1006-1004]",
+          "body": "产品所有者明确撤销 CNB/GitHub 等外部平台付费 AI review、模型代理和 NPC 自动修复，改用当前 Codex 会话实际精读、测试和准确回执。旧模型执行入口在 I/O 前拒绝；原仓机器 CI、敏感 fenced 租约、真实依赖、不可修改候选和准确普通 merge 双亲继续保留。\n\n安装清单覆盖完整执行闭包和目标适配，核验 Git/文件字节；Tiger governance 委托根现行协议；加强版删除文件 URL 只绑定准确目标/base，其他仍绑定准确源/head；私有制品首请求认证后不向后续下载转发令牌；开源扫描 PR 创建失联按准确分支、标记和 SHA 回读。\n\n本地：220 项核心回归通过；实际加强版目标安装副本 236 项通过、1 项因无共享 UI 发布通道跳过；清单与 27 文件秘密扫描通过。提交后复跑结果和当前会话 review 会保存准确 head/main/policy/范围及 CI 迁移理由。原仓 static/db/ui/bootstrap 真实检查必须通过，普通 merge 不使用 force。\n\n任务卡 #250。旧主干仍执行旧审核器，因此本过渡源码保持 ready:false，避免派发任何平台模型；当前 Codex 会话验证原仓 CI 后完成已授权普通合并。旧流水线/阶段身份仅兼容本次迁移，命令均已替换为确定性检查。\n\n<!-- delivery-no-platform-ai:20261006 -->\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1006-1004\",\n  \"ready\": false,\n  \"depends_on\": [],\n  \"releases\": []\n}\n-->",
+          "author": {
+            "username": "cnb.dYiF05kxAGA",
+            "nickname": "Genius",
+            "email": "XYpmztfpCvez6l8z5BBAvJ+cnb.dYiF05kxAGA@noreply.cnb.cool",
+            "is_npc": false
+          },
+          "reviewers": [],
+          "labels": [],
+          "base": {
+            "ref": "refs/heads/main",
+            "sha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+            "repo": {
+              "id": "2100396957109968896",
+              "name": "workloom-im",
+              "path": "workloom-ai/workloom-im",
+              "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+            }
+          },
+          "head": {
+            "ref": "refs/heads/task/T-2026-1006-1004",
+            "sha": "b155e7b73e2fef5550985963c892531f29292c9d",
+            "repo": {
+              "id": "2100396957109968896",
+              "name": "workloom-im",
+              "path": "workloom-ai/workloom-im",
+              "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+            }
+          },
+          "blocked_on": "unblocked",
+          "merged_by": {
+            "is_npc": false
+          },
+          "mergeable_state": "mergeable",
+          "is_wip": false,
+          "is_merged": false,
+          "is_force_merged": false,
+          "statuses": {}
+        },
+        "headSha": "b155e7b73e2fef5550985963c892531f29292c9d",
+        "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+        "files": [
+          "AGENTS.md",
+          "WORKLOOM_PRODUCT_CONTEXT.md",
+          "docs/DEVELOPMENT-PROTOCOL.md",
+          "docs/OPEN_SOURCE_COMPONENTS.md",
+          "scripts/delivery/README.md",
+          "scripts/delivery/bootstrap-cnb.yml",
+          "scripts/delivery/cnb.yml",
+          "scripts/delivery/install-assets.mjs",
+          "scripts/delivery/install-manifest.mjs",
+          "scripts/delivery/install-protocol.mjs",
+          "scripts/delivery/install-repository.mjs",
+          "scripts/delivery/install-repository.test.mjs",
+          "scripts/delivery/model-gateway.mjs",
+          "scripts/delivery/queue-controller.mjs",
+          "scripts/delivery/queue-model.mjs",
+          "scripts/delivery/queue-platform.mjs",
+          "scripts/delivery/queue-policy.mjs",
+          "scripts/delivery/queue-release.mjs",
+          "scripts/delivery/queue-runner.mjs",
+          "scripts/delivery/queue-work.mjs",
+          "scripts/delivery/queue.test.mjs",
+          "scripts/delivery/review-plugin.mjs",
+          "scripts/oss-watch-ci.mjs",
+          "scripts/oss-watch.test.mjs",
+          "scripts/tools/provision-protocol.mjs",
+          "sync/base-scope.json",
+          "sync/fanout-safety.test.mjs"
+        ],
+        "intent": {
+          "taskId": "T-2026-1006-1004",
+          "ready": false,
+          "dependsOn": [],
+          "releases": []
+        },
+        "headTime": 1791306877000,
+        "mergeBase": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+        "checkErrors": [],
+        "checkSha": "2c265ed2a40e4f8bf2b85ce587ed72ff761b6285",
+        "hasFailedChecks": false,
+        "ciPolicyChanges": [
+          {
+            "id": "CI-001",
+            "file": "scripts/delivery/install-protocol.mjs",
+            "before": {
+              "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+              "path": "scripts/delivery/install-protocol.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+              "path": "scripts/delivery/install-protocol.mjs",
+              "absent": false
+            },
+            "digest": "08ddf3c039ef128a0e95b352c375ea194c82b7029703cd597498f111da5fb6e1"
+          },
+          {
+            "id": "CI-002",
+            "file": "scripts/delivery/queue-policy.mjs",
+            "before": {
+              "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+              "path": "scripts/delivery/queue-policy.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+              "path": "scripts/delivery/queue-policy.mjs",
+              "absent": false
+            },
+            "digest": "14b8a5a9a055c7623e1e51e4328f1631b2dfb86e7316914f3a72c63405971e29"
+          },
+          {
+            "id": "CI-003",
+            "file": "scripts/oss-watch-ci.mjs",
+            "before": {
+              "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+              "path": "scripts/oss-watch-ci.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+              "path": "scripts/oss-watch-ci.mjs",
+              "absent": false
+            },
+            "digest": "249263120a7ca17aebfd138a0a03dfbc59a6e9128c55c9bbd4fc92c8832e3465"
+          },
+          {
+            "id": "CI-004",
+            "file": "scripts/delivery/install-manifest.mjs",
+            "before": {
+              "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+              "path": "scripts/delivery/install-manifest.mjs",
+              "absent": true
+            },
+            "after": {
+              "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+              "path": "scripts/delivery/install-manifest.mjs",
+              "absent": false
+            },
+            "digest": "4850873533abffe4e8995a2afdd52f16a2b927e74056513cbf83d0f64699a921"
+          },
+          {
+            "id": "CI-005",
+            "file": "scripts/oss-watch.test.mjs",
+            "before": {
+              "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+              "path": "scripts/oss-watch.test.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+              "path": "scripts/oss-watch.test.mjs",
+              "absent": false
+            },
+            "digest": "4d6b7c95e6cbe78299df491e7b4e8d5230042a2a4b6e015a2e8c2fd51e5172fc"
+          },
+          {
+            "id": "CI-006",
+            "file": "scripts/delivery/queue-runner.mjs",
+            "before": {
+              "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+              "path": "scripts/delivery/queue-runner.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+              "path": "scripts/delivery/queue-runner.mjs",
+              "absent": false
+            },
+            "digest": "542ccd0c2edbbf610290356a4e141662c873b99131ed018c07a090698a25ea71"
+          },
+          {
+            "id": "CI-007",
+            "file": "scripts/delivery/queue-release.mjs",
+            "before": {
+              "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+              "path": "scripts/delivery/queue-release.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+              "path": "scripts/delivery/queue-release.mjs",
+              "absent": false
+            },
+            "digest": "6baae4c6dfb399c601946836e22c38ce7b4c7d4d7926b996f36cda3df968f4ef"
+          },
+          {
+            "id": "CI-008",
+            "file": "scripts/delivery/queue-controller.mjs",
+            "before": {
+              "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+              "path": "scripts/delivery/queue-controller.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+              "path": "scripts/delivery/queue-controller.mjs",
+              "absent": false
+            },
+            "digest": "720e96e4447c05c702d204b4fe22d59ee211250e7bd9d437a5c14f398d205cdf"
+          },
+          {
+            "id": "CI-009",
+            "file": "scripts/delivery/bootstrap-cnb.yml",
+            "before": {
+              "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+              "path": "scripts/delivery/bootstrap-cnb.yml",
+              "absent": false
+            },
+            "after": {
+              "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+              "path": "scripts/delivery/bootstrap-cnb.yml",
+              "absent": false
+            },
+            "digest": "8262a8d50443c7d9edd7a20d0b2f821fef4120dc435a237fd55c0d58b66eed02"
+          },
+          {
+            "id": "CI-010",
+            "file": "sync/base-scope.json",
+            "before": {
+              "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+              "path": "sync/base-scope.json",
+              "absent": false
+            },
+            "after": {
+              "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+              "path": "sync/base-scope.json",
+              "absent": false
+            },
+            "digest": "8b595638760251f6df96303bd42f91d3c75590cd6887fb4f756ae761e45f8ad6"
+          },
+          {
+            "id": "CI-011",
+            "file": "scripts/delivery/queue-platform.mjs",
+            "before": {
+              "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+              "path": "scripts/delivery/queue-platform.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+              "path": "scripts/delivery/queue-platform.mjs",
+              "absent": false
+            },
+            "digest": "9bdb98d7563797121146c96015c1d73465dc89b8b34d95ba7d53ffe18617a882"
+          },
+          {
+            "id": "CI-012",
+            "file": "scripts/delivery/cnb.yml",
+            "before": {
+              "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+              "path": "scripts/delivery/cnb.yml",
+              "absent": false
+            },
+            "after": {
+              "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+              "path": "scripts/delivery/cnb.yml",
+              "absent": false
+            },
+            "digest": "a107cf1eaba66452417c2ba96bfa1d1f75463891c6cce3a2e778d8bda6427393"
+          },
+          {
+            "id": "CI-013",
+            "file": "scripts/delivery/install-repository.mjs",
+            "before": {
+              "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+              "path": "scripts/delivery/install-repository.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+              "path": "scripts/delivery/install-repository.mjs",
+              "absent": false
+            },
+            "digest": "a5ecce64a09c2a6520c9c6e19ddad38a9f07405a22c5717205203a9b3695b887"
+          },
+          {
+            "id": "CI-014",
+            "file": "sync/fanout-safety.test.mjs",
+            "before": {
+              "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+              "path": "sync/fanout-safety.test.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+              "path": "sync/fanout-safety.test.mjs",
+              "absent": false
+            },
+            "digest": "b3eb03a3e0fb115eff67c7b31c5175c7159699a79f747cbcbb1ad03c9e34982a"
+          },
+          {
+            "id": "CI-015",
+            "file": "scripts/delivery/install-assets.mjs",
+            "before": {
+              "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+              "path": "scripts/delivery/install-assets.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+              "path": "scripts/delivery/install-assets.mjs",
+              "absent": false
+            },
+            "digest": "b527b30c04b39a806f2287a3824f288f5563dabeeae5bcb0f99c84260ebf7dee"
+          },
+          {
+            "id": "CI-016",
+            "file": "scripts/delivery/review-plugin.mjs",
+            "before": {
+              "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+              "path": "scripts/delivery/review-plugin.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+              "path": "scripts/delivery/review-plugin.mjs",
+              "absent": false
+            },
+            "digest": "b570df42b862dac3a59d989ece836742dd1299b8496edf90f7e935824fc6cbb8"
+          },
+          {
+            "id": "CI-017",
+            "file": "scripts/delivery/queue-model.mjs",
+            "before": {
+              "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+              "path": "scripts/delivery/queue-model.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+              "path": "scripts/delivery/queue-model.mjs",
+              "absent": false
+            },
+            "digest": "cea00070991d6e0197241e8882714571214d56add78bb1fa8b0a8d5d143ddfcc"
+          },
+          {
+            "id": "CI-018",
+            "file": "scripts/delivery/queue.test.mjs",
+            "before": {
+              "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+              "path": "scripts/delivery/queue.test.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+              "path": "scripts/delivery/queue.test.mjs",
+              "absent": false
+            },
+            "digest": "d13b46a9343f18ab0ba7107d45bd2673a5c53269e37bfe50249c0d994bcb9364"
+          },
+          {
+            "id": "CI-019",
+            "file": "scripts/delivery/model-gateway.mjs",
+            "before": {
+              "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+              "path": "scripts/delivery/model-gateway.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+              "path": "scripts/delivery/model-gateway.mjs",
+              "absent": false
+            },
+            "digest": "d27c8f584abe1fcace5b2982063fef98e4b40a8ff70d941bbdb9e80ccf78efec"
+          },
+          {
+            "id": "CI-020",
+            "file": "scripts/tools/provision-protocol.mjs",
+            "before": {
+              "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+              "path": "scripts/tools/provision-protocol.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+              "path": "scripts/tools/provision-protocol.mjs",
+              "absent": false
+            },
+            "digest": "d36eb9092196657ef8a8a852d8b430d2c534aa485ada8b92c95e9afd7886244e"
+          },
+          {
+            "id": "CI-021",
+            "file": "scripts/delivery/install-repository.test.mjs",
+            "before": {
+              "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+              "path": "scripts/delivery/install-repository.test.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+              "path": "scripts/delivery/install-repository.test.mjs",
+              "absent": false
+            },
+            "digest": "d6d21df2c7e31e2c688ae1cbb268e1e0e4ce718d858e073d9a0499c73b2861ed"
+          },
+          {
+            "id": "CI-022",
+            "file": "scripts/delivery/queue-work.mjs",
+            "before": {
+              "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+              "path": "scripts/delivery/queue-work.mjs",
+              "absent": false
+            },
+            "after": {
+              "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+              "path": "scripts/delivery/queue-work.mjs",
+              "absent": false
+            },
+            "digest": "da85df7d5304a5bfdb4fdca68921b8dfa49a04ecdc51f8cd9db6906059e200f6"
+          }
+        ]
+      },
+      "platformAI": false
     }
   },
   "leases": {
@@ -85708,6 +86138,465 @@
       },
       "previous": "4e012f98bf66d28fd36466ccd42d6836b5d09955b31cc5b55aedfb830899c075",
       "digest": "2e530a85e1cab92b6053b2fb88220adc0b4ce6902845238c6a090992e1125ec7"
+    },
+    {
+      "sequence": 2161,
+      "at": "2026-10-06T17:21:04.725Z",
+      "kind": "task",
+      "data": {
+        "number": 264,
+        "patch": {
+          "status": "integrated",
+          "merge": {
+            "sha": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+            "sourceSha": "b155e7b73e2fef5550985963c892531f29292c9d",
+            "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+            "checkSha": "2c265ed2a40e4f8bf2b85ce587ed72ff761b6285",
+            "mergedBy": "cnb.dYiF05kxAGA",
+            "verifiedAt": "2026-10-06T17:20:59.341Z"
+          },
+          "mergeSnapshot": {
+            "repo": "workloom-ai/workloom-im",
+            "number": 264,
+            "pull": {
+              "number": 264,
+              "state": "open",
+              "title": "fix(delivery): 取消平台付费 AI 并核验会话实测 [T-2026-1006-1004]",
+              "body": "产品所有者明确撤销 CNB/GitHub 等外部平台付费 AI review、模型代理和 NPC 自动修复，改用当前 Codex 会话实际精读、测试和准确回执。旧模型执行入口在 I/O 前拒绝；原仓机器 CI、敏感 fenced 租约、真实依赖、不可修改候选和准确普通 merge 双亲继续保留。\n\n安装清单覆盖完整执行闭包和目标适配，核验 Git/文件字节；Tiger governance 委托根现行协议；加强版删除文件 URL 只绑定准确目标/base，其他仍绑定准确源/head；私有制品首请求认证后不向后续下载转发令牌；开源扫描 PR 创建失联按准确分支、标记和 SHA 回读。\n\n本地：220 项核心回归通过；实际加强版目标安装副本 236 项通过、1 项因无共享 UI 发布通道跳过；清单与 27 文件秘密扫描通过。提交后复跑结果和当前会话 review 会保存准确 head/main/policy/范围及 CI 迁移理由。原仓 static/db/ui/bootstrap 真实检查必须通过，普通 merge 不使用 force。\n\n任务卡 #250。旧主干仍执行旧审核器，因此本过渡源码保持 ready:false，避免派发任何平台模型；当前 Codex 会话验证原仓 CI 后完成已授权普通合并。旧流水线/阶段身份仅兼容本次迁移，命令均已替换为确定性检查。\n\n<!-- delivery-no-platform-ai:20261006 -->\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1006-1004\",\n  \"ready\": false,\n  \"depends_on\": [],\n  \"releases\": []\n}\n-->",
+              "author": {
+                "username": "cnb.dYiF05kxAGA",
+                "nickname": "Genius",
+                "email": "XYpmztfpCvez6l8z5BBAvJ+cnb.dYiF05kxAGA@noreply.cnb.cool",
+                "is_npc": false
+              },
+              "reviewers": [],
+              "labels": [],
+              "base": {
+                "ref": "refs/heads/main",
+                "sha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+                "repo": {
+                  "id": "2100396957109968896",
+                  "name": "workloom-im",
+                  "path": "workloom-ai/workloom-im",
+                  "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+                }
+              },
+              "head": {
+                "ref": "refs/heads/task/T-2026-1006-1004",
+                "sha": "b155e7b73e2fef5550985963c892531f29292c9d",
+                "repo": {
+                  "id": "2100396957109968896",
+                  "name": "workloom-im",
+                  "path": "workloom-ai/workloom-im",
+                  "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+                }
+              },
+              "blocked_on": "unblocked",
+              "merged_by": {
+                "is_npc": false
+              },
+              "mergeable_state": "mergeable",
+              "is_wip": false,
+              "is_merged": false,
+              "is_force_merged": false,
+              "statuses": {}
+            },
+            "headSha": "b155e7b73e2fef5550985963c892531f29292c9d",
+            "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+            "files": [
+              "AGENTS.md",
+              "WORKLOOM_PRODUCT_CONTEXT.md",
+              "docs/DEVELOPMENT-PROTOCOL.md",
+              "docs/OPEN_SOURCE_COMPONENTS.md",
+              "scripts/delivery/README.md",
+              "scripts/delivery/bootstrap-cnb.yml",
+              "scripts/delivery/cnb.yml",
+              "scripts/delivery/install-assets.mjs",
+              "scripts/delivery/install-manifest.mjs",
+              "scripts/delivery/install-protocol.mjs",
+              "scripts/delivery/install-repository.mjs",
+              "scripts/delivery/install-repository.test.mjs",
+              "scripts/delivery/model-gateway.mjs",
+              "scripts/delivery/queue-controller.mjs",
+              "scripts/delivery/queue-model.mjs",
+              "scripts/delivery/queue-platform.mjs",
+              "scripts/delivery/queue-policy.mjs",
+              "scripts/delivery/queue-release.mjs",
+              "scripts/delivery/queue-runner.mjs",
+              "scripts/delivery/queue-work.mjs",
+              "scripts/delivery/queue.test.mjs",
+              "scripts/delivery/review-plugin.mjs",
+              "scripts/oss-watch-ci.mjs",
+              "scripts/oss-watch.test.mjs",
+              "scripts/tools/provision-protocol.mjs",
+              "sync/base-scope.json",
+              "sync/fanout-safety.test.mjs"
+            ],
+            "intent": {
+              "taskId": "T-2026-1006-1004",
+              "ready": false,
+              "dependsOn": [],
+              "releases": []
+            },
+            "headTime": 1791306877000,
+            "mergeBase": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+            "checkErrors": [],
+            "checkSha": "2c265ed2a40e4f8bf2b85ce587ed72ff761b6285",
+            "hasFailedChecks": false,
+            "ciPolicyChanges": [
+              {
+                "id": "CI-001",
+                "file": "scripts/delivery/install-protocol.mjs",
+                "before": {
+                  "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+                  "path": "scripts/delivery/install-protocol.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+                  "path": "scripts/delivery/install-protocol.mjs",
+                  "absent": false
+                },
+                "digest": "08ddf3c039ef128a0e95b352c375ea194c82b7029703cd597498f111da5fb6e1"
+              },
+              {
+                "id": "CI-002",
+                "file": "scripts/delivery/queue-policy.mjs",
+                "before": {
+                  "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+                  "path": "scripts/delivery/queue-policy.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+                  "path": "scripts/delivery/queue-policy.mjs",
+                  "absent": false
+                },
+                "digest": "14b8a5a9a055c7623e1e51e4328f1631b2dfb86e7316914f3a72c63405971e29"
+              },
+              {
+                "id": "CI-003",
+                "file": "scripts/oss-watch-ci.mjs",
+                "before": {
+                  "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+                  "path": "scripts/oss-watch-ci.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+                  "path": "scripts/oss-watch-ci.mjs",
+                  "absent": false
+                },
+                "digest": "249263120a7ca17aebfd138a0a03dfbc59a6e9128c55c9bbd4fc92c8832e3465"
+              },
+              {
+                "id": "CI-004",
+                "file": "scripts/delivery/install-manifest.mjs",
+                "before": {
+                  "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+                  "path": "scripts/delivery/install-manifest.mjs",
+                  "absent": true
+                },
+                "after": {
+                  "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+                  "path": "scripts/delivery/install-manifest.mjs",
+                  "absent": false
+                },
+                "digest": "4850873533abffe4e8995a2afdd52f16a2b927e74056513cbf83d0f64699a921"
+              },
+              {
+                "id": "CI-005",
+                "file": "scripts/oss-watch.test.mjs",
+                "before": {
+                  "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+                  "path": "scripts/oss-watch.test.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+                  "path": "scripts/oss-watch.test.mjs",
+                  "absent": false
+                },
+                "digest": "4d6b7c95e6cbe78299df491e7b4e8d5230042a2a4b6e015a2e8c2fd51e5172fc"
+              },
+              {
+                "id": "CI-006",
+                "file": "scripts/delivery/queue-runner.mjs",
+                "before": {
+                  "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+                  "path": "scripts/delivery/queue-runner.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+                  "path": "scripts/delivery/queue-runner.mjs",
+                  "absent": false
+                },
+                "digest": "542ccd0c2edbbf610290356a4e141662c873b99131ed018c07a090698a25ea71"
+              },
+              {
+                "id": "CI-007",
+                "file": "scripts/delivery/queue-release.mjs",
+                "before": {
+                  "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+                  "path": "scripts/delivery/queue-release.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+                  "path": "scripts/delivery/queue-release.mjs",
+                  "absent": false
+                },
+                "digest": "6baae4c6dfb399c601946836e22c38ce7b4c7d4d7926b996f36cda3df968f4ef"
+              },
+              {
+                "id": "CI-008",
+                "file": "scripts/delivery/queue-controller.mjs",
+                "before": {
+                  "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+                  "path": "scripts/delivery/queue-controller.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+                  "path": "scripts/delivery/queue-controller.mjs",
+                  "absent": false
+                },
+                "digest": "720e96e4447c05c702d204b4fe22d59ee211250e7bd9d437a5c14f398d205cdf"
+              },
+              {
+                "id": "CI-009",
+                "file": "scripts/delivery/bootstrap-cnb.yml",
+                "before": {
+                  "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+                  "path": "scripts/delivery/bootstrap-cnb.yml",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+                  "path": "scripts/delivery/bootstrap-cnb.yml",
+                  "absent": false
+                },
+                "digest": "8262a8d50443c7d9edd7a20d0b2f821fef4120dc435a237fd55c0d58b66eed02"
+              },
+              {
+                "id": "CI-010",
+                "file": "sync/base-scope.json",
+                "before": {
+                  "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+                  "path": "sync/base-scope.json",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+                  "path": "sync/base-scope.json",
+                  "absent": false
+                },
+                "digest": "8b595638760251f6df96303bd42f91d3c75590cd6887fb4f756ae761e45f8ad6"
+              },
+              {
+                "id": "CI-011",
+                "file": "scripts/delivery/queue-platform.mjs",
+                "before": {
+                  "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+                  "path": "scripts/delivery/queue-platform.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+                  "path": "scripts/delivery/queue-platform.mjs",
+                  "absent": false
+                },
+                "digest": "9bdb98d7563797121146c96015c1d73465dc89b8b34d95ba7d53ffe18617a882"
+              },
+              {
+                "id": "CI-012",
+                "file": "scripts/delivery/cnb.yml",
+                "before": {
+                  "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+                  "path": "scripts/delivery/cnb.yml",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+                  "path": "scripts/delivery/cnb.yml",
+                  "absent": false
+                },
+                "digest": "a107cf1eaba66452417c2ba96bfa1d1f75463891c6cce3a2e778d8bda6427393"
+              },
+              {
+                "id": "CI-013",
+                "file": "scripts/delivery/install-repository.mjs",
+                "before": {
+                  "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+                  "path": "scripts/delivery/install-repository.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+                  "path": "scripts/delivery/install-repository.mjs",
+                  "absent": false
+                },
+                "digest": "a5ecce64a09c2a6520c9c6e19ddad38a9f07405a22c5717205203a9b3695b887"
+              },
+              {
+                "id": "CI-014",
+                "file": "sync/fanout-safety.test.mjs",
+                "before": {
+                  "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+                  "path": "sync/fanout-safety.test.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+                  "path": "sync/fanout-safety.test.mjs",
+                  "absent": false
+                },
+                "digest": "b3eb03a3e0fb115eff67c7b31c5175c7159699a79f747cbcbb1ad03c9e34982a"
+              },
+              {
+                "id": "CI-015",
+                "file": "scripts/delivery/install-assets.mjs",
+                "before": {
+                  "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+                  "path": "scripts/delivery/install-assets.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+                  "path": "scripts/delivery/install-assets.mjs",
+                  "absent": false
+                },
+                "digest": "b527b30c04b39a806f2287a3824f288f5563dabeeae5bcb0f99c84260ebf7dee"
+              },
+              {
+                "id": "CI-016",
+                "file": "scripts/delivery/review-plugin.mjs",
+                "before": {
+                  "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+                  "path": "scripts/delivery/review-plugin.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+                  "path": "scripts/delivery/review-plugin.mjs",
+                  "absent": false
+                },
+                "digest": "b570df42b862dac3a59d989ece836742dd1299b8496edf90f7e935824fc6cbb8"
+              },
+              {
+                "id": "CI-017",
+                "file": "scripts/delivery/queue-model.mjs",
+                "before": {
+                  "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+                  "path": "scripts/delivery/queue-model.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+                  "path": "scripts/delivery/queue-model.mjs",
+                  "absent": false
+                },
+                "digest": "cea00070991d6e0197241e8882714571214d56add78bb1fa8b0a8d5d143ddfcc"
+              },
+              {
+                "id": "CI-018",
+                "file": "scripts/delivery/queue.test.mjs",
+                "before": {
+                  "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+                  "path": "scripts/delivery/queue.test.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+                  "path": "scripts/delivery/queue.test.mjs",
+                  "absent": false
+                },
+                "digest": "d13b46a9343f18ab0ba7107d45bd2673a5c53269e37bfe50249c0d994bcb9364"
+              },
+              {
+                "id": "CI-019",
+                "file": "scripts/delivery/model-gateway.mjs",
+                "before": {
+                  "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+                  "path": "scripts/delivery/model-gateway.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+                  "path": "scripts/delivery/model-gateway.mjs",
+                  "absent": false
+                },
+                "digest": "d27c8f584abe1fcace5b2982063fef98e4b40a8ff70d941bbdb9e80ccf78efec"
+              },
+              {
+                "id": "CI-020",
+                "file": "scripts/tools/provision-protocol.mjs",
+                "before": {
+                  "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+                  "path": "scripts/tools/provision-protocol.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+                  "path": "scripts/tools/provision-protocol.mjs",
+                  "absent": false
+                },
+                "digest": "d36eb9092196657ef8a8a852d8b430d2c534aa485ada8b92c95e9afd7886244e"
+              },
+              {
+                "id": "CI-021",
+                "file": "scripts/delivery/install-repository.test.mjs",
+                "before": {
+                  "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+                  "path": "scripts/delivery/install-repository.test.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+                  "path": "scripts/delivery/install-repository.test.mjs",
+                  "absent": false
+                },
+                "digest": "d6d21df2c7e31e2c688ae1cbb268e1e0e4ce718d858e073d9a0499c73b2861ed"
+              },
+              {
+                "id": "CI-022",
+                "file": "scripts/delivery/queue-work.mjs",
+                "before": {
+                  "ref": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+                  "path": "scripts/delivery/queue-work.mjs",
+                  "absent": false
+                },
+                "after": {
+                  "ref": "b155e7b73e2fef5550985963c892531f29292c9d",
+                  "path": "scripts/delivery/queue-work.mjs",
+                  "absent": false
+                },
+                "digest": "da85df7d5304a5bfdb4fdca68921b8dfa49a04ecdc51f8cd9db6906059e200f6"
+              }
+            ]
+          },
+          "intent": {
+            "taskId": "T-2026-1006-1004",
+            "ready": false,
+            "dependsOn": [],
+            "releases": []
+          },
+          "platformAI": false
+        }
+      },
+      "previous": "2e530a85e1cab92b6053b2fb88220adc0b4ce6902845238c6a090992e1125ec7",
+      "digest": "bff3942d3240e22bdb83d96244bf3ea0b859ca365a537c7f41f91f42f50c2152"
+    },
+    {
+      "sequence": 2162,
+      "at": "2026-10-06T17:20:59.341Z",
+      "kind": "transaction",
+      "data": {
+        "id": "ecbb22d7-a160-49ef-a022-0b76da105a84"
+      },
+      "previous": "bff3942d3240e22bdb83d96244bf3ea0b859ca365a537c7f41f91f42f50c2152",
+      "digest": "cb90e7d6497ec693fd220892492059a1af7bb0293c4ffdd54f97522cd3afd268"
     }
   ]
 }
