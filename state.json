@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 805,
+  "revision": 807,
   "tasks": {
     "231": {
       "number": 231,
@@ -2841,17 +2841,17 @@
       },
       "reviewAttemptAt": 1791255926328,
       "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
-      "reviewBuild": null,
-      "reviewDispatch": {
+      "reviewBuild": {
+        "sn": "cnb-qi1-1k47jt20u",
+        "buildLogUrl": "https://cnb.cool/workloom-ai/workloom-im/-/build/logs/cnb-qi1-1k47jt20u",
+        "event": "api_trigger_delivery_review",
+        "message": "cnb received, but didn't finish build yet",
+        "success": true,
         "headSha": "3a185e26d2241f1f0951866bfafb13646280ba42",
         "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
-        "at": 1791257108821,
-        "title": "WorkLoom AI review #253 289501dcc5e61740380d",
-        "knownBuilds": [
-          "cnb-8uq-1k47fjoan",
-          "cnb-4h1-1k47efce9"
-        ]
+        "at": 1791257108821
       },
+      "reviewDispatch": null,
       "review": null,
       "error": "AI review did not pass without unresolved issues",
       "reviewFailures": {
@@ -25779,6 +25779,39 @@
       },
       "previous": "4e359fefd50d9bb8bcb7057174870d4de2ed09ba163275fca20a71471c40ea94",
       "digest": "52c2021e2a94e4bc6a2b3c9ed6703fc46b6697067908d1dd8371e3bfd4964f75"
+    },
+    {
+      "sequence": 806,
+      "at": "2026-10-06T03:25:08.821Z",
+      "kind": "task",
+      "data": {
+        "number": 253,
+        "patch": {
+          "reviewBuild": {
+            "sn": "cnb-qi1-1k47jt20u",
+            "buildLogUrl": "https://cnb.cool/workloom-ai/workloom-im/-/build/logs/cnb-qi1-1k47jt20u",
+            "event": "api_trigger_delivery_review",
+            "message": "cnb received, but didn't finish build yet",
+            "success": true,
+            "headSha": "3a185e26d2241f1f0951866bfafb13646280ba42",
+            "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+            "at": 1791257108821
+          },
+          "reviewDispatch": null
+        }
+      },
+      "previous": "52c2021e2a94e4bc6a2b3c9ed6703fc46b6697067908d1dd8371e3bfd4964f75",
+      "digest": "7fdd6341ea6fb0ca3129e6ee58180767cfb21731701afdc5401ff250314b1aa3"
+    },
+    {
+      "sequence": 807,
+      "at": "2026-10-06T03:25:19.017Z",
+      "kind": "transaction",
+      "data": {
+        "id": "3305d64e-8947-473e-af8f-97fb6b655640"
+      },
+      "previous": "7fdd6341ea6fb0ca3129e6ee58180767cfb21731701afdc5401ff250314b1aa3",
+      "digest": "7b72d3667d5a3a38e750b084bb90da46d319ee70acbd17ec3f57710d5e2cc4d3"
     }
   ]
 }
