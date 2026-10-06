@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 1376,
+  "revision": 1378,
   "tasks": {
     "231": {
       "number": 231,
@@ -3165,12 +3165,12 @@
     },
     "260": {
       "number": 260,
-      "status": "parked",
+      "status": "waiting_review",
       "firstSeen": 1791273011212,
       "attempts": {},
       "headSha": "bd865cc91b7ee8e28b2c585daf1f34d834c95bf2",
       "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
-      "updatedAt": 1791273947539,
+      "updatedAt": 1791274814606,
       "branch": "delivery/candidate/pr-232-de22b9c20891c890504f8468acf5ca5b",
       "intent": {
         "taskId": "T-2026-1002-0001",
@@ -3181,7 +3181,23 @@
       "reviewAttemptAt": 1791273036638,
       "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
       "reviewBuild": null,
-      "reviewDispatch": null,
+      "reviewDispatch": {
+        "headSha": "bd865cc91b7ee8e28b2c585daf1f34d834c95bf2",
+        "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+        "at": 1791274814606,
+        "title": "WorkLoom AI review #260 47371b3b015bac386bd2",
+        "knownBuilds": [
+          "cnb-36f-1k481l2km",
+          "cnb-ll6-1k480glue",
+          "cnb-ehs-1k47sfrkh",
+          "cnb-p1l-1k47r33qn",
+          "cnb-ue7-1k47nteog",
+          "cnb-mmj-1k47ltib8",
+          "cnb-qi1-1k47jt20u",
+          "cnb-8uq-1k47fjoan",
+          "cnb-4h1-1k47efce9"
+        ]
+      },
       "admission": {
         "number": 260,
         "headSha": "bd865cc91b7ee8e28b2c585daf1f34d834c95bf2",
@@ -48243,6 +48259,46 @@
       },
       "previous": "0c4d8662f91578c6e3b85ccf507e1ec40d41f6e76cdec34bbacb2291190b24f4",
       "digest": "46b42d3baf90b726f27c5b549b95d264142eee9db104db220a826e1ce78b2b46"
+    },
+    {
+      "sequence": 1377,
+      "at": "2026-10-06T08:20:14.606Z",
+      "kind": "task",
+      "data": {
+        "number": 260,
+        "patch": {
+          "status": "waiting_review",
+          "reviewDispatch": {
+            "headSha": "bd865cc91b7ee8e28b2c585daf1f34d834c95bf2",
+            "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+            "at": 1791274814606,
+            "title": "WorkLoom AI review #260 47371b3b015bac386bd2",
+            "knownBuilds": [
+              "cnb-36f-1k481l2km",
+              "cnb-ll6-1k480glue",
+              "cnb-ehs-1k47sfrkh",
+              "cnb-p1l-1k47r33qn",
+              "cnb-ue7-1k47nteog",
+              "cnb-mmj-1k47ltib8",
+              "cnb-qi1-1k47jt20u",
+              "cnb-8uq-1k47fjoan",
+              "cnb-4h1-1k47efce9"
+            ]
+          }
+        }
+      },
+      "previous": "46b42d3baf90b726f27c5b549b95d264142eee9db104db220a826e1ce78b2b46",
+      "digest": "93deeb1dd34f4bcc83561c4cd1dbe1b6a136dadb66f00283c0ccbc04c712811f"
+    },
+    {
+      "sequence": 1378,
+      "at": "2026-10-06T08:20:48.344Z",
+      "kind": "transaction",
+      "data": {
+        "id": "6bafcac3-1cbd-47cc-8e1c-91f6d59b9327"
+      },
+      "previous": "93deeb1dd34f4bcc83561c4cd1dbe1b6a136dadb66f00283c0ccbc04c712811f",
+      "digest": "238847022d9784da2727a1de0daab006609d065b1f1c91da2901f9ba94ef3a86"
     }
   ]
 }
