@@ -6,7 +6,7 @@
 > 仓库：workloom-ai/workloom-im ｜ 最近一次成功扫描：尚未记录已核实成功（运行 `pnpm oss:watch`） ｜ 最近尝试：未记录
 > 历史全量扫描/尝试（未核实）：2026-09-19T10:16:38.000Z
 > 每项上游版本按成功时间、查询状态和 TTL 单独判定；历史缓存与失败查询不作本次最新版本结论。
-> 统计：登记组件 98 个 ｜ npm 直接依赖 171 个 ｜ Python 依赖 5 个 ｜ 容器镜像 3 个
+> 统计：登记组件 98 个 ｜ npm 直接依赖 171 个 ｜ Python 依赖 5 个 ｜ 容器镜像 2 个
 
 ## 0. 维护机制（四件事）
 
@@ -310,12 +310,11 @@
 | `Pillow` | 12.3.0 | ==12.3.0 | scripts/whiteboard/engine/requirements.txt | —（未扫描） |
 | `playwright` | >=1.40.0（下限声明） | >=1.40.0 | packages/base/computer-use/toolkit/requirements.txt | 1.45.1（历史记录；未核实或已过期） |
 
-### 2.3 容器镜像（3 个）
+### 2.3 容器镜像（2 个）
 
 | 镜像 | 出现位置 |
 |---|---|
-| `cnbcool/code-review@sha256:c20b1e826d854738c807f4949859a6df5d58b95545ebefc96197369943a4bcce` | scripts/delivery/bootstrap-cnb.yml、scripts/delivery/cnb.yml |
-| `node:24.19.0-bookworm` | .cnb.yml、scripts/delivery/bootstrap-cnb.yml、scripts/delivery/cnb.yml |
+| `node:24.19.0-bookworm` | .cnb.yml |
 | `pgvector/pgvector:pg17` | .cnb.yml、docker-compose.yml#postgres |
 
 ### 2.4 工具链

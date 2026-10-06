@@ -41,7 +41,7 @@ export const PROTOCOL_ASSETS = [
   "scripts/ci/protocol-rules.test.mjs",
   'scripts/tools/cnb-api.mjs',
   'scripts/tools/task.mjs',
-  ...['queue-model.mjs', 'queue-policy.mjs', 'queue-platform.mjs', 'queue-controller.mjs', 'queue-work.mjs', 'queue-release.mjs', 'queue-runner.mjs', 'git-state.mjs', 'review-plugin.mjs', 'model-gateway.mjs', 'install-config.mjs', 'release-source.mjs', 'queue.test.mjs', 'cnb.yml', 'bootstrap-cnb.yml', 'runtime/package.json', 'runtime/package-lock.json'].map(path => `scripts/delivery/${path}`),
+  ...['queue-model.mjs', 'queue-policy.mjs', 'queue-platform.mjs', 'queue-controller.mjs', 'queue-work.mjs', 'queue-release.mjs', 'queue-runner.mjs', 'git-state.mjs', 'review-plugin.mjs', 'model-gateway.mjs', 'install-config.mjs', 'install-manifest.mjs', 'release-source.mjs', 'queue.test.mjs', 'cnb.yml', 'bootstrap-cnb.yml', 'runtime/package.json', 'runtime/package-lock.json'].map(path => `scripts/delivery/${path}`),
 ];
 
 const GATE_STAGE = `    - name: 协议门禁（提交规范 + 并发冲突）

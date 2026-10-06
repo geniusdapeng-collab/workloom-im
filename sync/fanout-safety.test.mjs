@@ -8,7 +8,7 @@ import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { GitStateStore, git } from '../scripts/delivery/git-state.mjs';
 import { prepareInstallation } from '../scripts/delivery/queue-runner.mjs';
-import { injectDeliveryConfig } from '../scripts/delivery/install-config.mjs';
+import { applyInstallation, CORE_ASSETS, DELIVERY_DOC, REGRESSION_CNB, installationPlan } from '../scripts/delivery/install-assets.mjs';
 
 test('fanout rejects a foreign, insecure or credential-bearing origin before requesting credentials', async () => {
   const beforeArgv = process.argv;
@@ -56,7 +56,10 @@ test('first-install execution closure is delivered before a ledger exists, then 
   for (const path of provision.PROTOCOL_ASSETS) { const content = await readFile(new URL(`../${path}`, import.meta.url), 'utf8'); assert.ok(content.trim(), path); await mkdir(dirname(join(checkout, path)), { recursive: true }); await writeFile(join(checkout, path), content); }
   for (const path of ['runtime/package.json', 'runtime/package-lock.json', 'cnb.yml', 'bootstrap-cnb.yml', 'queue-runner.mjs']) assert.ok((await readFile(join(checkout, 'scripts/delivery', path), 'utf8')).trim());
   assert.equal((await store.read()).revision, 0); // Assets already exist although fanout is still unavailable.
-  await writeFile(join(checkout, '.cnb.yml'), (await injectDeliveryConfig(provision.injectGate(original).content, { bootstrap: true })).content);
+  await writeFile(join(checkout, '.cnb.yml'), provision.injectGate(original).content);
+  const assets = Object.fromEntries(await Promise.all(CORE_ASSETS.map(async path => [path, await readFile(new URL(`../${path}`, import.meta.url), 'utf8')])));
+  assets['docs/AUTOMATIC-RD-DELIVERY.md'] = DELIVERY_DOC; assets['scripts/delivery/install-cnb.yml'] = REGRESSION_CNB;
+  await applyInstallation(await installationPlan({ root: checkout, repo, sourceRepo: 'workloom-ai/workloom-im', sourceSha: mainSha, assets }), checkout);
   await git(['add', '.'], { cwd: checkout }); await git(['commit', '-m', 'complete first installation'], { cwd: checkout });
   const headSha = await git(['rev-parse', 'HEAD'], { cwd: checkout }); let rules = [];
   const platform = { repo, main: async () => ({ commit: { sha: mainSha } }), protections: async () => rules, call: async (_path, options) => { rules = [{ ...options.body, id: 'prepared-state' }]; return {}; } };
