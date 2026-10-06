@@ -75,6 +75,35 @@ export async function createOnce({ list, match, create }) {
   }
 }
 
+/** Issue lists omit body; search the task identity, then validate actual detail. */
+export async function installationIssues(platform, taskId) {
+  if (!/^T-\d{4}-\d{4}-\d{4}$/.test(taskId ?? '')) throw new Error('Installation task identity is invalid');
+  const keyword = encodeURIComponent(taskId);
+  const summaries = [...await platform.list(`/-/issues?state=open&keyword=${keyword}`), ...await platform.list(`/-/issues?state=closed&keyword=${keyword}`)];
+  const issues = [];
+  for (const summary of summaries) {
+    const number = Number(summary.number);
+    if (!Number.isSafeInteger(number) || number <= 0) throw new Error('Installation issue list identity is invalid');
+    const detail = await platform.call(`/-/issues/${number}`);
+    if (Number(detail?.number) !== number || typeof detail.body !== 'string' || typeof detail.title !== 'string') throw new Error('Installation issue detail is unreadable or changed identity');
+    issues.push({ ...summary, ...detail, number });
+  }
+  return issues;
+}
+
+/** Read only the exact installer branch's details, never match markers in list stubs. */
+export async function installationPulls(platform, branch) {
+  if (typeof branch !== 'string' || !branch.startsWith('chore/protocol-onboarding-')) throw new Error('Installation branch identity is invalid');
+  const summaries = await platform.list('/-/pulls?state=all&base_ref=main');
+  const pulls = [];
+  for (const summary of summaries.filter(item => branchName(item.head?.ref) === branch)) {
+    const detail = await platform.pull(Number(summary.number));
+    if (branchName(detail.head?.ref) !== branch || typeof detail.body !== 'string') throw new Error('Installation PR detail is unreadable or changed branch');
+    pulls.push(detail);
+  }
+  return pulls;
+}
+
 export async function preparePropagated({ platform, store, root, number, expected, wait = sleep, elapsedClock = Date.now }) {
   const start = elapsedClock(); let pull;
   for (;;) {
@@ -134,7 +163,7 @@ export async function refreshInstallerPolicy({ platform, store, root, pull, prep
   if (ref.commit?.sha !== preparation.headSha) throw new Error('Refreshed installation branch differs from the reviewed source');
   await freezeInstallerSource(platform, { head: { sha: preparation.headSha, ref: branch } });
   const marker = `installer-policy-refresh:${pull.number}:${preparation.headSha}:${preparation.mainSha}`;
-  const replacement = await createOnce({ list: () => platform.list('/-/pulls?state=all&base_ref=main'), match: item => branchName(item.head?.ref) === branch && String(item.body).includes(`<!-- ${marker} -->`),
+  const replacement = await createOnce({ list: () => installationPulls(platform, branch), match: item => branchName(item.head?.ref) === branch && String(item.body).includes(`<!-- ${marker} -->`),
     create: () => platform.call('/-/pulls', { method: 'POST', body: { head: branch, base: 'main', title: pull.title, body: `${pull.body}\n\n<!-- ${marker} -->\n\n同一准确源码在现行 AI 交付规则下重新执行完整独立审查与原有门禁，真实合入后关闭被替代 #${pull.number}，源分支保留。` } }) });
   const number = Number(replacement.number);
   if (!Number.isSafeInteger(number) || number <= 0 || number === pull.number) throw new Error('Refreshed installer identity is invalid');
@@ -192,7 +221,7 @@ export async function prepareRepository({ repo, token, sourceRoot, sourceSha, so
     }
     const branch = `chore/protocol-onboarding-delivery-${plan.marker.packageHash.slice(0, 16)}-${mainSha.slice(0, 12)}`;
     const marker = `delivery-install:${plan.marker.packageHash}`;
-    const existingPulls = [...await platform.list('/-/pulls?state=open&base_ref=main'), ...await platform.list('/-/pulls?state=closed&base_ref=main')];
+    const existingPulls = await installationPulls(platform, branch);
     const prior = existingPulls.filter(p => branchName(p.head?.ref) === branch && String(p.body).includes(marker));
     if (prior.length > 1) throw new Error('Installation PR identity is ambiguous');
     if (prior.length) {
@@ -207,13 +236,13 @@ export async function prepareRepository({ repo, token, sourceRoot, sourceSha, so
       return { repo, status: pull.is_merged ? 'merged_pending_activation' : pull.state === 'open' ? 'waiting_checks' : 'closed_unmerged', number: pull.number, branch, packageHash: plan.marker.packageHash };
     }
     await ensureInstallationPolicy(platform, await store.read());
-    const issues = [...await platform.list('/-/issues?state=open'), ...await platform.list('/-/issues?state=closed')];
     const date = now.toISOString().slice(0, 10).replaceAll('-', '');
     const prefix = `T-${date.slice(0, 4)}-${date.slice(4)}`;
     const suffix = 1000 + parseInt(hash(`${repo}:${plan.marker.packageHash}`).slice(0, 8), 16) % 9000;
     const taskId = `${prefix}-${suffix}`;
+    const issues = await installationIssues(platform, taskId);
     if (issues.some(issue => String(issue.title).includes(taskId) && !String(issue.body).includes(marker))) throw new Error('Installation task number collides with another task');
-    const issue = await createOnce({ list: async () => [...await platform.list('/-/issues?state=open'), ...await platform.list('/-/issues?state=closed')],
+    const issue = await createOnce({ list: () => installationIssues(platform, taskId),
       match: item => String(item.body).includes(`<!-- ${marker} -->`),
       create: () => platform.call('/-/issues', { method: 'POST', body: { title: `[${taskId}] 安装普通研发自动交付`, body: taskCard(taskId, repo, plan.marker, [...plan.changes.keys()]) } }) });
     if (!Number.isSafeInteger(Number(issue.number)) || Number(issue.number) <= 0) throw new Error('Installation issue receipt is invalid');
@@ -240,7 +269,7 @@ export async function prepareRepository({ repo, token, sourceRoot, sourceSha, so
     }
     if ((await platform.main()).commit?.sha !== mainSha) throw new Error('Main advanced during installation; align branch and retry checks before activation');
     const body = `原仓必需检查保留，新增完整 CodeBuddy 和交付回归。安装范围及四问见 Issue #${issue.number} [${taskId}]。\n\n<!-- ${marker} -->\n\n<!-- workloom-delivery\n${JSON.stringify({ task_id: taskId, ready: true, depends_on: [], releases: [] })}\n-->`;
-    const pull = await createOnce({ list: () => platform.list('/-/pulls?state=open&base_ref=main'), match: p => branchName(p.head?.ref) === branch && String(p.body).includes(marker),
+    const pull = await createOnce({ list: () => installationPulls(platform, branch), match: p => branchName(p.head?.ref) === branch && String(p.body).includes(marker),
       create: () => platform.call('/-/pulls', { method: 'POST', body: { head: branch, base: 'main', title: `feat(base): 安装普通研发自动交付 [${taskId}]`, body } }) });
     const number = Number(pull.number); const expected = await git(['rev-parse', 'HEAD'], { cwd: root });
     await preparePropagated({ platform, store, root, number, expected });
