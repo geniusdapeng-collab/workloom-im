@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 541,
+  "revision": 543,
   "tasks": {
     "231": {
       "number": 231,
@@ -1886,7 +1886,7 @@
           "protocol": 36
         }
       },
-      "updatedAt": 1791248409854,
+      "updatedAt": 1791248709100,
       "headSha": "4d9806c6ae1e540a417d5542b081e42c79dbae05",
       "intent": {
         "taskId": "T-2026-1006-1003",
@@ -15502,6 +15502,56 @@
       },
       "previous": "1547fbf3cec81daa0c5eb68ae6b06caf50908ea3cd41b58b4908ec267440a513",
       "digest": "756dc38fa7045a5544e37a01d7a102159627bccf33ceec4f42bb34a0ee5eb065"
+    },
+    {
+      "sequence": 542,
+      "at": "2026-10-06T01:05:09.100Z",
+      "kind": "task",
+      "data": {
+        "number": 247,
+        "patch": {
+          "headSha": "4d9806c6ae1e540a417d5542b081e42c79dbae05",
+          "mainSha": "d20bbbf6f5f7347647484208227251cc01b02c21",
+          "branch": "task/T-2026-1006-1003",
+          "intent": {
+            "taskId": "T-2026-1006-1003",
+            "ready": true,
+            "dependsOn": [
+              243
+            ],
+            "releases": []
+          },
+          "originalBody": "十二仓真实首轮安装的静态门禁失败来自新增 CI/runtime 后目标开源清单未刷新，以及只读 API 429。安装器现在使用完整的任务专属检出，执行目标自己的离线生成器 write/check，并保留目标业务依赖和生成器；不复制基座业务事实。只读查询有界退避，写请求仍不盲重试。\n\n同时修复真实 AI 指出的账号安装器文档位置、handoff 源码/草稿漂移、以任务号释放租约、候选正文/来源合并前复核、独立 AI 平台回执强制核验和发布重试计数。未修改行业业务、隔离范围、经营或秘密。任务卡 #245；依赖 #243 的真实 CNB 列表详情契约修复。\n\n验证：171 项交付、真实安装复制/清单、协议、舰队与同步回归通过，零失败、零跳过；源仓自身 OSS write/check 通过，14 文件准确会话凭据扫描零命中，diff 检查通过。包含真实目标生成器、稀疏检出前置拒绝、GET 429/网络错误与 POST 禁止重试、handoff CLI 并发漂移、候选篡改、活跃租约不可按任务号释放、独立 Bot/源码时间/创建者核验和耐久发布计数测试。\n\n已有原生平台证明：基座 #239 与不可修改候选 #241 的 CI、CodeBuddy 批准和普通 merge 已实际完成；main 原生状态写入已回读。原仓产品 CI 不以此代替，当前提交继续跑原仓必需 CI。\n\n<!-- delivery-rollout-closure:20261006 -->\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1006-1003\",\n  \"ready\": true,\n  \"depends_on\": [\n    243\n  ],\n  \"releases\": []\n}\n-->\n\n源仓静态门禁补充：保留 rawFile 只有 HTTP 404 返回不存在的既有严格契约，403/429/网络失败继续明确报错并脱敏。额外跑协议纳管安全、任务闭环、不可变发布、真实基座同步等调用方回归，182 + 61 = 243 项通过，零失败/跳过。已通过十一仓真实安装复制、目标自身 OSS write/check 与机制回归；其中不提供共享 UI 发布通道的产品仅跳过该通道专属用例。准确主干已纳入 #248 真实 AI 批准与全部 CI 后的普通合并 d20bbbf6。",
+          "files": [
+            "scripts/ci/verify-lock-conflict.mjs",
+            "scripts/delivery/install-account.mjs",
+            "scripts/delivery/install-assets.mjs",
+            "scripts/delivery/install-inventory.mjs",
+            "scripts/delivery/install-repository.mjs",
+            "scripts/delivery/install-repository.test.mjs",
+            "scripts/delivery/queue-controller.mjs",
+            "scripts/delivery/queue-model.mjs",
+            "scripts/delivery/queue-release.mjs",
+            "scripts/delivery/queue-runner.mjs",
+            "scripts/delivery/queue.test.mjs",
+            "scripts/tools/cnb-api.mjs"
+          ],
+          "status": "waiting_ci",
+          "ciSince": 1791248409854
+        }
+      },
+      "previous": "756dc38fa7045a5544e37a01d7a102159627bccf33ceec4f42bb34a0ee5eb065",
+      "digest": "47a5d380ed178ed9e8884ff185819102a8dbf31c1c91fcb7d0fc00600a5e0721"
+    },
+    {
+      "sequence": 543,
+      "at": "2026-10-06T01:05:13.795Z",
+      "kind": "transaction",
+      "data": {
+        "id": "41a038d3-a885-4684-a3a0-dd1ce4eb0301"
+      },
+      "previous": "47a5d380ed178ed9e8884ff185819102a8dbf31c1c91fcb7d0fc00600a5e0721",
+      "digest": "71da514ad9f5e6e88ac7ea66a2a752bf61f307b42e9f4c41d58034b1ec3cd6ab"
     }
   ]
 }
