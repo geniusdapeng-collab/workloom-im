@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 917,
+  "revision": 919,
   "tasks": {
     "231": {
       "number": 231,
@@ -359,10 +359,14 @@
           "sync": 45
         }
       },
-      "recoveryCount": 0,
-      "recoveryIntent": null,
-      "error": "不可修改候选 #251 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
-      "blockedUntil": 0,
+      "recoveryCount": 1,
+      "recoveryIntent": {
+        "headSha": "e2ca569a44f45beedf8f6ec250c3445d66f47c8b",
+        "reason": "不可修改候选 #254 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
+        "at": 1791260411617
+      },
+      "error": "不可修改候选 #254 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
+      "blockedUntil": 1791261011617,
       "recovery": {
         "marker": "delivery-repair:cfa169db20a977d331d56776",
         "reviewId": "2107292373919375360",
@@ -30211,6 +30215,37 @@
       },
       "previous": "34736381a0669aba743d025c0f075a3ec6776ce9d207e015305875e0658c22e1",
       "digest": "222767218a15a51d4d0546ae85686277c249d60e34a34f7a42e5a271e7d4404b"
+    },
+    {
+      "sequence": 918,
+      "at": "2026-10-06T04:20:11.617Z",
+      "kind": "task",
+      "data": {
+        "number": 232,
+        "patch": {
+          "status": "parked",
+          "recoveryCount": 1,
+          "recoveryIntent": {
+            "headSha": "e2ca569a44f45beedf8f6ec250c3445d66f47c8b",
+            "reason": "不可修改候选 #254 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
+            "at": 1791260411617
+          },
+          "error": "不可修改候选 #254 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
+          "blockedUntil": 1791261011617
+        }
+      },
+      "previous": "222767218a15a51d4d0546ae85686277c249d60e34a34f7a42e5a271e7d4404b",
+      "digest": "525dbcc119e4c09cd8e24b077d1d028439cca79f11a1a21be68a974091ef7f8a"
+    },
+    {
+      "sequence": 919,
+      "at": "2026-10-06T04:20:36.104Z",
+      "kind": "transaction",
+      "data": {
+        "id": "1835e8cd-6712-4e15-b761-4d3830fbee8b"
+      },
+      "previous": "525dbcc119e4c09cd8e24b077d1d028439cca79f11a1a21be68a974091ef7f8a",
+      "digest": "a3b54196f1c5290657fe15165dbc98c6c80f1bad9dd4802d26f164bdf925ddd5"
     }
   ]
 }
