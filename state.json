@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 468,
+  "revision": 470,
   "tasks": {
     "231": {
       "number": 231,
@@ -91,15 +91,11 @@
       "error": "不可修改候选 #244 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
       "blockedUntil": 1791248409520,
       "recoveryCount": 1,
-      "recoveryIntent": {
-        "headSha": "336ac33066e5b861e61b239df2e44fa882fb0127",
-        "reason": "不可修改候选 #244 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
-        "at": 1791247809520
-      },
+      "recoveryIntent": null,
       "recovery": {
-        "marker": "delivery-repair:e9d9a070f87064a15d6b9427",
-        "reviewId": "2107248274348613632",
-        "dispatchedAt": 1791242114144
+        "marker": "delivery-repair:0c0d4e87ac958aee59931471",
+        "reviewId": "2107272188579713024",
+        "dispatchedAt": 1791247815740
       },
       "admission": {
         "number": 231,
@@ -13139,6 +13135,34 @@
       },
       "previous": "5da6858a7d9cfacdee1e7907f5ed92ef23c36803d3f5b95ffca20f02adfdba52",
       "digest": "3eb326976f2f7df3faa9165d6bf52aea8c08e743b2669665484795331f971621"
+    },
+    {
+      "sequence": 469,
+      "at": "2026-10-06T00:50:09.520Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "recovery": {
+            "marker": "delivery-repair:0c0d4e87ac958aee59931471",
+            "reviewId": "2107272188579713024",
+            "dispatchedAt": 1791247815740
+          },
+          "recoveryIntent": null
+        }
+      },
+      "previous": "3eb326976f2f7df3faa9165d6bf52aea8c08e743b2669665484795331f971621",
+      "digest": "0bde7166869c9d06a502d1a326c13a619d1ef7282573b28cf414dc2361371f19"
+    },
+    {
+      "sequence": 470,
+      "at": "2026-10-06T00:50:15.740Z",
+      "kind": "transaction",
+      "data": {
+        "id": "16a11fc4-2f8b-4e33-891d-ab48e8b9d6fe"
+      },
+      "previous": "0bde7166869c9d06a502d1a326c13a619d1ef7282573b28cf414dc2361371f19",
+      "digest": "e57be0d943b140095bcb0786d355bc2657f1fbd4eba6ace57f6610f85c19b409"
     }
   ]
 }
