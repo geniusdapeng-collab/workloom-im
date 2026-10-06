@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 376,
+  "revision": 378,
   "tasks": {
     "231": {
       "number": 231,
@@ -1576,7 +1576,25 @@
       "attempts": {},
       "headSha": "dbc002361775b510673249145ce117f273085d49",
       "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
-      "updatedAt": 1791246307622
+      "updatedAt": 1791246326643,
+      "branch": "delivery/candidate/pr-243-a8335b9f449707d92f8d07971266a11a",
+      "intent": {
+        "taskId": "T-2026-1006-1002",
+        "ready": true,
+        "dependsOn": [
+          236
+        ],
+        "releases": []
+      },
+      "reviewAttemptAt": 1791246326643,
+      "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+      "reviewBuild": {
+        "sn": "cnb-p5d-1k479jete",
+        "headSha": "dbc002361775b510673249145ce117f273085d49",
+        "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+        "at": 1791246326643
+      },
+      "reviewDispatch": null
     }
   },
   "leases": {
@@ -10541,6 +10559,49 @@
       },
       "previous": "cd8a1f349144ea3f0740c89b04e5c93211dad3e506ca1e6b0c72be97ebed627b",
       "digest": "5240fb92280f0b1c72be89e55cc52692931e46738f2150e680088e6110dfc3ed"
+    },
+    {
+      "sequence": 377,
+      "at": "2026-10-06T00:25:26.643Z",
+      "kind": "task",
+      "data": {
+        "number": 246,
+        "patch": {
+          "status": "waiting_review",
+          "headSha": "dbc002361775b510673249145ce117f273085d49",
+          "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+          "branch": "delivery/candidate/pr-243-a8335b9f449707d92f8d07971266a11a",
+          "intent": {
+            "taskId": "T-2026-1006-1002",
+            "ready": true,
+            "dependsOn": [
+              236
+            ],
+            "releases": []
+          },
+          "reviewAttemptAt": 1791246326643,
+          "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+          "reviewBuild": {
+            "sn": "cnb-p5d-1k479jete",
+            "headSha": "dbc002361775b510673249145ce117f273085d49",
+            "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+            "at": 1791246326643
+          },
+          "reviewDispatch": null
+        }
+      },
+      "previous": "5240fb92280f0b1c72be89e55cc52692931e46738f2150e680088e6110dfc3ed",
+      "digest": "01081f6978c5cfa456b2477009618ccf336a46d1750956214842067a49ca4a41"
+    },
+    {
+      "sequence": 378,
+      "at": "2026-10-06T00:25:26.242Z",
+      "kind": "transaction",
+      "data": {
+        "id": "dd83a452-b73f-4049-9379-654ab2ecb74e"
+      },
+      "previous": "01081f6978c5cfa456b2477009618ccf336a46d1750956214842067a49ca4a41",
+      "digest": "d2ab0a3c1f3b7e0a16f320c6dfc5787f1fc9710e0483bd96dc5b2c8cf8b4e67b"
     }
   ]
 }
