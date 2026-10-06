@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { AGENT_RULE, appendAgentRule, applyInstallation, CORE_ASSETS, INSTALL_MARKER, installationPlan, readAssets } from './install-assets.mjs';
-import { createOnce, discoverAccount, ensureInstallationMainProtection, ensureInstallationPolicy, finishInstallation, freezeInstallerSource, pendingInstallerMerge, preparePropagated, refreshInstallerPolicy, traceInstallerMerge } from './install-repository.mjs';
+import { createOnce, discoverAccount, ensureInstallationMainProtection, ensureInstallationPolicy, finishInstallation, freezeInstallerSource, installationIssues, installationPulls, pendingInstallerMerge, preparePropagated, refreshInstallerPolicy, traceInstallerMerge } from './install-repository.mjs';
 import { appendEvent, emptyState, validRepoSlug } from './queue-model.mjs';
 import { branchProtectionPayload } from '../tools/cnb-api.mjs';
 import { git, GitStateStore } from './git-state.mjs';
@@ -149,6 +149,42 @@ test('object creation recovers a single actual lost acknowledgement without blin
   objects.push({ number: 2, marker: 'fixed' }); await assert.rejects(createOnce(options), /ambiguous/); assert.equal(writes, 1);
   await assert.rejects(createOnce({ list: async () => [], match: () => true, create: async () => { throw new Error('denied'); } }), /denied/);
 });
+test('actual CNB issue summaries without bodies recover the exact task and a lost create acknowledgement once', async () => {
+  const taskId = 'T-2026-1006-1002'; const marker = '<!-- delivery-install:exact -->';
+  let rows = []; let detail; let writes = 0;
+  const platform = { list: async path => {
+    assert.ok(!path.includes('keyword='));
+    return path.includes('state=open') ? rows : [];
+  }, call: async path => { assert.equal(path, '/-/issues/9'); return detail; } };
+  const options = { list: () => installationIssues(platform, taskId), match: item => item.body.includes(marker), create: async () => {
+    writes++; rows = [{ number: '9', title: `[${taskId}] 安装普通研发自动交付` }];
+    detail = { ...rows[0], body: marker }; throw new Error('lost create acknowledgement');
+  } };
+  assert.equal((await createOnce(options)).number, 9); assert.equal((await createOnce(options)).number, 9); assert.equal(writes, 1);
+  detail = { ...detail, body: undefined }; await assert.rejects(installationIssues(platform, taskId), /unreadable/);
+  detail = { ...detail, body: marker, number: 10 }; await assert.rejects(installationIssues(platform, taskId), /identity/);
+  await assert.rejects(installationIssues(platform, 'invalid'), /identity/); assert.equal(writes, 1);
+});
+test('full issue-title coverage catches a colliding task even when keyword indexing would omit it', async () => {
+  const taskId = 'T-2026-1006-1002'; let hydrated = 0;
+  const platform = { list: async path => path.includes('state=open') ? [{ number: 20, title: `[${taskId}] Another task` }, { number: 21, title: 'Unrelated task' }] : [],
+    call: async path => { assert.equal(path, '/-/issues/20'); hydrated++; return { number: 20, title: `[${taskId}] Another task`, body: 'Different ownership marker' }; } };
+  const issues = await installationIssues(platform, taskId);
+  assert.equal(issues.length, 1); assert.equal(hydrated, 1); assert.ok(!issues[0].body.includes('delivery-install:expected'));
+});
+test('empty CNB PR summary bodies recover only the exact installer branch; failures never become absent objects', async () => {
+  const branch = 'chore/protocol-onboarding-exact'; const marker = '<!-- delivery-install:exact -->';
+  let rows = [{ number: 3, head: { ref: 'task/unrelated' }, body: '' }]; let detail; let writes = 0; let reads = 0;
+  const platform = { list: async () => rows, pull: async number => { reads++; assert.equal(number, 8); return detail; } };
+  const options = { list: () => installationPulls(platform, branch), match: item => item.body.includes(marker), create: async () => {
+    writes++; rows.push({ number: 8, head: { ref: `refs/heads/${branch}` }, body: '' });
+    detail = { ...rows[1], body: marker }; throw new Error('lost acknowledgement');
+  } };
+  assert.equal((await createOnce(options)).number, 8); assert.equal((await createOnce(options)).number, 8); assert.equal(writes, 1); assert.equal(reads, 2);
+  detail = { ...detail, head: { ref: 'task/changed' } }; await assert.rejects(installationPulls(platform, branch), /changed branch/);
+  platform.pull = async () => { throw Object.assign(new Error('Permission denied'), { status: 403 }); };
+  await assert.rejects(createOnce(options), /Permission denied/); assert.equal(writes, 1);
+});
 test('weak installation main protection is tightened with exact readback and preserves extra signature restrictions', async () => {
   let rule = { ...branchProtectionPayload(), id: 'main-rule', required_commit_signatures: true, allow_master_pushes: true };
   const platform = { protections: async () => [rule], call: async (_path, options) => { rule = { ...options.body, id: rule.id }; throw new Error('lost settings acknowledgement'); } };
@@ -203,7 +239,7 @@ test('only a later exact positive merge rejection resolves the persisted install
 test('verified installation policy refresh creates one frozen same-source PR, prepares it immediately and preserves the original', async () => {
   let rules = [{ ...branchProtectionPayload(), id: 'main' }]; let ref; let pulls = []; let writes = 0; let prepared = 0;
   const original = { number: 7, title: 'feat(base): install', body: '<!-- delivery-install:exact -->', is_merged: false, head: { sha: head, ref: 'chore/protocol-onboarding-old' } };
-  const platform = { repo, protections: async () => rules, pull: async () => original, main: async () => ({ commit: { sha: main } }), list: async () => pulls,
+  const platform = { repo, protections: async () => rules, pull: async number => number === 7 ? original : pulls.find(pull => pull.number === number), main: async () => ({ commit: { sha: main } }), list: async () => pulls,
     call: async (path, options) => {
       if (options?.method === 'PATCH') { const rule = rules.find(rule => path.endsWith(rule.id)); Object.assign(rule, options.body); return {}; }
       if (path.includes('branch-protections') && options?.method === 'POST') { rules.push({ ...options.body, id: `rule-${rules.length}` }); return {}; }
