@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 586,
+  "revision": 588,
   "tasks": {
     "231": {
       "number": 231,
@@ -2723,7 +2723,23 @@
       "attempts": {},
       "headSha": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4",
       "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
-      "updatedAt": 1791249608983
+      "updatedAt": 1791249625184,
+      "branch": "delivery/candidate/pr-232-c09162a5430318ef96d0ad80c9272e76",
+      "intent": {
+        "taskId": "T-2026-1002-0001",
+        "ready": true,
+        "dependsOn": [],
+        "releases": []
+      },
+      "reviewAttemptAt": 1791249625184,
+      "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+      "reviewBuild": {
+        "sn": "cnb-h3v-1k47co2i3",
+        "headSha": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4",
+        "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+        "at": 1791249625184
+      },
+      "reviewDispatch": null
     }
   },
   "leases": {
@@ -17454,6 +17470,47 @@
       },
       "previous": "4d0dc9338dd0b3f6289e9f6a2cf86916b250a8a4b229a20aaffc29228517a76c",
       "digest": "eebd8103f460778a3d4999fb1dd6861f64e9e4e4ba08b9d06328241bad6f3d1a"
+    },
+    {
+      "sequence": 587,
+      "at": "2026-10-06T01:20:25.184Z",
+      "kind": "task",
+      "data": {
+        "number": 251,
+        "patch": {
+          "status": "waiting_review",
+          "headSha": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4",
+          "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+          "branch": "delivery/candidate/pr-232-c09162a5430318ef96d0ad80c9272e76",
+          "intent": {
+            "taskId": "T-2026-1002-0001",
+            "ready": true,
+            "dependsOn": [],
+            "releases": []
+          },
+          "reviewAttemptAt": 1791249625184,
+          "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+          "reviewBuild": {
+            "sn": "cnb-h3v-1k47co2i3",
+            "headSha": "70d82655ddccb6a2f7b64ddb4e171aa4a126fac4",
+            "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+            "at": 1791249625184
+          },
+          "reviewDispatch": null
+        }
+      },
+      "previous": "eebd8103f460778a3d4999fb1dd6861f64e9e4e4ba08b9d06328241bad6f3d1a",
+      "digest": "4bd6c62ffd8d770fd8228486f451815b9b8695836916f22ebeed0721c568e526"
+    },
+    {
+      "sequence": 588,
+      "at": "2026-10-06T01:20:24.669Z",
+      "kind": "transaction",
+      "data": {
+        "id": "5c483475-71ac-4aba-a102-4d1c8e475de2"
+      },
+      "previous": "4bd6c62ffd8d770fd8228486f451815b9b8695836916f22ebeed0721c568e526",
+      "digest": "7af91d0abe7725de11b900f90c10f3f316e6b5a1c6aa7859a75f561687924908"
     }
   ]
 }
