@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 1101,
+  "revision": 1103,
   "tasks": {
     "231": {
       "number": 231,
@@ -3048,21 +3048,17 @@
       },
       "reviewAttemptAt": 1791264041550,
       "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
-      "reviewBuild": null,
-      "reviewDispatch": {
+      "reviewBuild": {
+        "sn": "cnb-ehs-1k47sfrkh",
+        "buildLogUrl": "https://cnb.cool/workloom-ai/workloom-im/-/build/logs/cnb-ehs-1k47sfrkh",
+        "event": "api_trigger_delivery_review",
+        "message": "cnb received, but didn't finish build yet",
+        "success": true,
         "headSha": "a83ad4c3018ec5859552a146ae7205e68295f676",
         "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
-        "at": 1791266109207,
-        "title": "WorkLoom AI review #257 61b9990e1a3c0f92fbc0",
-        "knownBuilds": [
-          "cnb-p1l-1k47r33qn",
-          "cnb-ue7-1k47nteog",
-          "cnb-mmj-1k47ltib8",
-          "cnb-qi1-1k47jt20u",
-          "cnb-8uq-1k47fjoan",
-          "cnb-4h1-1k47efce9"
-        ]
+        "at": 1791266109207
       },
+      "reviewDispatch": null,
       "review": null,
       "error": "AI review did not pass without unresolved issues",
       "reviewFailures": {
@@ -37392,6 +37388,39 @@
       },
       "previous": "662e53db2ebcb265f7829dcdf897b5a9d27331b758b55c49331df21b6b48ae93",
       "digest": "a6daee36c641f241db20fc3760f5b87e80063881e98c80949ed5fff2a1bd3f1a"
+    },
+    {
+      "sequence": 1102,
+      "at": "2026-10-06T05:55:09.207Z",
+      "kind": "task",
+      "data": {
+        "number": 257,
+        "patch": {
+          "reviewBuild": {
+            "sn": "cnb-ehs-1k47sfrkh",
+            "buildLogUrl": "https://cnb.cool/workloom-ai/workloom-im/-/build/logs/cnb-ehs-1k47sfrkh",
+            "event": "api_trigger_delivery_review",
+            "message": "cnb received, but didn't finish build yet",
+            "success": true,
+            "headSha": "a83ad4c3018ec5859552a146ae7205e68295f676",
+            "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+            "at": 1791266109207
+          },
+          "reviewDispatch": null
+        }
+      },
+      "previous": "a6daee36c641f241db20fc3760f5b87e80063881e98c80949ed5fff2a1bd3f1a",
+      "digest": "8b420a1aa8bb527ec15157b0fe0c436d8fd6e6254c1a1d25c0dbf2771f75884b"
+    },
+    {
+      "sequence": 1103,
+      "at": "2026-10-06T05:55:23.558Z",
+      "kind": "transaction",
+      "data": {
+        "id": "1f411340-c671-47da-972d-13000bd9f89e"
+      },
+      "previous": "8b420a1aa8bb527ec15157b0fe0c436d8fd6e6254c1a1d25c0dbf2771f75884b",
+      "digest": "cd3b11c86835999ccfdb011ddacab5202c5440236f8edd7b10a8c67a084c1299"
     }
   ]
 }
