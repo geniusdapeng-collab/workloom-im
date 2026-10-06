@@ -1,0 +1,15 @@
+PASS 私有集群未监听 TCP（listen_addresses=""）
+PASS DATABASE_URL 指向 runner 私有 Unix socket
+PASS app/gateway 角色均为 NOSUPERUSER/NOBYPASSRLS
+actor={"id":"company-ceo","type":"agent","readonly":false,"fenceBindings":["R1","R2"]}
+PASS 补齐名册后 actor 取得声明的 fence_bindings
+beat={"eventId":"E-9100","via":"rule"}
+PASS ceo.briefing 真实落库并返回 eventId
+PASS 事件可回读且 action 为 ceo.briefing
+PASS 事件 who.id 归因为 company-ceo
+{"mode":"after","failures":0,"result":"pass"}
+
+[pii] PII_SALT 未配置，使用 dev 占位盐（仅限开发/测试，生产必须注入 PII_SALT）
+
+exit_code=0 signal=none error=none
+assertion_validation={"ok":true,"errors":[]}

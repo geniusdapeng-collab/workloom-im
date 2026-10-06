@@ -1,0 +1,38 @@
+{
+  "schema": "workloom.evidence-run/v1",
+  "id": "MC-040-0-1791261928901",
+  "command": "node --import tsx scripts/repair-mc040-f210.mts before",
+  "exec": {
+    "file": "node",
+    "args": [
+      "--import",
+      "tsx",
+      "scripts/repair-mc040-f210.mts",
+      "before"
+    ]
+  },
+  "actor": "codebuddy",
+  "role": "repair",
+  "subject": {
+    "card_id": "MC-040",
+    "assertion_index": 0
+  },
+  "commit": "849a5a17e7f969d19eafed9eb6d31ca52e6a79f6",
+  "working_tree_dirty": false,
+  "started_at": "2026-10-06T04:45:28.901Z",
+  "finished_at": "2026-10-06T04:45:34.209Z",
+  "exit_code": 0,
+  "signal": null,
+  "validation": {
+    "ok": true,
+    "errors": []
+  },
+  "result": "pass",
+  "outputs": [
+    {
+      "path": "evidence/MC-040-0-1791261928901.txt",
+      "sha256": "763b4c8927f44b226adc823f9d94fe390a3694f0146fa3055818f7606efdad96",
+      "commit": "849a5a17e7f969d19eafed9eb6d31ca52e6a79f6"
+    }
+  ]
+}
