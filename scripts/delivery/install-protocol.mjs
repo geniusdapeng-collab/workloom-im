@@ -13,6 +13,14 @@ const INPUTS = Object.freeze({
   'verify-lock-conflict.mjs': '23e505efb698e6311e193ddb08fc6bee87b8684752834581a2690e4a8335138e',
   'verify-lock-conflict.test.mjs': 'efeec5d81bd0d8f6d083a8b92713f57ad499d80743ccc1c7a13989043a06b61a',
 });
+// Independently reviewed target main 8c19e677122398fee9b9751d18ac1d5811307d2f
+// binds CNB's raw generated merge title to its original, ordered Git parents.
+// These are paired migration metadata; target implementation stays in the target.
+const COMMIT_INPUTS = Object.freeze([
+  { 'verify-commit-msg.mjs': INPUTS['verify-commit-msg.mjs'], 'verify-commit-msg.test.mjs': INPUTS['verify-commit-msg.test.mjs'] },
+  { 'verify-commit-msg.mjs': '60ac648c8cd55cd157f7d25f6472ee2b4c47b6548205d3aafdaabee0004b2a2f',
+    'verify-commit-msg.test.mjs': '636467004a0a78c96d10f293f027100998431fc985904b2c3e8a229e2a01500b' },
+]);
 
 function lines(...rows) { return rows.join('\n'); }
 // This import exists in the generated target CI file, whose sibling is copied
@@ -178,9 +186,12 @@ export async function preserveBoundProtocol(assets, readTarget) {
     let content = await readTarget(PREFIX + name);
     if (name === 'verify-lock-conflict.mjs') content = original(content, LOCK_EDITS);
     if (name === 'verify-lock-conflict.test.mjs') content = original(content, TEST_EDITS);
-    if (typeof content !== 'string' || hash(content) !== digest) throw new Error('Hardened target protocol needs an explicit reviewed migration: ' + name);
+    const known = typeof content === 'string' && (name.startsWith('verify-commit-msg.')
+      ? COMMIT_INPUTS.some(inputs => inputs[name] === hash(content)) : hash(content) === digest);
+    if (!known) throw new Error('Hardened target protocol needs an explicit reviewed migration: ' + name);
     current[name] = content;
   }
+  if (!COMMIT_INPUTS.some(inputs => Object.entries(inputs).every(([name, digest]) => hash(current[name]) === digest))) throw new Error('Hardened target protocol checker/test versions differ; use one exact reviewed pair');
   let adaptedLock = current['verify-lock-conflict.mjs'];
   for (const [before, after] of LOCK_EDITS) adaptedLock = replaceExactly(adaptedLock, before, after);
   for (const [before, after] of URL_EDITS) adaptedLock = replaceExactly(adaptedLock, before, after);
