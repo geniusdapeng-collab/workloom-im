@@ -54,6 +54,44 @@ test("only explicit generic-CI value 1 excludes the exact four files; default an
   }
 });
 
+// apps/server 的四套契约同样要求任务专属私有集群与哨兵；泛化 CI 只在其
+// WORKLOOM_GENERIC_DB_CI=1 时排除它们，并保留 beforeAll 的 fail-closed 守卫。
+const taskOwnedServerFiles = [
+  "src/service/aipm.snapshot.pg.test.ts",
+  "src/service/devtools.cancel.pg.test.ts",
+  "src/service/devtools.thread.pg.test.ts",
+  "src/service/secretary.approval.pg.test.ts",
+];
+
+test("only explicit generic-CI value 1 excludes the exact four task-owned server files", async () => {
+  const previous = process.env.WORKLOOM_GENERIC_DB_CI;
+  try {
+    for (const [i, value] of [undefined, "0", "true", "1"].entries()) {
+      if (value === undefined) delete process.env.WORKLOOM_GENERIC_DB_CI;
+      else process.env.WORKLOOM_GENERIC_DB_CI = value;
+      const config = await import(`../apps/server/vitest.config.mjs?owned-contract-${i}`);
+      for (const file of taskOwnedServerFiles) {
+        assert.equal(config.default.test.exclude.includes(file), value === "1", `${value}:${file}`);
+      }
+      assert.deepEqual(config.taskOwnedPgTestFiles, taskOwnedServerFiles);
+      // 直接运行的默认发现面仍包含它们，守住 fail-closed 语义。
+      assert.equal(config.default.test.exclude.includes("src/service/devtools.scope.pg.test.ts"), false);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.WORKLOOM_GENERIC_DB_CI;
+    else process.env.WORKLOOM_GENERIC_DB_CI = previous;
+  }
+});
+
+test("server stage hands the four task-owned contracts to a dedicated runner via the generic-CI switch", () => {
+  const { parse } = createRequire(join(root, "packages/base/package.json"))("yaml");
+  const gate = parse(cnb)[".db-gate"];
+  const stage = gate.stages.find((item) => item.script?.includes("pnpm -C apps/server test"));
+  assert(stage, "server stage must exist in db-gate");
+  assert(stage.script.includes("WORKLOOM_GENERIC_DB_CI=1 pnpm -C apps/server test"));
+  assert(!stage.script.includes("vitest run src/service/secretary.approval.pg.test.ts"), "must not smuggle the task-owned suites into the generic server stage");
+});
+
 test("dedicated stage is mandatory in the actual PG17/pgvector db-gate, after Node/pnpm preparation", () => {
   const { parse } = createRequire(join(root, "packages/base/package.json"))("yaml");
   const config = parse(cnb);

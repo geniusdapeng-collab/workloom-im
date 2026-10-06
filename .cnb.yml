@@ -232,7 +232,11 @@ include:
       script: |
         set -a; . ./.env; set +a
         set -eu
-        pnpm -C apps/server test
+        # 四套专属 PG 契约（aipm.snapshot / devtools.cancel / devtools.thread /
+        # secretary.approval）要求任务专属私有集群与哨兵，通用 db-gate 不提供；
+        # 本开关把它们交给专属 runner 阶段，避免在通用发现面 fail closed。
+        # 与 packages/base 同一约定。
+        WORKLOOM_GENERIC_DB_CI=1 pnpm -C apps/server test
 
     - name: 全场景套件
       script: |
