@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 1408,
+  "revision": 1410,
   "tasks": {
     "231": {
       "number": 231,
@@ -384,17 +384,13 @@
         }
       },
       "recoveryCount": 1,
-      "recoveryIntent": {
-        "headSha": "bd865cc91b7ee8e28b2c585daf1f34d834c95bf2",
-        "reason": "不可修改候选 #260 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
-        "at": 1791275411481
-      },
+      "recoveryIntent": null,
       "error": "不可修改候选 #260 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
       "blockedUntil": 1791276011481,
       "recovery": {
-        "marker": "delivery-repair:41aeb69e785afc2fcf69fda6",
-        "reviewId": "2107371789471092736",
-        "dispatchedAt": 1791271562458
+        "marker": "delivery-repair:339bed8bec469fc66edb70f8",
+        "reviewId": "2107388165610967040",
+        "dispatchedAt": 1791275466832
       },
       "reviewFailures": null,
       "candidate": {
@@ -49347,6 +49343,34 @@
       },
       "previous": "3d408b4af7de75dc3d8e9a34474337765ec6a9b1c61c07800b6b894b30b34c6c",
       "digest": "5a75adccc28f9c282a67aef2a0795469d6f0d88c7e29148352e0a281bb0d62fc"
+    },
+    {
+      "sequence": 1409,
+      "at": "2026-10-06T08:30:11.481Z",
+      "kind": "task",
+      "data": {
+        "number": 232,
+        "patch": {
+          "recovery": {
+            "marker": "delivery-repair:339bed8bec469fc66edb70f8",
+            "reviewId": "2107388165610967040",
+            "dispatchedAt": 1791275466832
+          },
+          "recoveryIntent": null
+        }
+      },
+      "previous": "5a75adccc28f9c282a67aef2a0795469d6f0d88c7e29148352e0a281bb0d62fc",
+      "digest": "933e0e6709fc5b66096be36a97614dc543698ad40d84d65e9b0cd0a058b79cd1"
+    },
+    {
+      "sequence": 1410,
+      "at": "2026-10-06T08:31:06.832Z",
+      "kind": "transaction",
+      "data": {
+        "id": "b27c59ba-6caf-4c7c-8f76-57da8886eb88"
+      },
+      "previous": "933e0e6709fc5b66096be36a97614dc543698ad40d84d65e9b0cd0a058b79cd1",
+      "digest": "cef37542209949095a66294abfe0bd2f52aa058e6beed6d199513e3b86f41214"
     }
   ]
 }
