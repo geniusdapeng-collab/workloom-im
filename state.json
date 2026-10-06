@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 1512,
+  "revision": 1514,
   "tasks": {
     "231": {
       "number": 231,
@@ -3288,26 +3288,17 @@
       },
       "reviewAttemptAt": 1791277863152,
       "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
-      "reviewBuild": null,
-      "reviewDispatch": {
+      "reviewBuild": {
+        "sn": "cnb-81u-1k488qn5v",
+        "buildLogUrl": "https://cnb.cool/workloom-ai/workloom-im/-/build/logs/cnb-81u-1k488qn5v",
+        "event": "api_trigger_delivery_review",
+        "message": "cnb received, but didn't finish build yet",
+        "success": true,
         "headSha": "0aeae01c49aa00ee81ad9537c6b0a9c4a22462d0",
         "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
-        "at": 1791279015229,
-        "title": "WorkLoom AI review #262 dc181e37c4b3d8aa8b45",
-        "knownBuilds": [
-          "cnb-lnc-1k485c5hn",
-          "cnb-5ub-1k484q6c7",
-          "cnb-36f-1k481l2km",
-          "cnb-ll6-1k480glue",
-          "cnb-ehs-1k47sfrkh",
-          "cnb-p1l-1k47r33qn",
-          "cnb-ue7-1k47nteog",
-          "cnb-mmj-1k47ltib8",
-          "cnb-qi1-1k47jt20u",
-          "cnb-8uq-1k47fjoan",
-          "cnb-4h1-1k47efce9"
-        ]
+        "at": 1791279015229
       },
+      "reviewDispatch": null,
       "reviewFailures": {
         "headSha": "0aeae01c49aa00ee81ad9537c6b0a9c4a22462d0",
         "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
@@ -53411,6 +53402,39 @@
       },
       "previous": "7fa12cd9714cbc9243720047194115205cd2cd2584fbc0759cb4ddfea2223e06",
       "digest": "fc7e12929ecc18f4c747c8a3364e44927d16eb1e1accdddbd8fa1a42dffe001b"
+    },
+    {
+      "sequence": 1513,
+      "at": "2026-10-06T09:30:15.229Z",
+      "kind": "task",
+      "data": {
+        "number": 262,
+        "patch": {
+          "reviewBuild": {
+            "sn": "cnb-81u-1k488qn5v",
+            "buildLogUrl": "https://cnb.cool/workloom-ai/workloom-im/-/build/logs/cnb-81u-1k488qn5v",
+            "event": "api_trigger_delivery_review",
+            "message": "cnb received, but didn't finish build yet",
+            "success": true,
+            "headSha": "0aeae01c49aa00ee81ad9537c6b0a9c4a22462d0",
+            "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+            "at": 1791279015229
+          },
+          "reviewDispatch": null
+        }
+      },
+      "previous": "fc7e12929ecc18f4c747c8a3364e44927d16eb1e1accdddbd8fa1a42dffe001b",
+      "digest": "8c21c47f7c41398f8028db58ac64038365edfaef2ee8755aa776fb80522e0a9b"
+    },
+    {
+      "sequence": 1514,
+      "at": "2026-10-06T09:31:02.364Z",
+      "kind": "transaction",
+      "data": {
+        "id": "5a14f94e-33f8-46f4-90c3-78e43549f565"
+      },
+      "previous": "8c21c47f7c41398f8028db58ac64038365edfaef2ee8755aa776fb80522e0a9b",
+      "digest": "4610b1d7b978f71278a217ce14f1621fe3018f1e1539b8b0bbc4e3274527f803"
     }
   ]
 }
