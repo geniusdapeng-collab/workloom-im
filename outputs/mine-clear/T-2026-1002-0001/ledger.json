@@ -4,19 +4,19 @@
   "repo": "workspace",
   "repo_path": "/workspace",
   "title": "",
-  "created_at": "2026-10-06T00:30:20.770Z",
-  "updated_at": "2026-10-06T00:31:49.553Z",
+  "created_at": "2026-10-06T00:45:15.713Z",
+  "updated_at": "2026-10-06T00:47:31.674Z",
   "baseline": {
     "audit": {
-      "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee",
+      "commit": "67129d3b870cf2572aa0ad2e3bfaae7d04170923",
       "branch": "task/T-2026-1002-0001",
       "remote": "origin",
       "fetched_at": null,
       "fetch_status": "skipped",
-      "notes": "本地 HEAD 不是 origin/main 最新（云端 b9493467 / 本地 149c93c9）——按 §1.2 先对齐基线"
+      "notes": "审计基线 = 修复提交 67129d3（本轮源码改动全覆盖）；台账本身另以文档提交记录。"
     },
     "repair": {
-      "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee",
+      "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92",
       "reverified_problem_ids": []
     },
     "acceptance": {
@@ -102,21 +102,21 @@
       "evidence": [
         {
           "type": "code",
-          "ref": "packages/base/captain/loop.ts:23@149c93c921103ad4bedda6d6fa0e5a5369632bee",
+          "ref": "packages/base/captain/loop.ts:23@67129d3b870cf2572aa0ad2e3bfaae7d04170923",
           "sha256": "0fb599d5ec6b153f2c4887c4d07a47d2c3f7da02d15113350355a619fb4f21e4",
           "note": "loop.ceoActor 按 preset_key='company-ceo' 从 agents 名册解析 actor；缺行即空 fenceBindings → gateway 段①拒绝"
         },
         {
           "type": "code",
-          "ref": "scripts/seed.ts:619@149c93c921103ad4bedda6d6fa0e5a5369632bee",
-          "sha256": "aa18cad36c0b99da8cb8fad2273b8784de7a84b1e17dbd42390206bcf4c4cfa8",
+          "ref": "scripts/seed.ts:619@67129d3b870cf2572aa0ad2e3bfaae7d04170923",
+          "sha256": "359255aa777d13225eaed2f6e91c343938b6a6a94f7a6fb1f74caacd01f37cb1",
           "note": "修复前此处只有 Bundle 7 岗位入册，没有任何 company-ceo 行"
         }
       ],
       "root_cause": {
         "file": "scripts/seed.ts",
         "line": 620,
-        "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee",
+        "commit": "67129d3b870cf2572aa0ad2e3bfaae7d04170923",
         "symbol": "main()"
       },
       "trigger_path": "pnpm db:seed 后执行任一 ceo.* 写动作节拍",
@@ -134,14 +134,14 @@
           },
           "last_result": "pass",
           "run": {
-            "path": "runs/MC-040-0-1791246676615.json",
-            "sha256": "6879e155dc5cf8ac1f653dd3194760c9e2287d622afa1e82bc539b2732bf30a0",
-            "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee"
+            "path": "runs/MC-040-0-1791247611525.json",
+            "sha256": "5ec9f30d8caeaafb68e66497c964e3bd3b656f58a12fe9d3fb2ccdda68d9702f",
+            "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
           },
           "evidence": {
-            "path": "evidence/MC-040-0-1791246676615.txt",
-            "sha256": "559fcd2f9d63aec8c3bdb5d52ad68d6cc9871abc52468922276d27eecf9092f0",
-            "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee"
+            "path": "evidence/MC-040-0-1791247611525.txt",
+            "sha256": "6cf8b91153226c65cac920ad38c36dc18a86d57711e4329e1c4a2bd5eb84a759",
+            "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
           }
         },
         {
@@ -162,14 +162,14 @@
           },
           "last_result": "pass",
           "run": {
-            "path": "runs/MC-040-1-1791246690477.json",
-            "sha256": "b9d1a4f693c21e188235c7a69217c6c895055acdc0d38c618a50673952781523",
-            "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee"
+            "path": "runs/MC-040-1-1791247630455.json",
+            "sha256": "13e7bb7aa7221be9fed98d98d9c173e098f1f204c229ce6b8f25a3ba19926998",
+            "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
           },
           "evidence": {
-            "path": "evidence/MC-040-1-1791246690477.txt",
-            "sha256": "f1d270a814cb909210d561cbdc17be79fee26a634fb32bfd8e67104f2aa977e2",
-            "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee"
+            "path": "evidence/MC-040-1-1791247630455.txt",
+            "sha256": "e90e4876952e41a1bc5228e843daeaa142b13ca06f403e8dd62267c4a47e03c2",
+            "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
           }
         }
       ],
@@ -185,9 +185,9 @@
         "actor": "codebuddy",
         "role": "repair",
         "result": "pass",
-        "at": "2026-10-06T00:31:16.614Z",
-        "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee",
-        "finished_at": "2026-10-06T00:31:31.483Z"
+        "at": "2026-10-06T00:46:51.524Z",
+        "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92",
+        "finished_at": "2026-10-06T00:47:11.461Z"
       },
       "fixed_by": "codebuddy"
     },
@@ -202,13 +202,13 @@
       "evidence": [
         {
           "type": "code",
-          "ref": "scripts/suite.ts:2589@149c93c921103ad4bedda6d6fa0e5a5369632bee",
+          "ref": "scripts/suite.ts:2589@67129d3b870cf2572aa0ad2e3bfaae7d04170923",
           "sha256": "e3338994784f618ccb3ad6c6eb3954040a4ceabcde1323144e9f0c3348352cd2",
           "note": "夹具调用 activateRealMode 后无 finally 复位，工作区 dataMode 被永久写成 real"
         },
         {
           "type": "code",
-          "ref": "packages/runtime/src/tools.ts:42@149c93c921103ad4bedda6d6fa0e5a5369632bee",
+          "ref": "packages/runtime/src/tools.ts:42@67129d3b870cf2572aa0ad2e3bfaae7d04170923",
           "sha256": "78d110dfcf5281024d10e3dfac06c9cf719624a68b5adddf51ecb5605c03902e",
           "note": "executeDeclaredTool：!simulated 时返回 connector-required + synced:false → 线程转 failed"
         }
@@ -216,7 +216,7 @@
       "root_cause": {
         "file": "scripts/suite.ts",
         "line": 2589,
-        "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee",
+        "commit": "67129d3b870cf2572aa0ad2e3bfaae7d04170923",
         "symbol": "onboarding 经营主体写入后"
       },
       "trigger_path": "E2E 段执行到 H-13；门禁放行即污染全局工作区状态",
@@ -234,14 +234,14 @@
           },
           "last_result": "pass",
           "run": {
-            "path": "runs/MC-043-0-1791246695064.json",
-            "sha256": "40aebcf76105a911057fbe01ac98148977c1aa7d65a54bf6267b2098df136bba",
-            "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee"
+            "path": "runs/MC-043-0-1791247631526.json",
+            "sha256": "6fff2ba050a79dbf3afec253b5598b2fd3e6c899473e5a0a51c793fc4c328379",
+            "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
           },
           "evidence": {
-            "path": "evidence/MC-043-0-1791246695064.txt",
-            "sha256": "57ae5db04f3747d6fd898b22e8c6f688fa2b67933cb9a162f6f933c0168fe6b6",
-            "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee"
+            "path": "evidence/MC-043-0-1791247631526.txt",
+            "sha256": "684cfe986a0cccaa0a6c56a8e83690b531974ad55704f8e15af2f2eb11d159cd",
+            "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
           }
         }
       ],
@@ -257,9 +257,9 @@
         "actor": "codebuddy",
         "role": "repair",
         "result": "pass",
-        "at": "2026-10-06T00:31:35.063Z",
-        "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee",
-        "finished_at": "2026-10-06T00:31:49.553Z"
+        "at": "2026-10-06T00:47:11.525Z",
+        "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92",
+        "finished_at": "2026-10-06T00:47:31.674Z"
       },
       "fixed_by": "codebuddy"
     },
@@ -275,13 +275,13 @@
       "evidence": [
         {
           "type": "code",
-          "ref": "scripts/seed.ts:622@149c93c921103ad4bedda6d6fa0e5a5369632bee",
-          "sha256": "aa18cad36c0b99da8cb8fad2273b8784de7a84b1e17dbd42390206bcf4c4cfa8",
+          "ref": "scripts/seed.ts:622@67129d3b870cf2572aa0ad2e3bfaae7d04170923",
+          "sha256": "359255aa777d13225eaed2f6e91c343938b6a6a94f7a6fb1f74caacd01f37cb1",
           "note": "新增 agt-company-ceo 名册行，绑定基线围栏 R1/R2"
         },
         {
           "type": "code",
-          "ref": "scripts/suite.ts:120@149c93c921103ad4bedda6d6fa0e5a5369632bee",
+          "ref": "scripts/suite.ts:120@67129d3b870cf2572aa0ad2e3bfaae7d04170923",
           "sha256": "e3338994784f618ccb3ad6c6eb3954040a4ceabcde1323144e9f0c3348352cd2",
           "note": "ceoRosterActor() 从名册读围栏绑定，替换 R-22/R-24 的硬编码空 actor"
         }
@@ -307,14 +307,14 @@
           },
           "last_result": "pass",
           "run": {
-            "path": "runs/MC-101-0-1791246630199.json",
-            "sha256": "457ae87c7baaee22476e11f34faf55035cd7d8624a272dd5c2beb460410df6f0",
-            "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee"
+            "path": "runs/MC-101-0-1791247553297.json",
+            "sha256": "c355d52dd2fac3b73a8dd00876ccc2945ec3b36cc2252c0e0dcfae52f983a436",
+            "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
           },
           "evidence": {
-            "path": "evidence/MC-101-0-1791246630199.txt",
-            "sha256": "479d542fa0b588e5138cd6c155f5d9ae6585478111456f651e03a9aca2c9cdf8",
-            "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee"
+            "path": "evidence/MC-101-0-1791247553297.txt",
+            "sha256": "228520012f2b51220568d5a13b3e670f97f0a6bb5ec2ed6f78595ff7385a9b05",
+            "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
           }
         },
         {
@@ -330,14 +330,14 @@
           },
           "last_result": "pass",
           "run": {
-            "path": "runs/MC-101-1-1791246641242.json",
-            "sha256": "41782dc7dd4f41f70f36047d55ee2f3921006fbac35994cac8fb0a007f42e14d",
-            "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee"
+            "path": "runs/MC-101-1-1791247570323.json",
+            "sha256": "67fda18fb64f0921f006ceb53ae6a75bdf3812b6f65cfc57dbd47d9280cae317",
+            "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
           },
           "evidence": {
-            "path": "evidence/MC-101-1-1791246641242.txt",
-            "sha256": "0e60affbd9ba2c5c280f0702bfc90d908e214a63507df731cf84e9c65107c7f1",
-            "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee"
+            "path": "evidence/MC-101-1-1791247570323.txt",
+            "sha256": "2f2d81af280c14e918b2f85e48061f7ae1964d62dd50cb2187c64ad6e29be176",
+            "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
           }
         }
       ],
@@ -355,9 +355,9 @@
         "actor": "codebuddy",
         "role": "repair",
         "result": "pass",
-        "at": "2026-10-06T00:30:30.198Z",
-        "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee",
-        "finished_at": "2026-10-06T00:30:53.321Z"
+        "at": "2026-10-06T00:45:53.296Z",
+        "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92",
+        "finished_at": "2026-10-06T00:46:28.699Z"
       }
     },
     {
@@ -372,7 +372,7 @@
       "evidence": [
         {
           "type": "code",
-          "ref": "scripts/suite.ts:2589@149c93c921103ad4bedda6d6fa0e5a5369632bee",
+          "ref": "scripts/suite.ts:2589@67129d3b870cf2572aa0ad2e3bfaae7d04170923",
           "sha256": "e3338994784f618ccb3ad6c6eb3954040a4ceabcde1323144e9f0c3348352cd2",
           "note": "进入用例前快照 archive，finally 按原文写回；门禁断言与负例强度不变"
         }
@@ -396,14 +396,14 @@
           },
           "last_result": "pass",
           "run": {
-            "path": "runs/MC-102-0-1791246656955.json",
-            "sha256": "c88ab733d4d8712054fc4e17c556e67a7960323926ef80aa9fc4ed0bf2135ce9",
-            "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee"
+            "path": "runs/MC-102-0-1791247588770.json",
+            "sha256": "e08a0a58b1840299d214eaa4667d397ae34c12f0d403544c48cf3f6691214e58",
+            "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
           },
           "evidence": {
-            "path": "evidence/MC-102-0-1791246656955.txt",
-            "sha256": "68014d44583a5a9c4c1f360b81ee1c3850c2f7f723d5b47b36fd2dd13c625efd",
-            "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee"
+            "path": "evidence/MC-102-0-1791247588770.txt",
+            "sha256": "03fdd9d27295f5e1961d057b8ef774de6c37b16b368d26e8c51f01c8a2dee756",
+            "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
           }
         }
       ],
@@ -421,9 +421,9 @@
         "actor": "codebuddy",
         "role": "repair",
         "result": "pass",
-        "at": "2026-10-06T00:30:56.954Z",
-        "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee",
-        "finished_at": "2026-10-06T00:31:09.689Z"
+        "at": "2026-10-06T00:46:28.769Z",
+        "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92",
+        "finished_at": "2026-10-06T00:46:47.257Z"
       }
     }
   ],

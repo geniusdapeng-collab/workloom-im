@@ -426,10 +426,10 @@
 ✓ Z-08 B-07 superseded 必须是可查询状态（共享枚举 + 队列过滤）
 ✓ Z-09 A-03 线程执行必须原子认领：并发重入只允许一方执行
 ✓ Z-10 B-05 批准后副作用钩子：提交后回调一次，deduped 不重复触发
-[scheduler] 僵尸线程续跑 T-z-stmuvy1807-x3aojt → completed
+[scheduler] 僵尸线程续跑 T-z-stmuvykv5j-qcijo9 → completed
 ✓ Z-11 A-05 启动补扫：审批已通过而线程仍挂起时必须补续跑
 
-════════ 服务层用例：425/425 通过（10946ms）════════
+════════ 服务层用例：425/425 通过（14781ms）════════
 
 ▸ 启动 HTTP E2E 段（spawn server）……
 ✓ H-01 captain.theater 经营剧场聚合态（P0 首页数据源）
@@ -478,16 +478,16 @@
 ✓ H-44 E2E 端到端：dispatch → clarify 反问（含糊指令不建任务）
 ✓ H-45 E2E 端到端：dispatch 建任务 → threads.get 可查
 
-════════ HTTP E2E 用例：45/45 通过（1271ms）════════
+════════ HTTP E2E 用例：45/45 通过（1877ms）════════
 
 
 ════════════════════════════════════════
 套件总报告：470/470 通过，0 失败
 
 [auth] JWT_SECRET 长度 <32 字符，熵不足——生产环境请配置 ≥32 字符随机密钥
-[im-channels] 回执发送失败（审批 apr-suite-stmuvy1807-8gny7g，通道 dingtalk）： IM 平台抖动
+[im-channels] 回执发送失败（审批 apr-suite-stmuvykv5j-1qyic4，通道 dingtalk）： IM 平台抖动
 [captain] 宪章结构不合法 → 已按 disabled 兜底（fail-closed）：mode: Invalid option: expected one of "disabled"|"shadow"|"trial"|"suspended"|"active"
-[readable-id] 线程号 T-* 撞号 T-266（第 1/8 次），换号重试
+[readable-id] 线程号 T-* 撞号 T-386（第 1/8 次），换号重试
 
 exit_code=0 signal=none error=none
 assertion_validation={"ok":true,"errors":[]}

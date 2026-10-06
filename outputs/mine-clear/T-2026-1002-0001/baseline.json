@@ -5,20 +5,21 @@
   "repo_path": "/workspace",
   "remote": "origin",
   "audit": {
-    "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee",
+    "commit": "67129d3b870cf2572aa0ad2e3bfaae7d04170923",
     "branch": "task/T-2026-1002-0001",
     "remote": "origin",
     "remote_main": "b949346721360f3c20f10c628d5c7b214bc2b95e",
     "fetched_at": null,
     "fetch_status": "skipped",
-    "dirty_count": 0,
+    "dirty_count": 19,
     "notes": [
-      "本地 HEAD 不是 origin/main 最新（云端 b9493467 / 本地 149c93c9）——按 §1.2 先对齐基线"
+      "本地 HEAD 不是 origin/main 最新（云端 b9493467 / 本地 67129d3b）——按 §1.2 先对齐基线",
+      "工作树不干净（19 项未提交改动）：排雷结论只对已提交内容成立"
     ]
   },
   "smoke": {
     "status": "not-run",
     "notes": "M0 冒烟：健康检查 + 一条核心业务链路，跑完回填这里"
   },
-  "created_at": "2026-10-06T00:30:20.769Z"
+  "created_at": "2026-10-06T00:45:15.713Z"
 }

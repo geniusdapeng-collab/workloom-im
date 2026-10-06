@@ -1,6 +1,6 @@
 {
   "schema": "workloom.evidence-run/v1",
-  "id": "MC-040-1-1791246690477",
+  "id": "MC-040-1-1791247630455",
   "command": "pnpm -C packages/base exec vitest run captain/ceo-loop.test.ts",
   "exec": {
     "file": "pnpm",
@@ -19,10 +19,10 @@
     "card_id": "MC-040",
     "assertion_index": 1
   },
-  "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee",
+  "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92",
   "working_tree_dirty": false,
-  "started_at": "2026-10-06T00:31:30.477Z",
-  "finished_at": "2026-10-06T00:31:31.471Z",
+  "started_at": "2026-10-06T00:47:10.455Z",
+  "finished_at": "2026-10-06T00:47:11.448Z",
   "exit_code": 0,
   "signal": null,
   "validation": {
@@ -32,9 +32,9 @@
   "result": "pass",
   "outputs": [
     {
-      "path": "evidence/MC-040-1-1791246690477.txt",
-      "sha256": "f1d270a814cb909210d561cbdc17be79fee26a634fb32bfd8e67104f2aa977e2",
-      "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee"
+      "path": "evidence/MC-040-1-1791247630455.txt",
+      "sha256": "e90e4876952e41a1bc5228e843daeaa142b13ca06f403e8dd62267c4a47e03c2",
+      "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
     }
   ]
 }

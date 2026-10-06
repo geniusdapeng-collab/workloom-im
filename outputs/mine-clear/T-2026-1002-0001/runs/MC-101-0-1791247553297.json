@@ -1,6 +1,6 @@
 {
   "schema": "workloom.evidence-run/v1",
-  "id": "MC-101-0-1791246630199",
+  "id": "MC-101-0-1791247553297",
   "command": "pnpm suite",
   "exec": {
     "file": "pnpm",
@@ -14,10 +14,10 @@
     "card_id": "MC-101",
     "assertion_index": 0
   },
-  "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee",
+  "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92",
   "working_tree_dirty": false,
-  "started_at": "2026-10-06T00:30:30.199Z",
-  "finished_at": "2026-10-06T00:30:41.228Z",
+  "started_at": "2026-10-06T00:45:53.297Z",
+  "finished_at": "2026-10-06T00:46:10.308Z",
   "exit_code": 0,
   "signal": null,
   "validation": {
@@ -27,9 +27,9 @@
   "result": "pass",
   "outputs": [
     {
-      "path": "evidence/MC-101-0-1791246630199.txt",
-      "sha256": "479d542fa0b588e5138cd6c155f5d9ae6585478111456f651e03a9aca2c9cdf8",
-      "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee"
+      "path": "evidence/MC-101-0-1791247553297.txt",
+      "sha256": "228520012f2b51220568d5a13b3e670f97f0a6bb5ec2ed6f78595ff7385a9b05",
+      "commit": "a10bd6c91bffa183b0daa1559c745db51f48af92"
     }
   ]
 }
