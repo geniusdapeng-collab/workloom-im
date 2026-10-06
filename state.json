@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 1305,
+  "revision": 1307,
   "tasks": {
     "231": {
       "number": 231,
@@ -102,15 +102,11 @@
       "error": "不可修改候选 #259 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
       "blockedUntil": 1791273011834,
       "recoveryCount": 1,
-      "recoveryIntent": {
-        "headSha": "096b20e6711d50cd7473af33d370389f9bd79056",
-        "reason": "不可修改候选 #259 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
-        "at": 1791272411834
-      },
+      "recoveryIntent": null,
       "recovery": {
-        "marker": "delivery-repair:f1bb539aa3543aca214b9f5f",
-        "reviewId": "2107352776489738240",
-        "dispatchedAt": 1791267029391
+        "marker": "delivery-repair:76b4f2a2940d37b278eff40c",
+        "reviewId": "2107375427589414912",
+        "dispatchedAt": 1791272429850
       },
       "admission": {
         "number": 231,
@@ -45238,6 +45234,34 @@
       },
       "previous": "09d887b7e5fa9de1fb6e99f2522e0de813993f553ca48860c3edc8f654a800ff",
       "digest": "860c27ebfcaafb2b0b8072dc9951493fbee5d96dcd6828bb86b58c480997fc07"
+    },
+    {
+      "sequence": 1306,
+      "at": "2026-10-06T07:40:11.834Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "recovery": {
+            "marker": "delivery-repair:76b4f2a2940d37b278eff40c",
+            "reviewId": "2107375427589414912",
+            "dispatchedAt": 1791272429850
+          },
+          "recoveryIntent": null
+        }
+      },
+      "previous": "860c27ebfcaafb2b0b8072dc9951493fbee5d96dcd6828bb86b58c480997fc07",
+      "digest": "78209666480e215a9a6b622bb9cda173d1902ec020395ef94a61748319b9aa0c"
+    },
+    {
+      "sequence": 1307,
+      "at": "2026-10-06T07:40:29.850Z",
+      "kind": "transaction",
+      "data": {
+        "id": "910f88bc-b220-4be9-81a7-9f1399190969"
+      },
+      "previous": "78209666480e215a9a6b622bb9cda173d1902ec020395ef94a61748319b9aa0c",
+      "digest": "21d7976ddc9e890d051ec2b4c02237d4ffdfb2a9bacbeb851f82c36f3f38a4e5"
     }
   ]
 }
