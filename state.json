@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 2162,
+  "revision": 2165,
   "tasks": {
     "231": {
       "number": 231,
@@ -4372,16 +4372,16 @@
   },
   "leases": {
     "protocol": {
-      "owner": "platform-ai-migration/pr-264",
+      "owner": null,
       "generation": 75,
       "acquiredAt": 1791307249895,
-      "expiresAt": 1791308149895
+      "expiresAt": 1791307272202
     },
     "sync": {
-      "owner": "platform-ai-migration/pr-264",
+      "owner": null,
       "generation": 71,
       "acquiredAt": 1791307249895,
-      "expiresAt": 1791308149895
+      "expiresAt": 1791307272203
     },
     "dependencies": {
       "owner": null,
@@ -86597,6 +86597,48 @@
       },
       "previous": "bff3942d3240e22bdb83d96244bf3ea0b859ca365a537c7f41f91f42f50c2152",
       "digest": "cb90e7d6497ec693fd220892492059a1af7bb0293c4ffdd54f97522cd3afd268"
+    },
+    {
+      "sequence": 2163,
+      "at": "2026-10-06T17:21:12.202Z",
+      "kind": "lease_release",
+      "data": {
+        "scopes": [
+          "protocol"
+        ],
+        "owner": "platform-ai-migration/pr-264",
+        "generation": {
+          "protocol": 75
+        }
+      },
+      "previous": "cb90e7d6497ec693fd220892492059a1af7bb0293c4ffdd54f97522cd3afd268",
+      "digest": "01bbd37d9d20583f0f1288795d9f17d9612e0d818d5c88b9b8061ad06db9afe3"
+    },
+    {
+      "sequence": 2164,
+      "at": "2026-10-06T17:21:12.203Z",
+      "kind": "lease_release",
+      "data": {
+        "scopes": [
+          "sync"
+        ],
+        "owner": "platform-ai-migration/pr-264",
+        "generation": {
+          "sync": 71
+        }
+      },
+      "previous": "01bbd37d9d20583f0f1288795d9f17d9612e0d818d5c88b9b8061ad06db9afe3",
+      "digest": "10c408c378f419910550dc06923452f670fb5a7b32dd8170a806c2d601e6c6eb"
+    },
+    {
+      "sequence": 2165,
+      "at": "2026-10-06T17:21:05.808Z",
+      "kind": "transaction",
+      "data": {
+        "id": "cc6b5115-43c5-418c-ab2c-8008508d0db4"
+      },
+      "previous": "10c408c378f419910550dc06923452f670fb5a7b32dd8170a806c2d601e6c6eb",
+      "digest": "17ca3d78eab2199e2783ab4ecc28ef45baeb609da7fb57820a8fe0bf652b8a01"
     }
   ]
 }
