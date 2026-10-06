@@ -81,7 +81,7 @@ include:
           stage="$(mktemp -d "/tmp/workloom-runtime-${platform}-${arch}.XXXXXX")"
           node scripts/runtime-deps-lock.mjs stage "$stage" --os "$platform" --cpu "$arch"
         done
-        node --test scripts/product-runtime.test.mjs scripts/payload-policy.test.mjs scripts/pack-nm-merge.test.mjs scripts/runtime-deps-lock.test.mjs
+        node --test scripts/product-runtime.test.mjs scripts/payload-policy.test.mjs scripts/pack-nm-merge.test.mjs scripts/runtime-deps-lock.test.mjs scripts/generate-pc-page-registry.test.mjs
 
     - name: typecheck 全包
       script: |
@@ -93,6 +93,7 @@ include:
         set -eu
         pnpm product:verify
         pnpm bundle:governance:test
+        pnpm test:base-logic
         pnpm bundle:governance
         pnpm projections:check
         pnpm ui:governance
@@ -118,7 +119,7 @@ include:
         node --test scripts/delivery/*.test.mjs
         node --test scripts/acceptance/lib/profile-contract.test.mjs scripts/acceptance/profile-check.test.mjs scripts/acceptance/outcome.test.mjs scripts/acceptance/fleet-run.test.mjs scripts/acceptance/lib/environment-safety.test.mjs scripts/acceptance/lib/outcome-contract.test.mjs scripts/acceptance/lib/live/budget.test.mjs scripts/acceptance/lib/live/live-truth.test.mjs scripts/acceptance/lib/live/providers.test.mjs scripts/acceptance/lib/live/usage.test.mjs scripts/acceptance/lib/live/audit.test.mjs scripts/acceptance/lib/live/providers-http.test.mjs scripts/acceptance/lib/live/dsh-process.test.mjs scripts/acceptance/lib/live/live-cli-wire.test.mjs scripts/acceptance/lib/live/product.test.mjs scripts/acceptance/lib/live/media-negative.test.mjs scripts/acceptance/lib/live/live-cli.test.mjs
         node --test scripts/capability-status.test.mjs scripts/tools/provision-safety.test.mjs scripts/ui-release-registration.test.mjs
-        node --test apps/desktop/electron/bootstrap.test.cjs scripts/desktop-bootstrap-db.test.mjs
+        node --test apps/desktop/electron/bootstrap.test.cjs apps/desktop/electron/diagnostics.test.cjs scripts/desktop-bootstrap-db.test.mjs scripts/desktop-web.test.mjs scripts/desktop-seed-policy.test.cjs
 
     - name: 持续交付与不可变发布回归
       script: |
@@ -633,7 +634,7 @@ include:
         pnpm product:verify
         pnpm bundle:governance
         pnpm projections:check
-        node --test apps/desktop/electron/bootstrap.test.cjs scripts/desktop-bootstrap-db.test.mjs
+        node --test apps/desktop/electron/bootstrap.test.cjs apps/desktop/electron/diagnostics.test.cjs scripts/desktop-bootstrap-db.test.mjs scripts/desktop-web.test.mjs scripts/desktop-seed-policy.test.cjs
         pnpm exec vitest run apps/web/src/voice/VoiceEngine.test.ts
         pnpm -C apps/web build
     - name: 载荷装配 + DMG（arm64 / x64）+ 拆包验收
