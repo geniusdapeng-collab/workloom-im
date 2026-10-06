@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 490,
+  "revision": 492,
   "tasks": {
     "231": {
       "number": 231,
-      "status": "parked",
+      "status": "aligning",
       "firstSeen": 1791242108737,
       "attempts": {},
       "headSha": "336ac33066e5b861e61b239df2e44fa882fb0127",
@@ -85,8 +85,12 @@
       ],
       "ciSince": 1791245708190,
       "updatedAt": 1791247835500,
-      "alignmentCount": 0,
-      "alignmentIntent": null,
+      "alignmentCount": 1,
+      "alignmentIntent": {
+        "headSha": "336ac33066e5b861e61b239df2e44fa882fb0127",
+        "mainSha": "d20bbbf6f5f7347647484208227251cc01b02c21",
+        "at": 1791247835500
+      },
       "review": null,
       "error": "不可修改候选 #244 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
       "blockedUntil": 0,
@@ -13995,6 +13999,36 @@
       },
       "previous": "8b863883b0bc8d3062e5a9539eaccc24a23e0e0b4430b23641c46d79a8e8e217",
       "digest": "ed0fbf9838e126a4fd3a2a0bb1290d4b05fa5252ad3037729efa35a38db0b5d0"
+    },
+    {
+      "sequence": 491,
+      "at": "2026-10-06T00:50:35.500Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "status": "aligning",
+          "alignmentCount": 1,
+          "alignmentIntent": {
+            "headSha": "336ac33066e5b861e61b239df2e44fa882fb0127",
+            "mainSha": "d20bbbf6f5f7347647484208227251cc01b02c21",
+            "at": 1791247835500
+          },
+          "review": null
+        }
+      },
+      "previous": "ed0fbf9838e126a4fd3a2a0bb1290d4b05fa5252ad3037729efa35a38db0b5d0",
+      "digest": "e155ff3b54ec91fc9c64fd12a637f4f94aa02e6459552c8d5b3f156df64b9d17"
+    },
+    {
+      "sequence": 492,
+      "at": "2026-10-06T00:50:39.243Z",
+      "kind": "transaction",
+      "data": {
+        "id": "3cf58fcc-e523-4ed8-b7c6-c10ea236039e"
+      },
+      "previous": "e155ff3b54ec91fc9c64fd12a637f4f94aa02e6459552c8d5b3f156df64b9d17",
+      "digest": "98fdc060bea68380987bed922179ca9db41a10acd903c03533cdf2d9734295d4"
     }
   ]
 }
