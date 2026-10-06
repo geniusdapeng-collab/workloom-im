@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 2219,
+  "revision": 2224,
   "tasks": {
     "231": {
       "number": 231,
@@ -4529,14 +4529,34 @@
         "marker": "delivery-origin:266:716eb682583f0dbb00ff577d77ce850294973f30:2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
         "at": 1791308708799
       }
+    },
+    "267": {
+      "number": 267,
+      "status": "developing",
+      "firstSeen": 1791308773962,
+      "attempts": {},
+      "admission": {
+        "number": 267,
+        "headSha": "716eb682583f0dbb00ff577d77ce850294973f30",
+        "mainSha": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+        "filesHash": "1e314743f6bd3ad3d5f0cce93d726f8db4924c58b440332a713b3b7626ba4dc9",
+        "scopes": [
+          "protocol"
+        ],
+        "owner": "admission/pr-267",
+        "generation": {
+          "protocol": 79
+        }
+      },
+      "updatedAt": 1791308773962
     }
   },
   "leases": {
     "protocol": {
       "owner": null,
-      "generation": 78,
-      "acquiredAt": 1791308427595,
-      "expiresAt": 1791308427595
+      "generation": 79,
+      "acquiredAt": 1791308773962,
+      "expiresAt": 1791308773962
     },
     "sync": {
       "owner": null,
@@ -89142,6 +89162,93 @@
       },
       "previous": "aa25646ae35b84c1006db764c9c664f9905380b76f02449befb9c3ff41370f56",
       "digest": "9c289ce995ec1ed64a72227ee8ec105f0d45d24ae863186fa009ec9fe66296bd"
+    },
+    {
+      "sequence": 2220,
+      "at": "2026-10-06T17:46:13.962Z",
+      "kind": "lease_acquire",
+      "data": {
+        "scopes": [
+          "protocol"
+        ],
+        "owner": "admission/pr-267",
+        "generation": {
+          "protocol": 79
+        }
+      },
+      "previous": "9c289ce995ec1ed64a72227ee8ec105f0d45d24ae863186fa009ec9fe66296bd",
+      "digest": "623b764a8129a9abe7586e89fb3287be87b9fa5b423db1954b6595b4681bdfa4"
+    },
+    {
+      "sequence": 2221,
+      "at": "2026-10-06T17:46:13.962Z",
+      "kind": "lease_release",
+      "data": {
+        "scopes": [
+          "protocol"
+        ],
+        "owner": "admission/pr-267",
+        "generation": {
+          "protocol": 79
+        }
+      },
+      "previous": "623b764a8129a9abe7586e89fb3287be87b9fa5b423db1954b6595b4681bdfa4",
+      "digest": "e6288a7cffda84cbf7c00347503152dfdd0cb5946a646e3852d9d07ede1eeea2"
+    },
+    {
+      "sequence": 2222,
+      "at": "2026-10-06T17:46:13.962Z",
+      "kind": "source_admitted",
+      "data": {
+        "number": 267,
+        "headSha": "716eb682583f0dbb00ff577d77ce850294973f30",
+        "mainSha": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+        "filesHash": "1e314743f6bd3ad3d5f0cce93d726f8db4924c58b440332a713b3b7626ba4dc9",
+        "scopes": [
+          "protocol"
+        ],
+        "owner": "admission/pr-267",
+        "generation": {
+          "protocol": 79
+        }
+      },
+      "previous": "e6288a7cffda84cbf7c00347503152dfdd0cb5946a646e3852d9d07ede1eeea2",
+      "digest": "5990bb5e726d4c9fff9fe0715c5e984aea3a3013630c3dfbf1bfc486916d803f"
+    },
+    {
+      "sequence": 2223,
+      "at": "2026-10-06T17:46:13.962Z",
+      "kind": "task",
+      "data": {
+        "number": 267,
+        "patch": {
+          "admission": {
+            "number": 267,
+            "headSha": "716eb682583f0dbb00ff577d77ce850294973f30",
+            "mainSha": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+            "filesHash": "1e314743f6bd3ad3d5f0cce93d726f8db4924c58b440332a713b3b7626ba4dc9",
+            "scopes": [
+              "protocol"
+            ],
+            "owner": "admission/pr-267",
+            "generation": {
+              "protocol": 79
+            }
+          }
+        }
+      },
+      "previous": "5990bb5e726d4c9fff9fe0715c5e984aea3a3013630c3dfbf1bfc486916d803f",
+      "digest": "5f5f04ed5b9ed79b4b76e44a115a031f2f3102345fc046e96805e5f4d84fe6fe"
+    },
+    {
+      "sequence": 2224,
+      "at": "2026-10-06T17:46:10.565Z",
+      "kind": "transaction",
+      "data": {
+        "id": "source-admit:267:716eb682583f0dbb00ff577d77ce850294973f30:2d350b7ec969abb0749f8d8d60a2212b8872e3e0"
+      },
+      "previous": "5f5f04ed5b9ed79b4b76e44a115a031f2f3102345fc046e96805e5f4d84fe6fe",
+      "digest": "206aed37a9a8ca0d13191ee493a46812017a34cdb46ccddf93ab847c742aa599"
     }
   ]
 }
