@@ -163,11 +163,18 @@ test("正式与应急装配线统一使用每产品 lock、目标 OS/CPU 和身�
 });
 
 async function verifyProductionPreview({ legacy, withVitest = legacy, rejectMissingVitest = false }) {
+  // legacy 档位复现“已发布稳定客户端”的 vitest/config 运行时导入：只有当前
+  // 兼容闭包确实包含 Vitest 时才能指望它在缺少该依赖的隔离目录里成功启动。
   const [{ spawnSync }, { copyFileSync, existsSync, realpathSync, symlinkSync }, { dirname }, { createRequire }] = await Promise.all([
     import("node:child_process"), import("node:fs"), import("node:path"), import("node:module"),
   ]);
   const verified = verifyRuntimeDepsLock(REPOSITORY_ROOT);
-  assert.match(verified.manifest.dependencies.vitest, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u);
+  // 兼容闭包只在客户端配置运行期导入 vitest/config 时存在；两种档位都要求
+  // 它一旦存在就必须是精确的已解析版本，不允许范围/链接/别名。
+  if ("vitest" in verified.manifest.dependencies) {
+    assert.match(verified.manifest.dependencies.vitest, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u);
+  }
+  assert.match(String(verified.manifest.dependencies.vite), /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u);
   const resolvers = [
     createRequire(join(REPOSITORY_ROOT, "apps/web/package.json")),
     createRequire(join(REPOSITORY_ROOT, "node_modules/.pnpm/node_modules/package.json")),
@@ -330,12 +337,14 @@ test("当前产品配置派生的纯类型 Vitest 导入在无 Vitest 的隔离�
   await verifyProductionPreview({ legacy: false });
 });
 
-test("当前产品配置的稳定客户端 vitest/config 变体使用精确生产兼容依赖启动真实 preview", { timeout: 75_000 }, async () => {
-  await verifyProductionPreview({ legacy: true });
+// 当前产品配置只引用 Vitest 类型，兼容闭包里没有 Vitest；稳定客户端的
+// vitest/config 运行时导入由下面的隔离 fixture 用例证明（不需要新增依赖）。
+test("当前产品配置不携带 Vitest 运行时兼容依赖，仍在真实 preview 中服务", { timeout: 75_000 }, async () => {
+  await verifyProductionPreview({ legacy: true, withVitest: false });
 });
 
-test("Vitest 兼容闭包拒绝非法 pin，稳定配置缺 Vitest 时真实加载失败", { timeout: 75_000 }, async () => {
-  const { buildRuntimeDepsManifest } = await import("./runtime-deps-lock.mjs");
+test("只引用 Vitest 类型的产品不强制兼容依赖，运行期导入才要求并校验", { timeout: 75_000 }, async () => {
+  const { buildRuntimeDepsManifest, runtimeImportsVitestConfig } = await import("./runtime-deps-lock.mjs");
   const root = mkdtempSync(join(tmpdir(), "workloom-runtime-vitest-pin-"));
   const policy = { includePlatformOps: false };
   const version = "5.0.1";
@@ -352,22 +361,41 @@ test("Vitest 兼容闭包拒绝非法 pin，稳定配置缺 Vitest 时真实加�
       writeFileSync(join(root, "apps", app, "package.json"), '{"private":true}\n');
     }
     write(source, lock);
+
+    // 仓根 package.json 不在 base-sync 分发范围内：只引用 Vitest 类型的产品
+    // 不得被强制要求声明该依赖（否则所有子仓的锁校验与桌面装配直接失败）。
+    const typeOnly = '/// <reference types="vitest/config" />\nimport { defineConfig } from "vite";\n';
+    const runtimeImport = 'import { defineConfig } from "vitest/config";\n';
+    writeFileSync(join(root, "apps/web/vite.config.ts"), typeOnly);
+    assert.equal(runtimeImportsVitestConfig(root), false);
+    assert.ok(!("vitest" in buildRuntimeDepsManifest(root, policy).dependencies));
+    const undeclared = structuredClone(source);
+    delete undeclared.devDependencies.vitest;
+    const undeclaredLock = structuredClone(lock);
+    delete undeclaredLock.importers["."].devDependencies.vitest;
+    write(undeclared, undeclaredLock);
+    assert.deepEqual(buildRuntimeDepsManifest(root, policy).dependencies, {});
+
+    // 产品自身的客户端配置确实在运行期导入 vitest/config 时才纳入兼容闭包。
+    writeFileSync(join(root, "apps/web/vite.config.ts"), runtimeImport);
+    assert.equal(runtimeImportsVitestConfig(root), true);
+    write(source, lock);
     assert.deepEqual(buildRuntimeDepsManifest(root, policy).dependencies, { vitest: version });
 
     const missingDeclaration = structuredClone(source);
     delete missingDeclaration.devDependencies.vitest;
     write(missingDeclaration, lock);
-    assert.throws(() => buildRuntimeDepsManifest(root, policy), /Vitest.*缺失.*specifier/u);
+    assert.throws(() => buildRuntimeDepsManifest(root, policy), /运行时导入 vitest\/config.*devDependencies\.vitest/u);
 
     const missingLock = structuredClone(lock);
     delete missingLock.importers["."].devDependencies.vitest;
     write(source, missingLock);
-    assert.throws(() => buildRuntimeDepsManifest(root, policy), /Vitest.*缺失.*specifier/u);
+    assert.throws(() => buildRuntimeDepsManifest(root, policy), /运行时导入 vitest\/config.*devDependencies\.vitest/u);
 
     const drift = structuredClone(lock);
     drift.importers["."].devDependencies.vitest.specifier = "^5.0.2";
     write(source, drift);
-    assert.throws(() => buildRuntimeDepsManifest(root, policy), /Vitest.*specifier 漂移/u);
+    assert.throws(() => buildRuntimeDepsManifest(root, policy), /运行时导入 vitest\/config.*devDependencies\.vitest/u);
 
     for (const invalid of ["", "^5.0.1", "workspace:*", "link:../vitest", "npm:other@5.0.1", null]) {
       const nonExact = structuredClone(lock);
@@ -375,6 +403,13 @@ test("Vitest 兼容闭包拒绝非法 pin，稳定配置缺 Vitest 时真实加�
       write(source, nonExact);
       assert.throws(() => buildRuntimeDepsManifest(root, policy), /Vitest.*精确版本/u, `拒绝 ${String(invalid)}`);
     }
+
+    // 运行期导入但缺声明必须失败闭合，不能静默降级发行一个加载即失败的载荷。
+    writeFileSync(join(root, "apps/web/vite.config.ts"), runtimeImport);
+    const runtimeUndeclared = structuredClone(source);
+    delete runtimeUndeclared.devDependencies.vitest;
+    write(runtimeUndeclared, lock);
+    assert.throws(() => buildRuntimeDepsManifest(root, policy), /vitest\/config.*devDependencies\.vitest/u);
 
     for (const compatible of [true, false]) {
       const dependencyVersion = compatible ? version : "5.0.2";
@@ -388,5 +423,7 @@ test("Vitest 兼容闭包拒绝非法 pin，稳定配置缺 Vitest 时真实加�
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+  // 隔离 fixture 里复现“已发布稳定客户端”的运行时导入：仓根未声明兼容依赖时
+  // 必须真实加载失败，而不是静默降级发行一个启动即坏的载荷。
   await verifyProductionPreview({ legacy: true, withVitest: false, rejectMissingVitest: true });
 });

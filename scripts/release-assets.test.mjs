@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -90,7 +89,6 @@ test("every packaging download is wired through the verified fetch boundary", as
   const repositoryRoot = fileURLToPath(root);
   const product = JSON.parse(await readFile(new URL("../product.manifest.json", import.meta.url), "utf8"));
   const desktopWorkflowPath = resolveDesktopWorkflowPath(repositoryRoot, product).absolute;
-  const legacyWorkflowFile = new URL("../.github/workflows/pack-self-contained.yml", import.meta.url);
   const files = {
     electron: await readFile(new URL("./pack-electron-payload.sh", import.meta.url), "utf8"),
     mac: await readFile(new URL("./pack-macos.sh", import.meta.url), "utf8"),
@@ -98,7 +96,6 @@ test("every packaging download is wired through the verified fetch boundary", as
     nats: await readFile(new URL("./embedded-nats.mjs", import.meta.url), "utf8"),
     pgvectorWin: await readFile(new URL("./build-pgvector-win.ps1", import.meta.url), "utf8"),
     desktopWorkflow: await readFile(desktopWorkflowPath, "utf8"),
-    ...(existsSync(legacyWorkflowFile) ? { legacyWorkflow: await readFile(legacyWorkflowFile, "utf8") } : {}),
   };
   for (const name of ["electron", "mac", "win"]) {
     assert.match(files[name], /source scripts\/release-assets\.sh/);
@@ -131,10 +128,11 @@ test("every packaging download is wired through the verified fetch boundary", as
   assert.doesNotMatch(files.pgvectorWin, /foreach \(\$pkg|git clone --depth 1 --branch/);
   assert.match(files.electron, /verify-windows-pg-provenance vendor\/pg-win\/WORKLOOM-PROVENANCE\.txt/);
   assert.match(files.win, /verify-windows-pg-provenance vendor\/pg-win\/WORKLOOM-PROVENANCE\.txt/);
-  if (files.legacyWorkflow) {
-    assert.match(files.legacyWorkflow, /runs-on: windows-2022/);
-    assert.doesNotMatch(files.legacyWorkflow, /runs-on: windows-latest/);
-  }
+  // 旧自包含发布工作流仍是受控产物：必须真实存在并保持固定 Windows runner。
+  // 之前的存在性判断会在文件被删时静默跳过校验，等于削弱既有检查。
+  const legacyWorkflow = await readFile(new URL("../.github/workflows/pack-self-contained.yml", import.meta.url), "utf8");
+  assert.match(legacyWorkflow, /runs-on: windows-2022/);
+  assert.doesNotMatch(legacyWorkflow, /runs-on: windows-latest/);
   if (product.release?.workflow === ".cnb.yml") {
     assert.match(files.desktopWorkflow, /namespace: group/u);
     assert.match(files.desktopWorkflow, /tags: \[windows\]/u);

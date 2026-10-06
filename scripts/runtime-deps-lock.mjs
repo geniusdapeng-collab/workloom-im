@@ -163,15 +163,35 @@ function expectedMetadata(root, product, policy, manifest, packageLock) {
   };
 }
 
+/**
+ * 产品自身的客户端 Vite 配置是否在运行期导入 vitest/config。类型引用
+ * （/// <reference types="vitest/config" />）与 test 段只依赖类型，不引入运行依赖。
+ */
+export function runtimeImportsVitestConfig(root) {
+  const directories = new Set(runtimeDependencySources(root, { includePlatformOps: false })
+    .filter(project => project[3])
+    .map(project => dirname(join(root, project[0]))));
+  for (const directory of [...directories].sort()) {
+    const candidate = join(directory, "vite.config.ts");
+    if (!existsSync(candidate) || !statSync(candidate).isFile()) continue;
+    if (/^\s*import\s[^\n]*from\s*["']vitest\/config["']/mu.test(readFileSync(candidate, "utf8"))) return true;
+  }
+  return false;
+}
+
 export function buildRuntimeDepsManifest(root, policy) {
   const manifest = buildMergedRuntimeManifest(root, policy);
   // 已发布的稳定客户端仍可能在 Vite config 中运行时导入 vitest/config。
+  // 兼容闭包只在产品自身的客户端配置确实运行时导入 vitest/config 时才纳入
+  // Vitest：仓根 package.json 不在 base-sync 分发范围内（子仓保留自有依赖），
+  // 对只引用 Vitest 类型的配置无条件强制该依赖会阻断子仓的锁校验与桌面装配。
+  if (!runtimeImportsVitestConfig(root)) return manifest;
   // 兼容闭包只采用仓根已声明且 pnpm 已锁定的 Vitest；不借用宿主开发依赖。
   const source = readJson(join(root, "package.json"), "package.json");
   const locked = loadPnpmRuntimeLock(root).importers?.["."]?.devDependencies?.vitest;
   const specifier = source.devDependencies?.vitest;
   if (typeof specifier !== "string" || !specifier || locked?.specifier !== specifier) {
-    throw new Error("Vitest 运行兼容依赖缺失或 pnpm-lock.yaml specifier 漂移");
+    throw new Error("运行时导入 vitest/config 的客户端必须声明与 pnpm-lock.yaml 一致的 devDependencies.vitest");
   }
   const version = typeof locked?.version === "string"
     ? locked.version.match(/^(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)(?:\(.+\))?$/u)?.[1]

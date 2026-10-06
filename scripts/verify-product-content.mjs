@@ -77,6 +77,11 @@ if (product) {
   }
   const desktopWorkflow = fs.existsSync(desktopWorkflowPath) ? fs.readFileSync(desktopWorkflowPath, "utf8") : "";
   if (product.release?.workflow === ".cnb.yml") {
+    // 未激活分支：产品清单尚未切到 .cnb.yml 发布通道，下方的 CNB 门禁校验
+    // 在当前清单下不会执行。它只在清单声明 workflow === ".cnb.yml" 时生效。
+    // 切换批次必须补齐 product.desktop.nativeBuilders 与 product.desktop.smokeRunner，
+    // 并把 sourceNames 对齐到 .cnb.yml 实际源码门禁名，否则该分支一律拒绝。
+
     let configured;
     try { configured = YAML.parse(desktopWorkflow); }
     catch (error) { errors.push(`CNB 桌面发布工作流无法解析：${error instanceof Error ? error.message : String(error)}`); }
