@@ -47,6 +47,17 @@ const LOCK_EDITS = [
     '  const collection = await collectBoundPulls(client, context);',
   )],
 ];
+// The actual CNB delete-file URL points at the bound target/base object, while
+// every surviving file URL points at the bound source/head object.
+const URL_EDITS = [
+  ['export function fullPathOf(entry, { repoSlug, headSha } = {}) {', 'export function fullPathOf(entry, { repoSlug, headSha, baseSha, targetRepoSlug } = {}) {'],
+  ['const repo = repositorySlug(repoSlug); const sha = fullSha(headSha, "文件 head");', lines(
+    'const deleted = (FILE_STATUSES.get(entry.status) ?? entry.status) === "deleted";',
+    '    const repo = repositorySlug(deleted ? targetRepoSlug : repoSlug);',
+    '    const sha = fullSha(deleted ? baseSha : headSha, deleted ? "文件 base" : "文件 head");',
+  )],
+  ['fullPathOf(file, { repoSlug: before.sourceRepo, headSha: before.sourceSha })', 'fullPathOf(file, { repoSlug: before.sourceRepo, headSha: before.sourceSha, baseSha: before.targetSha, targetRepoSlug: before.repo })'],
+];
 
 const READY_FIXTURE = lines(
   'function readyFixture() {',
@@ -81,7 +92,7 @@ const TEST_EDITS = [
     lines(READY_FIXTURE, 'test("actual gate uses real PR Git source and API observation for advisory and module decisions", async () => {',
       '  const { f, fake } = admissionFixture(false);')],
 ];
-const ADMISSION_TESTS = lines(
+const LEGACY_ADMISSION_TESTS = lines(
   '',
   'test("installed admission releases old PR-number occupation without dropping bound Git/API proof", async () => {',
   '  const fixture = admissionFixture(); fixture.fake.compares.set("105", compareFor(fixture.fake.rows[0], ["sync/old-open.mjs"]));',
@@ -118,6 +129,26 @@ const ADMISSION_TESTS = lines(
   '});',
   '',
 );
+const ADMISSION_TESTS = LEGACY_ADMISSION_TESTS + lines(
+  '',
+  'test("actual deleted-file URLs bind only the exact target/base, including fork deletions", async () => {',
+  '  const fake = new PullFixture([pull(105, { sourceRepo: "fork/team/repository" }), pull(106, { sourceSha: SHA, sourceBranch: "task/current" })]);',
+  '  const comparison = compareFor(fake.rows[0], []); comparison.files = [{ path: "scripts/tools/deleted.mts", status: "deleted" }];',
+  '  fake.compares.set("105", comparison);',
+  '  const file = { filename: "deleted.mts", status: "delete", raw_url: "https://cnb.cool/" + REPO + "/-/git/raw/" + BASE + "/scripts/tools/deleted.mts",',
+  '    blob_url: "https://cnb.cool/" + REPO + "/-/blob/" + BASE + "/scripts/tools/deleted.mts" };',
+  '  fake.override = path => path === "pulls/105/files" ? Response.json([file]) : undefined;',
+  '  assert.deepEqual((await collectBoundPulls(fake.client(), fake.context())).prs[0].paths, ["scripts/tools/deleted.mts"]);',
+  '  for (const patch of [',
+  '    { raw_url: file.raw_url.replace(BASE, OTHER) }, { raw_url: file.raw_url.replace(BASE, BASE.slice(0, 12)) },',
+  '    { raw_url: file.raw_url.replace(REPO, "fork/team/repository") }, { status: "modify" },',
+  '    { blob_url: file.blob_url.replace("deleted.mts", "different.mts") },',
+  '  ]) { fake.override = path => path === "pulls/105/files" ? Response.json([{ ...file, ...patch }]) : undefined;',
+  '    await rejectCode(collectBoundPulls(fake.client(), fake.context()), "PATH_UNVERIFIED");',
+  '  }',
+  '});',
+  '',
+);
 
 function replaceExactly(text, before, after) {
   if (text.split(before).length !== 2) throw new Error('Bound protocol migration anchor changed');
@@ -126,8 +157,11 @@ function replaceExactly(text, before, after) {
 function original(text, edits) {
   if (!text?.includes(MARKER)) return text;
   if (edits === TEST_EDITS) {
-    if (!text.endsWith(ADMISSION_TESTS)) throw new Error('Bound protocol admission regressions changed');
-    text = text.slice(0, -ADMISSION_TESTS.length);
+    const suffix = text.endsWith(ADMISSION_TESTS) ? ADMISSION_TESTS : text.endsWith(LEGACY_ADMISSION_TESTS) ? LEGACY_ADMISSION_TESTS : null;
+    if (!suffix) throw new Error('Bound protocol admission regressions changed');
+    text = text.slice(0, -suffix.length);
+  } else if (edits === LOCK_EDITS && text.includes(URL_EDITS[0][1])) {
+    for (const [before, after] of [...URL_EDITS].reverse()) text = replaceExactly(text, after, before);
   }
   for (const [before, after] of [...edits].reverse()) text = replaceExactly(text, after, before);
   return text;
@@ -149,6 +183,7 @@ export async function preserveBoundProtocol(assets, readTarget) {
   }
   let adaptedLock = current['verify-lock-conflict.mjs'];
   for (const [before, after] of LOCK_EDITS) adaptedLock = replaceExactly(adaptedLock, before, after);
+  for (const [before, after] of URL_EDITS) adaptedLock = replaceExactly(adaptedLock, before, after);
   let adaptedTest = current['verify-lock-conflict.test.mjs'];
   for (const [before, after] of TEST_EDITS) adaptedTest = replaceExactly(adaptedTest, before, after);
   adaptedTest += ADMISSION_TESTS;

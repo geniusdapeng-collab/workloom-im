@@ -104,42 +104,48 @@ node --test scripts/delivery/*.test.mjs
 结构化测试观测使用 [Node.js Test runner 的 custom reporter / TestsStream](https://nodejs.org/api/test.html#custom-reporters)；人读报告格式不用于机器解析。
 
 
-## 持续研发交付（queue-*，2026-10-05）
+## 持续研发交付（queue-*，2026-10-07）
 
-与上方 MCD 台账执行器并列的研发交付机制；具体协议见 `docs/DEVELOPMENT-PROTOCOL.md` v2。`queue-runner.mjs` 提供 status、lease、handoff、review-prepare、review-finish、prepare-install、activate、reconcile、releases。日常开发用独立工作树；普通重叠提示；敏感开发租约默认 15 分钟，owner/generation 续租；CI/评审前交接释放。
+与上方 MCD 台账执行器并列；协议见 `docs/DEVELOPMENT-PROTOCOL.md` v2。产品所有者撤销 CNB/GitHub 等平台付费 AI 审核与 NPC 自动修复，要求当前 Codex 自带模型在提交/发布前完成代码 review 和实际测试。`queue-runner.mjs` 提供 status、lease、handoff、admit、verify-review、verify-bootstrap、prepare-install、verify-install、activate、reconcile、releases。旧 review-prepare、review-finish 和 review-plugin/model-gateway 执行入口在网络或模型 I/O 前明确拒绝；不会调用 SDK、模型网关、NPC 或发布平台批准。
 
-敏感源码必须先有正向接纳回执。trusted-main 的 admit 命令在独立 workloom-delivery-admission 原生锁内自动取得 scoped owner/generation，保存准确 source/main 与完整路径摘要，并在 CI 前立即释放；门禁验证历史 acquire→release→source_admitted 链。没有任何租约历史的敏感源码不能通过，不依赖开发者自愿领锁。接纳和 AI 流水线并行且使用不同锁，模型耗时不会阻塞别的源码接纳；真正合并另领取当前集成 generation。安装 prepare 同时形成首装接纳证明。main 尚无 include 且未初始化账本时保留旧敏感重叠门禁，避免文件先分发造成首装自锁；显式启用后缺账本仍失败闭合。
+日常开发使用独立工作树。普通重叠提示；敏感开发租约默认 15 分钟，以准确 owner/generation 续租。等待 CI/review 前用 lease --action release 显式释放；任务号、ready 或 handoff 不能自行解除有效租约。源码正向接纳在 main 独立的 workloom-delivery-admission 原生锁中自动 acquire→release→source_admitted，绑定 source/main 和完整路径摘要；实际集成另领取当前 fenced generation，旧持有者不能释放或续租新一代。
 
-trusted main 的 `cnb.yml` 每 5 分钟恢复，原生仓级锁串行集成。原 PR 通过必需检查后创建不可修改候选分支/PR，再运行绑定 source/main/policy/完整文件列表的真正 CodeBuddy 审查。所有敏感候选在实际合并时强制取得并核验 fenced 集成租约，不依赖开发者选择是否领开发租约；真实通过或未发请求失败即释放。Bot Approve 和完整结构化结果双重回读；平台强保护保留，不等待用户点 Approve。没有覆盖、超时、CI 红、依赖未满足或权限失败均不合。
+当前 Codex 会话先精读完整变化文件与直接依赖，处理错误/并发/权限路径并运行必要测试。将实际 review 与测试保存为结构化 JSON，再执行：
 
-AI 使用固定官方镜像内的 SDK，按每批最多 30 个变化路径分批精读；每仓同时只有一条审查流水线、最多两个模型子进程。全部批次必须给出准确覆盖和身份回执，任一批缺失、失败或漂移不发布 Approve。审查失败按 source/main 限两次并退避；进程中断由原生 build SN 回读计数，丢失启动响应以唯一 title 查回，无正向回执不重复启动。未知结果只保留该任务，超出在途时限后无关任务仍可排入原生串行锁。
+```bash
+node scripts/delivery/queue-runner.mjs handoff --repo <org/repo> --pr <number> --review-receipt /path/to/actual-review.json
+```
 
-模型批次剥离全部平台、批准和环境凭据；由 Linux 容器内不同 uid/gid 执行，源码与 trusted manifest 只读，仅能写本批 receipt 和独立 HOME。父进程的 loopback model-gateway 持有原生模型认证，只代理固定当前仓的 AI POST 路由，拒绝 Git/PR/构建/任意来源和重定向，不把后端错误体或凭据交回工具。原生镜像必须允许 root broker 降权，否则保持红灯。[CodeBuddy 环境变量说明](https://www.codebuddy.ai/docs/zh/cli/env-vars)支持配置模型 API key/base URL；平台批准仍由独立 publisher 持有真正 Bot 身份。bootstrap 与 trusted-main 镜像 digest 由 queue 测试对照 queue-policy 常量核验。
+回执字段为 schemaVersion=1、provider=codex、repo、number、headSha、mainSha、policyHash、reviewedFiles、reviewedAt、summary、dependsOn、ciPolicyChanges，以及 tests 的真实 command、exitCode=0、finishedAt、result。精确 files/CI 变化 id 必须与当前快照一致；测试时间不得早于该源码提交或晚于 review。成功 handoff 保存正文回读后的快照和内容摘要。记录是可信会话的实际审查声明和一致性证据，不是平台签名身份，也不是平台 AI 批准；CLI 不启动 Codex API 或外部模型。
 
-既有必需 CI 的流水线与阶段名称、顺序必须保留，不能转成 allowFailure。调整既有检查的脚本、镜像或配置时，执行器从 trusted main 与确切 source 计算完整前后差异；AI 必须对每个差异给出准确 id 与保留/增强验证信号、回归和回滚的理由，机器再核对整份迁移回执。未覆盖、乱填 id、回执过期或降低门禁均不放行；常规检查实现升级通过独立 AI 和原仓检查自动交付，不等待人工批准。
+既有必需 CI 流水线与阶段身份、顺序和验证信号保留，不能转为 allowFailure。脚本、镜像、include 或依赖实现变化须在当前准确源码/主干快照中逐项解释 id、保留/增强的信号、回归和回滚。source/main/policy/完整范围漂移使旧记录失效；语义冲突或红灯保存 repairRequired 诊断，由当前 Codex 会话修复并重做 review/测试，定时执行器不派发平台模型。
 
-Git `automation/delivery-state` 保存任务、租约、事件、尝试、AI、集成和发布证明；普通 fast-forward push 是 CAS，transaction ID 处理丢失响应。没有强推。合并响应不明暂停集成，先正向回读；声明的 UI/桌面制品发布由独立的 delivery-releases 原生流水线与 workloom-delivery-release 锁处理，不占用合并执行器。发布固定 SHA/版本，回读构建 SN/source/event/准确意图、tag/manifest/实际 SHA-512 字节；失败不跳过无关集成，不生成发布成功回执。
+trusted main 的 `cnb.yml` 每 5 分钟恢复。原仓 CI 与会话记录成立后，创建固定源码的不可修改候选 PR，再运行原仓 CI；仓级 workloom-delivery-merge 只串行实际集成。敏感候选必须取得并再次核验 fenced 集成租约，普通 merge 回读准确 source/main 双亲。WIP、risk/block、业务红线、缺记录、依赖未满足、权限失败或 CI 红灯保持未完成，其他可交付任务仍可推进。真实写响应不明先正向回读，不能盲目重复。
 
-UI 真正发布的唯一串行点是根 .cnb.yml 的 .ui-release / workloom-delivery-release-ui 锁。页面手动与交付器都触发同一个 api_trigger_ui_release，进入同一 ui-release job；没有第二个直接上传通道。delivery-releases / workloom-delivery-release 只串行持久化队列意图、异步启动和回读，不上传资产，也不持锁等待 ui-release 结束；两把不同职责的锁避免父调度和发布子构建互相等待。queue 测试直接对照 API event→原有 YAML alias→实际 publisher lock，不能把队列调度锁冒充资产写入锁。
+基座迁移暂时保留旧 delivery-ai-review / delivery-bootstrap-review 的流水线和阶段名称，以兼容旧主干的 CI 身份保护；执行内容全部替换为确定性的 Git/资产/账本/会话记录检查，没有 CodeBuddy 镜像或模型调用。目标安装包将 bootstrap 命名为 delivery-bootstrap-checks；不能从遗留名称推断仍在使用 AI。
 
-UI/桌面页面手动触发和 API 调用均必须显式传入 RELEASE_EXPECTED_SHA，值为已经审查并合入的准确源码。release-source 不从当前 main/tag 的 CNB_BRANCH_SHA 推测冻结来源；缺该变量或原生仓库身份，任何打包/上传前即失败。交付器在 build/start 的整次构建 env 传入相同 SHA，macOS、Windows 与 finalize 阶段均继承这一触发值。[CNB 默认变量官方契约](https://docs.cnb.cool/en/build/build-in-env.html#usage)规定 CNB_REPO_SLUG 等只读身份自动注入每个 Job；代码不覆盖它们。Linux PR 门禁不能证明自托管 mac/Windows 节点在线；桌面发布只有实际各平台构建和最终制品回读成功才记 delivered，节点/签名环境缺失保留失败待恢复，不关任务。
+Git `automation/delivery-state` 通过普通 fast-forward CAS 保存只增事件、任务、租约、尝试、会话 review/实测、集成与发布证明；transaction ID 恢复丢失 push 响应。没有强推。发布用独立 delivery-releases / workloom-delivery-release 锁，队列只启动/回读，不上传资产也不持锁等待子构建。UI 资产写入的唯一串行点仍为根 `.cnb.yml` 的 `.ui-release` / workloom-delivery-release-ui；页面与队列触发同一 api_trigger_ui_release，无第二上传通道。
 
-初次安装由具备写权限的安装执行端在准确安装分支执行 `node scripts/delivery/queue-runner.mjs prepare-install --repo <org/repo> --pr <number>`：由设置权限者创建并回读状态分支强保护、初始化账本。源分支 PR 令牌实测只读；bootstrap 的 verify-install 只回读强保护和准确 source/main 的准备事件，在真正 AI 批准前执行，缺任一证据保持红灯。然后再合入经过真实 bootstrap AI 审查和原仓检查的安装 PR。main 安装后的缺账本不能被当作空租约。安装执行端核验准确 AI/CI 后，用 configureAutomaticReviewPolicy 取消平台人工评审计数及额外管理员批准；PR、必需状态检查、禁直推/强推/删除与自有 NPC 自批限制保留。合入以后在当前 main 执行 activate，一次安装不可修改候选规则，再回读 main 必需检查和独立 AI 评审身份，写 activation 事件。候选创建者与独立 CodeBuddy 评审进程分离，只有真实 Bot 的批准与完整回执共同满足才集成。模型子进程不继承发布 Bot 的批准令牌，合并后的结构化回执通过校验和新鲜度检查后才交给独立发布步骤。云端只有 CNB 原生令牌，不保存会话凭据。两个隔离副本按产品所有者授权在各自仓独立安装同一研发机制，业务 base-sync 仍排除它们；平台秘密、实盘和客户动作不在研发自动授权内。
+UI/桌面发布必须显式传入已审查并合入的 RELEASE_EXPECTED_SHA 和版本。release-source 不从 current main/tag 的 CNB_BRANCH_SHA 推测来源；缺原生仓身份或准确 SHA 时打包/上传前失败。发布成功需真实 build SN/source/event/title、tag、manifest 与实际 SHA-512 字节。私有仓制品先经官方认证下载接口获取临时 byte URL，Bearer 只发给初始 CNB API，后续 HTTPS/CDN 请求不带凭据；权限、空流、大小、JSON、摘要或重定向失败均不能形成发布回执。桌面 mac/Windows 节点及签名环境缺失仍为欠项，Linux CI 不能冒充真实桌面构建。
 
-真实安装 PR #234 在 CodeBuddy approved 与四项检查 success 后仍被平台阻断为 waiting_review；仅调整自有 NPC 限制或添加 CodeBuddy 评审人无效。这个实测结果决定取消人工计数，而非把 Bot 评论冒充人的批准。configureAutomaticReviewPolicy 要求准确准备的 source/main 和独立 AI 身份；设置丢失响应必须完整回读，其他保护字段不能变化。
+首装先由具备设置权限的安装端在准确安装分支运行 prepare-install，回读状态分支强保护并准备准确 source/main。安装清单 schemaVersion=2 必须包含完整执行闭包、生成的 CI/文档、必要适配器及目标资产摘要；sourceSha 是上游来源提交，不是目标安装提交。verify-bootstrap 用只读临时 Git 检出准确安装源码，核验账本和每个 tracked asset 的 Git/文件字节；不能只凭标记 repo 或本地文件存在通过。
 
-验证：`node --test scripts/delivery/queue.test.mjs scripts/ci/protocol-rules.test.mjs sync/merge-sync-prs.test.mjs scripts/ui-release-registration.test.mjs`。包含真实本地 bare Git 的 CAS 并发、丢失 push 回执、主干对齐/语义冲突，与 AI 覆盖、权限、过期、依赖、失败隔离和冻结发布断言。云端上线另须真实平台检查、AI 和状态回读；本地模拟不算云端成功。
+首装完成 Codex 会话 review/实测、确定性 bootstrap 与原有门禁后，才取消额外人工计数/管理员批准、冻结源码并普通 merge；首次安装合并前实时核对 ready、正文、依赖、源码/主干、完整范围和 CI。平台保留创建时政策时，只创建同一已冻结源码的替代 PR，保存原记录 id、原 PR 和相同实测，再跑完整原仓 CI；真实合入后关闭原 PR，源分支保留。当前 main activate 再核验准备证明、源码/主干祖先、会话记录、清单和保护，写 platformAI=false 事件。源 PR 原生令牌只读，云端持续执行只用原生托管/CI 令牌，会话凭据不进入文件或 CI。
 
-### 账户新增仓持续安装
+Tiger 仍保留 Python/governance 产品检查。旧 governance 的四个协议入口显式委托根级现行协议/CLI，保留真实退出码，避免直接调用旧 open-PR 永久锁。未知加强版协议不覆盖；已审核的目标适配保留完整 Git、PR、main、fork、路径和租约边界。删除文件 URL 只能对应目标旧 base，新增/修改文件仍绑定准确 source。
 
-基座激活后，安装端运行 `node scripts/delivery/install-account.mjs --source-root <基座当前 main 工作区> --directory <专用安装目录> --concurrency 2`。账户扫描读取所有 Owner/active 仓库的完整分页，包含嵌套组织；准确来源必须为当前基座 main，且账本有真实激活回执。每仓使用独立、带所有者标记的干净 clone，保留其他任务的工作树与远端；唯一进程声明文件避免并发安装和失效锁删除竞争。
+两个隔离副本按产品所有者授权各自在本仓安装研发机制，不改变行业身份、冻结上下文或隔离清单，不加入业务 fanout；客户数据、生产秘密和 Tiger 实盘等仍须单独授权。
 
-每仓先完整检查现有 CI，再用确定的资产摘要、任务卡、分支和 PR 幂等恢复。缺 main、冻结、权限失败、检查/AI 未通过分别保存明确状态；一仓失败不停止其他仓。真正 merge、准确双亲、activation 回读成功才计 active。已启用仓的包更新走原生不可修改候选，不重新开启人工计数。最终基座读取失败仍保存已完成回执，并以非零退出标注无法核实当前来源。
+验证：`node --test scripts/delivery/queue.test.mjs scripts/delivery/install-repository.test.mjs scripts/delivery/install-account.test.mjs scripts/ci/protocol-rules.test.mjs sync/fanout-safety.test.mjs`。实际 Git 测试覆盖 CAS 竞争、丢失响应、普通分支对齐/冲突、准确两亲激活、完整清单、会话记录漂移、租约、权限、依赖、失败隔离和固定源码发布。云端上线另需真实原仓检查、merge/activation 与原生状态写入；本地测试不代替云端成功。
 
-Codex chat 的账户安装 heartbeat 负责首次设置权限，每 15 分钟运行同一安装端并恢复未完成项；无变化时保持安静，有实际完成、失败或权限需要处理才通知。它依赖本机 Codex 可用和本任务短期凭据有效，凭据仅注入进程，不进入调度提示、报告、配置或 CI。每仓的已激活集成和发布另由原生 5 分钟调度运行。账户安装状态保存在专用目录的 `latest-report.json`；保存调度成功与真实仓激活是两项分别回读的证据。
+### 账户新增仓安装
 
-### CNB 语义的实际验证
+基座激活后，安装端运行 `node scripts/delivery/install-account.mjs --source-root <基座当前 main 工作区> --directory <专用安装目录> --concurrency 2`。读取所有 Owner/active 仓库的完整分页，包括嵌套组织；来源必须为当前基座 main 且账本有真实激活。每仓使用带任务所有者标记的独立完整干净 clone，保留其他任务工作树与远端，进程声明避免并发安装和失效锁删除竞争。
 
-[官方语法手册](https://docs.cnb.cool/zh/build/grammar.html)规定：退出码 78 表示任务成功并中断当前流水线；include 的数组追加，对象合并，本地配置覆盖引用配置。因此 bootstrap 在非安装分支退出 78 不跳过产品流水线，追加 include 保留既有数组门禁。[真实首装构建 cnb-dm0-1k4545ojq](https://cnb.cool/workloom-ai/workloom-im/-/build/logs/cnb-dm0-1k4545ojq)实际出现 bootstrap、static、db、ui 四条流水线，三条原有门禁成功，AI 失败独立阻断了安装；这证明解析和触发边界，不代表当时 AI 通过或已上线。
+每仓检查既有产品 CI，按确定资产摘要、任务卡、分支和 PR 幂等恢复，并离线刷新目标自身开源清单。缺 main、冻结、权限失败、检查未过或缺 Codex 实测记录保存明确状态；一仓失败不停止其他仓。只有真实 merge 双亲、activation 和原生写入回读成功才算启用；已激活仓更新经原生候选，不能走首次安装捷径。
 
-CI 迁移判断还覆盖变化的 scripts/、sync/、governance/scripts/、本地 CI include 与依赖输入；每个条目的 id 绑定准确旧、新 Git ref 和路径。每项分配给唯一批次，再核对完整合集。流水线名称保持不变不能作为省略脚本迁移回执的理由。
+用户取消的 Codex chat 账户安装 heartbeat 保持取消。本机制不会重建它。未来仓扫描/准备可由另行授权的安装调度执行；实际会话 review/实测仍须 Codex 完成，缺记录保持等待，不能由定时脚本伪造。账户报告在专用目录 latest-report.json；仓级原生五分钟交付和账户安装调度分别回读。
+
+### CNB 契约来源
+
+[官方语法手册](https://docs.cnb.cool/zh/build/grammar.html)规定退出码 78 表示成功并中断当前流水线，include 的数组追加、对象合并、本地覆盖引用配置。因此非安装分支跳过 bootstrap 不跳过独立产品流水线。[默认变量契约](https://docs.cnb.cool/en/build/build-in-env.html#usage)规定原生仓库身份自动注入，每个 job 使用真实身份而不覆盖。[官方 OpenAPI](https://docs.cnb.cool/zh/develops/openapi.html)定义认证接口；具体读写、保护和制品证明按平台实时回读。

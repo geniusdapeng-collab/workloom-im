@@ -7,9 +7,10 @@ import { dirname, join } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import { AGENT_RULE, appendAgentRule, applyInstallation, CORE_ASSETS, INSTALL_MARKER, installationPlan, readAssets } from './install-assets.mjs';
-import { createOnce, discoverAccount, ensureInstallationMainProtection, ensureInstallationPolicy, finishInstallation, freezeInstallerSource, installationIssues, installationPulls, pendingInstallerMerge, preparePropagated, refreshInstallerPolicy, traceInstallerMerge } from './install-repository.mjs';
-import { appendEvent, emptyState, validRepoSlug } from './queue-model.mjs';
+import { AGENT_RULE, appendAgentRule, applyInstallation, CORE_ASSETS, DELIVERY_DOC, REGRESSION_CNB, INSTALL_MARKER, installationPlan, readAssets } from './install-assets.mjs';
+import { createOnce, discoverAccount, ensureInstallationMainProtection, ensureInstallationPolicy, finishInstallation, freezeInstallerSource, installationIssues, installationPulls, pendingInstallerMerge, preparePropagated, refreshInstallerPolicy, traceInstallerMerge, verifyInstallationReview } from './install-repository.mjs';
+import { appendEvent, emptyState, hash, parseIntent, validRepoSlug, validateDeveloperReview } from './queue-model.mjs';
+import { packageDigest, TIGER_ALIASES, validateInstallationManifest, verifyInstallationManifest } from './install-manifest.mjs';
 import { branchProtectionPayload } from '../tools/cnb-api.mjs';
 import { git, GitStateStore } from './git-state.mjs';
 import { modelGateway } from './model-gateway.mjs';
@@ -17,7 +18,10 @@ import { parser, resolvePipelineConfig } from './queue-policy.mjs';
 
 const sourceRoot = fileURLToPath(new URL('../../', import.meta.url));
 const sourceSha = await git(['rev-parse', 'HEAD'], { cwd: sourceRoot });
-const assets = await readAssets(sourceRoot, sourceSha);
+// Exercise all package bytes under review before Git publication; readAssets is verified separately at the final exact commit.
+const assets = Object.fromEntries(await Promise.all(CORE_ASSETS.map(async path => [path, await readFile(join(sourceRoot, path), 'utf8')])));
+assets['docs/AUTOMATIC-RD-DELIVERY.md'] = DELIVERY_DOC;
+assets['scripts/delivery/install-cnb.yml'] = REGRESSION_CNB;
 const fixtureCredential = randomUUID();
 const repo = 'workloom-ai/fixture';
 const main = 'a'.repeat(40); const head = 'b'.repeat(40); const merge = 'c'.repeat(40);
@@ -36,12 +40,20 @@ function memoryStore(initial = emptyState(repo)) {
   let state = structuredClone(initial);
   return { read: async () => structuredClone(state), mutate: async operation => { const copy = structuredClone(state); const result = operation(copy); state = copy; return { state: structuredClone(copy), result }; } };
 }
+function reviewFixture(pull = { number: 7, state: 'open', is_wip: false, body: '<!-- delivery-install:exact -->\n<!-- workloom-delivery\n{"ready":true,"depends_on":[],"releases":[]}\n-->', head: { sha: head, ref: 'chore/protocol-onboarding-old' } }) {
+  const policy = { hash: 'd'.repeat(64) };
+  const reviewedAt = new Date().toISOString();
+  const snapshot = { repo, number: pull.number, pull, headSha: head, mainSha: main, headTime: Date.now() - 5000, files: ['.cnb.yml'], ciPolicyChanges: [], checkErrors: [], intent: parseIntent(pull) };
+  const developerReview = validateDeveloperReview({ schemaVersion: 1, provider: 'codex', repo, number: pull.number, headSha: head, mainSha: main, policyHash: policy.hash,
+    reviewedFiles: snapshot.files, dependsOn: [], ciPolicyChanges: [], reviewedAt, summary: 'Fixture verifies source identity and exact CI closure.', tests: [{ command: 'node --test fixture', exitCode: 0, result: 'passed', finishedAt: reviewedAt }] }, snapshot, policy);
+  return { policy, reviewSnapshot: snapshot, developerReview, pull, preparation: { headSha: head, mainSha: main } };
+}
 
 test('install execution closure preserves product CI, industry identity, isolation and frozen agent text; a repeated exact package has no writes', async t => {
   const root = await fixture(t); const beforeAgents = await readFile(join(root, 'AGENTS.md'), 'utf8');
   const beforeProduct = await readFile(join(root, 'product.manifest.json'), 'utf8'); const beforeIsolation = await readFile(join(root, '.workloom-base-sync.json'), 'utf8');
   const result = await plan(root);
-  assert.equal(CORE_ASSETS.length, 23); assert.ok(result.requiredNames.includes('product-gate')); assert.ok(result.requiredNames.includes('delivery-bootstrap-review')); assert.ok(result.requiredNames.includes('delivery-regression'));
+  assert.equal(CORE_ASSETS.length, 24); assert.ok(result.requiredNames.includes('product-gate')); assert.ok(result.requiredNames.includes('delivery-bootstrap-checks')); assert.ok(result.requiredNames.includes('delivery-regression'));
   await applyInstallation(result, root);
   const resolved = await resolvePipelineConfig(await readFile(join(root, '.cnb.yml'), 'utf8'), { readLocal: path => readFile(join(root, path), 'utf8') });
   const YAML = await parser(); const baseline = YAML.parse(original);
@@ -137,13 +149,15 @@ test('instruction append is idempotent and rejects duplicate, reversed or incomp
   assert.equal(appendAgentRule(once), once); assert.ok(once.includes(AGENT_RULE));
   for (const text of ['<!-- WORKLOOM-RD-DELIVERY:BEGIN -->', AGENT_RULE + AGENT_RULE, '<!-- WORKLOOM-RD-DELIVERY:END --><!-- WORKLOOM-RD-DELIVERY:BEGIN -->']) assert.throws(() => appendAgentRule(text), /markers/);
 });
-test('Tiger migration preserves Python/governance product checks and only reroutes the three protocol commands', async t => {
+test('Tiger migration preserves Python product checks and delegates every legacy governance entry to the canonical root', async t => {
   const ci = original.replace('python3 product_test.py', 'python3 governance/product_test.py\n            node governance/scripts/ci/protocol-rules.test.mjs\n            node governance/scripts/ci/verify-commit-msg.mjs\n            node governance/scripts/ci/verify-lock-conflict.mjs');
   const root = await fixture(t, ci); const result = await plan(root, { repo: 'workloom-ai/workroom-tiger' });
   const next = result.changes.get('.cnb.yml');
   assert.ok(next.includes('python3 governance/product_test.py')); assert.ok(next.includes('node scripts/ci/verify-lock-conflict.mjs'));
   assert.ok(!next.includes('node governance/scripts/ci/verify-lock-conflict.mjs'));
-  assert.ok(![...result.changes.keys()].some(path => path.startsWith('governance/')));
+  assert.deepEqual([...result.changes.keys()].filter(path => path.startsWith('governance/')).sort(), [...TIGER_ALIASES].sort());
+  assert.match(result.changes.get('governance/scripts/ci/protocol-rules.mjs'), /export \* from/);
+  assert.match(result.changes.get('governance/scripts/ci/verify-lock-conflict.mjs'), /process.exitCode = result.status/);
 });
 test('account discovery paginates all owned active repos and fails on ambiguous or unreadable identity', async () => {
   const first = Array.from({ length: 100 }, (_, i) => ({ id: String(i + 1), path: `org/repo-${i}` })); let calls = 0;
@@ -153,7 +167,7 @@ test('account discovery paginates all owned active repos and fails on ambiguous 
   await assert.rejects(discoverAccount('ephemeral', async () => [{ id: '1', path: 'org/one' }, { id: '2', path: 'org/one' }]), /ambiguous/);
   await assert.rejects(discoverAccount('ephemeral', async () => ({})), /unreadable/);
 });
-test('nested CNB groups use the exact model and state destination; traversal and foreign origins are rejected', async () => {
+test('nested CNB groups use their exact state destination; disabled platform model exits before network I/O', async () => {
   const nested = 'owner/group/subgroup/project';
   assert.ok(validRepoSlug(nested)); assert.equal(new GitStateStore({ repo: nested }).repo, nested);
   const discovered = await discoverAccount(fixtureCredential, async () => [{ id: 'nested', path: nested }]); assert.equal(discovered[0].repo, nested);
@@ -162,11 +176,8 @@ test('nested CNB groups use the exact model and state destination; traversal and
   }
   assert.throws(() => new GitStateStore({ repo: nested, token: fixtureCredential, remote: 'https://example.com/repo.git' }), /destination/);
   let calls = 0;
-  const broker = await modelGateway({ repo: nested, token: fixtureCredential, request: async (url, options) => { calls++; assert.equal(url, `https://api.cnb.cool/${nested}/-/ai/v1/messages`); assert.equal(options.headers.authorization, `Bearer ${fixtureCredential}`); return new Response('{}'); } });
-  try {
-    assert.equal((await fetch(`${broker.url}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 200);
-    assert.equal(calls, 1);
-  } finally { await broker.close(); }
+  await assert.rejects(modelGateway({ repo: nested, token: fixtureCredential, request: async () => { calls++; } }), /disabled/);
+  assert.equal(calls, 0);
 });
 test('object creation recovers a single actual lost acknowledgement without blind retry or accepting a collision', async () => {
   let objects = []; let writes = 0;
@@ -228,7 +239,7 @@ test('exact protected installation source must read back before a merge; a weak 
   actualHead = main; await assert.rejects(freezeInstallerSource(platform, pull), /changed/);
   actualHead = head; rules[0].allow_master_pushes = true; await assert.rejects(freezeInstallerSource(platform, pull), /immutable/);
 });
-test('an activated package update preserves verified AI main policy without restoring the human approval counter', async () => {
+test('an activated package update preserves verified Codex/CI main policy without restoring the human approval counter', async () => {
   const state = emptyState(repo); appendEvent(state, 'activated', { mainSha: main });
   let rule = { ...branchProtectionPayload({ requireReview: false }), allow_master_manual_merge: false, id: 'main-rule' }; let writes = 0; let candidates = 0;
   const platform = { protections: async () => [rule], call: async () => { writes++; }, assertCandidateProtection: async () => { candidates++; } };
@@ -264,23 +275,23 @@ test('only a later exact positive merge rejection resolves the persisted install
 });
 test('verified installation policy refresh creates one frozen same-source PR, prepares it immediately and preserves the original', async () => {
   let rules = [{ ...branchProtectionPayload(), id: 'main' }]; let ref; let pulls = []; let writes = 0; let prepared = 0;
-  const original = { number: 7, title: 'feat(base): install', body: '<!-- delivery-install:exact -->', is_merged: false, head: { sha: head, ref: 'chore/protocol-onboarding-old' } };
+  const review = reviewFixture(); const original = { ...review.pull, title: 'feat(base): install', is_merged: false };
   const platform = { repo, protections: async () => rules, pull: async number => number === 7 ? original : pulls.find(pull => pull.number === number), main: async () => ({ commit: { sha: main } }), list: async () => pulls,
     call: async (path, options) => {
       if (options?.method === 'PATCH') { const rule = rules.find(rule => path.endsWith(rule.id)); Object.assign(rule, options.body); return {}; }
       if (path.includes('branch-protections') && options?.method === 'POST') { rules.push({ ...options.body, id: `rule-${rules.length}` }); return {}; }
       if (path === '/-/git/branches' && options?.method === 'POST') { ref = { commit: { sha: options.body.start_point }, protected: true }; return {}; }
       if (path.startsWith('/-/git/branches/')) { if (path.endsWith('chore%2Fprotocol-onboarding-old')) return { protected: true, commit: { sha: head } }; if (!ref) throw Object.assign(new Error('absent'), { status: 404 }); return ref; }
-      if (path === '/-/pulls' && options?.method === 'POST') { writes++; const value = { number: 8, body: options.body.body, head: { ref: options.body.head } }; pulls = [value]; return value; }
+      if (path === '/-/pulls' && options?.method === 'POST') { writes++; const value = { number: 8, state: 'open', is_wip: false, body: options.body.body, head: { sha: head, ref: options.body.head } }; pulls = [value]; return value; }
       throw new Error(`Unexpected ${path}`);
     } };
-  const store = memoryStore(); const proof = { platform, store, root: '/owned', pull: original, preparation: { headSha: head, mainSha: main }, approval: { id: 'actual', author: 'CodeBuddy', creator: 'developer', isNpc: true },
+  const store = memoryStore(); const proof = { platform, store, root: '/owned', ...review, pull: original,
     prepare: async value => { assert.equal(value.number, 8); assert.equal(value.expected, head); prepared++; } };
   const first = await refreshInstallerPolicy(proof); assert.equal(first.status, 'waiting_checks'); assert.equal(first.supersededNumber, 7);
   assert.equal(rules[0].required_pull_request_reviews, false); assert.equal(writes, 1); assert.equal(prepared, 1); assert.equal(original.is_merged, false);
   await refreshInstallerPolicy(proof); assert.equal(writes, 1); assert.equal(prepared, 2);
   assert.equal((await store.read()).events.filter(event => event.kind === 'installer_replacement').length, 2);
-  await assert.rejects(refreshInstallerPolicy({ ...proof, approval: null }), /proof/);
+  await assert.rejects(refreshInstallerPolicy({ ...proof, developerReview: null }), /review/);
 });
 test('an active repository update uses its native immutable delivery instead of the privileged first-install merger', async t => {
   const root = await fixture(t); const state = emptyState(repo); appendEvent(state, 'activated', { mainSha: main }); let writes = 0;
@@ -291,4 +302,65 @@ test('source propagation times out without protection writes or false preparatio
   let clock = 0; let reads = 0;
   await assert.rejects(preparePropagated({ platform: { pull: async () => { reads++; return { head: { sha: main } }; } }, expected: head, elapsedClock: () => clock, wait: async ms => { clock += ms; } }), /timed out/);
   assert.equal(clock, 30000); assert.equal(reads, 31);
+});
+
+test('first-install merge rejects changed body, readiness, source, main, scope, dependencies and CI after review', () => {
+  const proof = reviewFixture();
+  const state = emptyState(repo); state.tasks['7'] = { reviewSnapshot: proof.reviewSnapshot, developerReview: proof.developerReview };
+  const options = { ...proof, state, snapshot: structuredClone(proof.reviewSnapshot) };
+  assert.equal(verifyInstallationReview(options).id, proof.developerReview.id);
+  for (const change of [
+    value => { value.pull.body += '\nchanged release intent'; },
+    value => { value.snapshot.pull.is_wip = true; },
+    value => { value.snapshot.pull.state = 'closed'; },
+    value => { value.snapshot.headSha = main; },
+    value => { value.snapshot.mainSha = head; },
+    value => { value.snapshot.intent.ready = false; },
+    value => { value.snapshot.intent.dependsOn = [6]; },
+    value => { value.snapshot.files.push('new-file.mjs'); },
+    value => { value.snapshot.checkErrors = ['Product CI failed']; },
+  ]) {
+    const changed = structuredClone(options); change(changed);
+    assert.throws(() => verifyInstallationReview(changed), /review|prerequisite|cover/);
+  }
+});
+
+test('manifest rejects partial execution, foreign targets, unknown assets, incomplete adapters and altered digests', async t => {
+  const root = await fixture(t); await applyInstallation(await plan(root), root);
+  const manifest = JSON.parse(await readFile(join(root, INSTALL_MARKER), 'utf8'));
+  assert.equal(validateInstallationManifest(manifest, repo), manifest);
+  for (const change of [
+    value => { value.repo = 'other/repo'; },
+    value => { delete value.assets['scripts/delivery/install-manifest.mjs']; value.packageHash = packageDigest(value.assets); },
+    value => { value.assets['scripts/ci/verify-delivery-admission.mjs'] = hash('adapter'); value.packageHash = packageDigest(value.assets); },
+    value => { value.assets['../outside'] = hash('outside'); value.packageHash = packageDigest(value.assets); },
+    value => { value.assets['scripts/delivery/queue-runner.mjs'] = 'invalid'; },
+    value => { value.packageHash = '0'.repeat(64); },
+  ]) { const changed = structuredClone(manifest); change(changed); assert.throws(() => validateInstallationManifest(changed, repo)); }
+  const tiger = { ...manifest, repo: 'workloom-ai/workroom-tiger' };
+  assert.throws(() => validateInstallationManifest(tiger, tiger.repo), /closure/);
+});
+
+test('actual Git manifest binds committed bytes and upstream provenance separately from the target installer SHA', async t => {
+  const root = await fixture(t); await applyInstallation(await plan(root), root);
+  await git(['init', '--quiet'], { cwd: root }); await git(['add', '.'], { cwd: root }); await git(['commit', '--quiet', '-m', 'complete reviewed package'], { cwd: root });
+  const sha = await git(['rev-parse', 'HEAD'], { cwd: root });
+  assert.notEqual(sha, sourceSha);
+  const verified = await verifyInstallationManifest({ root, repo, sha });
+  assert.equal(verified.upstreamSourceSha, sourceSha); assert.equal(verified.installerSourceSha, sha);
+  const file = join(root, 'scripts/delivery/queue-runner.mjs'); const originalBytes = await readFile(file, 'utf8');
+  await writeFile(file, originalBytes + '\n// uncommitted drift\n');
+  await assert.rejects(verifyInstallationManifest({ root, repo, sha }), /differs/); await writeFile(file, originalBytes);
+  const outside = join(await temp(t), 'outside.mjs'); await writeFile(outside, originalBytes); await rm(file); await symlink(outside, file);
+  await assert.rejects(verifyInstallationManifest({ root, repo, sha }), /symlink/);
+  await rm(file); await writeFile(file, originalBytes);
+  const manifestPath = join(root, INSTALL_MARKER); const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  manifest.assets['scripts/delivery/queue-runner.mjs'] = hash('wrong bytes'); manifest.packageHash = packageDigest(manifest.assets);
+  await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n'); await git(['add', INSTALL_MARKER], { cwd: root }); await git(['commit', '--quiet', '-m', 'altered package digest'], { cwd: root });
+  await assert.rejects(verifyInstallationManifest({ root, repo, sha: await git(['rev-parse', 'HEAD'], { cwd: root }) }), /digest mismatch/);
+});
+
+test('missing target manifest cannot prepare an installed execution closure or claim complete provenance', async t => {
+  const root = await fixture(t); await git(['init', '--quiet'], { cwd: root }); await git(['add', '.'], { cwd: root }); await git(['commit', '--quiet', '-m', 'no installation manifest'], { cwd: root });
+  await assert.rejects(verifyInstallationManifest({ root, repo, sha: await git(['rev-parse', 'HEAD'], { cwd: root }) }), { code: 'ENOENT' });
 });

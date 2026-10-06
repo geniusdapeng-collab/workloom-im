@@ -218,6 +218,7 @@
       "scripts/delivery/review-plugin.mjs",
       "scripts/delivery/model-gateway.mjs",
       "scripts/delivery/install-config.mjs",
+      "scripts/delivery/install-manifest.mjs",
       "scripts/delivery/cnb.yml",
       "scripts/delivery/bootstrap-cnb.yml",
       "scripts/delivery/runtime/package.json",

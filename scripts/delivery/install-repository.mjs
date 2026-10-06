@@ -6,10 +6,9 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { api, branchProtectionPayload, redactCredentials, requireToken, validateBranchProtection } from '../tools/cnb-api.mjs';
 import { GitStateStore, git } from './git-state.mjs';
-import { appendEvent, branchName, hash, parseIntent, SHA_RE, updateTask, validRepoSlug } from './queue-model.mjs';
+import { appendEvent, branchName, hash, parseIntent, SHA_RE, updateTask, validRepoSlug, validateDeveloperReview } from './queue-model.mjs';
 import { Platform } from './queue-platform.mjs';
 import { activate, configureAutomaticReviewPolicy, prepareInstallation, verifyInstallerChecks } from './queue-runner.mjs';
-import { independentCodeBuddyApproval } from './queue-work.mjs';
 import { loadPolicy } from './queue-policy.mjs';
 import { applyInstallation, installationPlan, INSTALL_MARKER, readAssets } from './install-assets.mjs';
 
@@ -34,7 +33,7 @@ export async function discoverAccount(token, request = api) {
 export async function ensureInstallationMainProtection(platform) {
   const rules = await platform.protections(); const existing = rules.find(rule => rule.rule === 'main');
   if (existing && !validateBranchProtection(existing).length) return existing;
-  // Tighten existing weak controls; keep its other restrictions and extra human requirement until activation proves AI.
+  // Tighten existing weak controls; keep its other restrictions and extra human requirement until activation proves the actual Codex review and tests.
   const { id, ...prior } = existing ?? {};
   const expected = { ...branchProtectionPayload(), ...prior, rule: 'main', allow_deletions: false, allow_force_pushes: false, allow_pushes: false,
     allow_master_deletions: false, allow_master_force_pushes: false, allow_master_pushes: false,
@@ -53,13 +52,13 @@ export async function ensureInstallationPolicy(platform, state) {
   if (!state.events.some(event => event.kind === 'activated')) return ensureInstallationMainProtection(platform);
   const mainRule = (await platform.protections()).find(rule => rule.rule === 'main');
   const errors = validateBranchProtection(mainRule, { requireReview: false, forbidManualOverride: true });
-  if (errors.length || mainRule.required_pull_request_reviews !== false || mainRule.required_master_approve !== false) throw new Error('Active installation policy drifted; preserve AI policy and stop instead of restoring a human counter');
+  if (errors.length || mainRule.required_pull_request_reviews !== false || mainRule.required_master_approve !== false) throw new Error('Active installation policy drifted; preserve Codex/CI policy and stop instead of restoring a human counter');
   await platform.assertCandidateProtection();
   return mainRule;
 }
 
 function taskCard(taskId, repo, marker, files) {
-  return `<!-- delivery-install:${marker.packageHash} -->\n\n任务号：${taskId}\n\n## four_questions\n1. 公共研发交付机制，在 ${repo} 独立安装。\n2. 只变更研发 CI、租约和真实 AI 审查，业务围栏/账户/客户数据不变。\n3. 不改变行业身份、隔离登记或业务同步。\n4. 原仓必需 CI、独立 CodeBuddy、准确 merge 双亲与 activation 回读；失败保留任务，回滚通过独立 revert PR。\n\n## scope\n${files.map(path => `- ${path}`).join('\n')}\n\n## acceptance\n- 保留原仓机器检查与业务文件。\n- 普通研发不等待用户点 Approve。\n- 首装准备账本 → 真实 AI/检查 → 普通 merge → 当前 main 激活回读。\n\n## risk\n治理代码接受完整独立 AI 审查。缺权限/未知操作保持未启用，凭据只在进程内。`;
+  return `<!-- delivery-install:${marker.packageHash} -->\n\n任务号：${taskId}\n\n## four_questions\n1. 公共研发交付机制，在 ${repo} 独立安装。\n2. 只变更研发 CI、租约和Codex 会话审查实测，业务围栏/账户/客户数据不变。\n3. 不改变行业身份、隔离登记或业务同步。\n4. 原仓必需 CI、当前 Codex 审查实测、准确 merge 双亲与 activation 回读；失败保留任务，回滚通过独立 revert PR。\n\n## scope\n${files.map(path => `- ${path}`).join('\n')}\n\n## acceptance\n- 保留原仓机器检查与业务文件。\n- 普通研发不等待用户点 Approve。\n- 首装准备账本 → Codex 实测/检查 → 普通 merge → 当前 main 激活回读。\n\n## risk\n治理代码接受完整 Codex 会话审查与实测。缺权限/未知操作保持未启用，凭据只在进程内。`;
 }
 
 /** Recover a single successful-but-unacknowledged object by its immutable marker; no blind write retry. */
@@ -146,9 +145,13 @@ export async function traceInstallerMerge(platform, snapshot) {
   throw new Error('Installation merge cannot be traced to its exact tested parents');
 }
 
-/** CNB retains creation-time PR policy. A reviewed first install can need a new PR under the verified AI policy. */
-export async function refreshInstallerPolicy({ platform, store, root, pull, preparation, approval, prepare = preparePropagated }) {
-  await configureAutomaticReviewPolicy(platform, { independentApproval: approval, preparation });
+/** CNB retains creation-time PR policy. A reviewed first install can need a new PR under the verified Codex/CI policy. */
+export async function refreshInstallerPolicy({ platform, store, root, pull, preparation, developerReview, reviewSnapshot, policy, prepare = preparePropagated }) {
+  const before = await platform.pull(pull.number);
+  if (before.body !== pull.body || before.head?.sha !== preparation.headSha || (await platform.main()).commit?.sha !== preparation.mainSha) throw new Error('Installation changed before policy refresh');
+  verifyInstallationReview({ state: { tasks: { [pull.number]: { developerReview, reviewSnapshot } } }, pull: before, policy, preparation,
+    snapshot: { ...reviewSnapshot, pull: before, intent: parseIntent(before) } });
+  await configureAutomaticReviewPolicy(platform, { developerReview, reviewSnapshot, policy, preparation });
   await freezeInstallerSource(platform, pull);
   const current = await platform.pull(pull.number);
   if (current.is_merged || current.head?.sha !== preparation.headSha || current.body !== pull.body || (await platform.main()).commit?.sha !== preparation.mainSha) throw new Error('Installation changed before policy refresh');
@@ -165,11 +168,21 @@ export async function refreshInstallerPolicy({ platform, store, root, pull, prep
   await freezeInstallerSource(platform, { head: { sha: preparation.headSha, ref: branch } });
   const marker = `installer-policy-refresh:${pull.number}:${preparation.headSha}:${preparation.mainSha}`;
   const replacement = await createOnce({ list: () => installationPulls(platform, branch), match: item => branchName(item.head?.ref) === branch && String(item.body).includes(`<!-- ${marker} -->`),
-    create: () => platform.call('/-/pulls', { method: 'POST', body: { head: branch, base: 'main', title: pull.title, body: `${pull.body}\n\n<!-- ${marker} -->\n\n同一准确源码在现行 AI 交付规则下重新执行完整独立审查与原有门禁，真实合入后关闭被替代 #${pull.number}，源分支保留。` } }) });
+    create: () => platform.call('/-/pulls', { method: 'POST', body: { head: branch, base: 'main', title: pull.title, body: `${pull.body}\n\n<!-- ${marker} -->\n\n同一准确源码在现行 Codex/CI 交付规则下重新执行完整独立审查与原有门禁，真实合入后关闭被替代 #${pull.number}，源分支保留。` } }) });
   const number = Number(replacement.number);
   if (!Number.isSafeInteger(number) || number <= 0 || number === pull.number) throw new Error('Refreshed installer identity is invalid');
   await prepare({ platform, store, root, number, expected: preparation.headSha });
-  await store.mutate(state => appendEvent(state, 'installer_replacement', { number: pull.number, replacement: number, headSha: preparation.headSha, mainSha: preparation.mainSha }), { id: `installer-replacement:${pull.number}:${number}` });
+  const replacementSnapshot = { ...reviewSnapshot, number, pull: await platform.pull(number) };
+  if (replacementSnapshot.pull.state !== 'open' || replacementSnapshot.pull.is_wip !== false || replacementSnapshot.pull.head?.sha !== preparation.headSha ||
+    (await platform.main()).commit?.sha !== preparation.mainSha || parseIntent(replacementSnapshot.pull).ready !== true) throw new Error('Replacement installation changed before transferring the exact Codex source review');
+  replacementSnapshot.intent = parseIntent(replacementSnapshot.pull);
+  const { id: ignoredId, filesHash: ignoredFiles, ciPolicyChangesHash: ignoredChanges, passed: ignoredPassed, ...rawReview } = developerReview;
+  const replacementReview = validateDeveloperReview({ ...rawReview, number }, replacementSnapshot, policy);
+  await store.mutate(state => {
+    appendEvent(state, 'installer_replacement', { number: pull.number, replacement: number, headSha: preparation.headSha, mainSha: preparation.mainSha, reviewedSourceId: developerReview.id });
+    appendEvent(state, 'developer_review', { number, id: replacementReview.id, transferredFrom: pull.number, sourceReviewId: developerReview.id });
+    updateTask(state, number, { developerReview: replacementReview, reviewSnapshot: replacementSnapshot, intent: parseIntent(replacementSnapshot.pull) });
+  }, { id: `installer-replacement:${pull.number}:${number}` });
   return { repo: platform.repo, number, supersededNumber: pull.number, status: 'waiting_checks', headSha: preparation.headSha };
 }
 
@@ -177,6 +190,16 @@ export function pendingInstallerMerge(state, number) {
   const request = state.events.findLast(event => event.kind === 'installer_merge_requested' && event.data.number === number);
   if (!request) return null;
   return state.events.some(event => event.sequence > request.sequence && event.kind === 'installer_merge_rejected' && event.data.number === number && event.data.headSha === request.data.snapshot.headSha && event.data.verifiedUnmerged === true) ? null : request;
+}
+
+/** Check the live first-install source and intent before changing protection or requesting a merge. */
+export function verifyInstallationReview({ state, pull, policy, preparation, snapshot }) {
+  const recorded = state.tasks[String(pull.number)]?.reviewSnapshot;
+  if (!recorded || recorded.number !== pull.number || recorded.headSha !== preparation.headSha || recorded.mainSha !== preparation.mainSha ||
+    recorded.pull?.body !== pull.body || snapshot?.number !== pull.number || snapshot.headSha !== preparation.headSha || snapshot.mainSha !== preparation.mainSha ||
+    snapshot.pull?.head?.sha !== pull.head?.sha || snapshot.pull?.body !== pull.body || snapshot.pull?.state !== 'open' || snapshot.pull?.is_wip !== false ||
+    snapshot.intent?.ready !== true || snapshot.checkErrors?.length !== 0) throw new Error('Installation source, ready intent or CI changed after Codex review; repeat handoff --review-receipt');
+  return validateDeveloperReview(state.tasks[String(pull.number)]?.developerReview, snapshot, policy);
 }
 
 async function closeReplacedInstallers(platform, store, number, receipt) {
@@ -187,7 +210,7 @@ async function closeReplacedInstallers(platform, store, number, receipt) {
     if (original.is_merged || original.head?.sha !== receipt.sourceSha || event.data.headSha !== receipt.sourceSha) throw new Error('Superseded installation source differs from verified integration');
     const marker = `installer-superseded:${original.number}:${receipt.sha}`;
     if (original.state !== 'closed') {
-      if (!(await platform.list(`/-/pulls/${original.number}/comments`)).some(comment => String(comment.body).includes(marker))) await platform.comment(original.number, `准确源码已通过 #${number} 的真实 AI/门禁并合入 ${receipt.sha}，此安装 PR 被替代；源分支保留。\n\n<!-- ${marker} -->`);
+      if (!(await platform.list(`/-/pulls/${original.number}/comments`)).some(comment => String(comment.body).includes(marker))) await platform.comment(original.number, `准确源码已通过 #${number} 的Codex 审查实测/门禁并合入 ${receipt.sha}，此安装 PR 被替代；源分支保留。\n\n<!-- ${marker} -->`);
       await platform.call(`/-/pulls/${original.number}`, { method: 'PATCH', body: { state: 'closed' } });
       if ((await platform.pull(original.number)).state !== 'closed') throw new Error('Superseded installer closure did not read back');
     }
@@ -267,7 +290,7 @@ export async function prepareRepository({ repo, token, sourceRoot, sourceSha, so
       }
     }
     if ((await platform.main()).commit?.sha !== mainSha) throw new Error('Main advanced during installation; align branch and retry checks before activation');
-    const body = `原仓必需检查保留，新增完整 CodeBuddy 和交付回归。安装范围及四问见 Issue #${issue.number} [${taskId}]。\n\n<!-- ${marker} -->\n\n<!-- workloom-delivery\n${JSON.stringify({ task_id: taskId, ready: true, depends_on: [], releases: [] })}\n-->`;
+    const body = `原仓必需检查保留，新增 Codex 审查回执 和交付回归。安装范围及四问见 Issue #${issue.number} [${taskId}]。\n\n<!-- ${marker} -->\n\n<!-- workloom-delivery\n${JSON.stringify({ task_id: taskId, ready: false, depends_on: [], releases: [] })}\n-->`;
     const pull = await createOnce({ list: () => installationPulls(platform, branch), match: p => branchName(p.head?.ref) === branch && String(p.body).includes(marker),
       create: () => platform.call('/-/pulls', { method: 'POST', body: { head: branch, base: 'main', title: `feat(base): 安装普通研发自动交付 [${taskId}]`, body } }) });
     const number = Number(pull.number); const expected = await git(['rev-parse', 'HEAD'], { cwd: root });
@@ -276,7 +299,7 @@ export async function prepareRepository({ repo, token, sourceRoot, sourceSha, so
   } finally { if (!checkout) await rm(directory, { recursive: true, force: true }); }
 }
 
-/** A first install uses genuine bootstrap CI/AI; a native candidate handles every later development merge. */
+/** A first install uses deterministic bootstrap CI and an actual Codex review; a native candidate handles every later development merge. */
 export async function finishInstallation({ repo, token, number, root, platform = new Platform(repo, token), store = new GitStateStore({ repo, token }), policyRefreshDepth = 0 }) {
   if (policyRefreshDepth >= 3) throw new Error('Installation policy refresh exceeds the recovery budget');
   let pull = await platform.pull(number);
@@ -312,20 +335,24 @@ export async function finishInstallation({ repo, token, number, root, platform =
   let preparation;
   try { preparation = verifyInstallerChecks({ state, installer: pull, statuses, tested, requiredNames: policy.requiredNames }); }
   catch (error) { return { repo, number, status: 'waiting_checks', reasons: [platform.error(error)] }; }
-  const commit = await platform.commit(pull.head?.sha);
-  const approval = independentCodeBuddyApproval(await platform.list(`/-/pulls/${number}/reviews`), pull, Date.parse(commit.commit?.committer?.date ?? commit.commit?.author?.date));
+  const reviewSnapshot = state.tasks[String(number)]?.reviewSnapshot;
+  let developerReview = validateDeveloperReview(state.tasks[String(number)]?.developerReview, reviewSnapshot ?? {}, policy);
+  if (reviewSnapshot?.number !== number || reviewSnapshot.headSha !== pull.head?.sha || reviewSnapshot.mainSha !== preparation.mainSha) throw new Error('Installation requires the exact current Codex review and tests; run handoff --review-receipt');
   if (!pull.is_merged) {
     if (pull.state !== 'open' || pull.is_wip !== false || branchName(pull.head?.ref).startsWith('chore/protocol-onboarding-') !== true || !String(pull.body).includes('<!-- delivery-install:')) throw new Error('Not a current exact installation PR');
     const mainSha = (await platform.main()).commit?.sha;
     if (mainSha !== tested.parents[0].sha || pull.base?.sha !== mainSha || pull.mergeable_state !== 'mergeable') return { repo, number, status: 'waiting_alignment' };
+    const liveSnapshot = await platform.snapshot(number, policy);
+    developerReview = verifyInstallationReview({ state, pull, policy, preparation, snapshot: liveSnapshot });
+    for (const dependency of developerReview.dependsOn) if ((await platform.pull(dependency)).is_merged !== true) return { repo, number, status: 'waiting_dependency', dependency };
     if (await git(['rev-parse', 'HEAD'], { cwd: root }) !== pull.head.sha) throw new Error('Installation merge checkout differs from the exact reviewed source');
     if ((await store.read()).events.some(event => event.kind === 'activated')) throw new Error('An active repository must route subsequent updates through its native immutable candidate');
     const mainRule = (await platform.protections()).find(rule => rule.rule === 'main');
-    if (mainRule?.required_pull_request_reviews === true || mainRule?.required_master_approve === true || state.events.some(event => event.kind === 'installer_merge_rejected' && event.data.number === number && event.data.headSha === pull.head.sha && event.data.verifiedUnmerged === true)) return refreshInstallerPolicy({ platform, store, root, pull, preparation, approval });
-    await configureAutomaticReviewPolicy(platform, { independentApproval: approval, preparation });
+    if (mainRule?.required_pull_request_reviews === true || mainRule?.required_master_approve === true || state.events.some(event => event.kind === 'installer_merge_rejected' && event.data.number === number && event.data.headSha === pull.head.sha && event.data.verifiedUnmerged === true)) return refreshInstallerPolicy({ platform, store, root, pull, preparation, developerReview, reviewSnapshot, policy });
+    await configureAutomaticReviewPolicy(platform, { developerReview, reviewSnapshot, policy, preparation });
     await freezeInstallerSource(platform, pull);
     const snapshot = { number, pull, headSha: pull.head.sha, mainSha, checkSha: statuses.sha };
-    await store.mutate(s => appendEvent(s, 'installer_merge_requested', { number, snapshot, approval }), { id: `installer-merge:${number}:${pull.head.sha}` });
+    await store.mutate(s => appendEvent(s, 'installer_merge_requested', { number, snapshot, developerReview }), { id: `installer-merge:${number}:${pull.head.sha}` });
     const current = await platform.pull(number);
     if (current.head?.sha !== snapshot.headSha || current.body !== pull.body || (await platform.main()).commit?.sha !== mainSha) throw new Error('Installation changed before merge');
     let result;
@@ -335,7 +362,7 @@ export async function finishInstallation({ repo, token, number, root, platform =
       if (!pull.is_merged) {
         if (error.status === 409 && pull.is_merged === false && pull.head?.sha === snapshot.headSha) {
           await store.mutate(s => appendEvent(s, 'installer_merge_rejected', { number, headSha: snapshot.headSha, httpStatus: 409, verifiedUnmerged: true }));
-          return refreshInstallerPolicy({ platform, store, root, pull, preparation, approval });
+          return refreshInstallerPolicy({ platform, store, root, pull, preparation, developerReview, reviewSnapshot, policy });
         }
         throw error;
       }
