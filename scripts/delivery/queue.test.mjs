@@ -18,7 +18,7 @@ import { verifyReleaseSource } from './release-source.mjs';
 import { modelGateway } from './model-gateway.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { api, rawFile, strictRawFile } from '../tools/cnb-api.mjs';
+import { api, rawFile } from '../tools/cnb-api.mjs';
 const repo = 'workloom-ai/test'; const head = 'a'.repeat(40); const main = 'b'.repeat(40); const mergedSha = 'c'.repeat(40); const testedSha = 'd'.repeat(40); const now = 10_000_000;
 const policy = { ...BASE_POLICY, hash: 'policy-1', requiredNames: ['static-gate'] };
 const intent = { ready: true, dependsOn: [], releases: [], taskId: null };
@@ -195,14 +195,14 @@ test('only read transport failures and retryable HTTP statuses retry; writes and
   calls = 0; globalThis.fetch = async () => ++calls === 1 ? new Response('paced', { status: 429, headers: { 'retry-after': '0.001' } }) : Response.json({ recovered: true });
   assert.deepEqual(await api(repo, '/-/pulls/1', { token: 'fixture', baseDelayMs: 0 }), { recovered: true }); assert.equal(calls, 2);
 });
-test('legacy optional raw assets stay tolerant with a redacted warning while strict reads fail closed', async t => {
-  const previous = globalThis.fetch; const warn = console.warn; const warnings = []; const credential = randomUUID();
-  t.after(() => { globalThis.fetch = previous; console.warn = warn; }); console.warn = value => warnings.push(value);
+test('raw asset permission and transport failures stay errors and redact actual credentials; only 404 means absent', async t => {
+  const previous = globalThis.fetch; const credential = randomUUID();
+  t.after(() => { globalThis.fetch = previous; });
   globalThis.fetch = async () => new Response('backend ' + credential, { status: 503 });
-  assert.equal(await rawFile(repo, main, 'optional.json', { token: credential }), null);
-  assert.equal(warnings.length, 1); assert.ok(!warnings[0].includes(credential));
-  await assert.rejects(strictRawFile(repo, main, 'required.json', { token: credential }), { status: 503 });
-  globalThis.fetch = async () => new Response('', { status: 404 }); assert.equal(await strictRawFile(repo, main, 'absent.json', { token: credential }), null);
+  await assert.rejects(rawFile(repo, main, 'required.json', { token: credential }), error => error.status === 503 && !error.message.includes(credential));
+  globalThis.fetch = async () => { throw new TypeError('network ' + credential); };
+  await assert.rejects(rawFile(repo, main, 'required.json', { token: credential }), error => /network/.test(error.message) && !error.message.includes(credential));
+  globalThis.fetch = async () => new Response('', { status: 404 }); assert.equal(await rawFile(repo, main, 'absent.json', { token: credential }), null);
 });
 test('source CI preserves required identities; implementation changes require exact AI migration evidence', async () => {
   const YAML = await parser(); const baseline = { name: 'static-gate', stages: [{ name: 'compile', script: 'compile' }, { name: 'test', script: 'test' }] };

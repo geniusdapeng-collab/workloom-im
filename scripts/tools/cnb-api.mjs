@@ -95,26 +95,20 @@ export async function api(slug, path, options = {}) {
 }
 
 /** Strict read: only HTTP 404 means absent; permission/transport failures stay errors. */
-export async function strictRawFile(slug, ref, path, options = {}) {
+export async function rawFile(slug, ref, path, options = {}) {
   const token = options.token ?? requireToken();
   const url = `${API_BASE}/${slug}/-/git/raw/${ref}/${path}`;
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(30000), redirect: 'error',
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(30000), redirect: 'error',
+    });
+  } catch (error) { throw new Error(redactCredentials(`CNB raw transport failed: ${error.message}`, token)); }
   if (response.status === 404) return null;
   const text = await response.text();
   if (!response.ok) throw new CnbError(response.status, text, url, token);
   return text;
-}
-
-/** Legacy optional asset reader. Keep its tolerant contract and report unavailable reads. */
-export async function rawFile(slug, ref, path, options = {}) {
-  try { return await strictRawFile(slug, ref, path, options); }
-  catch (error) {
-    console.warn(redactCredentials(`! Optional CNB asset unavailable: ${slug}/${path}: ${error.message}`, options.token));
-    return null;
-  }
 }
 
 export function listRepos(groupSlug, options = {}) {
