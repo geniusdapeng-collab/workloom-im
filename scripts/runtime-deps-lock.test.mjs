@@ -416,7 +416,7 @@ test("只引用 Vitest 类型的产品不强制兼容依赖，运行期导入才
     const typeOnly = '/// <reference types="vitest/config" />\nimport { defineConfig } from "vite";\n';
     const runtimeImport = 'import { defineConfig } from "vitest/config";\n';
     writeFileSync(join(root, "apps/web/vite.config.ts"), typeOnly);
-    assert.equal(runtimeImportsVitestConfig(root), false);
+    assert.equal(runtimeImportsVitestConfig(root, policy), false);
     assert.ok(!("vitest" in buildRuntimeDepsManifest(root, policy).dependencies));
     const undeclared = structuredClone(source);
     delete undeclared.devDependencies.vitest;
@@ -427,7 +427,7 @@ test("只引用 Vitest 类型的产品不强制兼容依赖，运行期导入才
 
     // 产品自身的客户端配置确实在运行期导入 vitest/config 时才纳入兼容闭包。
     writeFileSync(join(root, "apps/web/vite.config.ts"), runtimeImport);
-    assert.equal(runtimeImportsVitestConfig(root), true);
+    assert.equal(runtimeImportsVitestConfig(root, policy), true);
     write(source, lock);
     assert.deepEqual(buildRuntimeDepsManifest(root, policy).dependencies, { vitest: version });
 
