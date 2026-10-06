@@ -31,6 +31,12 @@ test("audit: pinned session/event(session,event) writes events, distinct seq ide
   assert.throws(() => onEvent({ id: "session-1" }, { ...event, data: { turn: 5 } }), /身份复用/);
 });
 
+test("audit: clean events with undefined-valued fields persist a chain that reads back", (t) => {
+  const f = mounted(t); f.listeners.get("session/event")({ id: "session-1" }, { type: "assistant/message", seq: 0, time: 1000, data: { text: "hi", maybe: undefined }, note: undefined });
+  const actual = readDshAudit(f.file); assert.equal(actual.ok, true, actual.reason); assert.equal(actual.redacted, false);
+  assert.equal(actual.lines, 1); assert.equal(actual.events[0].data.text, "hi");
+});
+
 test("audit: damaged hashes, duplicate identities, missing newline and unreadable storage never verify", (t) => {
   for (const mutate of [
     (text) => text.replace('"turn":0', '"turn":5'), (text) => `${text}${text}`, (text) => text.trimEnd(), (text) => `${text}{truncated\n`,

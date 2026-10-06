@@ -60,7 +60,9 @@ function applyInternal(ctx, config = {}) {
     try {
       if (typeof session?.id !== "string" || !session.id || typeof event?.type !== "string" || !number(event.seq)) throw new PublicBoundaryError("DSH session/event 缺少 Session/Event 双参数身份", "audit_invalid");
       const clean = redact({ ...event, sessionId: session.id });
-      const ev = { ...clean.value, ...(clean.changed ? { auditRedacted: true } : {}) };
+      // Hash the exact JSON-persisted shape: own keys whose value is undefined survive
+      // canonical() but are dropped by JSON.stringify, so reading back would fail the chain.
+      const ev = JSON.parse(JSON.stringify({ ...clean.value, ...(clean.changed ? { auditRedacted: true } : {}) }));
       const id = `${ev.sessionId}:${ev.seq}`; const payload = canonical(ev);
       if (seen.has(id)) { if (seen.get(id) !== payload) throw new PublicBoundaryError("DSH 事件身份复用但内容不同", "audit_invalid"); return; }
       if (existsSync(file)) ordinaryFile(file);
