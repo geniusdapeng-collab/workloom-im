@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 2441,
+  "revision": 2443,
   "tasks": {
     "231": {
       "number": 231,
@@ -95,12 +95,12 @@
         "tests/ui/workloom-clients.spec.ts"
       ],
       "ciSince": 1791312443365,
-      "updatedAt": 1791320414903,
+      "updatedAt": 1791321315335,
       "alignmentCount": 1,
       "alignmentIntent": null,
       "review": null,
-      "error": "检查/评审阻断：Developer has not handed off; Codex review identity differs from the exact repository/source/main/policy",
-      "blockedUntil": 1791321014903,
+      "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+      "blockedUntil": 1791321915335,
       "recoveryCount": 0,
       "recoveryIntent": null,
       "recovery": {
@@ -100779,6 +100779,31 @@
       },
       "previous": "2de6956635b9a573e95337ec915368a08f1d3d9fe6847998a3400c1d8b075259",
       "digest": "5b9e71b7e3d2fa987403801a1ffcb53daba2157b973c1f551c794d1aa8a2a928"
+    },
+    {
+      "sequence": 2442,
+      "at": "2026-10-06T21:15:15.335Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "status": "parked",
+          "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+          "blockedUntil": 1791321915335
+        }
+      },
+      "previous": "5b9e71b7e3d2fa987403801a1ffcb53daba2157b973c1f551c794d1aa8a2a928",
+      "digest": "ded571113651bfffb778ea42c3c3e2c86dabf9f210ef513df4c045c544eab3d1"
+    },
+    {
+      "sequence": 2443,
+      "at": "2026-10-06T21:15:22.552Z",
+      "kind": "transaction",
+      "data": {
+        "id": "923ccc6d-362b-4d9c-a6ca-c9ce3b3e0188"
+      },
+      "previous": "ded571113651bfffb778ea42c3c3e2c86dabf9f210ef513df4c045c544eab3d1",
+      "digest": "06e6d37da241032d81cf9ed55137020c2360569f091ea357abd97c127d2f9c73"
     }
   ]
 }
