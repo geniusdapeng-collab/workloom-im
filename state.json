@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 1532,
+  "revision": 1534,
   "tasks": {
     "231": {
       "number": 231,
@@ -3335,27 +3335,17 @@
       },
       "reviewAttemptAt": 1791278189976,
       "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
-      "reviewBuild": null,
-      "reviewDispatch": {
+      "reviewBuild": {
+        "sn": "cnb-kmh-1k4893v41",
+        "buildLogUrl": "https://cnb.cool/workloom-ai/workloom-im/-/build/logs/cnb-kmh-1k4893v41",
+        "event": "api_trigger_delivery_review",
+        "message": "cnb received, but didn't finish build yet",
+        "success": true,
         "headSha": "643a96edc8a4a819a682020ea8f52b8783d898e3",
         "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
-        "at": 1791279307187,
-        "title": "WorkLoom AI review #263 2effa259778913b2ad95",
-        "knownBuilds": [
-          "cnb-81u-1k488qn5v",
-          "cnb-lnc-1k485c5hn",
-          "cnb-5ub-1k484q6c7",
-          "cnb-36f-1k481l2km",
-          "cnb-ll6-1k480glue",
-          "cnb-ehs-1k47sfrkh",
-          "cnb-p1l-1k47r33qn",
-          "cnb-ue7-1k47nteog",
-          "cnb-mmj-1k47ltib8",
-          "cnb-qi1-1k47jt20u",
-          "cnb-8uq-1k47fjoan",
-          "cnb-4h1-1k47efce9"
-        ]
+        "at": 1791279307187
       },
+      "reviewDispatch": null,
       "reviewFailures": {
         "headSha": "643a96edc8a4a819a682020ea8f52b8783d898e3",
         "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
@@ -54218,6 +54208,39 @@
       },
       "previous": "af1bd0e2178f2b61d6a25e282af4eef16d71f638035800f35abc7c7ce0a636a1",
       "digest": "4f2945e1c3f5409246c9922170009a512bf703aafc4357a6b225c7018d415c4e"
+    },
+    {
+      "sequence": 1533,
+      "at": "2026-10-06T09:35:07.187Z",
+      "kind": "task",
+      "data": {
+        "number": 263,
+        "patch": {
+          "reviewBuild": {
+            "sn": "cnb-kmh-1k4893v41",
+            "buildLogUrl": "https://cnb.cool/workloom-ai/workloom-im/-/build/logs/cnb-kmh-1k4893v41",
+            "event": "api_trigger_delivery_review",
+            "message": "cnb received, but didn't finish build yet",
+            "success": true,
+            "headSha": "643a96edc8a4a819a682020ea8f52b8783d898e3",
+            "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+            "at": 1791279307187
+          },
+          "reviewDispatch": null
+        }
+      },
+      "previous": "4f2945e1c3f5409246c9922170009a512bf703aafc4357a6b225c7018d415c4e",
+      "digest": "e010f7d8cb4355ec928bdda8cf34da9dfb9cbf086f83e9c62b3c0e2a22ea2d02"
+    },
+    {
+      "sequence": 1534,
+      "at": "2026-10-06T09:36:05.424Z",
+      "kind": "transaction",
+      "data": {
+        "id": "a906e103-1dae-4ef6-bb28-421e35bc9aa1"
+      },
+      "previous": "e010f7d8cb4355ec928bdda8cf34da9dfb9cbf086f83e9c62b3c0e2a22ea2d02",
+      "digest": "27630498a4252a3e86f9e6e29c6816d3eef2d3afccf430c2436ba55fb29ec241"
     }
   ]
 }
