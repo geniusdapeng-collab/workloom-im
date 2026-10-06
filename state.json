@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 2228,
+  "revision": 2230,
   "tasks": {
     "231": {
       "number": 231,
@@ -4380,7 +4380,7 @@
           "protocol": 78
         }
       },
-      "updatedAt": 1791308708799,
+      "updatedAt": 1791309012668,
       "headSha": "716eb682583f0dbb00ff577d77ce850294973f30",
       "intent": {
         "taskId": "T-2026-1007-1001",
@@ -89587,6 +89587,45 @@
       },
       "previous": "2e613497baa154bf4b3429dcb894b01860a94ffc8f23c2a17ba49a7003e7ce25",
       "digest": "4d2df457e1bd828fe562b2979a5813e15e773b9dce798259778c3757a1803408"
+    },
+    {
+      "sequence": 2229,
+      "at": "2026-10-06T17:50:12.668Z",
+      "kind": "task",
+      "data": {
+        "number": 266,
+        "patch": {
+          "headSha": "716eb682583f0dbb00ff577d77ce850294973f30",
+          "mainSha": "2d350b7ec969abb0749f8d8d60a2212b8872e3e0",
+          "branch": "task/T-2026-1007-1001",
+          "intent": {
+            "taskId": "T-2026-1007-1001",
+            "ready": true,
+            "dependsOn": [
+              264
+            ],
+            "releases": []
+          },
+          "originalBody": "加强版目标 main 8c19e677122398fee9b9751d18ac1d5811307d2f 新增严格 CNB 原始合并标题/双亲校验。安装器只登记已精读与实际测试的新校验器/测试准确摘要，要求成对匹配；目标实现原字节保留，不回流隔离仓实现。原协议、未知/混配/篡改拒绝、Git/PR/路径/租约证明及平台 AI 禁用规则继续保留。\n\n当前 Codex 已跑新校验器 109 项；完整实际安装副本 255 项中 254 通过、1 项因无共享 UI 发布通道跳过，四项混配/篡改拒绝与旧版支持、重复安装幂等、新校验器及测试字节保留均验证。原有机器门禁与准确当前会话回执成立后，由不可修改候选普通集成。任务卡 #265。\n\n<!-- delivery-reviewed-bound-input:20261007 -->\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1007-1001\",\n  \"ready\": true,\n  \"depends_on\": [\n    264\n  ],\n  \"releases\": []\n}\n-->",
+          "files": [
+            "scripts/delivery/install-protocol.mjs"
+          ],
+          "status": "waiting_ci",
+          "ciSince": 1791308708799
+        }
+      },
+      "previous": "4d2df457e1bd828fe562b2979a5813e15e773b9dce798259778c3757a1803408",
+      "digest": "3992d71497cfd4d6ccde94eba5e95708d2f001ed1b6d57e0ba5d4d804e624258"
+    },
+    {
+      "sequence": 2230,
+      "at": "2026-10-06T17:51:01.071Z",
+      "kind": "transaction",
+      "data": {
+        "id": "cfe2bd1e-d0e0-4d3c-a7ab-c85d567c969f"
+      },
+      "previous": "3992d71497cfd4d6ccde94eba5e95708d2f001ed1b6d57e0ba5d4d804e624258",
+      "digest": "4f4ede8d51d5185b6b132e633890b4a78f644bda74fdb2cc4fd918287ef062be"
     }
   ]
 }
