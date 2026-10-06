@@ -117,8 +117,10 @@ export async function installationPlan({ root, assets, sourceRepo, sourceSha, re
   if (repo.endsWith('/workroom-tiger')) {
     for (const path of TIGER_ALIASES) {
       const name = path.split('/').at(-1);
-      if (name === 'protocol-rules.mjs') executionAssets[path] = "// Canonical root delivery protocol; governance must not resurrect the superseded open-PR lock.\nexport * from '../../../scripts/ci/protocol-rules.mjs';\n";
-      else if (name === 'protocol-rules.test.mjs') executionAssets[path] = "// Run the same canonical assertions from either legacy or root entry point.\nimport '../../../scripts/ci/protocol-rules.test.mjs';\n";
+      // This specifier belongs to the generated governance file, not this installer.
+      const canonicalProtocol = JSON.stringify('../../../scripts/ci/' + name);
+      if (name === 'protocol-rules.mjs') executionAssets[path] = `// Canonical root delivery protocol; governance must not resurrect the superseded open-PR lock.\nexport * from ${canonicalProtocol};\n`;
+      else if (name === 'protocol-rules.test.mjs') executionAssets[path] = `// Run the same canonical assertions from either legacy or root entry point.\nimport ${canonicalProtocol};\n`;
       else executionAssets[path] = `// Legacy CLI delegates to the canonical root and preserves its real exit status.\nimport { spawnSync } from 'node:child_process';\nimport { fileURLToPath } from 'node:url';\nconst result = spawnSync(process.execPath, [fileURLToPath(new URL('../../../scripts/ci/${name}', import.meta.url)), ...process.argv.slice(2)], { stdio: 'inherit' });\nif (result.error || result.signal || result.status === null) { console.error('Canonical protocol CLI could not complete'); process.exitCode = 1; }\nelse process.exitCode = result.status;\n`;
     }
   }
