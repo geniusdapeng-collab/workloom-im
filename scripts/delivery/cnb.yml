@@ -59,7 +59,7 @@
     - name: Install locked delivery parser
       timeout: 120s
       script: npm ci --prefix scripts/delivery/runtime --ignore-scripts --no-audit --no-fund
-    - name: Recover, align and integrate reviewed source independently of fanout
+    - name: Recover, align, review and integrate independently of fanout
       timeout: 12m
       script: node scripts/delivery/queue-runner.mjs reconcile
 
