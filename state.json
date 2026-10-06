@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 832,
+  "revision": 834,
   "tasks": {
     "231": {
       "number": 231,
@@ -2869,7 +2869,7 @@
       "attempts": {},
       "headSha": "e2ca569a44f45beedf8f6ec250c3445d66f47c8b",
       "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
-      "updatedAt": 1791257733680,
+      "updatedAt": 1791257737636,
       "admission": {
         "number": 254,
         "headSha": "e2ca569a44f45beedf8f6ec250c3445d66f47c8b",
@@ -2888,7 +2888,23 @@
           "protocol": 50,
           "sync": 46
         }
-      }
+      },
+      "branch": "delivery/candidate/pr-232-6805d5d791a431e409e9f3321a89b13a",
+      "intent": {
+        "taskId": "T-2026-1002-0001",
+        "ready": true,
+        "dependsOn": [],
+        "releases": []
+      },
+      "reviewAttemptAt": 1791257737636,
+      "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+      "reviewBuild": {
+        "sn": "cnb-ho9-1k47kfhr4",
+        "headSha": "e2ca569a44f45beedf8f6ec250c3445d66f47c8b",
+        "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+        "at": 1791257737636
+      },
+      "reviewDispatch": null
     }
   },
   "leases": {
@@ -26786,6 +26802,47 @@
       },
       "previous": "ed021e7285fa0d043b562a5e29b0210ac1ddf5458e035a1f2d53a7a34593699d",
       "digest": "149df111cdc8e94306d00c007e15e1d1c17aa8c56a383fe42404be650f9f2dfa"
+    },
+    {
+      "sequence": 833,
+      "at": "2026-10-06T03:35:37.636Z",
+      "kind": "task",
+      "data": {
+        "number": 254,
+        "patch": {
+          "status": "waiting_review",
+          "headSha": "e2ca569a44f45beedf8f6ec250c3445d66f47c8b",
+          "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+          "branch": "delivery/candidate/pr-232-6805d5d791a431e409e9f3321a89b13a",
+          "intent": {
+            "taskId": "T-2026-1002-0001",
+            "ready": true,
+            "dependsOn": [],
+            "releases": []
+          },
+          "reviewAttemptAt": 1791257737636,
+          "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
+          "reviewBuild": {
+            "sn": "cnb-ho9-1k47kfhr4",
+            "headSha": "e2ca569a44f45beedf8f6ec250c3445d66f47c8b",
+            "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+            "at": 1791257737636
+          },
+          "reviewDispatch": null
+        }
+      },
+      "previous": "149df111cdc8e94306d00c007e15e1d1c17aa8c56a383fe42404be650f9f2dfa",
+      "digest": "dc8a1bced3e7e3157d5f3c61062b16b8bbe130daab0cfb0e69cacf837ac762c0"
+    },
+    {
+      "sequence": 834,
+      "at": "2026-10-06T03:35:36.827Z",
+      "kind": "transaction",
+      "data": {
+        "id": "71c3b606-85b8-478b-bbba-1b841fc4352e"
+      },
+      "previous": "dc8a1bced3e7e3157d5f3c61062b16b8bbe130daab0cfb0e69cacf837ac762c0",
+      "digest": "7295fb32462ad59746861ad66f65b30a4c57cc581f1d4ff4ee968449a3a41c3a"
     }
   ]
 }
