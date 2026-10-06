@@ -5,7 +5,7 @@
   "repo_path": "/workspace",
   "title": "",
   "created_at": "2026-10-06T00:45:15.713Z",
-  "updated_at": "2026-10-06T04:46:03.501Z",
+  "updated_at": "2026-10-06T06:11:45.584Z",
   "baseline": {
     "audit": {
       "commit": "67129d3b870cf2572aa0ad2e3bfaae7d04170923",
@@ -16,7 +16,7 @@
       "notes": "审计基线 = 修复提交 67129d3（本轮源码改动全覆盖）；台账本身另以文档提交记录。"
     },
     "repair": {
-      "commit": null,
+      "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e",
       "notes": ""
     },
     "acceptance": {
@@ -97,7 +97,7 @@
       "level": "L3",
       "severity": "P1",
       "batch": 1,
-      "state": "unfixed",
+      "state": "fixed",
       "title": "演示名册缺 company-ceo 岗，CEO 节拍全部被 F2.10 正确拒写",
       "evidence": [
         {
@@ -135,7 +135,17 @@
               "before"
             ]
           },
-          "last_result": "not-run"
+          "last_result": "pass",
+          "run": {
+            "path": "runs/MC-040-0-1791267073254.json",
+            "sha256": "f9d716618da38cca746ab876a7fc84c6086ab8e0fde780195c06300273dd9fc5",
+            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+          },
+          "evidence": {
+            "path": "evidence/MC-040-0-1791267073254.txt",
+            "sha256": "763b4c8927f44b226adc823f9d94fe390a3694f0146fa3055818f7606efdad96",
+            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+          }
         },
         {
           "kind": "property",
@@ -151,7 +161,17 @@
               "after"
             ]
           },
-          "last_result": "not-run"
+          "last_result": "pass",
+          "run": {
+            "path": "runs/MC-040-1-1791267077344.json",
+            "sha256": "3bd32d8aa4cab4e414b507af94a09b66231c9252cc6e4ce3e7dbc8178bc1826e",
+            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+          },
+          "evidence": {
+            "path": "evidence/MC-040-1-1791267077344.txt",
+            "sha256": "fb5896a324e257a0a1fcfc841c75217abe7153f10bcdb68a72e2e8664b140c03",
+            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+          }
         }
       ],
       "notes": "MC-040 原登记口径为「标准 suite 的 CEO 正例未声明测试名册和 actor 的围栏绑定」；本轮实测证明根因在**生产种子**缺 CEO 名册行。修复同时覆盖 seed.ts / seed-aipm.ts 与 suite 的 ceoRosterActor()。 本轮（2026-10-06）把断言改成可独立复跑的 F2.10 双向复现：before 方向必须在缺岗时拒绝，after 方向必须在补齐名册后真实写入。整轮 pnpm suite 470/470 仍作为宽回归单列，不再当作单卡回执。",
@@ -163,11 +183,11 @@
         "actor": "codebuddy",
         "role": "repair",
         "result": "pass",
-        "at": "2026-10-06T04:45:28.900Z",
-        "commit": "849a5a17e7f969d19eafed9eb6d31ca52e6a79f6",
-        "finished_at": "2026-10-06T04:45:38.783Z"
+        "at": "2026-10-06T06:11:13.253Z",
+        "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e",
+        "finished_at": "2026-10-06T06:11:21.487Z"
       },
-      "fixed_by": null,
+      "fixed_by": "codebuddy",
       "verified_by": null,
       "verified_at": null,
       "verification_evidence": null
@@ -178,7 +198,7 @@
       "level": "L3",
       "severity": "P1",
       "batch": 1,
-      "state": "unfixed",
+      "state": "fixed",
       "title": "H-13 夹具把工作区永久翻到 dataMode=real，连坐 O/H 域 5 条用例假红",
       "evidence": [
         {
@@ -216,7 +236,17 @@
               "before"
             ]
           },
-          "last_result": "not-run"
+          "last_result": "pass",
+          "run": {
+            "path": "runs/MC-043-0-1791267085346.json",
+            "sha256": "7d0883a2680484375c87ebed4b0727fd247fd4ce888205bd565b0a73afcc9adb",
+            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+          },
+          "evidence": {
+            "path": "evidence/MC-043-0-1791267085346.txt",
+            "sha256": "41b8414f481361a283c2c3910ee063248334040603feb71bca673ce80e080d5b",
+            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+          }
         },
         {
           "kind": "property",
@@ -232,7 +262,17 @@
               "after"
             ]
           },
-          "last_result": "not-run"
+          "last_result": "pass",
+          "run": {
+            "path": "runs/MC-043-1-1791267089267.json",
+            "sha256": "460ce0af06fdc9b7187aa2746dfc7b536f319f2bd237f3c9018c97838c8c2255",
+            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+          },
+          "evidence": {
+            "path": "evidence/MC-043-1-1791267089267.txt",
+            "sha256": "b82cc2f428e9c82467b9ee22249c041a804cf50c2c019f1043262a1eca47f813",
+            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+          }
         }
       ],
       "notes": "夹具写入在 finally 中按原 archive 字节还原，与 R 域 restoreArchive 同口径；未放宽任何门禁断言。 本轮把断言换成可独立复跑的 H-13 双向复现，不再用整轮 suite 当作单卡回执。",
@@ -244,11 +284,11 @@
         "actor": "codebuddy",
         "role": "repair",
         "result": "pass",
-        "at": "2026-10-06T04:45:42.291Z",
-        "commit": "849a5a17e7f969d19eafed9eb6d31ca52e6a79f6",
-        "finished_at": "2026-10-06T04:45:50.731Z"
+        "at": "2026-10-06T06:11:25.345Z",
+        "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e",
+        "finished_at": "2026-10-06T06:11:33.304Z"
       },
-      "fixed_by": null,
+      "fixed_by": "codebuddy",
       "verified_by": null,
       "verified_at": null,
       "verification_evidence": null
@@ -257,7 +297,7 @@
       "id": "MC-101",
       "kind": "fix",
       "batch": 1,
-      "state": "unfixed",
+      "state": "fixed",
       "title": "补齐公司负责人名册行（seed/seed-aipm）+ suite 直连注入读名册",
       "covers": [
         "MC-040"
@@ -298,7 +338,17 @@
               "after"
             ]
           },
-          "last_result": "not-run"
+          "last_result": "pass",
+          "run": {
+            "path": "runs/MC-101-0-1791267093369.json",
+            "sha256": "4591e05e0f691d9d9dcb3d385c83b5439942e4b1d1fe2b73b3f68ddba768a6ab",
+            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+          },
+          "evidence": {
+            "path": "evidence/MC-101-0-1791267093369.txt",
+            "sha256": "fb5896a324e257a0a1fcfc841c75217abe7153f10bcdb68a72e2e8664b140c03",
+            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+          }
         },
         {
           "kind": "property",
@@ -314,7 +364,17 @@
               "after"
             ]
           },
-          "last_result": "not-run"
+          "last_result": "pass",
+          "run": {
+            "path": "runs/MC-101-1-1791267097382.json",
+            "sha256": "7a41773b0186ca64344820ff1021e7bfcf44404e6cdf5e95e4563820ed9523b9",
+            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+          },
+          "evidence": {
+            "path": "evidence/MC-101-1-1791267097382.txt",
+            "sha256": "fb5896a324e257a0a1fcfc841c75217abe7153f10bcdb68a72e2e8664b140c03",
+            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+          }
         }
       ],
       "regression": {
@@ -322,15 +382,15 @@
         "evidence": null
       },
       "rollback": "revert 149c93c92110（按文件 revert 本提交）",
-      "fixed_by": null,
+      "fixed_by": "codebuddy",
       "notes": "",
       "last_assertion_attempt": {
         "actor": "codebuddy",
         "role": "repair",
         "result": "pass",
-        "at": "2026-10-06T04:45:50.805Z",
-        "commit": "849a5a17e7f969d19eafed9eb6d31ca52e6a79f6",
-        "finished_at": "2026-10-06T04:45:59.357Z"
+        "at": "2026-10-06T06:11:33.369Z",
+        "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e",
+        "finished_at": "2026-10-06T06:11:41.695Z"
       },
       "verified_by": null,
       "verified_at": null,
@@ -340,7 +400,7 @@
       "id": "MC-102",
       "kind": "fix",
       "batch": 1,
-      "state": "unfixed",
+      "state": "fixed",
       "title": "H-13 夹具 finally 复位工作区 archive",
       "covers": [
         "MC-043"
@@ -373,7 +433,17 @@
               "after"
             ]
           },
-          "last_result": "not-run"
+          "last_result": "pass",
+          "run": {
+            "path": "runs/MC-102-0-1791267101763.json",
+            "sha256": "d017a6ff349164333793967b67bf05abd505c284d70de463261f64bf494d69b2",
+            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+          },
+          "evidence": {
+            "path": "evidence/MC-102-0-1791267101763.txt",
+            "sha256": "b82cc2f428e9c82467b9ee22249c041a804cf50c2c019f1043262a1eca47f813",
+            "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e"
+          }
         }
       ],
       "regression": {
@@ -381,15 +451,15 @@
         "evidence": null
       },
       "rollback": "revert 149c93c92110（按文件 revert 本提交）",
-      "fixed_by": null,
+      "fixed_by": "codebuddy",
       "notes": "",
       "last_assertion_attempt": {
         "actor": "codebuddy",
         "role": "repair",
         "result": "pass",
-        "at": "2026-10-06T04:45:59.420Z",
-        "commit": "849a5a17e7f969d19eafed9eb6d31ca52e6a79f6",
-        "finished_at": "2026-10-06T04:46:03.501Z"
+        "at": "2026-10-06T06:11:41.763Z",
+        "commit": "2159d9d0b1faf2f409a9938d1c9f009b0a5a232e",
+        "finished_at": "2026-10-06T06:11:45.584Z"
       },
       "verified_by": null,
       "verified_at": null,
