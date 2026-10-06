@@ -5,7 +5,7 @@
   "repo_path": "/workspace",
   "title": "",
   "created_at": "2026-10-06T00:45:15.713Z",
-  "updated_at": "2026-10-06T06:16:56.629Z",
+  "updated_at": "2026-10-06T08:56:52.128Z",
   "baseline": {
     "audit": {
       "commit": "67129d3b870cf2572aa0ad2e3bfaae7d04170923",
@@ -20,8 +20,8 @@
       "notes": "repair 基线 = 回执实体与运行记录共同落地的提交"
     },
     "acceptance": {
-      "commit": "17b9c2e1d342d2d60589ee4b1021933d615223b0",
-      "is_descendant_of_repair": true
+      "commit": null,
+      "is_descendant_of_repair": null
     }
   },
   "environment": {
@@ -97,7 +97,7 @@
       "level": "L3",
       "severity": "P1",
       "batch": 1,
-      "state": "verified",
+      "state": "unfixed",
       "title": "演示名册缺 company-ceo 岗，CEO 节拍全部被 F2.10 正确拒写",
       "evidence": [
         {
@@ -135,17 +135,7 @@
               "before"
             ]
           },
-          "last_result": "pass",
-          "run": {
-            "path": "runs/MC-040-0-1791267387729.json",
-            "sha256": "71c9d4477e9977b723e28aecb7c7c1def14578849f5747ebf1ba5261e29cf933",
-            "commit": "17b9c2e1d342d2d60589ee4b1021933d615223b0"
-          },
-          "evidence": {
-            "path": "evidence/MC-040-0-1791267387729.txt",
-            "sha256": "763b4c8927f44b226adc823f9d94fe390a3694f0146fa3055818f7606efdad96",
-            "commit": "17b9c2e1d342d2d60589ee4b1021933d615223b0"
-          }
+          "last_result": "not-run"
         },
         {
           "kind": "property",
@@ -161,17 +151,7 @@
               "after"
             ]
           },
-          "last_result": "pass",
-          "run": {
-            "path": "runs/MC-040-1-1791267391958.json",
-            "sha256": "9c5b36aeef09d608a9bff53ef568c20d628a0a2e6c847bf09c27a5138ab17b14",
-            "commit": "17b9c2e1d342d2d60589ee4b1021933d615223b0"
-          },
-          "evidence": {
-            "path": "evidence/MC-040-1-1791267391958.txt",
-            "sha256": "fb5896a324e257a0a1fcfc841c75217abe7153f10bcdb68a72e2e8664b140c03",
-            "commit": "17b9c2e1d342d2d60589ee4b1021933d615223b0"
-          }
+          "last_result": "not-run"
         }
       ],
       "notes": "MC-040 原登记口径为「标准 suite 的 CEO 正例未声明测试名册和 actor 的围栏绑定」；本轮实测证明根因在**生产种子**缺 CEO 名册行。修复同时覆盖 seed.ts / seed-aipm.ts 与 suite 的 ceoRosterActor()。 本轮（2026-10-06）把断言改成可独立复跑的 F2.10 双向复现：before 方向必须在缺岗时拒绝，after 方向必须在补齐名册后真实写入。整轮 pnpm suite 470/470 仍作为宽回归单列，不再当作单卡回执。",
@@ -180,21 +160,16 @@
         "evidence": null
       },
       "last_assertion_attempt": {
-        "actor": "session-acceptance",
-        "role": "acceptance",
-        "result": "pass",
-        "at": "2026-10-06T06:16:27.729Z",
-        "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c",
-        "finished_at": "2026-10-06T06:16:36.084Z"
+        "actor": "ai-repair-session-2026-10-06",
+        "role": "repair",
+        "result": "running",
+        "at": "2026-10-06T08:56:52.128Z",
+        "commit": "f7b0dd2e2882b05976a6a76e0ad21e8c6dc103d0"
       },
       "fixed_by": "session-repair",
-      "verified_by": "session-acceptance",
-      "verified_at": "2026-10-06T06:16:36.084Z",
-      "verification_evidence": {
-        "path": "runs/MC-040-0-1791267387729.json",
-        "sha256": "71c9d4477e9977b723e28aecb7c7c1def14578849f5747ebf1ba5261e29cf933",
-        "commit": "95cea20c2ceadcf47253c7939ae6b7856cc8e97c"
-      },
+      "verified_by": null,
+      "verified_at": null,
+      "verification_evidence": null,
       "last_verification_attempt": {
         "actor": "session-acceptance",
         "result": "pass",
