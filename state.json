@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 1654,
+  "revision": 1656,
   "tasks": {
     "231": {
       "number": 231,
@@ -100,9 +100,13 @@
       "alignmentIntent": null,
       "review": null,
       "error": "不可修改候选 #262 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
-      "blockedUntil": 1791280508507,
-      "recoveryCount": 1,
-      "recoveryIntent": null,
+      "blockedUntil": 1791284412815,
+      "recoveryCount": 2,
+      "recoveryIntent": {
+        "headSha": "0aeae01c49aa00ee81ad9537c6b0a9c4a22462d0",
+        "reason": "不可修改候选 #262 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
+        "at": 1791283812815
+      },
       "recovery": {
         "marker": "delivery-repair:ce0c7358dd160512b780e460",
         "reviewId": "2107406889663504384",
@@ -59738,6 +59742,37 @@
       },
       "previous": "52c5cbfff7002c344a059ad590a300088dcbf510fa0e61da97a298b4fdef8d25",
       "digest": "5bc6c31579bb5bf787e16492979a143b2d2929346489b6ebbf7ff790faee9d4d"
+    },
+    {
+      "sequence": 1655,
+      "at": "2026-10-06T10:50:12.815Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "status": "parked",
+          "recoveryCount": 2,
+          "recoveryIntent": {
+            "headSha": "0aeae01c49aa00ee81ad9537c6b0a9c4a22462d0",
+            "reason": "不可修改候选 #262 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
+            "at": 1791283812815
+          },
+          "error": "不可修改候选 #262 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
+          "blockedUntil": 1791284412815
+        }
+      },
+      "previous": "5bc6c31579bb5bf787e16492979a143b2d2929346489b6ebbf7ff790faee9d4d",
+      "digest": "386f8e142aefa81da1b7e4901e112e06bf403d4929e41c3057629f7334216f7c"
+    },
+    {
+      "sequence": 1656,
+      "at": "2026-10-06T10:50:53.359Z",
+      "kind": "transaction",
+      "data": {
+        "id": "38982d89-6298-40c3-8495-6e4f4b9e4c92"
+      },
+      "previous": "386f8e142aefa81da1b7e4901e112e06bf403d4929e41c3057629f7334216f7c",
+      "digest": "7e58d1cb7d570879b9c62df48b0008d6aa4f86efa301112dca4d4fb6fe5a54cf"
     }
   ]
 }
