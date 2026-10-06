@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 1552,
+  "revision": 1554,
   "tasks": {
     "231": {
       "number": 231,
@@ -102,15 +102,11 @@
       "error": "不可修改候选 #262 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
       "blockedUntil": 1791280508507,
       "recoveryCount": 1,
-      "recoveryIntent": {
-        "headSha": "0aeae01c49aa00ee81ad9537c6b0a9c4a22462d0",
-        "reason": "不可修改候选 #262 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
-        "at": 1791279908507
-      },
+      "recoveryIntent": null,
       "recovery": {
-        "marker": "delivery-repair:c411c2d671f1c547ea57f5a8",
-        "reviewId": "2107390765001510912",
-        "dispatchedAt": 1791276086567
+        "marker": "delivery-repair:ce0c7358dd160512b780e460",
+        "reviewId": "2107406889663504384",
+        "dispatchedAt": 1791279930994
       },
       "admission": {
         "number": 231,
@@ -54879,6 +54875,34 @@
       },
       "previous": "5e21e4c63a1117a970b6e5e444fda8c80fa6c2ec763d931cdf795a81af0c0cb7",
       "digest": "c708e310781fdc99ff5d4431e82aae7d85eba5a636bf70a77d03b9c10443a62b"
+    },
+    {
+      "sequence": 1553,
+      "at": "2026-10-06T09:45:08.507Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "recovery": {
+            "marker": "delivery-repair:ce0c7358dd160512b780e460",
+            "reviewId": "2107406889663504384",
+            "dispatchedAt": 1791279930994
+          },
+          "recoveryIntent": null
+        }
+      },
+      "previous": "c708e310781fdc99ff5d4431e82aae7d85eba5a636bf70a77d03b9c10443a62b",
+      "digest": "0b9248bfbd1868f69d71467a4f05d59aa829603520a7cc1188e43cb7957aacdf"
+    },
+    {
+      "sequence": 1554,
+      "at": "2026-10-06T09:45:30.994Z",
+      "kind": "transaction",
+      "data": {
+        "id": "42a60df1-583f-4fc0-90d2-c02c93d2e5a2"
+      },
+      "previous": "0b9248bfbd1868f69d71467a4f05d59aa829603520a7cc1188e43cb7957aacdf",
+      "digest": "7d0359bdcaf97b54076abbea04137bab60236fa5e7d055432ba8dd5bb949548d"
     }
   ]
 }
