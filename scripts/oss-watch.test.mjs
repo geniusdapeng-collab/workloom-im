@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runWatch, dockerLatest, githubLatest } from './oss-watch.mjs';
 import { run as runCi } from './oss-watch-ci.mjs';
+import { git } from './delivery/git-state.mjs';
+import { randomUUID } from 'node:crypto';
 
 const quiet = () => {};
 function fixture(t, component = { name: 'demo', channel: 'github', repo: 'https://github.com/example/demo', cadence: 'monthly', current: '1.0.0', latest: '1.0.0' }) {
@@ -207,4 +209,68 @@ for (const channel of ['npm', 'pypi']) test(`G15: ${channel} cache reuse retains
   assert.equal(state.registry_cache.demo.last_success, observed);
   assert.equal(state.last_success, clockHistory);
   assert.equal(state.last_full_scan, clockHistory);
+});
+
+async function ciFixture(t) {
+  const root = fixture(t); const remote = join(mkdtempSync(join(tmpdir(), 'oss-watch-remote-')), 'repo.git');
+  t.after(() => rmSync(join(remote, '..'), { recursive: true, force: true }));
+  await git(['init', '--bare', '--quiet', remote]); await git(['init', '--quiet', '--initial-branch=main'], { cwd: root });
+  await git(['add', '.'], { cwd: root }); await git(['commit', '--quiet', '-m', 'initial facts'], { cwd: root });
+  const origin = 'https://cnb.cool/owner/nested/project.git';
+  await git(['remote', 'add', 'origin', origin], { cwd: root }); await git(['config', `url.${remote}.insteadOf`, origin], { cwd: root });
+  const date = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date()).replace(/-/g, '');
+  const branch = `chore/oss-watch-${date}`;
+  const services = { requireToken: () => randomUUID(), runWatch: async () => {
+    writeFileSync(join(root, 'docs/oss-update-plan.md'), 'actual new facts\n');
+    return { exitCode: 0, summary: { status: 'ok', scannedAt: new Date().toISOString(), failures: [], componentUpdates: 1, dependencyUpdates: 0, npmQueried: 0, pypiQueried: 0 } };
+  } };
+  return { root, remote, branch, services };
+}
+
+for (const shape of ['object', 'string', 'legacy']) test(`CI PR lookup reads the exact ${shape} source ref without a substring collision or duplicate write`, async t => {
+  const f = await ciFixture(t); let writes = 0;
+  const source = branch => shape === 'object' ? { head: { ref: `refs/heads/${branch}` } } : shape === 'string' ? { head: branch } : { source_branch: { ref: branch } };
+  const result = await runCi({ cwd: f.root, log: quiet, services: { ...f.services,
+    request: async () => [{ number: '1', ...source(f.branch + '-unrelated') }, { number: '2', ...source(f.branch) }],
+    createPull: async () => { writes++; throw new Error('Must reuse existing exact PR'); } } });
+  assert.equal(result.reused, true); assert.equal(result.pull, '2'); assert.equal(writes, 0);
+  assert.equal(await git(['branch', '--show-current'], { cwd: f.root }), 'main');
+});
+
+test('CI scans all PR pages before creating a branch and refuses an unreadable or repeated page', async t => {
+  const f = await ciFixture(t); let pages = 0;
+  const full = Array.from({ length: 100 }, (_, i) => ({ number: String(i + 1), head: { ref: `task/other-${i}` } }));
+  const options = { cwd: f.root, log: quiet, services: { ...f.services, request: async (_slug, path) => {
+    assert.equal(_slug, 'owner/nested/project'); pages++; assert.ok(path.includes(`page=${pages}`));
+    return pages === 1 ? full : [{ number: '101', head: { ref: f.branch } }];
+  } } };
+  assert.equal((await runCi(options)).pull, '101'); assert.equal(pages, 2);
+  options.services.request = async () => ({}); await assert.rejects(runCi(options), /分页不可读/);
+  options.services.request = async () => full; await assert.rejects(runCi(options), /重复/);
+  options.services.request = async () => [{ number: '1', head: {} }]; await assert.rejects(runCi(options), /源分支不可读/);
+  assert.equal(await git(['branch', '--show-current'], { cwd: f.root }), 'main');
+});
+
+test('CI recovers a lost PR creation acknowledgement from exact branch, marker and real pushed Git SHA without a second POST', async t => {
+  const f = await ciFixture(t); let rows = []; let detail; let writes = 0;
+  const result = await runCi({ cwd: f.root, log: quiet, services: { ...f.services,
+    request: async () => rows,
+    createPull: async (slug, value) => {
+      writes++; const sha = (await git(['ls-remote', f.remote, `refs/heads/${f.branch}`])).split(/\s/)[0];
+      assert.equal(sha, await git(['rev-parse', 'HEAD'], { cwd: f.root })); assert.equal(slug, 'owner/nested/project');
+      detail = { number: '5', state: 'open', head: { ref: f.branch, sha }, body: value.body }; rows = [{ number: '5', head: { ref: f.branch } }];
+      throw new Error('Lost actual acknowledgement');
+    }, getPull: async () => detail,
+  } });
+  assert.equal(result.pull, '5'); assert.equal(writes, 1); assert.match(detail.body, /<!-- oss-watch:/);
+});
+
+test('CI does not accept a foreign marker or changed source after a lost PR creation acknowledgement', async t => {
+  const f = await ciFixture(t); let created = false; let writes = 0;
+  await assert.rejects(runCi({ cwd: f.root, log: quiet, services: { ...f.services,
+    request: async () => created ? [{ number: '5', head: { ref: f.branch } }] : [],
+    createPull: async () => { created = true; writes++; throw new Error('Creation result unknown'); },
+    getPull: async () => ({ number: '5', state: 'open', head: { ref: f.branch, sha: 'f'.repeat(40) }, body: '<!-- unrelated -->' }),
+  } }), /Creation result unknown/);
+  assert.equal(writes, 1);
 });

@@ -16,7 +16,7 @@ import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runWatch } from "./oss-watch.mjs";
-import { createPull, listPulls, requireToken, gitAuthenticationEnvironment, redactCredentials } from "./tools/cnb-api.mjs";
+import { api, createPull, getPull, requireToken, gitAuthenticationEnvironment, redactCredentials } from "./tools/cnb-api.mjs";
 
 const WATCHED_PATHS = [
   "oss-components.json",
@@ -31,10 +31,12 @@ function git(args, options = {}) {
 }
 
 function slugFromRemote(cwd) {
-  const remote = git(["-C", cwd, "remote", "get-url", "origin"]);
-  const match = remote.match(/cnb\.cool[/:]([^/]+\/[^/\s]+?)(?:\.git)?$/);
+  // get-url expands insteadOf transport aliases; repository identity comes from the stored origin.
+  const remote = git(["-C", cwd, "config", "--get", "remote.origin.url"]);
+  const match = remote.match(/^(?:https:\/\/cnb\.cool\/|git@cnb\.cool:)([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+?)(?:\.git)?$/);
   if (!match) throw new Error(`无法从 origin 推断仓库 slug：${remote}`);
-  return match[1];
+  if (match[1].split('/').some(part => part === '.' || part === '..')) throw new Error('开源扫描仓库 slug 不能包含路径穿越');
+  return match[1].replace(/\.git$/, '');
 }
 
 /**
@@ -64,9 +66,32 @@ function changedFiles(cwd) {
   return out ? out.split("\n").map((line) => line.slice(3).trim()).filter(Boolean) : [];
 }
 
-export async function run({ cwd, dryRun = false, taskId = "", log = console.log } = {}) {
+function sourceBranch(pull) {
+  const ref = typeof pull.head === 'string' ? pull.head : pull.head?.ref;
+  const legacy = typeof pull.source_branch === 'string' ? pull.source_branch : pull.source_branch?.ref;
+  const branch = ref ?? legacy;
+  if (typeof branch !== 'string' || !branch) throw new Error('开源扫描 PR 源分支不可读');
+  return branch.replace(/^refs\/heads\//, '');
+}
+
+async function openPulls(slug, token, request = api) {
+  const result = []; const seen = new Set();
+  for (let page = 1; page <= 100; page++) {
+    const rows = await request(slug, `/-/pulls?state=open&page_size=100&page=${page}`, { token });
+    if (!Array.isArray(rows)) throw new Error('开源扫描 PR 分页不可读');
+    for (const pull of rows) {
+      const number = Number(pull.number);
+      if (!Number.isSafeInteger(number) || number <= 0 || seen.has(number)) throw new Error('开源扫描 PR 分页身份重复或无效');
+      seen.add(number); sourceBranch(pull); result.push(pull);
+    }
+    if (rows.length < 100) return result;
+  }
+  throw new Error('开源扫描 PR 分页超过上限');
+}
+
+export async function run({ cwd, dryRun = false, taskId = "", log = console.log, services = {} } = {}) {
   const root = resolve(cwd);
-  const { summary, exitCode } = await runWatch({ root, all: false, exitZero: true, dryRun, log });
+  const { summary, exitCode } = await (services.runWatch ?? runWatch)({ root, all: false, exitZero: true, dryRun, log });
   if (dryRun) {
     log(`--dry-run：只查询与生成计划，不写文件、不建分支、不推送；状态 ${summary.status}`);
     return { changed: false, dryRun: true, plannedFiles: summary.plannedFiles, summary, exitCode };
@@ -84,10 +109,12 @@ export async function run({ cwd, dryRun = false, taskId = "", log = console.log 
     .replace(/-/g, "");
   const branch = `chore/oss-watch-${date}`;
   const slug = slugFromRemote(root);
-  const token = requireToken();
+  const token = (services.requireToken ?? requireToken)();
 
-  const openPulls = await listPulls(slug, { state: "open" });
-  const existing = openPulls.find((pull) => (pull.head ?? pull.source_branch?.ref ?? "").includes(branch));
+  const list = () => openPulls(slug, token, services.request);
+  const matches = (await list()).filter(pull => sourceBranch(pull) === branch);
+  if (matches.length > 1) throw new Error('当日开源扫描 PR 身份不唯一');
+  const existing = matches[0];
   if (existing) {
     log(`已有当日 PR #${existing.number}（${branch}），跳过重复创建`);
     return { changed: true, branch, pull: existing.number, summary, reused: true };
@@ -126,12 +153,31 @@ export async function run({ cwd, dryRun = false, taskId = "", log = console.log 
     for (const failure of summary.failures.slice(0, 20)) lines.push(`- \`${failure}\``);
   }
 
-  const pull = await createPull(slug, {
+  const marker = `oss-watch:${branch}:${git(['-C', root, 'rev-parse', 'HEAD'])}`;
+  lines.push(`\n<!-- ${marker} -->`);
+  const create = services.createPull ?? createPull;
+  const detail = number => (services.getPull ?? getPull)(slug, number, { token });
+  let pull;
+  try { pull = await create(slug, {
     title: `chore(deps): 开源组件清单与更新计划周期刷新（${date}）`,
     head: branch,
     base: "main",
     body: lines.join("\n"),
-  });
+  }, { token }); }
+  catch (error) {
+    const recovered = [];
+    for (const item of (await list()).filter(item => sourceBranch(item) === branch)) {
+      const actual = await detail(Number(item.number));
+      if (typeof actual.body === 'string' && actual.body.includes(`<!-- ${marker} -->`)) recovered.push(actual);
+    }
+    if (recovered.length !== 1) throw error;
+    pull = recovered[0];
+  }
+  const number = Number(pull?.number);
+  if (!Number.isSafeInteger(number) || number <= 0) throw new Error('开源扫描 PR 创建回执无效');
+  const actual = await detail(number);
+  if (Number(actual.number) !== number || actual.state !== 'open' || sourceBranch(actual) !== branch ||
+    actual.head?.sha !== git(['-C', root, 'rev-parse', 'HEAD']) || typeof actual.body !== 'string' || !actual.body.includes(`<!-- ${marker} -->`)) throw new Error('开源扫描 PR 创建结果与准确源码不一致');
   log(`✓ 已创建 PR #${pull?.number ?? "?"}（${branch}）`);
   return { changed: true, branch, pull: pull?.number, summary };
 }
