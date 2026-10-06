@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 347,
+  "revision": 352,
   "tasks": {
     "231": {
       "number": 231,
@@ -1521,7 +1521,22 @@
       "attempts": {},
       "headSha": "336ac33066e5b861e61b239df2e44fa882fb0127",
       "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
-      "updatedAt": 1791245708190
+      "updatedAt": 1791245719285,
+      "admission": {
+        "number": 244,
+        "headSha": "336ac33066e5b861e61b239df2e44fa882fb0127",
+        "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+        "filesHash": "4c45cfcc21e0b73b2a31ac340b653d38a16f5144d9b0ae5eb32cbb9bba60958f",
+        "scopes": [
+          "dependencies",
+          "sync"
+        ],
+        "owner": "admission/pr-244",
+        "generation": {
+          "dependencies": 8,
+          "sync": 28
+        }
+      }
     }
   },
   "leases": {
@@ -1533,15 +1548,15 @@
     },
     "sync": {
       "owner": null,
-      "generation": 27,
-      "acquiredAt": 1791245270425,
-      "expiresAt": 1791245270425
+      "generation": 28,
+      "acquiredAt": 1791245719285,
+      "expiresAt": 1791245719285
     },
     "dependencies": {
       "owner": null,
-      "generation": 7,
-      "acquiredAt": 1791245270425,
-      "expiresAt": 1791245270425
+      "generation": 8,
+      "acquiredAt": 1791245719285,
+      "expiresAt": 1791245719285
     },
     "migrations": {
       "owner": null,
@@ -9515,6 +9530,101 @@
       },
       "previous": "ae0b6ff36de6a4d14206d0066e63f2c2caf5ef9a050b28784063a68b728936fd",
       "digest": "5e435455a3253c6820ffc0730c0c07606791fbe20c51bf8a5ab080c4288a4a0b"
+    },
+    {
+      "sequence": 348,
+      "at": "2026-10-06T00:15:19.285Z",
+      "kind": "lease_acquire",
+      "data": {
+        "scopes": [
+          "dependencies",
+          "sync"
+        ],
+        "owner": "admission/pr-244",
+        "generation": {
+          "dependencies": 8,
+          "sync": 28
+        }
+      },
+      "previous": "5e435455a3253c6820ffc0730c0c07606791fbe20c51bf8a5ab080c4288a4a0b",
+      "digest": "f9a3053703e2abb8af14000fd2486151336435913421ab790b52985e7fcbbd59"
+    },
+    {
+      "sequence": 349,
+      "at": "2026-10-06T00:15:19.285Z",
+      "kind": "lease_release",
+      "data": {
+        "scopes": [
+          "dependencies",
+          "sync"
+        ],
+        "owner": "admission/pr-244",
+        "generation": {
+          "dependencies": 8,
+          "sync": 28
+        }
+      },
+      "previous": "f9a3053703e2abb8af14000fd2486151336435913421ab790b52985e7fcbbd59",
+      "digest": "60ff9f7a4f4ed9c4353a4fd797a9d67f914913a5b7a113cd8a2f992c9fe2355b"
+    },
+    {
+      "sequence": 350,
+      "at": "2026-10-06T00:15:19.285Z",
+      "kind": "source_admitted",
+      "data": {
+        "number": 244,
+        "headSha": "336ac33066e5b861e61b239df2e44fa882fb0127",
+        "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+        "filesHash": "4c45cfcc21e0b73b2a31ac340b653d38a16f5144d9b0ae5eb32cbb9bba60958f",
+        "scopes": [
+          "dependencies",
+          "sync"
+        ],
+        "owner": "admission/pr-244",
+        "generation": {
+          "dependencies": 8,
+          "sync": 28
+        }
+      },
+      "previous": "60ff9f7a4f4ed9c4353a4fd797a9d67f914913a5b7a113cd8a2f992c9fe2355b",
+      "digest": "b637b38004c39cf9418a5e2c3d5e2ff6e63f71745869e5e7d3cb1f3d81da893c"
+    },
+    {
+      "sequence": 351,
+      "at": "2026-10-06T00:15:19.285Z",
+      "kind": "task",
+      "data": {
+        "number": 244,
+        "patch": {
+          "admission": {
+            "number": 244,
+            "headSha": "336ac33066e5b861e61b239df2e44fa882fb0127",
+            "mainSha": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+            "filesHash": "4c45cfcc21e0b73b2a31ac340b653d38a16f5144d9b0ae5eb32cbb9bba60958f",
+            "scopes": [
+              "dependencies",
+              "sync"
+            ],
+            "owner": "admission/pr-244",
+            "generation": {
+              "dependencies": 8,
+              "sync": 28
+            }
+          }
+        }
+      },
+      "previous": "b637b38004c39cf9418a5e2c3d5e2ff6e63f71745869e5e7d3cb1f3d81da893c",
+      "digest": "83a46885c3ea397eb606e3cf8018ca20c4faa22da2e4c2e36f983884690d5ec9"
+    },
+    {
+      "sequence": 352,
+      "at": "2026-10-06T00:15:18.833Z",
+      "kind": "transaction",
+      "data": {
+        "id": "source-admit:244:336ac33066e5b861e61b239df2e44fa882fb0127:b949346721360f3c20f10c628d5c7b214bc2b95e"
+      },
+      "previous": "83a46885c3ea397eb606e3cf8018ca20c4faa22da2e4c2e36f983884690d5ec9",
+      "digest": "9da643e7f0b482b11ad3fd8f6ab18f71b16969a7c65ba2f495b8c64a3325c5ec"
     }
   ]
 }
