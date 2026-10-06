@@ -60,43 +60,44 @@ if (!receipts.length) die("台账与索引里没有任何回执", 2);
 const errors = [];
 const show = (path, commit) => execFileSync("git", ["show", `${commit}:${repoPath(path)}`], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
 
-/** The newest commit reachable from HEAD that contains this receipt. */
-function containingCommit(path) {
-  try { return resolveCommit(root, execFileSync("git", ["log", "-1", "--format=%H", "HEAD", "--", repoPath(path)], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim()); }
-  catch { return null; }
-}
-
 if (write) {
   const missing = [];
   for (const { label, ref } of receipts) {
     if (!existsSync(resolve(artifactRoot, ref.path))) { missing.push(label); continue; }
-    const commit = containingCommit(ref.path);
-    if (!commit) { missing.push(label); continue; }
-    ref.commit = commit;
+    ref.commit = resolveCommit(root, ref.commit ?? revision.commit);
     ref.sha256 = hashBytes(readFileSync(resolve(artifactRoot, ref.path)));
   }
   if (missing.length) {
-    console.error(`✗ 有 ${missing.length} 份回执没有任何提交包含它们（先提交实体再重绑）：`);
+    console.error(`✗ 有 ${missing.length} 份回执在磁盘上不存在（先落盘再重绑）：`);
     for (const label of missing.slice(0, 5)) console.error(`  - ${label}`);
     process.exit(1);
   }
-  index.commit = resolveCommit(root, execFileSync("git", ["log", "-1", "--format=%H", "HEAD", "--", repoPath("evidence-index.json")], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim());
+  index.commit = resolveCommit(root, index.commit ?? revision.commit);
   writeFileSync(resolve(ledgerPath), `${JSON.stringify(ledger, null, 2)}\n`);
   writeFileSync(indexPath, `${JSON.stringify(index, null, 2)}\n`);
-  console.log(`✓ 已把 ${receipts.length} 份回执绑定到各自真实落地的提交（index@${index.commit.slice(0, 8)}）`);
+  console.log(`✓ ${receipts.length} 份回执已按其声明提交对齐 sha256（index@${index.commit.slice(0, 8)}）`);
   process.exit(0);
 }
 
+/**
+ * The invariant: every receipt must be readable *and* byte-identical at the commit it
+ * declares. A receipt entity that only exists on disk (or only in a later commit than the
+ * one named) is unverifiable evidence — the exact failure of 5e0044f.
+ */
 for (const { label, ref } of receipts) {
   if (!HEX64.test(String(ref.sha256 ?? ""))) { errors.push(`${label}：sha256 缺失或非法`); continue; }
-  let declared; let containing;
+  let declared;
   try { declared = resolveCommit(root, ref.commit); } catch { errors.push(`${label}：声明提交 ${String(ref.commit ?? "(空)").slice(0, 8)} 在本仓不可解析`); continue; }
-  containing = containingCommit(ref.path);
-  if (!containing) { errors.push(`${label}：没有任何提交包含 ${ref.path}`); continue; }
-  if (declared !== containing) { errors.push(`${label}：声明提交 ${declared.slice(0, 8)} 不是最后包含该产物的提交 ${containing.slice(0, 8)}`); continue; }
-  try { if (hashBytes(show(ref.path, declared)) !== ref.sha256) errors.push(`${label}：git 回读字节与 sha256 不一致（声明 ${ref.sha256.slice(0, 8)}）`); }
-  catch { errors.push(`${label}：无法从声明提交 ${declared.slice(0, 8)} 回读 ${ref.path}`); }
+  try {
+    const bytes = show(ref.path, declared);
+    if (hashBytes(bytes) !== ref.sha256) errors.push(`${label}：${declared.slice(0, 8)} 处的字节与 sha256 不一致（声明 ${ref.sha256.slice(0, 8)}）`);
+    else if (existsSync(resolve(artifactRoot, ref.path)) && !readFileSync(resolve(artifactRoot, ref.path)).equals(bytes)) errors.push(`${label}：磁盘字节与 ${declared.slice(0, 8)} 处的提交字节不一致`);
+  } catch { errors.push(`${label}：无法从声明提交 ${declared.slice(0, 8)} 回读 ${ref.path}（该提交不含此实体）`); }
 }
 
-if (errors.length) { console.error(`✗ 回执绑定不一致（${errors.length} 项）：`); for (const item of errors) console.error(`  - ${item}`); process.exit(1); }
-console.log(`✓ ${receipts.length} 份回执可在 HEAD ${revision.commit.slice(0, 8)} 上回读，sha256 逐份一致`);
+if (errors.length) {
+  console.error(`✗ 回执绑定不一致（${errors.length} 项）：`);
+  for (const item of errors) console.error(`  - ${item}`);
+  process.exit(1);
+}
+console.log(`✓ ${receipts.length} 份回执均可在各自声明的提交上回读，且与磁盘字节一致`);
