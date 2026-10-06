@@ -5,7 +5,7 @@
   "repo_path": "/workspace",
   "title": "",
   "created_at": "2026-10-06T00:45:15.713Z",
-  "updated_at": "2026-10-06T02:40:19.173Z",
+  "updated_at": "2026-10-06T04:42:56.018Z",
   "baseline": {
     "audit": {
       "commit": "67129d3b870cf2572aa0ad2e3bfaae7d04170923",
@@ -97,7 +97,7 @@
       "level": "L3",
       "severity": "P1",
       "batch": 1,
-      "state": "fixed",
+      "state": "unfixed",
       "title": "演示名册缺 company-ceo 岗，CEO 节拍全部被 F2.10 正确拒写",
       "evidence": [
         {
@@ -135,17 +135,7 @@
               "before"
             ]
           },
-          "last_result": "pass",
-          "run": {
-            "path": "runs/MC-040-0-1791254388315.json",
-            "sha256": "b1ecddf5a11f6d12efc58ef6d9fe14d7aa8976c16259636f6a543b1e8af9703f",
-            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
-          },
-          "evidence": {
-            "path": "evidence/MC-040-0-1791254388315.txt",
-            "sha256": "763b4c8927f44b226adc823f9d94fe390a3694f0146fa3055818f7606efdad96",
-            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
-          }
+          "last_result": "not-run"
         },
         {
           "kind": "property",
@@ -161,17 +151,7 @@
               "after"
             ]
           },
-          "last_result": "pass",
-          "run": {
-            "path": "runs/MC-040-1-1791254392185.json",
-            "sha256": "a0ce418786da912f9a61d80d352e90ee3a5e22056157bdf55627897cc2aac675",
-            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
-          },
-          "evidence": {
-            "path": "evidence/MC-040-1-1791254392185.txt",
-            "sha256": "fb5896a324e257a0a1fcfc841c75217abe7153f10bcdb68a72e2e8664b140c03",
-            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
-          }
+          "last_result": "not-run"
         }
       ],
       "notes": "MC-040 原登记口径为「标准 suite 的 CEO 正例未声明测试名册和 actor 的围栏绑定」；本轮实测证明根因在**生产种子**缺 CEO 名册行。修复同时覆盖 seed.ts / seed-aipm.ts 与 suite 的 ceoRosterActor()。 本轮（2026-10-06）把断言改成可独立复跑的 F2.10 双向复现：before 方向必须在缺岗时拒绝，after 方向必须在补齐名册后真实写入。整轮 pnpm suite 470/470 仍作为宽回归单列，不再当作单卡回执。",
@@ -182,10 +162,9 @@
       "last_assertion_attempt": {
         "actor": "codebuddy",
         "role": "repair",
-        "result": "pass",
-        "at": "2026-10-06T02:39:48.315Z",
-        "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab",
-        "finished_at": "2026-10-06T02:39:56.087Z"
+        "result": "running",
+        "at": "2026-10-06T04:42:56.018Z",
+        "commit": "99621b45262cb60a821db7356b1e4d13547e2a09"
       },
       "fixed_by": "codebuddy",
       "verified_by": null,
@@ -236,17 +215,7 @@
               "before"
             ]
           },
-          "last_result": "pass",
-          "run": {
-            "path": "runs/MC-043-0-1791254396145.json",
-            "sha256": "e4597ae9135fa92591557fab29464c9e5476f370febddb88a096b378ee8d8f2f",
-            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
-          },
-          "evidence": {
-            "path": "evidence/MC-043-0-1791254396145.txt",
-            "sha256": "41b8414f481361a283c2c3910ee063248334040603feb71bca673ce80e080d5b",
-            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
-          }
+          "last_result": "not-run"
         },
         {
           "kind": "property",
@@ -262,17 +231,7 @@
               "after"
             ]
           },
-          "last_result": "pass",
-          "run": {
-            "path": "runs/MC-043-1-1791254399833.json",
-            "sha256": "3147cbc29abde7791254ea20881a4711238fb4d28bdfc25fede9d1a7c5f01231",
-            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
-          },
-          "evidence": {
-            "path": "evidence/MC-043-1-1791254399833.txt",
-            "sha256": "b82cc2f428e9c82467b9ee22249c041a804cf50c2c019f1043262a1eca47f813",
-            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
-          }
+          "last_result": "not-run"
         }
       ],
       "notes": "夹具写入在 finally 中按原 archive 字节还原，与 R 域 restoreArchive 同口径；未放宽任何门禁断言。 本轮把断言换成可独立复跑的 H-13 双向复现，不再用整轮 suite 当作单卡回执。",
@@ -338,17 +297,7 @@
               "after"
             ]
           },
-          "last_result": "pass",
-          "run": {
-            "path": "runs/MC-101-0-1791254403931.json",
-            "sha256": "350777247fb97b177cf9d934d1c27432acd77ffd8f07c4fe98fb08e0166235f2",
-            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
-          },
-          "evidence": {
-            "path": "evidence/MC-101-0-1791254403931.txt",
-            "sha256": "fb5896a324e257a0a1fcfc841c75217abe7153f10bcdb68a72e2e8664b140c03",
-            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
-          }
+          "last_result": "not-run"
         },
         {
           "kind": "property",
@@ -364,17 +313,7 @@
               "after"
             ]
           },
-          "last_result": "pass",
-          "run": {
-            "path": "runs/MC-101-1-1791254408533.json",
-            "sha256": "26714dd3b877074497214cae6dabc89f1916c0ade936afea5744150b8d097190",
-            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
-          },
-          "evidence": {
-            "path": "evidence/MC-101-1-1791254408533.txt",
-            "sha256": "fb5896a324e257a0a1fcfc841c75217abe7153f10bcdb68a72e2e8664b140c03",
-            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
-          }
+          "last_result": "not-run"
         }
       ],
       "regression": {
@@ -433,17 +372,7 @@
               "after"
             ]
           },
-          "last_result": "pass",
-          "run": {
-            "path": "runs/MC-102-0-1791254415033.json",
-            "sha256": "4628cd366e903f797f72c07b002d3f3fccce6e217b8e8cd925613f20b0de98ec",
-            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
-          },
-          "evidence": {
-            "path": "evidence/MC-102-0-1791254415033.txt",
-            "sha256": "b82cc2f428e9c82467b9ee22249c041a804cf50c2c019f1043262a1eca47f813",
-            "commit": "8ec0473960b82f01fff6ebb33fd1b9448be39cab"
-          }
+          "last_result": "not-run"
         }
       ],
       "regression": {
