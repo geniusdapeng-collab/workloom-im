@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 1282,
+  "revision": 1284,
   "tasks": {
     "231": {
       "number": 231,
@@ -383,17 +383,13 @@
         }
       },
       "recoveryCount": 1,
-      "recoveryIntent": {
-        "headSha": "2f031865c86217e7df94b364c51b6a85f9698c62",
-        "reason": "不可修改候选 #258 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
-        "at": 1791271510560
-      },
+      "recoveryIntent": null,
       "error": "不可修改候选 #258 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
       "blockedUntil": 1791272110560,
       "recovery": {
-        "marker": "delivery-repair:039b0e1ba074b175e82d2fbd",
-        "reviewId": "2107349026865844224",
-        "dispatchedAt": 1791266135428
+        "marker": "delivery-repair:41aeb69e785afc2fcf69fda6",
+        "reviewId": "2107371789471092736",
+        "dispatchedAt": 1791271562458
       },
       "reviewFailures": null,
       "candidate": {
@@ -44620,6 +44616,34 @@
       },
       "previous": "ddc753016caf4f2859809bb2ba54483f9d5190ad0370c3e1c32afeb82c5905f8",
       "digest": "cd664b083a51688021625718fcf0f1384aacbd6eff242dd5b590b7f1f1f0e9b5"
+    },
+    {
+      "sequence": 1283,
+      "at": "2026-10-06T07:25:10.560Z",
+      "kind": "task",
+      "data": {
+        "number": 232,
+        "patch": {
+          "recovery": {
+            "marker": "delivery-repair:41aeb69e785afc2fcf69fda6",
+            "reviewId": "2107371789471092736",
+            "dispatchedAt": 1791271562458
+          },
+          "recoveryIntent": null
+        }
+      },
+      "previous": "cd664b083a51688021625718fcf0f1384aacbd6eff242dd5b590b7f1f1f0e9b5",
+      "digest": "07e86a1b4391e8068566dc911d4678a89de4971c8b53130137b0eb7a69754dd0"
+    },
+    {
+      "sequence": 1284,
+      "at": "2026-10-06T07:26:02.458Z",
+      "kind": "transaction",
+      "data": {
+        "id": "223b3597-8bd0-44f8-b191-06adc9e1d79c"
+      },
+      "previous": "07e86a1b4391e8068566dc911d4678a89de4971c8b53130137b0eb7a69754dd0",
+      "digest": "91d2897c7f443eb5ac1da8e7ae4800a4a95a9b16be09cfc4a3991c1a897467b8"
     }
   ]
 }
