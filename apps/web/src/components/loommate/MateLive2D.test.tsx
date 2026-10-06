@@ -8,6 +8,7 @@ type Props = { size: number; modelUrl?: string; frame?: "bust" | "full"; mood?: 
 type LipEvent = { type: "start" | "boundary" | "end"; text?: string; charIndex?: number };
 
 const runtime = vi.hoisted(() => ({
+  composite: { drawImage: vi.fn(), clearRect: vi.fn() },
   applications: [] as Array<{ view: HTMLCanvasElement; destroy: ReturnType<typeof vi.fn>; children: unknown[] }>,
   renderers: [] as Array<{ view: HTMLCanvasElement; destroy: ReturnType<typeof vi.fn>; screen: { width: number; height: number }; render: ReturnType<typeof vi.fn>; context: { isLost: boolean; extensions: { loseContext?: { loseContext: ReturnType<typeof vi.fn<() => void>> } } } }>,
   createModel: vi.fn(),
@@ -20,6 +21,7 @@ const runtime = vi.hoisted(() => ({
 vi.mock("pixi.js", () => {
   class Container {
     children: FakeModel[] = [];
+    position = { x: 0, y: 0, set: (x: number, y: number) => { this.position.x = x; this.position.y = y; } };
     addChild(model: FakeModel) { this.children.push(model); }
     removeChild(model: FakeModel) { this.children = this.children.filter((child) => child !== model); }
     destroy(options?: { children?: boolean }) {
@@ -95,6 +97,8 @@ describe("MateLive2D startup and renderer ownership", () => {
     vi.resetModules();
     vi.useFakeTimers();
     (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    runtime.composite.drawImage.mockReset();
+    runtime.composite.clearRect.mockReset();
     runtime.applications.length = 0;
     runtime.renderers.length = 0;
     runtime.createModel.mockReset().mockImplementation(() => Promise.resolve(new FakeModel()));
@@ -107,7 +111,7 @@ describe("MateLive2D startup and renderer ownership", () => {
       ? importGate.promise.then(() => ({ Live2DModel: { from: runtime.createModel } }))
       : { Live2DModel: { from: runtime.createModel } });
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation((type) => (type === "2d"
-      ? { drawImage: vi.fn(), clearRect: vi.fn() } : {}) as RenderingContext);
+      ? { drawImage: runtime.composite.drawImage, clearRect: runtime.composite.clearRect } : {}) as RenderingContext);
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
       const id = ++runtime.nextRaf;
       runtime.raf.set(id, callback);
@@ -376,6 +380,47 @@ describe("MateLive2D startup and renderer ownership", () => {
     await render();
     expect(runtime.renderers).toHaveLength(2);
     expect(ready()).toBe("true");
+  });
+
+  it("composes each differently-sized avatar from its own viewport over one growing shared framebuffer", async () => {
+    const { createMateWebGLSurface } = await import("./MateWebGLRenderer");
+    const big = createMateWebGLSurface(400);
+    const small = createMateWebGLSurface(320);
+    try {
+      // 同文档只应有一个共享 renderer，且它按更大的角色扩到 400。
+      expect(runtime.renderers).toHaveLength(1);
+      expect(runtime.renderers[0]!.screen).toEqual({ width: 400, height: 400 });
+      // 每个角色的合成源区恒为自身的 size×size，而不是共享 framebuffer 的 400×400：
+      // 小角色若按 400 取景就会读到另一角色的像素或留下空白。
+      expect({ ...small.composedSourceRect }).toEqual({ x: 0, y: 0, width: 320, height: 320 });
+      expect({ ...big.composedSourceRect }).toEqual({ x: 0, y: 0, width: 400, height: 400 });
+      expect(small.view.width).toBe(320);
+      expect(small.sourceView).toBe(big.sourceView);
+    } finally { small.destroy(); big.destroy(); }
+  });
+
+  it("samples each avatar's own size region when compositing two sizes", async () => {
+    const { createMateWebGLSurface } = await import("./MateWebGLRenderer");
+    const big = createMateWebGLSurface(400);
+    const small = createMateWebGLSurface(320);
+    try {
+      const shared = big.sourceView;
+      runtime.composite.drawImage.mockClear();
+      big.render();
+      // 大角色采样自身的 400×400 顶左区。
+      expect(runtime.composite.drawImage).toHaveBeenLastCalledWith(shared, 0, 0, 400, 400, 0, 0, 400, 400);
+      // 渲染前 stage 归位到顶左原点，渲染结果只由本角色 size 决定。
+      expect({ x: big.stage.position.x, y: big.stage.position.y }).toEqual({ x: 0, y: 0 });
+      runtime.composite.drawImage.mockClear();
+      small.render();
+      // 共享 framebuffer 已扩到 400，但小角色仍只采样自己的 320×320 区域，不复制大角色的像素。
+      expect(runtime.renderers[0]!.screen).toEqual({ width: 400, height: 400 });
+      expect(runtime.composite.drawImage).toHaveBeenLastCalledWith(shared, 0, 0, 320, 320, 0, 0, 320, 320);
+      // 两份画布都是各自 size 的独立可见画布，互不共用。
+      expect(big.view.width).toBe(400);
+      expect(small.view.width).toBe(320);
+      expect(small.view).not.toBe(big.view);
+    } finally { small.destroy(); big.destroy(); }
   });
 
   it("ends both shared instances after loss of their real WebGL source", async () => {

@@ -176,6 +176,17 @@ include:
         node --test scripts/test-owned-pg-contract.test.mjs
         node scripts/test-owned-pg.mjs --repo base
 
+    # CEO 并发/撤权与首次夜班决策包三套契约同属任务专属：泛化 base 阶段用
+    # WORKLOOM_GENERIC_DB_CI=1 把它们移出发现面，这个阶段就是那条排除的补偿执行路径。
+    # 它不是可选件——契约测试会断言它存在、且不继承泛化开关、不裁剪用例清单。
+    - name: 基座 CEO 与夜班专属 PostgreSQL 契约（独立 Unix socket）
+      script: |
+        set -eu
+        REPORT_PARENT="$(mktemp -d /tmp/wl-owned-ceo-night-evidence-XXXXXX)"
+        REPORT_DIR="${REPORT_PARENT}/receipts"
+        node scripts/test-owned-ceo-night-pg.mjs --report-dir "$REPORT_DIR"
+        echo "owned CEO/night PG receipts: $REPORT_DIR"
+
     # server 侧的任务专属契约需要各自私有的 Unix 集群与哨兵：泛化 server 阶段用
     # WORKLOOM_GENERIC_DB_CI=1 把它们移出发现面，这个阶段就是那条排除的补偿执行路径。
     # 它不是可选件——契约测试会断言它存在、且不继承泛化开关、不裁剪用例清单。

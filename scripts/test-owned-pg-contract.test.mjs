@@ -334,3 +334,90 @@ test("CLI missing PG resources exits failed with zero suites and an explicit fai
     assert.match(receipt.error.message, /ENOENT/); assert.equal(receipt.temporary_removed, true);
   } finally { await rm(temporary, { recursive: true }); }
 });
+
+// 基座 CEO 并发/撤权与首次夜班决策包三套契约同属任务专属：泛化 base 阶段用
+// WORKLOOM_GENERIC_DB_CI=1 把它们移出发现面，补偿执行路径是专用的
+// scripts/test-owned-ceo-night-pg.mjs。排除即「摘掉必需检查」，因此这里逐条钉死
+// 文件、每套必测用例数、必需哨兵与私有前缀，并断言必需阶段确实调用它。
+const taskOwnedCeoNightFiles = [
+  "captain/ceo-escalation.pg.test.ts",
+  "captain/ceo-withdrawal.pg.test.ts",
+  "night-shift/night-package.pg.test.ts",
+];
+const ownedCeoNightRunner = join(root, "scripts/test-owned-ceo-night-pg.mjs");
+
+test("only explicit generic-CI value 1 excludes the exact task-owned CEO/night files", async () => {
+  const previous = process.env.WORKLOOM_GENERIC_DB_CI;
+  try {
+    for (const [i, value] of [undefined, "0", "true", "1"].entries()) {
+      if (value === undefined) delete process.env.WORKLOOM_GENERIC_DB_CI;
+      else process.env.WORKLOOM_GENERIC_DB_CI = value;
+      const config = await import(`../packages/base/vitest.config.mjs?owned-ceo-night-${i}`);
+      for (const file of taskOwnedCeoNightFiles) {
+        assert.equal(config.default.test.exclude.includes(file), value === "1", `${value}:${file}`);
+      }
+      assert.deepEqual(config.ownedCeoNightPgTestFiles, taskOwnedCeoNightFiles);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.WORKLOOM_GENERIC_DB_CI;
+    else process.env.WORKLOOM_GENERIC_DB_CI = previous;
+  }
+});
+
+// 实测计数（真实 PG17 + pgvector 私有集群）：52 / 206 / 58，均由本会话实际执行得到，
+// 不是静态推演；runner 会要求 vitest 报告逐套命中该值，否则红灯。
+const taskOwnedCeoNightSuites = [
+  ["ceo-escalation", "captain/ceo-escalation.pg.test.ts", 52],
+  ["ceo-withdrawal", "captain/ceo-withdrawal.pg.test.ts", 206],
+  ["night-package", "night-shift/night-package.pg.test.ts", 58],
+];
+
+test("a dedicated CEO/night runner enumerates exactly the excluded suites with real counts", async () => {
+  const { OWNED_CEO_NIGHT_SUITES } = await import(pathToFileURL(ownedCeoNightRunner).href);
+  assert.deepEqual(OWNED_CEO_NIGHT_SUITES.map((item) => [item.key, item.file, item.tests]), taskOwnedCeoNightSuites);
+  const excluded = await readFile(join(root, "packages/base/vitest.config.mjs"), "utf8");
+  for (const file of OWNED_CEO_NIGHT_SUITES.map((item) => item.file)) assert(excluded.includes(file), `excluded suite is not covered by the dedicated runner: ${file}`);
+  for (const file of taskOwnedCeoNightFiles) assert(OWNED_CEO_NIGHT_SUITES.some((item) => item.file === file), `excluded suite has no dedicated executor: ${file}`);
+});
+
+test("every dedicated CEO/night suite keeps its fail-closed sentinel and private cluster prefix", async () => {
+  const { OWNED_CEO_NIGHT_SUITES } = await import(pathToFileURL(ownedCeoNightRunner).href);
+  const required = {
+    "ceo-escalation": ["CEO_ESCALATION_TASK_OWNED"],
+    "ceo-withdrawal": ["CEO_WITHDRAWAL_TASK_OWNED"],
+    "night-package": ["NIGHT_PACKAGE_TASK_OWNED"],
+  };
+  for (const suite of OWNED_CEO_NIGHT_SUITES) {
+    assert(suite.prefix.startsWith("wl-") && !suite.prefix.includes("..") && !suite.prefix.includes("/"), `${suite.key}: unsafe private prefix`);
+    for (const key of required[suite.key] ?? []) assert(suite.sentinels?.[key] !== undefined, `${suite.key}: missing ${key} sentinel`);
+    const source = await readFile(join(root, "packages/base", suite.file), "utf8");
+    for (const key of Object.keys(suite.sentinels ?? {})) assert(source.includes(key), `${suite.key}: ${key} sentinel is no longer asserted by the suite itself`);
+    // 契约自身的 fail-closed 守卫仍在：RUN_DB_TESTS=1 与哨兵缺一即整块 skip。
+    assert(source.includes("RUN_DB_TESTS"), `${suite.key}: suite dropped its fail-closed RUN_DB_TESTS guard`);
+  }
+});
+
+test("runner derives each suite environment without inheriting shared DB or the generic switch", async () => {
+  const { suiteEnvironment, OWNED_CEO_NIGHT_SUITES } = await import(pathToFileURL(ownedCeoNightRunner).href);
+  for (const suite of OWNED_CEO_NIGHT_SUITES) {
+    const socket = `/tmp/${suite.prefix}deadbeef`;
+    const env = suiteEnvironment(suite, { socket, port: 60000, database: `${suite.databasePrefix}_abc123`, nonce: "0123456789" });
+    assert.equal(env.WORKLOOM_GENERIC_DB_CI, undefined, `${suite.key}: must not inherit the generic switch`);
+    const pinned = decodeURIComponent(env.DATABASE_URL);
+    assert.equal(pinned.includes(socket), true, `${suite.key}: must pin the runner-owned socket`);
+    for (const key of Object.keys(suite.sentinels)) assert.equal(env[key], suite.sentinels[key], `${suite.key}: ${key} sentinel missing from environment`);
+  }
+});
+
+test("the mandatory db-gate invokes the dedicated CEO/night runner without the generic-CI exclusion switch", () => {
+  const { parse } = createRequire(join(root, "packages/base/package.json"))("yaml");
+  const gate = parse(cnb)[".db-gate"];
+  const stages = gate.stages.filter((item) => item.script?.includes("node scripts/test-owned-ceo-night-pg.mjs"));
+  assert.equal(stages.length, 1, "exactly one mandatory stage must execute the dedicated CEO/night runner");
+  const index = gate.stages.indexOf(stages[0]);
+  assert(index > 0, "dedicated CEO/night runner must run after Node/pnpm preparation");
+  assert(stages[0].script.includes("--report-dir"));
+  assert(!stages[0].script.includes("WORKLOOM_GENERIC_DB_CI"), "dedicated CEO/night runner must not inherit the generic-CI exclusion");
+  assert(!stages[0].script.includes("--suites"), "the mandatory stage must run every dedicated CEO/night suite");
+  assert.equal(gate.allowFailure, undefined);
+});

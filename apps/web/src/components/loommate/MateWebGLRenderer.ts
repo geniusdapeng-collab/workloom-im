@@ -4,6 +4,8 @@ export interface MateWebGLSurface {
   view: HTMLCanvasElement;
   sourceView: HTMLCanvasElement;
   stage: PIXI.Container;
+  /** 本角色在共享 framebuffer 中的合成源区；尺寸不同的角色并存时仍是自身的 size×size。 */
+  composedSourceRect: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
   render: () => void;
   destroy: () => void;
 }
@@ -53,14 +55,24 @@ export function createMateWebGLSurface(size: number): MateWebGLSurface {
   owner.users += 1;
   let disposed = false;
 
+  // 本角色只在 [0, size) 顶左区内构图（模型 x=size/2、y=size*1.72 均按自身 size 的视口计算），
+  // 因此无论共享 framebuffer 被更大的角色扩到多大，合成源区恒为 (0,0,size,size)：
+  // 逐帧切换尺寸不会让另一角色的画布改变本角色的取景，也不会读到另一角色的像素。
+  const composedSourceRect = Object.freeze({ x: 0, y: 0, width: pixels, height: pixels });
+
   return {
-    view, sourceView: owner.sourceView, stage,
+    view, sourceView: owner.sourceView, stage, composedSourceRect,
     render: () => {
       if (disposed) return;
+      // render 前把该角色自己的 stage 归位到顶左原点：渲染结果只由本角色的 size 决定，
+      // 与共享 framebuffer 当前尺寸无关（更早的更大角色扩容不会平移本角色的取景）。
+      stage.position.set(0, 0);
       owner.renderer.render(stage, { clear: true });
       context.clearRect(0, 0, pixels, pixels);
       // 同步 canvas 合成，不做 getImageData/readPixels，也不让另一角色覆盖本帧。
-      context.drawImage(owner.sourceView, 0, 0, pixels, pixels, 0, 0, pixels, pixels);
+      context.drawImage(owner.sourceView,
+        composedSourceRect.x, composedSourceRect.y, composedSourceRect.width, composedSourceRect.height,
+        0, 0, pixels, pixels);
     },
     destroy: () => {
       if (disposed) return;

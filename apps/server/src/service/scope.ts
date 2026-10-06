@@ -24,7 +24,8 @@ export function requireServiceScope(workspaceId: string, explicit?: ServiceScope
   const current = scopes.getStore();
   const scope = explicit ? validatedServiceScope(explicit) : current;
   if (!scope || scope.workspaceId !== workspaceId
-      || current && (scope.tenantId !== current.tenantId || scope.workspaceId !== current.workspaceId)) {
+      || (current !== undefined
+        && (scope.tenantId !== current.tenantId || scope.workspaceId !== current.workspaceId))) {
     throw new Error("service scope: 缺少可信双作用域或请求作用域不匹配");
   }
   return scope;

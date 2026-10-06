@@ -336,9 +336,9 @@
     "apps/web/src/components/loomball/provenance.test.ts": "f3f8fecf21c0997627dafc6f128099d942be51639ba7dd953a45539c38f62ada",
     "apps/web/src/components/loomball/useStableEmotion.ts": "a00b08f9f35bb4b36ad368a0f225d84730ee16dd13a7a2d855fe24cf2a8599a4",
     "apps/web/src/components/loommate/LoomMate.tsx": "7713f3c1332937d2781720bc67d1fc7a4acee4641f30d863ae15bd2b212218f1",
-    "apps/web/src/components/loommate/MateLive2D.test.tsx": "ff0c99417b9f7623549e14230e2bc16d72e724585a7968438c689030a269da04",
+    "apps/web/src/components/loommate/MateLive2D.test.tsx": "9121439c8c05152ff573d3c5b798d472acb76fd216e9275b639ab07be6c01174",
     "apps/web/src/components/loommate/MateLive2D.tsx": "2c674876513be53e23962e1bbf6cb85ede21e20698f0a0dc06ce53652672cf56",
-    "apps/web/src/components/loommate/MateWebGLRenderer.ts": "e9a7c047800c839c09209c27ef4d18633ac6c2e435ef93f8e07fe9f4acd4cbeb",
+    "apps/web/src/components/loommate/MateWebGLRenderer.ts": "2e35c002c385e56a0f64f4e0c5c646a9952c531844feebfbba6ef308030e4489",
     "apps/web/src/components/loommate/speechText.test.ts": "90fbf47d1bf1fc24fb504300af0305c05f071622d037977fecdcb5a322d7ec64",
     "apps/web/src/components/loommate/speechText.ts": "c5523c2efe80c6a500f4727809c43727ef194e6925638a0797ec271d90736193",
     "apps/web/src/components/star-ring/StarRing.tsx": "08c7b91c784b166a2843547e89a3028264969ed50ef3f03f02d0c3e800eb8c18",
@@ -418,5 +418,5 @@
     "apps/web/src/voice/neuralVoice.test.ts": "e82b0c4584e84a62c1a68f44023eb74b539801cbf0b109be8531f650d81dab69",
     "apps/web/src/voice/neuralVoice.ts": "cb2992522c317fb1931e6bfaf296f5ad322a92c956fe74905ba5bb80f5ab0924"
   },
-  "digest": "b44f43059904afc9bdbdd6ff2ae06d982256be35e64bbe5637d47e7714884a21"
+  "digest": "5bc788bdc3ea526da5552cfb4e972028d0bf34a222d0d49ddf207b436452f592"
 }
