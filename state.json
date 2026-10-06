@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 1378,
+  "revision": 1380,
   "tasks": {
     "231": {
       "number": 231,
@@ -3180,24 +3180,17 @@
       },
       "reviewAttemptAt": 1791273036638,
       "policyHash": "8106f7a0785b587ae3b77263fa6d13d1c97e775965472fadbdfd2562d2d3c1f6",
-      "reviewBuild": null,
-      "reviewDispatch": {
+      "reviewBuild": {
+        "sn": "cnb-5ub-1k484q6c7",
+        "buildLogUrl": "https://cnb.cool/workloom-ai/workloom-im/-/build/logs/cnb-5ub-1k484q6c7",
+        "event": "api_trigger_delivery_review",
+        "message": "cnb received, but didn't finish build yet",
+        "success": true,
         "headSha": "bd865cc91b7ee8e28b2c585daf1f34d834c95bf2",
         "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
-        "at": 1791274814606,
-        "title": "WorkLoom AI review #260 47371b3b015bac386bd2",
-        "knownBuilds": [
-          "cnb-36f-1k481l2km",
-          "cnb-ll6-1k480glue",
-          "cnb-ehs-1k47sfrkh",
-          "cnb-p1l-1k47r33qn",
-          "cnb-ue7-1k47nteog",
-          "cnb-mmj-1k47ltib8",
-          "cnb-qi1-1k47jt20u",
-          "cnb-8uq-1k47fjoan",
-          "cnb-4h1-1k47efce9"
-        ]
+        "at": 1791274814606
       },
+      "reviewDispatch": null,
       "admission": {
         "number": 260,
         "headSha": "bd865cc91b7ee8e28b2c585daf1f34d834c95bf2",
@@ -48299,6 +48292,39 @@
       },
       "previous": "93deeb1dd34f4bcc83561c4cd1dbe1b6a136dadb66f00283c0ccbc04c712811f",
       "digest": "238847022d9784da2727a1de0daab006609d065b1f1c91da2901f9ba94ef3a86"
+    },
+    {
+      "sequence": 1379,
+      "at": "2026-10-06T08:20:14.606Z",
+      "kind": "task",
+      "data": {
+        "number": 260,
+        "patch": {
+          "reviewBuild": {
+            "sn": "cnb-5ub-1k484q6c7",
+            "buildLogUrl": "https://cnb.cool/workloom-ai/workloom-im/-/build/logs/cnb-5ub-1k484q6c7",
+            "event": "api_trigger_delivery_review",
+            "message": "cnb received, but didn't finish build yet",
+            "success": true,
+            "headSha": "bd865cc91b7ee8e28b2c585daf1f34d834c95bf2",
+            "mainSha": "0a77f86cb113cdf2df1ce88663fb7885b04e55c8",
+            "at": 1791274814606
+          },
+          "reviewDispatch": null
+        }
+      },
+      "previous": "238847022d9784da2727a1de0daab006609d065b1f1c91da2901f9ba94ef3a86",
+      "digest": "ecaf70a2d87f258fe9b2dc4a1c035afbd4311bb2bf0894d6cddc0c3eb6788b58"
+    },
+    {
+      "sequence": 1380,
+      "at": "2026-10-06T08:20:50.838Z",
+      "kind": "transaction",
+      "data": {
+        "id": "2e06a24b-cd30-40af-8a4e-bbb7d5c525bd"
+      },
+      "previous": "ecaf70a2d87f258fe9b2dc4a1c035afbd4311bb2bf0894d6cddc0c3eb6788b58",
+      "digest": "51e1bdfcbc7997f222454e6f7242f430f53acb4d51ce2c6ee51cf376fb48d2bc"
     }
   ]
 }
