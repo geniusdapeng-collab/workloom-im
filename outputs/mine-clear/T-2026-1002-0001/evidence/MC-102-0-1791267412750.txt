@@ -1,9 +1,0 @@
-PASS 夹具起点是模拟运行态（dataMode=simulated）
-PASS 门禁放行时写入确实发生了（复现负例场景）
-PASS 复位后工作区回到模拟运行态（dataMode=simulated）
-PASS archive 按原字节还原，后续用例不再被连坐
-{"mode":"after","failures":0,"result":"pass"}
-
-
-exit_code=0 signal=none error=none
-assertion_validation={"ok":true,"errors":[]}

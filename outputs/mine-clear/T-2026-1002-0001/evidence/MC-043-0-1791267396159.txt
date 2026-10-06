@@ -1,7 +1,0 @@
-PASS 夹具起点是模拟运行态（dataMode=simulated）
-PASS 无复位时工作区被永久翻到 real（dataMode=real）
-{"mode":"before","failures":0,"result":"pass"}
-
-
-exit_code=0 signal=none error=none
-assertion_validation={"ok":true,"errors":[]}
