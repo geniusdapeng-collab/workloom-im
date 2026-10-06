@@ -1,0 +1,67 @@
+{
+  "id": "MC-101",
+  "kind": "fix",
+  "batch": 1,
+  "state": "open",
+  "title": "补齐公司负责人名册行（seed/seed-aipm）+ suite 直连注入读名册",
+  "covers": [
+    "MC-040"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "scripts/seed.ts:622@149c93c921103ad4bedda6d6fa0e5a5369632bee",
+      "sha256": "aa18cad36c0b99da8cb8fad2273b8784de7a84b1e17dbd42390206bcf4c4cfa8",
+      "note": "新增 agt-company-ceo 名册行，绑定基线围栏 R1/R2"
+    },
+    {
+      "type": "code",
+      "ref": "scripts/suite.ts:120@149c93c921103ad4bedda6d6fa0e5a5369632bee",
+      "sha256": "e3338994784f618ccb3ad6c6eb3954040a4ceabcde1323144e9f0c3348352cd2",
+      "note": "ceoRosterActor() 从名册读围栏绑定，替换 R-22/R-24 的硬编码空 actor"
+    }
+  ],
+  "fix_plan": "seed.ts/seed-aipm.ts 各补一条 ON CONFLICT DO NOTHING 的名册插入；suite 的两处直连注入改用 ceoRosterActor()。",
+  "blast_radius": "演示库新增一行 agents；不改变 gateway 权限语义，缺岗/停用仍失败关闭。",
+  "conflict_paths": [
+    "scripts/seed.ts",
+    "scripts/seed-aipm.ts",
+    "scripts/suite.ts"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "隔离 PG 17 + pgvector，db:migrate + db:seed + db:seed:aipm",
+      "expect": "两条命令各自输出「数字 CEO 岗位入册」，名册出现 ready 且 fence_bindings 非空",
+      "command": "pnpm suite",
+      "exec": {
+        "file": "pnpm",
+        "args": [
+          "suite"
+        ]
+      },
+      "last_result": "not-run"
+    },
+    {
+      "kind": "property",
+      "given": "任意 ceo.* 写动作节拍",
+      "expect": "不再抛「未声明 fence_bindings」",
+      "command": "pnpm suite",
+      "exec": {
+        "file": "pnpm",
+        "args": [
+          "suite"
+        ]
+      },
+      "last_result": "not-run"
+    }
+  ],
+  "regression": {
+    "command": "pnpm suite && pnpm -C packages/base test",
+    "evidence": null
+  },
+  "rollback": "revert 149c93c92110（按文件 revert 本提交）",
+  "fixed_by": "149c93c921103ad4bedda6d6fa0e5a5369632bee",
+  "verified_by": null,
+  "notes": ""
+}

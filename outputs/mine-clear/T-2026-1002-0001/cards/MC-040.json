@@ -1,0 +1,64 @@
+{
+  "id": "MC-040",
+  "kind": "problem",
+  "level": "L3",
+  "severity": "P1",
+  "batch": 1,
+  "state": "open",
+  "title": "演示名册缺 company-ceo 岗，CEO 节拍全部被 F2.10 正确拒写",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "packages/base/captain/loop.ts:23@149c93c921103ad4bedda6d6fa0e5a5369632bee",
+      "sha256": "0fb599d5ec6b153f2c4887c4d07a47d2c3f7da02d15113350355a619fb4f21e4",
+      "note": "loop.ceoActor 按 preset_key='company-ceo' 从 agents 名册解析 actor；缺行即空 fenceBindings → gateway 段①拒绝"
+    },
+    {
+      "type": "code",
+      "ref": "scripts/seed.ts:619@149c93c921103ad4bedda6d6fa0e5a5369632bee",
+      "sha256": "aa18cad36c0b99da8cb8fad2273b8784de7a84b1e17dbd42390206bcf4c4cfa8",
+      "note": "修复前此处只有 Bundle 7 岗位入册，没有任何 company-ceo 行"
+    }
+  ],
+  "root_cause": {
+    "file": "scripts/seed.ts",
+    "line": 620,
+    "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee",
+    "symbol": "main()"
+  },
+  "trigger_path": "pnpm db:seed 后执行任一 ceo.* 写动作节拍",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "db:seed 后查询 agents.preset_key='company-ceo'",
+      "expect": "存在 1 行 ready 且 fence_bindings 非空",
+      "command": "pnpm suite",
+      "exec": {
+        "file": "pnpm",
+        "args": [
+          "suite"
+        ]
+      },
+      "last_result": "not-run"
+    },
+    {
+      "kind": "property",
+      "given": "任意 runBriefingBeat/runQueueBeat",
+      "expect": "不再抛「未声明 fence_bindings」；缺岗/停用/重复在编仍失败关闭",
+      "command": "pnpm -C packages/base exec vitest run captain/ceo-loop.test.ts",
+      "exec": {
+        "file": "pnpm",
+        "args": [
+          "-C",
+          "packages/base",
+          "exec",
+          "vitest",
+          "run",
+          "captain/ceo-loop.test.ts"
+        ]
+      },
+      "last_result": "not-run"
+    }
+  ],
+  "notes": "MC-040 原登记口径为「标准 suite 的 CEO 正例未声明测试名册和 actor 的围栏绑定」；本轮实测证明根因在**生产种子**缺 CEO 名册行。修复同时覆盖 seed.ts / seed-aipm.ts 与 suite 的 ceoRosterActor()。"
+}

@@ -113,6 +113,25 @@ async function qApp<T = Record<string, unknown>>(sql: string, params: unknown[] 
 }
 
 /**
+ * 数字 CEO 的 actor 事实（MC-040）：围栏绑定必须来自本工作区名册，与生产
+ * `loop.ceoActor()` 同一来源。用例若硬编码一个空 actor 去注入 ceo.* 写动作，
+ * 就会被 F2.10 正确拒绝——问题在夹具不在守卫，因此这里如实读名册。
+ */
+async function ceoRosterActor(): Promise<{ id: string; type: "agent"; readonly: boolean; fenceBindings: string[] }> {
+  const r = await qApp<{ readonly: boolean; fence_bindings: unknown }>(
+    `SELECT readonly, fence_bindings FROM agents WHERE workspace_id=$1 AND preset_key='company-ceo' AND status='ready'`,
+    [scope.workspaceId],
+  );
+  const row = r.rows[0];
+  assert(row, "名册缺 company-ceo：请先 pnpm db:seed（MC-040）");
+  const declared = row!.fence_bindings;
+  return {
+    id: "company-ceo", type: "agent", readonly: row!.readonly !== false,
+    fenceBindings: Array.isArray(declared) ? declared.map(String) : [],
+  };
+}
+
+/**
  * 套件依赖显式播种的酒店演示工作区。治理夹具若仍是旧自治结构，Zod 的
  * 安全默认会令所有动作保守上浮；这里在 459 个用例启动前一次性报清根因，
  * 避免同一个前置错误伪装成多个审批、熔断和夜班回归。
@@ -2566,14 +2585,29 @@ h2("onboarding 还原 mock 装配（套件环境复位）", async () => {
   eq(st.result?.data?.llm?.real, false, "status 复位 mock");
 });
 h2("onboarding 经营主体写入后，mock/示例装配仍被正式模式门禁拦截", async () => {
-  const { data } = await api<{ result?: { data?: { ok?: boolean } } }>("/trpc/onboarding.setupWorkspace", {
-    method: "POST", token: tokenOwner, body: { displayName: "云栖酒店", industry: "hotel", note: "E2E 向导验收" },
-  });
-  eq(data.result?.data?.ok, true, "主体档案写入");
-  const { data: act } = await api<{ error?: { data?: { httpStatus?: number }; message?: string } }>("/trpc/onboarding.activateRealMode", { method: "POST", token: tokenOwner });
-  eq(act.error?.data?.httpStatus, 412, `门禁拒绝（${act.error?.message ?? ""}）`);
-  const { data: st } = await api<{ result?: { data?: { dataMode?: string } } }>("/trpc/onboarding.status", { token: tokenOwner });
-  eq(st.result?.data?.dataMode, "simulated", "拒绝后仍如实显示模拟运行态");
+  /**
+   * 套件自持作用域复位（MC-043）：本用例写入向导档案并尝试 activateRealMode。
+   * 一旦服务端门禁放行（正是本用例要证明的负例失效场景），工作区会被**永久**翻到
+   * dataMode=real——后续 O 域的 Quest 用例在真实数据态下拿不到模拟回执，线程被判 failed；
+   * H-15/H-16/H-18 又会读到一个已经不是 simulated 的横幅事实源。夹具的写入必须在
+   * finally 里按原样还原，不能把整轮套件的后续用例连坐成假红。
+   */
+  const before = (await qApp<{ archive: Record<string, unknown> }>(
+    `SELECT archive FROM profiles WHERE workspace_id=$1`, [scope.workspaceId],
+  )).rows[0]!.archive;
+  try {
+    const { data } = await api<{ result?: { data?: { ok?: boolean } } }>("/trpc/onboarding.setupWorkspace", {
+      method: "POST", token: tokenOwner, body: { displayName: "云栖酒店", industry: "hotel", note: "E2E 向导验收" },
+    });
+    eq(data.result?.data?.ok, true, "主体档案写入");
+    const { data: act } = await api<{ error?: { data?: { httpStatus?: number }; message?: string } }>("/trpc/onboarding.activateRealMode", { method: "POST", token: tokenOwner });
+    eq(act.error?.data?.httpStatus, 412, `门禁拒绝（${act.error?.message ?? ""}）`);
+    const { data: st } = await api<{ result?: { data?: { dataMode?: string } } }>("/trpc/onboarding.status", { token: tokenOwner });
+    eq(st.result?.data?.dataMode, "simulated", "拒绝后仍如实显示模拟运行态");
+  } finally {
+    await qApp(`UPDATE profiles SET archive=$2::jsonb, updated_at=now() WHERE workspace_id=$1`,
+      [scope.workspaceId, JSON.stringify(before)]);
+  }
 });
 
 /* ---- D26 大版本融合 E2E：LLM 装配×节拍 / 开箱运行态 / 真实模式融合 / P21 互洽 / 降级链 ---- */
@@ -3062,7 +3096,9 @@ h2("融合·LLM 降级链：死端配置被拒 → mock 兜底应答不断链", 
     const arc = await getArchive();
     try {
       // 注入一个到期的决策日记 + 基线 KPI
-      await gatewayAppend(gw, { ...scope, actor: { id: "company-ceo", type: "agent" }, sessionId: "suite-r23" }, {
+      // MC-040：CEO actor 的围栏绑定同样来自本工作区名册（与 loop.ceoActor 同一事实），
+      // 硬编码空 actor 会让这条注入被 F2.10 正确拒绝——注入的是 CEO 自己的日记。
+      await gatewayAppend(gw, { ...scope, actor: await ceoRosterActor(), sessionId: "suite-r23" }, {
         who: { type: "agent", id: "company-ceo" },
         context: { tenant_id: scope.tenantId, workspace_id: scope.workspaceId, time: new Date().toISOString() },
         object: { type: "company_ceo", id: scope.workspaceId },
@@ -3110,7 +3146,7 @@ h2("融合·LLM 降级链：死端配置被拒 → mock 兜底应答不断链", 
           rule_impact: [], model_trace: { model_id: "suite", tier: "standard" },
         });
       }
-      await gatewayAppend(gw, { ...scope, actor: { id: "company-ceo", type: "agent" }, sessionId: "suite-r25" }, {
+      await gatewayAppend(gw, { ...scope, actor: await ceoRosterActor(), sessionId: "suite-r25" }, {
         who: { type: "agent", id: "company-ceo" },
         context: { tenant_id: scope.tenantId, workspace_id: scope.workspaceId, time: new Date().toISOString() },
         object: { type: "company_ceo", id: scope.workspaceId },

@@ -1,0 +1,40 @@
+{
+  "schema": "workloom.evidence-run/v1",
+  "id": "MC-040-1-1791246690477",
+  "command": "pnpm -C packages/base exec vitest run captain/ceo-loop.test.ts",
+  "exec": {
+    "file": "pnpm",
+    "args": [
+      "-C",
+      "packages/base",
+      "exec",
+      "vitest",
+      "run",
+      "captain/ceo-loop.test.ts"
+    ]
+  },
+  "actor": "codebuddy",
+  "role": "repair",
+  "subject": {
+    "card_id": "MC-040",
+    "assertion_index": 1
+  },
+  "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee",
+  "working_tree_dirty": false,
+  "started_at": "2026-10-06T00:31:30.477Z",
+  "finished_at": "2026-10-06T00:31:31.471Z",
+  "exit_code": 0,
+  "signal": null,
+  "validation": {
+    "ok": true,
+    "errors": []
+  },
+  "result": "pass",
+  "outputs": [
+    {
+      "path": "evidence/MC-040-1-1791246690477.txt",
+      "sha256": "f1d270a814cb909210d561cbdc17be79fee26a634fb32bfd8e67104f2aa977e2",
+      "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee"
+    }
+  ]
+}

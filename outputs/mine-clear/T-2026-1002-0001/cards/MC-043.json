@@ -1,0 +1,46 @@
+{
+  "id": "MC-043",
+  "kind": "problem",
+  "level": "L3",
+  "severity": "P1",
+  "batch": 1,
+  "state": "open",
+  "title": "H-13 夹具把工作区永久翻到 dataMode=real，连坐 O/H 域 5 条用例假红",
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "scripts/suite.ts:2589@149c93c921103ad4bedda6d6fa0e5a5369632bee",
+      "sha256": "e3338994784f618ccb3ad6c6eb3954040a4ceabcde1323144e9f0c3348352cd2",
+      "note": "夹具调用 activateRealMode 后无 finally 复位，工作区 dataMode 被永久写成 real"
+    },
+    {
+      "type": "code",
+      "ref": "packages/runtime/src/tools.ts:42@149c93c921103ad4bedda6d6fa0e5a5369632bee",
+      "sha256": "78d110dfcf5281024d10e3dfac06c9cf719624a68b5adddf51ecb5605c03902e",
+      "note": "executeDeclaredTool：!simulated 时返回 connector-required + synced:false → 线程转 failed"
+    }
+  ],
+  "root_cause": {
+    "file": "scripts/suite.ts",
+    "line": 2589,
+    "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee",
+    "symbol": "onboarding 经营主体写入后"
+  },
+  "trigger_path": "E2E 段执行到 H-13；门禁放行即污染全局工作区状态",
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "pnpm suite 连跑两次",
+      "expect": "两次都 470/470，无跨用例污染",
+      "command": "pnpm suite",
+      "exec": {
+        "file": "pnpm",
+        "args": [
+          "suite"
+        ]
+      },
+      "last_result": "not-run"
+    }
+  ],
+  "notes": "夹具写入在 finally 中按原 archive 字节还原，与 R 域 restoreArchive 同口径；未放宽任何门禁断言。"
+}

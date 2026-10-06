@@ -1,0 +1,24 @@
+{
+  "schema": "workloom.mine-clear/baseline@1",
+  "task_id": "T-2026-1002-0001",
+  "repo": "workspace",
+  "repo_path": "/workspace",
+  "remote": "origin",
+  "audit": {
+    "commit": "149c93c921103ad4bedda6d6fa0e5a5369632bee",
+    "branch": "task/T-2026-1002-0001",
+    "remote": "origin",
+    "remote_main": "b949346721360f3c20f10c628d5c7b214bc2b95e",
+    "fetched_at": null,
+    "fetch_status": "skipped",
+    "dirty_count": 0,
+    "notes": [
+      "本地 HEAD 不是 origin/main 最新（云端 b9493467 / 本地 149c93c9）——按 §1.2 先对齐基线"
+    ]
+  },
+  "smoke": {
+    "status": "not-run",
+    "notes": "M0 冒烟：健康检查 + 一条核心业务链路，跑完回填这里"
+  },
+  "created_at": "2026-10-06T00:30:20.769Z"
+}

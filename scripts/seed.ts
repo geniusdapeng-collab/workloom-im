@@ -619,6 +619,21 @@ async function main(): Promise<void> {
   }
   console.log(`✓ Agent 实例 ×${presets.length}（含只读 preset：巡检/竞对，L9.1）`);
 
+  /**
+   * MC-040（2026-10-06 db-gate 实测）：数字 CEO 不是 Bundle 岗位，此前名册里根本没有
+   * `company-ceo` 行，而 CEO 节拍已按 F2.10 从名册解析 actor（loop.ceoActor）——于是
+   * 任何一次 ceo.* 写动作都被 gateway 以「未声明 fence_bindings」拒绝。
+   * 这不是放宽守卫，而是补齐 CEO 自己的岗位事实：只声明它需要的基线围栏（R1 涨幅/R2 保底价），
+   * 权责与其他岗位同一套规则；缺岗、停用、重复在编仍然失败关闭（见 captain/ceo-loop.test.ts）。
+   */
+  await q(
+    `INSERT INTO agents (id, workspace_id, preset_key, name, version, kind, readonly, fence_bindings, skills, status, meta)
+     VALUES ('agt-company-ceo',$1,'company-ceo','顾云峥','v1.0','commander',false,'["R1","R2"]','[]','ready',$2)
+     ON CONFLICT (id) DO NOTHING`,
+    [WS_ID, JSON.stringify({ description: "公司负责人：主持经营晨报与 L2 裁决节拍", night_shift: false, high_risk: false })],
+  );
+  console.log("✓ 数字 CEO 岗位入册（company-ceo，绑定基线围栏 R1/R2）");
+
   // 一店一档（槽①；forbidden 双写：archive 内 + 独立列，L1.6）
   // dataMode=simulated：落地向导（D24）横幅事实源——种子库即「全模拟运行态」，向导启用真实模式后翻转
   const archive = { ...yunqiArchive(), dataMode: "simulated" };

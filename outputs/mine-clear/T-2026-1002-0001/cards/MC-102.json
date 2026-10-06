@@ -1,0 +1,46 @@
+{
+  "id": "MC-102",
+  "kind": "fix",
+  "batch": 1,
+  "state": "open",
+  "title": "H-13 夹具 finally 复位工作区 archive",
+  "covers": [
+    "MC-043"
+  ],
+  "evidence": [
+    {
+      "type": "code",
+      "ref": "scripts/suite.ts:2589@149c93c921103ad4bedda6d6fa0e5a5369632bee",
+      "sha256": "e3338994784f618ccb3ad6c6eb3954040a4ceabcde1323144e9f0c3348352cd2",
+      "note": "进入用例前快照 archive，finally 按原文写回；门禁断言与负例强度不变"
+    }
+  ],
+  "fix_plan": "在「onboarding 经营主体写入后…」用例中加入 before/after archive 快照与 finally 还原。",
+  "blast_radius": "仅改变夹具的收尾行为；用例断言语义不变。",
+  "conflict_paths": [
+    "scripts/suite.ts"
+  ],
+  "assertions": [
+    {
+      "kind": "sample",
+      "given": "pnpm suite 连跑两次",
+      "expect": "两次都 470/470",
+      "command": "pnpm suite",
+      "exec": {
+        "file": "pnpm",
+        "args": [
+          "suite"
+        ]
+      },
+      "last_result": "not-run"
+    }
+  ],
+  "regression": {
+    "command": "pnpm suite",
+    "evidence": null
+  },
+  "rollback": "revert 149c93c92110（按文件 revert 本提交）",
+  "fixed_by": "149c93c921103ad4bedda6d6fa0e5a5369632bee",
+  "verified_by": null,
+  "notes": ""
+}
