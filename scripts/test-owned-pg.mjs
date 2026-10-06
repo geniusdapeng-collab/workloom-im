@@ -43,9 +43,12 @@ export function childEnvironment(ambient, temporaryDirectory) {
   });
 }
 
+/** Runner-owned Unix sockets only: this allowlist is the ownership boundary itself. */
+const OWNED_SOCKET = /^\/tmp\/wl-(?:im-inbound|inspection-proof|mc022-pg|aipm-proof|raw-scope|kb-pg)-[a-zA-Z0-9]+\/socket$/;
+
 export function databaseUrls(database, socket, port) {
   assert(/^[a-z][a-z0-9_]+$/.test(database), "Synthetic database name required");
-  assert(/^\/tmp\/wl-(im-inbound|inspection-proof|mc022-pg)-[a-zA-Z0-9]+\/socket$/.test(socket), "Owned Unix socket required");
+  assert(OWNED_SOCKET.test(socket), "Owned Unix socket required");
   assert(Number.isInteger(port) && port >= 59000 && port <= 63999, "Owned socket port required");
   return Object.fromEntries([["DATABASE_URL", "postgres"], ["DATABASE_APP_URL", "workloom_app"],
     ["DATABASE_GATEWAY_URL", "workloom_gateway"]].map(([key, user]) => {

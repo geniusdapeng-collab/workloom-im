@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
@@ -54,16 +55,17 @@ test("only explicit generic-CI value 1 excludes the exact four files; default an
   }
 });
 
-// apps/server 的四套契约同样要求任务专属私有集群与哨兵；泛化 CI 只在其
+// apps/server 的五套契约同样要求任务专属私有集群与哨兵；泛化 CI 只在其
 // WORKLOOM_GENERIC_DB_CI=1 时排除它们，并保留 beforeAll 的 fail-closed 守卫。
 const taskOwnedServerFiles = [
   "src/service/aipm.snapshot.pg.test.ts",
   "src/service/devtools.cancel.pg.test.ts",
   "src/service/devtools.thread.pg.test.ts",
   "src/service/secretary.approval.pg.test.ts",
+  "src/service/kb-publish.pg.test.ts",
 ];
 
-test("only explicit generic-CI value 1 excludes the exact four task-owned server files", async () => {
+test("only explicit generic-CI value 1 excludes the exact task-owned server files", async () => {
   const previous = process.env.WORKLOOM_GENERIC_DB_CI;
   try {
     for (const [i, value] of [undefined, "0", "true", "1"].entries()) {
@@ -83,13 +85,67 @@ test("only explicit generic-CI value 1 excludes the exact four task-owned server
   }
 });
 
-test("server stage hands the four task-owned contracts to a dedicated runner via the generic-CI switch", () => {
+test("server stage hands the task-owned contracts to a dedicated runner that actually executes them", () => {
   const { parse } = createRequire(join(root, "packages/base/package.json"))("yaml");
   const gate = parse(cnb)[".db-gate"];
   const stage = gate.stages.find((item) => item.script?.includes("pnpm -C apps/server test"));
   assert(stage, "server stage must exist in db-gate");
   assert(stage.script.includes("WORKLOOM_GENERIC_DB_CI=1 pnpm -C apps/server test"));
   assert(!stage.script.includes("vitest run src/service/secretary.approval.pg.test.ts"), "must not smuggle the task-owned suites into the generic server stage");
+});
+
+// 排除本身就是「摘掉必需检查」；只有存在真实的强制执行路径才允许排除。
+// 这里把补偿 runner 逐条钉死：文件、精确清单、每套必测用例数、必需哨兵，缺一即红灯。
+const taskOwnedServerSuites = [
+  ["aipm-snapshot", "src/service/aipm.snapshot.pg.test.ts", 34],
+  ["devtools-cancel", "src/service/devtools.cancel.pg.test.ts", 29],
+  ["devtools-thread", "src/service/devtools.thread.pg.test.ts", 20],
+  ["secretary-approval", "src/service/secretary.approval.pg.test.ts", 29],
+  ["kb-publish", "src/service/kb-publish.pg.test.ts", 52],
+];
+const ownedServerRunner = join(root, "scripts/test-owned-server-pg.mjs");
+
+test("a dedicated server runner exists and enumerates exactly the excluded suites with real counts", async () => {
+  const { OWNED_SERVER_SUITES } = await import(pathToFileURL(ownedServerRunner).href);
+  assert.deepEqual(OWNED_SERVER_SUITES.map((item) => [item.key, item.file, item.tests]), taskOwnedServerSuites);
+  const excluded = await readFile(join(root, "apps/server/vitest.config.mjs"), "utf8");
+  for (const file of OWNED_SERVER_SUITES.map((item) => item.file)) {
+    assert(excluded.includes(file), `excluded suite is not covered by the dedicated runner: ${file}`);
+  }
+  for (const file of taskOwnedServerFiles) assert(OWNED_SERVER_SUITES.some((item) => item.file === file), `excluded suite has no dedicated executor: ${file}`);
+});
+
+test("every dedicated server suite keeps its fail-closed sentinel and private cluster prefix", async () => {
+  const { OWNED_SERVER_SUITES } = await import(pathToFileURL(ownedServerRunner).href);
+  const required = {
+    "devtools-cancel": ["DEVTOOLS_THREAD_TASK_OWNED"],
+    "devtools-thread": ["DEVTOOLS_THREAD_TASK_OWNED"],
+    "secretary-approval": ["SECRETARY_APPROVAL_TASK_OWNED", "RAW_SCOPE_REPO"],
+    "kb-publish": ["RUN_KB_PUBLISH_DB_TESTS"],
+  };
+  for (const suite of OWNED_SERVER_SUITES) {
+    assert(/^\/tmp\/wl-/.test(join("/tmp", `${suite.prefix}x/socket`)), `${suite.key}: runner must use its own private /tmp socket prefix`);
+    assert(!suite.prefix.includes("..") && suite.prefix.startsWith("wl-"), `${suite.key}: unsafe private prefix`);
+    for (const key of required[suite.key] ?? []) assert(suite.sentinels?.[key] !== undefined, `${suite.key}: missing ${key} sentinel`);
+    const source = await readFile(join(root, "apps/server", suite.file), "utf8");
+    for (const key of Object.keys(suite.sentinels ?? {})) assert(source.includes(key), `${suite.key}: ${key} sentinel is no longer asserted by the suite itself`);
+  }
+});
+
+test("the mandatory db-gate invokes the dedicated server runner without the generic-CI exclusion switch", () => {
+  const { parse } = createRequire(join(root, "packages/base/package.json"))("yaml");
+  const gate = parse(cnb)[".db-gate"];
+  const stages = gate.stages.filter((item) => item.script?.includes("node scripts/test-owned-server-pg.mjs"));
+  assert.equal(stages.length, 1, "exactly one mandatory stage must execute the dedicated server runner");
+  const index = gate.stages.indexOf(stages[0]);
+  assert(index > 0, "dedicated server runner must run after Node/pnpm preparation");
+  assert(stages[0].script.includes("--report-dir"));
+  assert(!stages[0].script.includes("WORKLOOM_GENERIC_DB_CI"), "dedicated server runner must not inherit the generic-CI exclusion");
+  assert(!stages[0].script.includes("--suites"), "the mandatory stage must run every dedicated server suite");
+  assert.equal(gate.allowFailure, undefined);
+  const before = gate.stages.slice(0, index);
+  assert(before.some((stage) => stage.script?.includes("pnpm install --frozen-lockfile")));
+  assert(before.some((stage) => stage.script?.includes("node scripts/test-owned-pg.mjs")));
 });
 
 test("dedicated stage is mandatory in the actual PG17/pgvector db-gate, after Node/pnpm preparation", () => {
