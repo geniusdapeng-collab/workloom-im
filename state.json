@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 976,
+  "revision": 978,
   "tasks": {
     "231": {
       "number": 231,
@@ -91,10 +91,14 @@
       "alignmentCount": 0,
       "alignmentIntent": null,
       "review": null,
-      "error": "不可修改候选 #253 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
-      "blockedUntil": 0,
-      "recoveryCount": 0,
-      "recoveryIntent": null,
+      "error": "不可修改候选 #255 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
+      "blockedUntil": 1791262812101,
+      "recoveryCount": 1,
+      "recoveryIntent": {
+        "headSha": "94ec81a9d10e3cf82d54a6c5f90cc93abca682e9",
+        "reason": "不可修改候选 #255 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
+        "at": 1791262212101
+      },
       "recovery": {
         "marker": "delivery-repair:95643f4222924e88eb01bc0f",
         "reviewId": "2107315008011149312",
@@ -32333,6 +32337,37 @@
       },
       "previous": "689624bd0d711432d6507e36541a2f70cf0e34628c17531db2a2206be65024aa",
       "digest": "85534105b9b447e5d7faacafe56620568df9527f9b27d4d45f4d58bd298a522e"
+    },
+    {
+      "sequence": 977,
+      "at": "2026-10-06T04:50:12.101Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "status": "parked",
+          "recoveryCount": 1,
+          "recoveryIntent": {
+            "headSha": "94ec81a9d10e3cf82d54a6c5f90cc93abca682e9",
+            "reason": "不可修改候选 #255 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
+            "at": 1791262212101
+          },
+          "error": "不可修改候选 #255 的 AI 审查未通过；请修复原分支，交付器会创建新候选",
+          "blockedUntil": 1791262812101
+        }
+      },
+      "previous": "85534105b9b447e5d7faacafe56620568df9527f9b27d4d45f4d58bd298a522e",
+      "digest": "af8c4bbcef25d20570ab8020f713ea89c2ef657b5556b8b976cde7bd380298a7"
+    },
+    {
+      "sequence": 978,
+      "at": "2026-10-06T04:50:31.792Z",
+      "kind": "transaction",
+      "data": {
+        "id": "2f31c593-6b0f-4cd4-82c9-860945457e98"
+      },
+      "previous": "af8c4bbcef25d20570ab8020f713ea89c2ef657b5556b8b976cde7bd380298a7",
+      "digest": "38b60377ec2322a645d4c790dbd27d9c944ba7e592c87d9855f6aa279a223c8d"
     }
   ]
 }
