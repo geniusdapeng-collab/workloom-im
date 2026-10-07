@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 3062,
+  "revision": 3064,
   "tasks": {
     "231": {
       "number": 231,
@@ -95,12 +95,12 @@
         "tests/ui/workloom-clients.spec.ts"
       ],
       "ciSince": 1791332715875,
-      "updatedAt": 1791414615059,
+      "updatedAt": 1791414910508,
       "alignmentCount": 1,
       "alignmentIntent": null,
       "review": null,
-      "error": "检查/评审阻断：Developer has not handed off; Codex review identity differs from the exact repository/source/main/policy",
-      "blockedUntil": 1791415215059,
+      "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+      "blockedUntil": 1791415510508,
       "recoveryCount": 0,
       "recoveryIntent": null,
       "recovery": {
@@ -129099,6 +129099,31 @@
       },
       "previous": "5a31e410b783a5975679e1d55d53766fd2b66d691712e6c85148d0b6f4b05cbc",
       "digest": "e13fb30636226344212011dc7a0600df98cb328b8e2c49db5d4255dcca1ebd87"
+    },
+    {
+      "sequence": 3063,
+      "at": "2026-10-07T23:15:10.508Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "status": "parked",
+          "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+          "blockedUntil": 1791415510508
+        }
+      },
+      "previous": "e13fb30636226344212011dc7a0600df98cb328b8e2c49db5d4255dcca1ebd87",
+      "digest": "30f162b5b67fc768e531028504010efc32f1934cf70be5076d5066a7a414ca1b"
+    },
+    {
+      "sequence": 3064,
+      "at": "2026-10-07T23:15:19.211Z",
+      "kind": "transaction",
+      "data": {
+        "id": "01206456-73bd-4a1b-a3bf-60f6bd6c3e88"
+      },
+      "previous": "30f162b5b67fc768e531028504010efc32f1934cf70be5076d5066a7a414ca1b",
+      "digest": "e9612b34ce6af6f5078792e43145248cf35f169a37563451af613f7bd7bbcea7"
     }
   ]
 }
