@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 3060,
+  "revision": 3062,
   "tasks": {
     "231": {
       "number": 231,
@@ -383,7 +383,7 @@
       "recoveryCount": 0,
       "recoveryIntent": null,
       "error": "检查/评审阻断：Developer has not handed off; Codex review identity differs from the exact repository/source/main/policy",
-      "blockedUntil": 1791414610449,
+      "blockedUntil": 1791415215059,
       "recovery": {
         "marker": "delivery-repair:632d1dfa0c5c36c258d30af2",
         "recovered": true
@@ -396,7 +396,7 @@
         "headSha": "d6050e29be515208e45a74ee1227bdb38c61dde3",
         "mainSha": "e5d76398484cac7d8ac50b6c27905765a59fd50f",
         "reason": "检查/评审阻断：Developer has not handed off; Codex review identity differs from the exact repository/source/main/policy",
-        "at": 1791414010449
+        "at": 1791414615059
       }
     },
     "236": {
@@ -129066,6 +129066,39 @@
       },
       "previous": "b02646265266d09fd61926b8952af9f89a47ca68d49b41037e133c6e3cecd57b",
       "digest": "b68dba1dee4ee9ba6ba19770ed553313e17a2f2381abbf26c92bcf08b50fdd89"
+    },
+    {
+      "sequence": 3061,
+      "at": "2026-10-07T23:10:15.059Z",
+      "kind": "task",
+      "data": {
+        "number": 232,
+        "patch": {
+          "status": "parked",
+          "error": "检查/评审阻断：Developer has not handed off; Codex review identity differs from the exact repository/source/main/policy",
+          "repairRequired": {
+            "provider": "codex",
+            "headSha": "d6050e29be515208e45a74ee1227bdb38c61dde3",
+            "mainSha": "e5d76398484cac7d8ac50b6c27905765a59fd50f",
+            "reason": "检查/评审阻断：Developer has not handed off; Codex review identity differs from the exact repository/source/main/policy",
+            "at": 1791414615059
+          },
+          "recoveryIntent": null,
+          "blockedUntil": 1791415215059
+        }
+      },
+      "previous": "b68dba1dee4ee9ba6ba19770ed553313e17a2f2381abbf26c92bcf08b50fdd89",
+      "digest": "5a31e410b783a5975679e1d55d53766fd2b66d691712e6c85148d0b6f4b05cbc"
+    },
+    {
+      "sequence": 3062,
+      "at": "2026-10-07T23:11:04.434Z",
+      "kind": "transaction",
+      "data": {
+        "id": "72cbe0cb-44c3-4834-991c-96a34cec1f49"
+      },
+      "previous": "5a31e410b783a5975679e1d55d53766fd2b66d691712e6c85148d0b6f4b05cbc",
+      "digest": "e13fb30636226344212011dc7a0600df98cb328b8e2c49db5d4255dcca1ebd87"
     }
   ]
 }
