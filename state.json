@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 2584,
+  "revision": 2586,
   "tasks": {
     "231": {
       "number": 231,
-      "status": "waiting_ci",
+      "status": "parked",
       "firstSeen": 1791242108737,
       "attempts": {},
       "headSha": "fe0f53e237eb216e158de562a34eb5041fc968f4",
@@ -95,12 +95,12 @@
         "tests/ui/workloom-clients.spec.ts"
       ],
       "ciSince": 1791332715875,
-      "updatedAt": 1791333907804,
+      "updatedAt": 1791334510097,
       "alignmentCount": 1,
       "alignmentIntent": null,
       "review": null,
-      "error": "检查/评审阻断：Developer has not handed off; Codex review identity differs from the exact repository/source/main/policy",
-      "blockedUntil": 0,
+      "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+      "blockedUntil": 1791335110097,
       "recoveryCount": 0,
       "recoveryIntent": null,
       "recovery": {
@@ -106758,6 +106758,31 @@
       },
       "previous": "f13e2024cd133b77da098c000962f168abd7547a84f901acd8fd59984d6327b7",
       "digest": "4f51f3272215af6a47ae2101b1dd4590c36c8a1f0f55c0d6496e8f7e41c38539"
+    },
+    {
+      "sequence": 2585,
+      "at": "2026-10-07T00:55:10.097Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "status": "parked",
+          "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+          "blockedUntil": 1791335110097
+        }
+      },
+      "previous": "4f51f3272215af6a47ae2101b1dd4590c36c8a1f0f55c0d6496e8f7e41c38539",
+      "digest": "bad282b2fdbacadfadd2a9f141ead55ac5a8f71520a8e75e4e71a91bd874ddce"
+    },
+    {
+      "sequence": 2586,
+      "at": "2026-10-07T00:55:20.523Z",
+      "kind": "transaction",
+      "data": {
+        "id": "0bb25882-daee-4207-ab20-069ea63ad83f"
+      },
+      "previous": "bad282b2fdbacadfadd2a9f141ead55ac5a8f71520a8e75e4e71a91bd874ddce",
+      "digest": "0a175cc3a7f0f61fb79e8688ba88ddee2b06659ba456fce9acd7ae2b237769bf"
     }
   ]
 }
