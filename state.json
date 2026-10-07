@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 2505,
+  "revision": 2510,
   "tasks": {
     "231": {
       "number": 231,
@@ -5020,14 +5020,34 @@
         }
       },
       "updatedAt": 1791312087650
+    },
+    "272": {
+      "number": 272,
+      "status": "developing",
+      "firstSeen": 1791331552617,
+      "attempts": {},
+      "admission": {
+        "number": 272,
+        "headSha": "ac8802c8f724a76c8a5655e890de67cfa915d1df",
+        "mainSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+        "filesHash": "939c97927a4ab7c47e045619fb8169ac8e3662abd7d06b8208f524bd791f0a4a",
+        "scopes": [
+          "protocol"
+        ],
+        "owner": "admission/pr-272",
+        "generation": {
+          "protocol": 88
+        }
+      },
+      "updatedAt": 1791331552617
     }
   },
   "leases": {
     "protocol": {
       "owner": null,
-      "generation": 87,
-      "acquiredAt": 1791312511771,
-      "expiresAt": 1791312511771
+      "generation": 88,
+      "acquiredAt": 1791331552617,
+      "expiresAt": 1791331552617
     },
     "sync": {
       "owner": null,
@@ -103614,6 +103634,93 @@
       },
       "previous": "8ea2bcdacdddc6dae6df52ea39fd0ecccc18b2934e4372da86c9cdeed679b31d",
       "digest": "47dbf6e6446cd266a336febc58547e6ed0d389864dae79042316a88ac2e8074b"
+    },
+    {
+      "sequence": 2506,
+      "at": "2026-10-07T00:05:52.617Z",
+      "kind": "lease_acquire",
+      "data": {
+        "scopes": [
+          "protocol"
+        ],
+        "owner": "admission/pr-272",
+        "generation": {
+          "protocol": 88
+        }
+      },
+      "previous": "47dbf6e6446cd266a336febc58547e6ed0d389864dae79042316a88ac2e8074b",
+      "digest": "dbbe43f7809adbb5900011d84bd6cd9e8cd7b3553161a9bccdd05e2dd4e8ef2f"
+    },
+    {
+      "sequence": 2507,
+      "at": "2026-10-07T00:05:52.617Z",
+      "kind": "lease_release",
+      "data": {
+        "scopes": [
+          "protocol"
+        ],
+        "owner": "admission/pr-272",
+        "generation": {
+          "protocol": 88
+        }
+      },
+      "previous": "dbbe43f7809adbb5900011d84bd6cd9e8cd7b3553161a9bccdd05e2dd4e8ef2f",
+      "digest": "eaf7a601bb48d066c56d6863498bb3c57285ff70cd35ef7490f33a85e91144d7"
+    },
+    {
+      "sequence": 2508,
+      "at": "2026-10-07T00:05:52.617Z",
+      "kind": "source_admitted",
+      "data": {
+        "number": 272,
+        "headSha": "ac8802c8f724a76c8a5655e890de67cfa915d1df",
+        "mainSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+        "filesHash": "939c97927a4ab7c47e045619fb8169ac8e3662abd7d06b8208f524bd791f0a4a",
+        "scopes": [
+          "protocol"
+        ],
+        "owner": "admission/pr-272",
+        "generation": {
+          "protocol": 88
+        }
+      },
+      "previous": "eaf7a601bb48d066c56d6863498bb3c57285ff70cd35ef7490f33a85e91144d7",
+      "digest": "e9c7538bb04379a8429da9684878267b47d24826877db4a3f57745beee27d594"
+    },
+    {
+      "sequence": 2509,
+      "at": "2026-10-07T00:05:52.617Z",
+      "kind": "task",
+      "data": {
+        "number": 272,
+        "patch": {
+          "admission": {
+            "number": 272,
+            "headSha": "ac8802c8f724a76c8a5655e890de67cfa915d1df",
+            "mainSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+            "filesHash": "939c97927a4ab7c47e045619fb8169ac8e3662abd7d06b8208f524bd791f0a4a",
+            "scopes": [
+              "protocol"
+            ],
+            "owner": "admission/pr-272",
+            "generation": {
+              "protocol": 88
+            }
+          }
+        }
+      },
+      "previous": "e9c7538bb04379a8429da9684878267b47d24826877db4a3f57745beee27d594",
+      "digest": "bc0be89fd59853af39a0c0474a8d211f437feecc7d00c2f3fafa574f311956a0"
+    },
+    {
+      "sequence": 2510,
+      "at": "2026-10-07T00:05:46.372Z",
+      "kind": "transaction",
+      "data": {
+        "id": "source-admit:272:ac8802c8f724a76c8a5655e890de67cfa915d1df:9bf6a1a09ff4805c332f577022b2e079e8daa6b4"
+      },
+      "previous": "bc0be89fd59853af39a0c0474a8d211f437feecc7d00c2f3fafa574f311956a0",
+      "digest": "4b80ca617f50aabfcc4a046176864ae6cec69e0ee08fb4d416ad296918c66d67"
     }
   ]
 }
