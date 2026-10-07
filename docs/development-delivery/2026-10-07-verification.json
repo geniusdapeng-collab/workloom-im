@@ -1,0 +1,709 @@
+{
+  "schemaVersion": "workloom.development-delivery-verification/v1",
+  "evidenceGrade": "B",
+  "verificationDate": "2026-10-07",
+  "timezone": "Asia/Shanghai",
+  "scope": "十二仓研发交付机制在本次准确源码快照的安装、原有必需CI、普通候选集成、激活及原生执行；行业业务未重新全量审计。后续main变化须重新回读，不视为永久现状。",
+  "sourceImplementationSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+  "observedAt": {
+    "installationStartedAt": "2026-10-06T19:50:19.466Z",
+    "installationFinishedAt": "2026-10-06T19:59:25.899170+00:00",
+    "nativeFinishedAt": "2026-10-06T20:03:27.362540+00:00",
+    "ledgerFinishedAt": "2026-10-06T20:04:38.738Z"
+  },
+  "installed": 12,
+  "nativePassed": 12,
+  "ledgerPassed": 12,
+  "nativeWriteTimeCorrelated": 7,
+  "reviewProvider": "codex",
+  "platformAI": false,
+  "humanClickRequired": false,
+  "canonicalTests": {
+    "tests": 290,
+    "pass": 290,
+    "fail": 0,
+    "skip": 0
+  },
+  "repeatedTargetExecutions": {
+    "tests": 1415,
+    "pass": 1404,
+    "fail": 0,
+    "skip": 11
+  },
+  "accountIdempotency": {
+    "active": 12,
+    "pending": 0,
+    "newPr": 0
+  },
+  "cronRestoration": "11 original repository settings restored exactly; base remained enabled",
+  "cancelledChatHeartbeat": "DELETED; not recreated",
+  "identityBoundary": "Session review receipts and time-correlated ledger writes are consistency evidence, not cryptographic actor signatures.",
+  "isolationBoundary": "Two isolated repositories were installed individually under product-owner authorization; none-in-none-out and frozen product context remain. Not added to business fanout.",
+  "repositories": [
+    {
+      "repo": "workloom-ai/workloom-im",
+      "mainSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+      "status": "active",
+      "activationAt": "2026-10-06T17:21:37.524Z",
+      "sourcePr": 269,
+      "candidatePr": 270,
+      "candidateUrl": "https://cnb.cool/workloom-ai/workloom-im/-/pulls/270",
+      "integratedSourceSha": "aac6f97cb196e900912e53ae842962ec0386ac7d",
+      "testedMainSha": "83ac6ef9466e93704725f469c366cfd7b54f0a99",
+      "testedCheckSha": "09b08d471cb3c76f8da7fd0ac5e6201fdb7d4c7c",
+      "integrationVerifiedAt": "2026-10-06T19:50:40.542Z",
+      "reviewProvider": "codex",
+      "reviewedAt": "2026-10-06T18:37:12.026Z",
+      "platformAI": false,
+      "humanClickRequired": false,
+      "requiredChecks": [
+        "delivery-bootstrap-review",
+        "static-gate",
+        "db-gate",
+        "ui-gate"
+      ],
+      "native": {
+        "sn": "cnb-0m1-1k49c82v9",
+        "url": "https://cnb.cool/workloom-ai/workloom-im/-/build/logs/cnb-0m1-1k49c82v9",
+        "mainSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+        "configSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+        "event": "crontab: */5 * * * *",
+        "createdAt": "2026-10-06T19:50:01.000Z",
+        "pipelines": [
+          {
+            "name": "delivery-reconcile",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          },
+          {
+            "name": "delivery-releases",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "ledger": {
+        "sha": "5f1891c20202a33aa5c823f17e840990eb0fca8a",
+        "branchProtected": true,
+        "eventChainValidated": true,
+        "nativeWriteTimeCorrelated": true
+      }
+    },
+    {
+      "repo": "workloom-ai/workroom-andromeda",
+      "mainSha": "100842119ce8d84aabb3d65fb1510045a25b9897",
+      "status": "active",
+      "activationAt": "2026-10-06T18:10:30.216Z",
+      "sourcePr": 91,
+      "candidatePr": 92,
+      "candidateUrl": "https://cnb.cool/workloom-ai/workroom-andromeda/-/pulls/92",
+      "integratedSourceSha": "7e3a524376fc950f2f607676bbe97ab5b8f84c5f",
+      "testedMainSha": "99b24cf23beb80be1ac2d83f31327eba26ca2da5",
+      "testedCheckSha": "f35c7a24b7bff083e7a908fd0357c50d980911c1",
+      "integrationVerifiedAt": "2026-10-06T19:51:05.130Z",
+      "reviewProvider": "codex",
+      "reviewedAt": "2026-10-06T18:58:23.957Z",
+      "platformAI": false,
+      "humanClickRequired": false,
+      "requiredChecks": [
+        "delivery-bootstrap-checks",
+        "delivery-regression",
+        "static-gate",
+        "db-gate"
+      ],
+      "native": {
+        "sn": "cnb-9jp-1k49ch859",
+        "url": "https://cnb.cool/workloom-ai/workroom-andromeda/-/build/logs/cnb-9jp-1k49ch859",
+        "mainSha": "100842119ce8d84aabb3d65fb1510045a25b9897",
+        "configSha": "100842119ce8d84aabb3d65fb1510045a25b9897",
+        "event": "crontab: */5 * * * *",
+        "createdAt": "2026-10-06T19:55:01.000Z",
+        "pipelines": [
+          {
+            "name": "delivery-reconcile",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          },
+          {
+            "name": "delivery-releases",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "ledger": {
+        "sha": "43eae60f0091cd5d3715baa39ffaa95f1a02f026",
+        "branchProtected": true,
+        "eventChainValidated": true,
+        "nativeWriteTimeCorrelated": true
+      }
+    },
+    {
+      "repo": "workloom-ai/workloom-hotel",
+      "mainSha": "5a04120a225dc3734415c8cc23e9c5f9474170c0",
+      "status": "active",
+      "activationAt": "2026-10-06T18:09:35.940Z",
+      "sourcePr": 104,
+      "candidatePr": 105,
+      "candidateUrl": "https://cnb.cool/workloom-ai/workloom-hotel/-/pulls/105",
+      "integratedSourceSha": "2d8ceff00cdc402519f12301ed482d6f90e95789",
+      "testedMainSha": "a3af9cd51effc5f3b64ebc136b1aba3e6d9b3564",
+      "testedCheckSha": "fcb7d9ce67d39f80ba7e3975f675b92e4b943827",
+      "integrationVerifiedAt": "2026-10-06T19:51:29.645Z",
+      "reviewProvider": "codex",
+      "reviewedAt": "2026-10-06T18:58:23.873Z",
+      "platformAI": false,
+      "humanClickRequired": false,
+      "requiredChecks": [
+        "delivery-bootstrap-checks",
+        "delivery-regression",
+        "static-gate",
+        "db-gate"
+      ],
+      "native": {
+        "sn": "cnb-itq-1k49c83ti",
+        "url": "https://cnb.cool/workloom-ai/workloom-hotel/-/build/logs/cnb-itq-1k49c83ti",
+        "mainSha": "5a04120a225dc3734415c8cc23e9c5f9474170c0",
+        "configSha": "5a04120a225dc3734415c8cc23e9c5f9474170c0",
+        "event": "crontab: */5 * * * *",
+        "createdAt": "2026-10-06T19:50:02.000Z",
+        "pipelines": [
+          {
+            "name": "delivery-reconcile",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          },
+          {
+            "name": "delivery-releases",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "ledger": {
+        "sha": "6e3185261ce4c23484882f76377715c749d8e779",
+        "branchProtected": true,
+        "eventChainValidated": true,
+        "nativeWriteTimeCorrelated": true
+      }
+    },
+    {
+      "repo": "workloom-ai/hyperreality-system",
+      "mainSha": "08df432a107c1b59e0d6832e46f050db026832b5",
+      "status": "active",
+      "activationAt": "2026-10-06T18:03:57.981Z",
+      "sourcePr": 90,
+      "candidatePr": 91,
+      "candidateUrl": "https://cnb.cool/workloom-ai/hyperreality-system/-/pulls/91",
+      "integratedSourceSha": "1a15f134a3dc458389c416e47b86c5408949a3f4",
+      "testedMainSha": "07c05a06cdd46007fbabcbcd19d83ff4cf125cc4",
+      "testedCheckSha": "88f6a03ebff4b69c1e1fcb9bd65ea9051672140c",
+      "integrationVerifiedAt": "2026-10-06T19:51:54.269Z",
+      "reviewProvider": "codex",
+      "reviewedAt": "2026-10-06T18:58:23.155Z",
+      "platformAI": false,
+      "humanClickRequired": false,
+      "requiredChecks": [
+        "delivery-bootstrap-checks",
+        "delivery-regression",
+        "static-gate",
+        "db-gate"
+      ],
+      "native": {
+        "sn": "cnb-p3k-1k49ch7rh",
+        "url": "https://cnb.cool/workloom-ai/hyperreality-system/-/build/logs/cnb-p3k-1k49ch7rh",
+        "mainSha": "08df432a107c1b59e0d6832e46f050db026832b5",
+        "configSha": "08df432a107c1b59e0d6832e46f050db026832b5",
+        "event": "crontab: */5 * * * *",
+        "createdAt": "2026-10-06T19:55:01.000Z",
+        "pipelines": [
+          {
+            "name": "delivery-reconcile",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          },
+          {
+            "name": "delivery-releases",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "ledger": {
+        "sha": "fb9d3b7ba3b55fb2f6ea9f32c90ae011b62e69e2",
+        "branchProtected": true,
+        "eventChainValidated": true,
+        "nativeWriteTimeCorrelated": true
+      }
+    },
+    {
+      "repo": "workloom-ai/workloom",
+      "mainSha": "f608da6cfae516577bf3c2db3ee9478946a9ea76",
+      "status": "active",
+      "activationAt": "2026-10-06T18:05:47.103Z",
+      "sourcePr": 88,
+      "candidatePr": 89,
+      "candidateUrl": "https://cnb.cool/workloom-ai/workloom/-/pulls/89",
+      "integratedSourceSha": "eb3855862b9b983ad94cb122702777d1c959a911",
+      "testedMainSha": "92604c978dbea85a41a0bb4dfc7133bbb6ffbc32",
+      "testedCheckSha": "acf9dc3d800c49685b6b52866408da7e0e53800c",
+      "integrationVerifiedAt": "2026-10-06T19:52:18.857Z",
+      "reviewProvider": "codex",
+      "reviewedAt": "2026-10-06T18:58:23.422Z",
+      "platformAI": false,
+      "humanClickRequired": false,
+      "requiredChecks": [
+        "delivery-bootstrap-checks",
+        "delivery-regression",
+        "static-gate",
+        "db-gate",
+        "test-gate"
+      ],
+      "native": {
+        "sn": "cnb-vbb-1k49ch7ru",
+        "url": "https://cnb.cool/workloom-ai/workloom/-/build/logs/cnb-vbb-1k49ch7ru",
+        "mainSha": "f608da6cfae516577bf3c2db3ee9478946a9ea76",
+        "configSha": "f608da6cfae516577bf3c2db3ee9478946a9ea76",
+        "event": "crontab: */5 * * * *",
+        "createdAt": "2026-10-06T19:55:01.000Z",
+        "pipelines": [
+          {
+            "name": "delivery-reconcile",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          },
+          {
+            "name": "delivery-releases",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "ledger": {
+        "sha": "a2c1c3f54a01c65d5ee732ab6664dedad25ece1d",
+        "branchProtected": true,
+        "eventChainValidated": true,
+        "nativeWriteTimeCorrelated": false
+      }
+    },
+    {
+      "repo": "workloom-ai/WorkLoom-growth",
+      "mainSha": "73767dc51658171e97673969780f06ca52994b7a",
+      "status": "active",
+      "activationAt": "2026-10-06T18:06:42.124Z",
+      "sourcePr": 339,
+      "candidatePr": 340,
+      "candidateUrl": "https://cnb.cool/workloom-ai/WorkLoom-growth/-/pulls/340",
+      "integratedSourceSha": "87658d5ac91283931eda85948ca1ce0d22905bf4",
+      "testedMainSha": "afdc7b93a76b92b8b53e29582e2dd6b8f1cd24c6",
+      "testedCheckSha": "3a27a5b29a7fdf8648ebab788e5c6c70bbc58573",
+      "integrationVerifiedAt": "2026-10-06T19:52:43.686Z",
+      "reviewProvider": "codex",
+      "reviewedAt": "2026-10-06T18:58:23.537Z",
+      "platformAI": false,
+      "humanClickRequired": false,
+      "requiredChecks": [
+        "delivery-bootstrap-checks",
+        "delivery-regression",
+        "static-gate",
+        "db-gate",
+        "test-gate"
+      ],
+      "native": {
+        "sn": "cnb-o7f-1k49cqfk0",
+        "url": "https://cnb.cool/workloom-ai/WorkLoom-growth/-/build/logs/cnb-o7f-1k49cqfk0",
+        "mainSha": "73767dc51658171e97673969780f06ca52994b7a",
+        "configSha": "73767dc51658171e97673969780f06ca52994b7a",
+        "event": "crontab: */5 * * * *",
+        "createdAt": "2026-10-06T20:00:04.000Z",
+        "pipelines": [
+          {
+            "name": "delivery-reconcile",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          },
+          {
+            "name": "delivery-releases",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "ledger": {
+        "sha": "5523616626dc07a692d6d3ebeab9fc096c91bfa3",
+        "branchProtected": true,
+        "eventChainValidated": true,
+        "nativeWriteTimeCorrelated": true
+      }
+    },
+    {
+      "repo": "workloom-ai/panda-cineforge",
+      "mainSha": "80d16853bcc8b419df6aac889ad2df32b251bad2",
+      "status": "active",
+      "activationAt": "2026-10-06T18:04:52.515Z",
+      "sourcePr": 87,
+      "candidatePr": 88,
+      "candidateUrl": "https://cnb.cool/workloom-ai/panda-cineforge/-/pulls/88",
+      "integratedSourceSha": "86b57818f95716f3b4f4f917b5b503991bab80fd",
+      "testedMainSha": "d6e68d092b3f8021280ff15fbb849058672b5275",
+      "testedCheckSha": "8b884a357b5d000542bbaa09090590b0804a521a",
+      "integrationVerifiedAt": "2026-10-06T19:53:08.215Z",
+      "reviewProvider": "codex",
+      "reviewedAt": "2026-10-06T18:58:23.305Z",
+      "platformAI": false,
+      "humanClickRequired": false,
+      "requiredChecks": [
+        "delivery-bootstrap-checks",
+        "delivery-regression",
+        "static-gate",
+        "db-gate"
+      ],
+      "native": {
+        "sn": "cnb-aeo-1k49ch7sq",
+        "url": "https://cnb.cool/workloom-ai/panda-cineforge/-/build/logs/cnb-aeo-1k49ch7sq",
+        "mainSha": "80d16853bcc8b419df6aac889ad2df32b251bad2",
+        "configSha": "80d16853bcc8b419df6aac889ad2df32b251bad2",
+        "event": "crontab: */5 * * * *",
+        "createdAt": "2026-10-06T19:55:01.000Z",
+        "pipelines": [
+          {
+            "name": "delivery-reconcile",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          },
+          {
+            "name": "delivery-releases",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "ledger": {
+        "sha": "6e5019d2c1cd6a7318c846fe178b8bd501b98add",
+        "branchProtected": true,
+        "eventChainValidated": true,
+        "nativeWriteTimeCorrelated": true
+      }
+    },
+    {
+      "repo": "workloom-ai/workroom-tiger",
+      "mainSha": "5fc58513363f535de66ba7c4f4b7df1d7daa5578",
+      "status": "active",
+      "activationAt": "2026-10-06T18:13:14.034Z",
+      "sourcePr": 85,
+      "candidatePr": 86,
+      "candidateUrl": "https://cnb.cool/workloom-ai/workroom-tiger/-/pulls/86",
+      "integratedSourceSha": "fd0e373c6236b26018a5cc188ec7a25d32d28e5b",
+      "testedMainSha": "f64046fdb10cbd2c7cc5e2aec49c29ccc2b5f3a3",
+      "testedCheckSha": "6a8fe93cf71ff729999f38367165670095d1e69c",
+      "integrationVerifiedAt": "2026-10-06T19:53:32.932Z",
+      "reviewProvider": "codex",
+      "reviewedAt": "2026-10-06T18:58:24.218Z",
+      "platformAI": false,
+      "humanClickRequired": false,
+      "requiredChecks": [
+        "delivery-bootstrap-checks",
+        "delivery-regression",
+        "py-gate",
+        "oss-gate",
+        "protocol-gate"
+      ],
+      "native": {
+        "sn": "cnb-gfa-1k49ch812",
+        "url": "https://cnb.cool/workloom-ai/workroom-tiger/-/build/logs/cnb-gfa-1k49ch812",
+        "mainSha": "5fc58513363f535de66ba7c4f4b7df1d7daa5578",
+        "configSha": "5fc58513363f535de66ba7c4f4b7df1d7daa5578",
+        "event": "crontab: */5 * * * *",
+        "createdAt": "2026-10-06T19:55:01.000Z",
+        "pipelines": [
+          {
+            "name": "delivery-reconcile",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          },
+          {
+            "name": "delivery-releases",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "ledger": {
+        "sha": "870f283543ffe325a6081f3e04eec0d38ce6ba7c",
+        "branchProtected": true,
+        "eventChainValidated": true,
+        "nativeWriteTimeCorrelated": true
+      }
+    },
+    {
+      "repo": "workloom-ai/workroom-eagle",
+      "mainSha": "2771ffeab0250c88ae25185c4f2eed923a773e6a",
+      "status": "active",
+      "activationAt": "2026-10-06T18:11:25.069Z",
+      "sourcePr": 91,
+      "candidatePr": 92,
+      "candidateUrl": "https://cnb.cool/workloom-ai/workroom-eagle/-/pulls/92",
+      "integratedSourceSha": "f4088052b1440752ee16c7f87fabdcb9a9354411",
+      "testedMainSha": "9227f5e99ecbfa4ca118fa3afea6685873606e82",
+      "testedCheckSha": "a0eb20885534aa3ccec348077b378d949517465b",
+      "integrationVerifiedAt": "2026-10-06T19:53:57.515Z",
+      "reviewProvider": "codex",
+      "reviewedAt": "2026-10-06T18:58:24.048Z",
+      "platformAI": false,
+      "humanClickRequired": false,
+      "requiredChecks": [
+        "delivery-bootstrap-checks",
+        "delivery-regression",
+        "static-gate",
+        "db-gate"
+      ],
+      "native": {
+        "sn": "cnb-420-1k49cqfmu",
+        "url": "https://cnb.cool/workloom-ai/workroom-eagle/-/build/logs/cnb-420-1k49cqfmu",
+        "mainSha": "2771ffeab0250c88ae25185c4f2eed923a773e6a",
+        "configSha": "2771ffeab0250c88ae25185c4f2eed923a773e6a",
+        "event": "crontab: */5 * * * *",
+        "createdAt": "2026-10-06T20:00:04.000Z",
+        "pipelines": [
+          {
+            "name": "delivery-reconcile",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          },
+          {
+            "name": "delivery-releases",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "ledger": {
+        "sha": "933cc7d62f34b3ddb653f8426de75c8367e38e1b",
+        "branchProtected": true,
+        "eventChainValidated": true,
+        "nativeWriteTimeCorrelated": false
+      }
+    },
+    {
+      "repo": "workloom-ai/workroom-fox",
+      "mainSha": "e22d80fea9a7120e740b0984cf1f1ed30a218f9d",
+      "status": "active",
+      "activationAt": "2026-10-06T18:12:19.545Z",
+      "sourcePr": 84,
+      "candidatePr": 85,
+      "candidateUrl": "https://cnb.cool/workloom-ai/workroom-fox/-/pulls/85",
+      "integratedSourceSha": "8750818f59311374bdca8b62aebc746d58836d8e",
+      "testedMainSha": "4b6b0f7bda0ed3f1f2792c1919b8b4908711e50c",
+      "testedCheckSha": "90a35201c9d6de4fac612ec6a029122adb3c7ec8",
+      "integrationVerifiedAt": "2026-10-06T19:54:22.043Z",
+      "reviewProvider": "codex",
+      "reviewedAt": "2026-10-06T18:58:24.136Z",
+      "platformAI": false,
+      "humanClickRequired": false,
+      "requiredChecks": [
+        "delivery-bootstrap-checks",
+        "delivery-regression",
+        "static-gate",
+        "db-gate"
+      ],
+      "native": {
+        "sn": "cnb-690-1k49c83vf",
+        "url": "https://cnb.cool/workloom-ai/workroom-fox/-/build/logs/cnb-690-1k49c83vf",
+        "mainSha": "e22d80fea9a7120e740b0984cf1f1ed30a218f9d",
+        "configSha": "e22d80fea9a7120e740b0984cf1f1ed30a218f9d",
+        "event": "crontab: */5 * * * *",
+        "createdAt": "2026-10-06T19:50:02.000Z",
+        "pipelines": [
+          {
+            "name": "delivery-reconcile",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          },
+          {
+            "name": "delivery-releases",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "ledger": {
+        "sha": "9961a582ab951dc778fed8891c28c8bb0903863c",
+        "branchProtected": true,
+        "eventChainValidated": true,
+        "nativeWriteTimeCorrelated": false
+      }
+    },
+    {
+      "repo": "workloom-ai/workloom-growthtest",
+      "mainSha": "c28f11cd3d200770ee15d21c4ed98176d2e6bbb9",
+      "status": "active",
+      "activationAt": "2026-10-06T18:34:38.509Z",
+      "sourcePr": 114,
+      "candidatePr": 115,
+      "candidateUrl": "https://cnb.cool/workloom-ai/workloom-growthtest/-/pulls/115",
+      "integratedSourceSha": "76e5991bebb56f0eed91d569929efb62bd2d59b9",
+      "testedMainSha": "79866e883092ff60940b213c233a345d210bc57d",
+      "testedCheckSha": "a334a5d63d49aa3594d86e4ae154de80a09d9b4c",
+      "integrationVerifiedAt": "2026-10-06T19:54:46.636Z",
+      "reviewProvider": "codex",
+      "reviewedAt": "2026-10-06T18:58:23.789Z",
+      "platformAI": false,
+      "humanClickRequired": false,
+      "requiredChecks": [
+        "delivery-bootstrap-checks",
+        "delivery-regression",
+        "static-gate",
+        "db-gate",
+        "test-gate"
+      ],
+      "native": {
+        "sn": "cnb-cos-1k49ch82u",
+        "url": "https://cnb.cool/workloom-ai/workloom-growthtest/-/build/logs/cnb-cos-1k49ch82u",
+        "mainSha": "c28f11cd3d200770ee15d21c4ed98176d2e6bbb9",
+        "configSha": "c28f11cd3d200770ee15d21c4ed98176d2e6bbb9",
+        "event": "crontab: */5 * * * *",
+        "createdAt": "2026-10-06T19:55:01.000Z",
+        "pipelines": [
+          {
+            "name": "delivery-reconcile",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          },
+          {
+            "name": "delivery-releases",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "ledger": {
+        "sha": "1999e2b2aa1b4d6ea7961096cc989379e5b81f80",
+        "branchProtected": true,
+        "eventChainValidated": true,
+        "nativeWriteTimeCorrelated": false
+      }
+    },
+    {
+      "repo": "workloom-ai/workloom-growthmatrix",
+      "mainSha": "6e7bb78749a4ade1955cf03476ed249f630aa3f8",
+      "status": "active",
+      "activationAt": "2026-10-06T18:07:37.898Z",
+      "sourcePr": 137,
+      "candidatePr": 138,
+      "candidateUrl": "https://cnb.cool/workloom-ai/workloom-growthmatrix/-/pulls/138",
+      "integratedSourceSha": "1b98d46f6c84c1cd8b99429563a42d29f60a68fa",
+      "testedMainSha": "8e27e21395dc0e38682225673317814ea2db15ce",
+      "testedCheckSha": "dddda0555ed2a37a79fd2468fa5a0d2e51e3a102",
+      "integrationVerifiedAt": "2026-10-06T19:58:20.701Z",
+      "reviewProvider": "codex",
+      "reviewedAt": "2026-10-06T18:58:23.661Z",
+      "platformAI": false,
+      "humanClickRequired": false,
+      "requiredChecks": [
+        "delivery-bootstrap-checks",
+        "delivery-regression",
+        "static-gate",
+        "db-gate",
+        "test-gate"
+      ],
+      "native": {
+        "sn": "cnb-v03-1k49ch7tc",
+        "url": "https://cnb.cool/workloom-ai/workloom-growthmatrix/-/build/logs/cnb-v03-1k49ch7tc",
+        "mainSha": "6e7bb78749a4ade1955cf03476ed249f630aa3f8",
+        "configSha": "6e7bb78749a4ade1955cf03476ed249f630aa3f8",
+        "event": "crontab: */5 * * * *",
+        "createdAt": "2026-10-06T19:55:01.000Z",
+        "pipelines": [
+          {
+            "name": "delivery-reconcile",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          },
+          {
+            "name": "delivery-releases",
+            "status": "success",
+            "jobExitCodes": [
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "ledger": {
+        "sha": "33d05a2cf0ba54a03546164db95d57e6942f8264",
+        "branchProtected": true,
+        "eventChainValidated": true,
+        "nativeWriteTimeCorrelated": false
+      }
+    }
+  ]
+}
