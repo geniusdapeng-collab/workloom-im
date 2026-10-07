@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 2704,
+  "revision": 2706,
   "tasks": {
     "231": {
       "number": 231,
@@ -95,12 +95,12 @@
         "tests/ui/workloom-clients.spec.ts"
       ],
       "ciSince": 1791332715875,
-      "updatedAt": 1791349210537,
+      "updatedAt": 1791350110489,
       "alignmentCount": 1,
       "alignmentIntent": null,
       "review": null,
-      "error": "检查/评审阻断：Developer has not handed off; Codex review identity differs from the exact repository/source/main/policy",
-      "blockedUntil": 1791349810537,
+      "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+      "blockedUntil": 1791350710489,
       "recoveryCount": 0,
       "recoveryIntent": null,
       "recovery": {
@@ -112439,6 +112439,31 @@
       },
       "previous": "fc7594d56a8f35890ec5741a1359491e78dc499163b974ccc25cd3c639bef85f",
       "digest": "2217072263fa7268a51af985727184d29a41aa85497ee6163ddac502fa0f6473"
+    },
+    {
+      "sequence": 2705,
+      "at": "2026-10-07T05:15:10.489Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "status": "parked",
+          "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+          "blockedUntil": 1791350710489
+        }
+      },
+      "previous": "2217072263fa7268a51af985727184d29a41aa85497ee6163ddac502fa0f6473",
+      "digest": "633926f2c4403f6e299a08c6057b76e4c3cc75657a4ebf5273801ba4658a7f7f"
+    },
+    {
+      "sequence": 2706,
+      "at": "2026-10-07T05:15:17.543Z",
+      "kind": "transaction",
+      "data": {
+        "id": "6d67ee0b-af50-49c3-8baa-10b575722040"
+      },
+      "previous": "633926f2c4403f6e299a08c6057b76e4c3cc75657a4ebf5273801ba4658a7f7f",
+      "digest": "d057d2159615bf67de5a9f49f28a7672d97b6ea2bca370313e0648db3dcaa42b"
     }
   ]
 }
