@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 2600,
+  "revision": 2602,
   "tasks": {
     "231": {
       "number": 231,
@@ -351,7 +351,7 @@
         "sync/base-scope.json"
       ],
       "ciSince": 1791332715875,
-      "updatedAt": 1791336310927,
+      "updatedAt": 1791336613671,
       "alignmentCount": 1,
       "alignmentIntent": null,
       "review": null,
@@ -382,8 +382,8 @@
       },
       "recoveryCount": 0,
       "recoveryIntent": null,
-      "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/232 :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
-      "blockedUntil": 1791336307995,
+      "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/232/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+      "blockedUntil": 1791337213671,
       "recovery": {
         "marker": "delivery-repair:632d1dfa0c5c36c258d30af2",
         "recovered": true
@@ -107770,6 +107770,31 @@
       },
       "previous": "7bd1bc0ea01f000e7ad1bc444a19c63234dc6023efb7d8837af5f46a9610aaac",
       "digest": "4ba9bf204fa23174aed06462d373b76a51753b2824520e378ad89641bb6972e6"
+    },
+    {
+      "sequence": 2601,
+      "at": "2026-10-07T01:30:13.671Z",
+      "kind": "task",
+      "data": {
+        "number": 232,
+        "patch": {
+          "status": "parked",
+          "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/232/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+          "blockedUntil": 1791337213671
+        }
+      },
+      "previous": "4ba9bf204fa23174aed06462d373b76a51753b2824520e378ad89641bb6972e6",
+      "digest": "204694f64708d6ad8896e7bfb520824cd78a5a225e185a9338ed37464d0c8c3c"
+    },
+    {
+      "sequence": 2602,
+      "at": "2026-10-07T01:30:22.201Z",
+      "kind": "transaction",
+      "data": {
+        "id": "69e8adb7-a5ea-4312-8590-ef21e7d3458e"
+      },
+      "previous": "204694f64708d6ad8896e7bfb520824cd78a5a225e185a9338ed37464d0c8c3c",
+      "digest": "674e6e528a39ffe71ad30e871478959a1893ed8a0052906bd7c6fed3623097d7"
     }
   ]
 }
