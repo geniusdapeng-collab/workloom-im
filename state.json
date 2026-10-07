@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 2510,
+  "revision": 2513,
   "tasks": {
     "231": {
       "number": 231,
@@ -5023,7 +5023,7 @@
     },
     "272": {
       "number": 272,
-      "status": "developing",
+      "status": "waiting_ci",
       "firstSeen": 1791331552617,
       "attempts": {},
       "admission": {
@@ -5039,7 +5039,112 @@
           "protocol": 88
         }
       },
-      "updatedAt": 1791331552617
+      "updatedAt": 1791331598561,
+      "headSha": "ac8802c8f724a76c8a5655e890de67cfa915d1df",
+      "mainSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+      "branch": "task/T-2026-1007-1003",
+      "intent": {
+        "taskId": "T-2026-1007-1003",
+        "ready": true,
+        "dependsOn": [],
+        "releases": []
+      },
+      "developerReview": {
+        "schemaVersion": 1,
+        "provider": "codex",
+        "repo": "workloom-ai/workloom-im",
+        "number": 272,
+        "headSha": "ac8802c8f724a76c8a5655e890de67cfa915d1df",
+        "mainSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+        "policyHash": "8b6db8edf768d3fa0245e8f8b068deec502ae326808d729e0143f73065d23818",
+        "reviewedFiles": [
+          "WORKLOOM_PRODUCT_CONTEXT.md",
+          "docs/DEVELOPMENT-PROTOCOL.md",
+          "docs/development-delivery/2026-10-07-verification.json"
+        ],
+        "filesHash": "939c97927a4ab7c47e045619fb8169ac8e3662abd7d06b8208f524bd791f0a4a",
+        "dependsOn": [],
+        "ciPolicyChanges": [],
+        "ciPolicyChangesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "tests": [
+          {
+            "command": "python3 work/verify-product-context-update.py",
+            "exitCode": 0,
+            "finishedAt": "2026-10-07T00:05:36.051838+00:00",
+            "result": "Metadata, prior hash, historical scope, public data minimization and Markdown format; Exact projection of all 12 installation, native pipeline/job and protected ledger evidence rows; Actual test counters, idempotency, restored scheduling, model revocation and isolated-repository boundary; Implementation references, exact 3-file task scope and Git whitespace validation"
+          }
+        ],
+        "reviewedAt": "2026-10-07T00:06:30.168Z",
+        "summary": "Current Codex completed the full panorama and development protocol review, including their prior controlled originals, repository instructions, actual delivery README and referenced mechanism implementations. An independent Codex document review read both complete Markdown documents and the full public evidence JSON, checked every public field against the exact original 12-repository installation/native/ledger evidence, and checked tests, idempotency, cron restoration and cancelled scheduling. All review findings were fixed: repository-specific CI (including Tiger), historical audit version labels and dates, anonymous historical snapshot wording, and exact snapshot main table wording. The post-commit document validation passed for every evidence row, metadata and prior hash, exact references, statistics, public data minimization and declared 3-file scope. Exact credential and Basic scans passed in the authorized process only. Current delivery facts are distinguished from unchanged September industry statistics; isolated frozen documents and none-in-none-out remain. No runtime, dependency or CI changes, no model/NPC calls, no unsupported new production claims and no unresolved blocking findings.",
+        "passed": true,
+        "id": "bcf3532a92781a1774c5b2d71786845863e958446dde034ef5df224450b7f47e"
+      },
+      "reviewSnapshot": {
+        "repo": "workloom-ai/workloom-im",
+        "number": 272,
+        "pull": {
+          "number": 272,
+          "state": "open",
+          "title": "docs(base): 更新产品全景与十二仓交付事实 [T-2026-1007-1003]",
+          "body": "补齐产品全景中的十二仓实际启用与原生执行验收事实，更新现行 Codex 审查实测、失败隔离、独立发布、保护与隔离副本点名安装边界；修正历史同步直合并和旧保护说明的时态。行业统计仍明确为 2026-09-22 快照。新增只含公开仓/PR/构建身份和实际校验结果的可追溯证据 JSON。同步补充研发协议，主干合入后从唯一受控原文刷新本地缓存并比对散列。\n\n验证：完整文档及直接依赖复核、独立 Codex 文案复核、元数据/JSON/源码引用/证据一致性及秘密扫描；原必需 CI 与不可修改候选普通集成。无运行时、依赖或 CI 变更，无平台模型调用、force 或 main 直推。任务卡 #271。\n\n<!-- product-context-delivery-verification:20261007 -->\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1007-1003\",\n  \"ready\": true,\n  \"depends_on\": [],\n  \"releases\": []\n}\n-->",
+          "author": {
+            "username": "cnb.dYiF05kxAGA",
+            "nickname": "Genius",
+            "email": "XYpmztfpCvez6l8z5BBAvJ+cnb.dYiF05kxAGA@noreply.cnb.cool",
+            "is_npc": false
+          },
+          "reviewers": [],
+          "labels": [],
+          "base": {
+            "ref": "refs/heads/main",
+            "sha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+            "repo": {
+              "id": "2100396957109968896",
+              "name": "workloom-im",
+              "path": "workloom-ai/workloom-im",
+              "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+            }
+          },
+          "head": {
+            "ref": "refs/heads/task/T-2026-1007-1003",
+            "sha": "ac8802c8f724a76c8a5655e890de67cfa915d1df",
+            "repo": {
+              "id": "2100396957109968896",
+              "name": "workloom-im",
+              "path": "workloom-ai/workloom-im",
+              "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+            }
+          },
+          "blocked_on": "status_check",
+          "merged_by": {
+            "is_npc": false
+          },
+          "mergeable_state": "mergeable",
+          "is_wip": false,
+          "is_merged": false,
+          "is_force_merged": false,
+          "statuses": {}
+        },
+        "headSha": "ac8802c8f724a76c8a5655e890de67cfa915d1df",
+        "mainSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+        "files": [
+          "WORKLOOM_PRODUCT_CONTEXT.md",
+          "docs/DEVELOPMENT-PROTOCOL.md",
+          "docs/development-delivery/2026-10-07-verification.json"
+        ],
+        "intent": {
+          "taskId": "T-2026-1007-1003",
+          "ready": true,
+          "dependsOn": [],
+          "releases": []
+        },
+        "headTime": 1791331535000,
+        "mergeBase": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+        "checkErrors": [],
+        "checkSha": null,
+        "hasFailedChecks": false,
+        "ciPolicyChanges": []
+      }
     }
   },
   "leases": {
@@ -103721,6 +103826,147 @@
       },
       "previous": "bc0be89fd59853af39a0c0474a8d211f437feecc7d00c2f3fafa574f311956a0",
       "digest": "4b80ca617f50aabfcc4a046176864ae6cec69e0ee08fb4d416ad296918c66d67"
+    },
+    {
+      "sequence": 2511,
+      "at": "2026-10-07T00:06:38.561Z",
+      "kind": "developer_review",
+      "data": {
+        "number": 272,
+        "id": "bcf3532a92781a1774c5b2d71786845863e958446dde034ef5df224450b7f47e",
+        "headSha": "ac8802c8f724a76c8a5655e890de67cfa915d1df",
+        "mainSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4"
+      },
+      "previous": "4b80ca617f50aabfcc4a046176864ae6cec69e0ee08fb4d416ad296918c66d67",
+      "digest": "40c89284e297a1c2f1e3b204992bfa93f5a7e3215b89a9d4dfd296b195119692"
+    },
+    {
+      "sequence": 2512,
+      "at": "2026-10-07T00:06:38.561Z",
+      "kind": "task",
+      "data": {
+        "number": 272,
+        "patch": {
+          "status": "waiting_ci",
+          "headSha": "ac8802c8f724a76c8a5655e890de67cfa915d1df",
+          "mainSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+          "branch": "task/T-2026-1007-1003",
+          "intent": {
+            "taskId": "T-2026-1007-1003",
+            "ready": true,
+            "dependsOn": [],
+            "releases": []
+          },
+          "developerReview": {
+            "schemaVersion": 1,
+            "provider": "codex",
+            "repo": "workloom-ai/workloom-im",
+            "number": 272,
+            "headSha": "ac8802c8f724a76c8a5655e890de67cfa915d1df",
+            "mainSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+            "policyHash": "8b6db8edf768d3fa0245e8f8b068deec502ae326808d729e0143f73065d23818",
+            "reviewedFiles": [
+              "WORKLOOM_PRODUCT_CONTEXT.md",
+              "docs/DEVELOPMENT-PROTOCOL.md",
+              "docs/development-delivery/2026-10-07-verification.json"
+            ],
+            "filesHash": "939c97927a4ab7c47e045619fb8169ac8e3662abd7d06b8208f524bd791f0a4a",
+            "dependsOn": [],
+            "ciPolicyChanges": [],
+            "ciPolicyChangesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "tests": [
+              {
+                "command": "python3 work/verify-product-context-update.py",
+                "exitCode": 0,
+                "finishedAt": "2026-10-07T00:05:36.051838+00:00",
+                "result": "Metadata, prior hash, historical scope, public data minimization and Markdown format; Exact projection of all 12 installation, native pipeline/job and protected ledger evidence rows; Actual test counters, idempotency, restored scheduling, model revocation and isolated-repository boundary; Implementation references, exact 3-file task scope and Git whitespace validation"
+              }
+            ],
+            "reviewedAt": "2026-10-07T00:06:30.168Z",
+            "summary": "Current Codex completed the full panorama and development protocol review, including their prior controlled originals, repository instructions, actual delivery README and referenced mechanism implementations. An independent Codex document review read both complete Markdown documents and the full public evidence JSON, checked every public field against the exact original 12-repository installation/native/ledger evidence, and checked tests, idempotency, cron restoration and cancelled scheduling. All review findings were fixed: repository-specific CI (including Tiger), historical audit version labels and dates, anonymous historical snapshot wording, and exact snapshot main table wording. The post-commit document validation passed for every evidence row, metadata and prior hash, exact references, statistics, public data minimization and declared 3-file scope. Exact credential and Basic scans passed in the authorized process only. Current delivery facts are distinguished from unchanged September industry statistics; isolated frozen documents and none-in-none-out remain. No runtime, dependency or CI changes, no model/NPC calls, no unsupported new production claims and no unresolved blocking findings.",
+            "passed": true,
+            "id": "bcf3532a92781a1774c5b2d71786845863e958446dde034ef5df224450b7f47e"
+          },
+          "reviewSnapshot": {
+            "repo": "workloom-ai/workloom-im",
+            "number": 272,
+            "pull": {
+              "number": 272,
+              "state": "open",
+              "title": "docs(base): 更新产品全景与十二仓交付事实 [T-2026-1007-1003]",
+              "body": "补齐产品全景中的十二仓实际启用与原生执行验收事实，更新现行 Codex 审查实测、失败隔离、独立发布、保护与隔离副本点名安装边界；修正历史同步直合并和旧保护说明的时态。行业统计仍明确为 2026-09-22 快照。新增只含公开仓/PR/构建身份和实际校验结果的可追溯证据 JSON。同步补充研发协议，主干合入后从唯一受控原文刷新本地缓存并比对散列。\n\n验证：完整文档及直接依赖复核、独立 Codex 文案复核、元数据/JSON/源码引用/证据一致性及秘密扫描；原必需 CI 与不可修改候选普通集成。无运行时、依赖或 CI 变更，无平台模型调用、force 或 main 直推。任务卡 #271。\n\n<!-- product-context-delivery-verification:20261007 -->\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1007-1003\",\n  \"ready\": true,\n  \"depends_on\": [],\n  \"releases\": []\n}\n-->",
+              "author": {
+                "username": "cnb.dYiF05kxAGA",
+                "nickname": "Genius",
+                "email": "XYpmztfpCvez6l8z5BBAvJ+cnb.dYiF05kxAGA@noreply.cnb.cool",
+                "is_npc": false
+              },
+              "reviewers": [],
+              "labels": [],
+              "base": {
+                "ref": "refs/heads/main",
+                "sha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+                "repo": {
+                  "id": "2100396957109968896",
+                  "name": "workloom-im",
+                  "path": "workloom-ai/workloom-im",
+                  "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+                }
+              },
+              "head": {
+                "ref": "refs/heads/task/T-2026-1007-1003",
+                "sha": "ac8802c8f724a76c8a5655e890de67cfa915d1df",
+                "repo": {
+                  "id": "2100396957109968896",
+                  "name": "workloom-im",
+                  "path": "workloom-ai/workloom-im",
+                  "web_url": "https://cnb.cool/workloom-ai/workloom-im"
+                }
+              },
+              "blocked_on": "status_check",
+              "merged_by": {
+                "is_npc": false
+              },
+              "mergeable_state": "mergeable",
+              "is_wip": false,
+              "is_merged": false,
+              "is_force_merged": false,
+              "statuses": {}
+            },
+            "headSha": "ac8802c8f724a76c8a5655e890de67cfa915d1df",
+            "mainSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+            "files": [
+              "WORKLOOM_PRODUCT_CONTEXT.md",
+              "docs/DEVELOPMENT-PROTOCOL.md",
+              "docs/development-delivery/2026-10-07-verification.json"
+            ],
+            "intent": {
+              "taskId": "T-2026-1007-1003",
+              "ready": true,
+              "dependsOn": [],
+              "releases": []
+            },
+            "headTime": 1791331535000,
+            "mergeBase": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+            "checkErrors": [],
+            "checkSha": null,
+            "hasFailedChecks": false,
+            "ciPolicyChanges": []
+          }
+        }
+      },
+      "previous": "40c89284e297a1c2f1e3b204992bfa93f5a7e3215b89a9d4dfd296b195119692",
+      "digest": "d2dff33bc9e1ce182a093ff93181d1cfe899e6894d3768d73241bc1e8cb7b661"
+    },
+    {
+      "sequence": 2513,
+      "at": "2026-10-07T00:06:32.503Z",
+      "kind": "transaction",
+      "data": {
+        "id": "57f5fb11-3765-46b7-b8ed-cdddac5c7a77"
+      },
+      "previous": "d2dff33bc9e1ce182a093ff93181d1cfe899e6894d3768d73241bc1e8cb7b661",
+      "digest": "ff71be6617c13120df09147cc94327a80d0bf82821ca3b054839daca5d7ddde9"
     }
   ]
 }
