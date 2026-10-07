@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 2547,
+  "revision": 2549,
   "tasks": {
     "231": {
       "number": 231,
@@ -5160,7 +5160,7 @@
         "marker": "delivery-origin:272:ac8802c8f724a76c8a5655e890de67cfa915d1df:9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
         "at": 1791331816063
       },
-      "mergePhase": "merge_requested",
+      "mergePhase": "merge_verified",
       "mergeSnapshot": {
         "repo": "workloom-ai/workloom-im",
         "number": 273,
@@ -5237,7 +5237,15 @@
           "protocol": 90
         }
       },
-      "mergeRequestedAt": 1791332587908
+      "mergeRequestedAt": 1791332587908,
+      "merge": {
+        "sha": "e5d76398484cac7d8ac50b6c27905765a59fd50f",
+        "sourceSha": "ac8802c8f724a76c8a5655e890de67cfa915d1df",
+        "mainSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+        "checkSha": "dbd73aae5e704d27a4ac09ca314a2008af5dc0ab",
+        "mergedBy": "cnb.dYiF05kxAGA",
+        "verifiedAt": "2026-10-07T00:24:29.375Z"
+      }
     },
     "273": {
       "number": 273,
@@ -105253,6 +105261,37 @@
       },
       "previous": "3c8f973b762a0f3463ae07a0816068847a1f6d36ca3fb14f82c0b0c923be701c",
       "digest": "292e58c9b0dc774921c0b7141b79679f2b3a31470268f525650153f2c8e120ed"
+    },
+    {
+      "sequence": 2548,
+      "at": "2026-10-07T00:23:07.908Z",
+      "kind": "task",
+      "data": {
+        "number": 272,
+        "patch": {
+          "mergePhase": "merge_verified",
+          "merge": {
+            "sha": "e5d76398484cac7d8ac50b6c27905765a59fd50f",
+            "sourceSha": "ac8802c8f724a76c8a5655e890de67cfa915d1df",
+            "mainSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+            "checkSha": "dbd73aae5e704d27a4ac09ca314a2008af5dc0ab",
+            "mergedBy": "cnb.dYiF05kxAGA",
+            "verifiedAt": "2026-10-07T00:24:29.375Z"
+          }
+        }
+      },
+      "previous": "292e58c9b0dc774921c0b7141b79679f2b3a31470268f525650153f2c8e120ed",
+      "digest": "a7ccedd82ea7be8ce4c2b0a6fa227ea44f114b280260a7489ed89fa907326cd1"
+    },
+    {
+      "sequence": 2549,
+      "at": "2026-10-07T00:24:29.375Z",
+      "kind": "transaction",
+      "data": {
+        "id": "f924dc7a-9ef9-4ea6-9c05-833a2d488f57"
+      },
+      "previous": "a7ccedd82ea7be8ce4c2b0a6fa227ea44f114b280260a7489ed89fa907326cd1",
+      "digest": "d0a76ecaa7210498fc0a9f6df4cf7047b89adf52395f55ad7edefccd2035e1ef"
     }
   ]
 }
