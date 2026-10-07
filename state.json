@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 2664,
+  "revision": 2666,
   "tasks": {
     "231": {
       "number": 231,
@@ -351,7 +351,7 @@
         "sync/base-scope.json"
       ],
       "ciSince": 1791332715875,
-      "updatedAt": 1791344711731,
+      "updatedAt": 1791345009181,
       "alignmentCount": 1,
       "alignmentIntent": null,
       "review": null,
@@ -382,8 +382,8 @@
       },
       "recoveryCount": 0,
       "recoveryIntent": null,
-      "error": "检查/评审阻断：Developer has not handed off; Codex review identity differs from the exact repository/source/main/policy",
-      "blockedUntil": 1791345311731,
+      "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/232/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+      "blockedUntil": 1791345609181,
       "recovery": {
         "marker": "delivery-repair:632d1dfa0c5c36c258d30af2",
         "recovered": true
@@ -110512,6 +110512,31 @@
       },
       "previous": "76a71cfcff5f70984ce5002ae89d7932cd99eb7d4265d2e1fddec5eadc3bc9f1",
       "digest": "75c3fdc100aa4ca7925a25dcb88d3a994a71d84e12ebba19fd9dbf93545876c0"
+    },
+    {
+      "sequence": 2665,
+      "at": "2026-10-07T03:50:09.181Z",
+      "kind": "task",
+      "data": {
+        "number": 232,
+        "patch": {
+          "status": "parked",
+          "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/232/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+          "blockedUntil": 1791345609181
+        }
+      },
+      "previous": "75c3fdc100aa4ca7925a25dcb88d3a994a71d84e12ebba19fd9dbf93545876c0",
+      "digest": "26137057f208aa50e8f92be3948823039c64ad841af825fff70bd961ece780a2"
+    },
+    {
+      "sequence": 2666,
+      "at": "2026-10-07T03:50:16.227Z",
+      "kind": "transaction",
+      "data": {
+        "id": "f4235c37-08ad-44aa-bea2-ca8e4ae3476a"
+      },
+      "previous": "26137057f208aa50e8f92be3948823039c64ad841af825fff70bd961ece780a2",
+      "digest": "d04a1759782c9c39d7c586d4574d975eaff0c17d0a5c40fa0fee58529364ea9a"
     }
   ]
 }
