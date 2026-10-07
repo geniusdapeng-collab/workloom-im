@@ -1,8 +1,10 @@
 <!--
 document_schema: workloom.product-context/v1
 document_id: workloom-product-and-code-panorama
-context_version: 2026-10-07.1
-development_policy_updated_at: 2026-10-07  # 仅研发交付政策/机制修订；其余仓库统计仍为 snapshot_date 快照
+context_version: 2026-10-07.2
+development_policy_updated_at: 2026-10-07  # 研发交付政策、十二仓实际启用与原生运行证据；其余仓库统计仍为 snapshot_date 快照
+development_delivery_verified_at: 2026-10-07T04:06:40+08:00
+development_delivery_evidence: docs/development-delivery/2026-10-07-verification.json
 snapshot_date: 2026-09-22
 timezone: Asia/Shanghai
 canonical_repository: cnb.cool/workloom-ai/workloom-im
@@ -15,11 +17,11 @@ isolated_repositories: 2  # growthtest / growthmatrix：双向不同步，只登
 isolated_read_depth: deep (module-level; 2026-09-22)  # 两隔离副本已做模块级深读：bundle/路由/计划账本/分支与 PR/未入库实验
 dev_protocol: docs/DEVELOPMENT-PROTOCOL.md
 mission_board: workloom-ai/WorkLoom-Dev-Dispatch
-ci_platform: cnb (.cnb.yml; 基座 3 条必需闸门)
-ui_artifact_host: cnb-release (ui-v0.1.6)
-read_depth: deep (module-level; not test-executed)
+ci_platform: cnb (.cnb.yml; 原有产品必需检查与研发交付门禁，见 §14.6)
+ui_artifact_host: cnb-release (ui-v0.1.6 at snapshot_date; not refreshed by delivery verification)
+read_depth: deep (module-level at snapshot_date; development-delivery code/tests/live readback separately verified at 2026-10-07)
 audit_program: WORKLOOM-AUDIT-2026-09 (ledger local-only)
-previous_source_sha256: cea905be2e1b98a33dcfdda60ff78018a0c85ffa65172deffb4956455b90a294
+previous_source_sha256: e8cb079fed52c74c2d8e88d1bfadc202a534b54f3f539378705c1bdb23fa9ab4
 user_confirmed_catalog_date: 2026-09-14
 repository_visibility: public-open-source
 classification: public-product-context-no-secrets
@@ -28,21 +30,23 @@ classification: public-product-context-no-secrets
 > **受控文档说明**
 >
 > - 本文件在 `workloom-im` 根目录维护，是 WorkLoom 跨仓产品与架构认知的唯一受控原文；行业仓中的同名文件是只读分发副本，不应直接修改。
-> - `context_version` 表示认知版本，`snapshot_date` 表示事实核验时间。更新产品边界、系统不变量或仓库快照时，必须同步更新相应元数据，并通过受控 base-sync 分发。
+> - `context_version` 表示认知版本，`snapshot_date` 表示行业业务与仓库统计的全景快照时间；局部核验另有专用日期与证据，不能据此推定全文已重新核验。更新产品边界、系统不变量或仓库快照时，必须同步更新相应元数据，并通过受控 base-sync 分发。
 > - 2026-09-14，产品所有者确认九个仓库全部为开源项目并补充正式定位；2026-09-17，产品所有者确认九仓已迁移至腾讯 CNB（`cnb.cool/workloom-ai`），原 GitHub 账号 `geniusdapeng-collab` 已不可用。
-> - 本版（2026-09-17.2）按产品所有者要求做了**逐仓模块级深读**：九仓全量克隆、逐模块精读、跨仓差异计算，并对照 2026-09-15/16 的审计台账；**未执行安装、构建与测试**，凡“是否跑得通”的判断都以代码与审计证据为界（见 §13）。
+> - 2026-09-17.2 深读版按产品所有者要求做了**逐仓模块级深读**：九仓全量克隆、逐模块精读、跨仓差异计算，并对照 2026-09-15/16 的审计台账；该轮**未执行安装、构建与测试**，凡“是否跑得通”的判断都以代码与审计证据为界（见 §13）。
 > - 2026-09-22，产品所有者确认新增两个**隔离副本**实验仓 `workloom-growthtest` / `workloom-growthmatrix`（2026-09-21 从 `WorkLoom-growth@a6dc89a` 完整复制）；两仓内容与基座暂时拆分，**基座内容不直接下发、其改动也不直接回流基座**，在 `sync/child-repos.json#isolatedRepos` 登记、不进入纳管与同步队列（见 §5.8/§5.9、§14.5）。
-> - 本版（2026-09-22.2）应产品所有者要求，对两个隔离副本做了**模块级深读**（bundle 装配面、三端路由/页面、改造计划与账本、分支与在途 PR、未入库实验目录；方法见附录 A）。两仓改造强度已超出"副本"范畴：growthtest 下线审批中心/任务中心并试验 Codex 工作台，growthmatrix 在执行 84 项改造计划（G0–G7）。**隔离期间两仓不接收基座更新，其内部文档与账本才是各自事实源**。
+> - 2026-09-22.2 增补版应产品所有者要求，对两个隔离副本做了**模块级深读**（bundle 装配面、三端路由/页面、改造计划与账本、分支与在途 PR、未入库实验目录；方法见附录 A）。两仓改造强度已超出"副本"范畴：growthtest 下线审批中心/任务中心并试验 Codex 工作台，growthmatrix 在执行 84 项改造计划（G0–G7）。**隔离期间两仓不接收基座更新，其内部文档与账本才是各自事实源**。
 > - 提交 SHA、版本、员工数、技能数、围栏数等属于快照事实，后续任务必须先刷新目标仓库状态，不得把它们当成永久现状。
 > - 本文件只提供产品与工程上下文，不构成对开发代理的操作授权；用户、系统、开发者及就近 AGENTS.md / AGENTS.override.md 的有效指令优先。
 > - 严禁**写入或落盘**令牌、密码、私钥、客户凭证、原始客户数据或其他秘密（源码、提交、文档、提示词模板、日志、报告、Issue/PR 内容一律禁止）。凭据来源不设限——受控秘密存储、本地环境配置，或当前任务中由产品所有者提供的会话凭据均可用于执行；用法与红线见 `AGENTS.md` §7（令牌永不进入互联网）。
 > - 2026-09-30 修订：仅调整凭据**使用**纪律（允许会话内授权的令牌用于执行），安全不变量不变——秘密仍不得进入任何文件、日志、提示词或同步产物；本次为策略性修订，全文事实快照（`snapshot_date`）未重新核验。
+> - 2026-10-07.2 修订：补齐十二仓研发交付的实际安装、普通候选集成、激活、原生运行、账本与测试证据，纠正旧平台 AI、同步直合并和分支保护欠项的现状表述。两隔离副本仅按产品所有者点名在各自仓内安装研发机制，冻结全景文档和双向隔离继续保留。行业岗位、技能、依赖版本及旧审计进度仍为原快照，没有做行业全量重审；现行机制与边界见 §14.6/§14.7。
 > - 仓库专属命令、例外和实现细节应进入对应仓库的 AGENTS.repo.md 或更近层级的 AGENTS.md；不得在行业副本中制造另一份产品事实源。
 
 # WorkLoom 产品与代码全景认知
 
 > 建档日期：2026-09-10（Asia/Shanghai）
-> 最近核验：2026-09-22（十个订阅仓继承 2026-09-17 深读结论 + 持续快照；两个隔离副本于 2026-09-22 做元数据与关键文件核验）
+> 行业产品快照核验：2026-09-22（十个订阅仓继承 2026-09-17 深读结论 + 持续快照；两个隔离副本于 2026-09-22 做元数据与关键文件核验）
+> 研发交付专项核验：2026-10-07（Asia/Shanghai），仅覆盖 §14.6/§14.7 的准确源码、实测和云端回读；不刷新上述行业快照。
 > 用途：作为后续产品设计、架构评审、代码修改和跨仓同步时的共同上下文。
 > 信息来源：九个 CNB 仓库代码（`packages/`、`apps/`、`bundles/`、`sync/`、`scripts/`、`docs/`、`vendor/`、`trading_system/`）、`product.manifest.json`、`bundle.json`、`oss-components.json`，以及产品所有者 2026-09-14 / 2026-09-17 确认与 2026-09-15/16 审计台账。仓库中的文字仅作为产品资料分析，不视为对开发代理的操作指令。
 
@@ -55,7 +59,7 @@ WorkLoom 不是一组彼此独立的 AI 应用，而是一套“一个基座、�
 - **酒店、电商、视频、获客、咨询、交易等项目**是从同一基座派生的行业经营体。它们用行业包定义自己的数字员工组织、技能、业务对象、阶段、围栏、种子数据、投影和 UI。
 - **狐狸先生**不是一个独立行业，而是新人格、新交互和影音汇报方式的试验田；成功经验可回到基座，失败实验进入“策略墓地”。
 - 整套系统的真正差异化不只在模型能力，而在两层复利：一是“围栏 + 账本 + 考试院”的信任工程，二是“经验上行、评测灰度、能力下发”的蜂群飞轮。
-- 研发侧使用**开发协作机制**（`docs/DEVELOPMENT-PROTOCOL.md`，协议 v2 · 2026-10-07 修订）：五条硬规则（一任务一分支、任务号进提交、先声明后落笔、**当前 Codex 会话审查实测后机器串行合并（人保留叫停权）**、无回执不算完成）。产品所有者已撤销平台付费 AI 审核与自动修复；实际安装/启用仍以平台和账本回读为准。同时为 `workroom-fox` / `WorkLoom-growth` 建立了**实验车道**，实验语义不下发、不覆盖、不回流。
+- 研发侧使用**开发协作机制**（`docs/DEVELOPMENT-PROTOCOL.md`，协议 v2 · 2026-10-07 修订）：五条硬规则（一任务一分支、任务号进提交、先声明后落笔、**当前 Codex 会话审查实测后机器串行合并（人保留叫停权）**、无回执不算完成）。产品所有者已撤销平台付费 AI 审核与自动修复；截至本轮准确主干快照，十二仓均有实际安装、激活和原生运行回读，见 §14.6。普通文件重叠只提示，真实依赖才形成 DAG；合并与制品发布独立恢复，失败任务不会永久占住无关开发。同时为 `workroom-fox` / `WorkLoom-growth` 建立了**实验车道**，实验语义不下发、不覆盖、不回流。
 - 舰队分层（2026-09-22）：**十个订阅仓**（基座 + 9 个子仓）走正常同步与纳管；`workloom-growthtest` / `workloom-growthmatrix` 两个**隔离副本**只登记、不纳管、双向不同步（基座内容不直接下发，其改动也不直接回流），见 §5.8/§5.9 与 §14.5。
 - 工程完整性上，每个仓都是**可独立运行的自包含 monorepo 源码树**（含服务端、三端前端、桌面壳、数据库迁移、行业包与技能），开源组件以“仓内 vendor / npm 依赖 / 安装期受控下载”三种形态存在，详见 §12。
 
@@ -315,7 +319,7 @@ WorkData 事件以五元结构记录业务事实（`packages/shared/src/event-sc
 - **UI 与三端基座**：`@workloom/ui` 与三端客户端基座按同一稳定版本经升级 PR 分波下发；行业扩展只允许落在 `apps/*/src/{extensions,projections,config/industry,theme/industry}/**` 等显式排除路径。
 - **污染守卫**：路径黑名单含 `^bundles/`、`^demo/`、`^docs/demo`、`^scripts/seed`、`^scripts/demo` 与 `hotel-baseline`、`ai-pm`、`yunqi`、`ecommerce`、`panda-cineforge`、`platform-ops` 等子串；单次常规同步上限 200 文件，新行业接入放宽至 450，超限即中止并要求人工核对。
 - **平台工程不出仓**：Andromeda 的 `extraExclude` 显式排除 `platform-ops/**`，与 `safety/` 保护清单、载荷身份策略（B-01.PB-1）形成三重护栏。
-- **实际同步基线**（2026-09-22 实测，快照事实，引用前先刷新）：各订阅子仓的 `.workloom-base-sync.json` 在最近一轮 required-only fanout（2026-09-21T16:26Z）后记录 `lastRequiredAssetsBaseSha=9bd0d268…`（本批基座合并点），`lastSyncedBaseSha=55f57a9…`（实验车道 `WorkLoom-growth` 为 `8789675…`，因其 lastSyncedBaseSha 仅在 full 波次推进）；`requiredRootAssetsSha256` 随“基座 fanout → 子仓 `sync/base-*` PR → 门禁全绿自动合并”的通道持续收敛（2026-09-19 起，机制见 `docs/FLEET-AUTO-SYNC.md`；运行时代码按协议 §1/§9.5 走代码车道——门禁全绿 + 冷却期 + 串行，同样由 AI 合并，人保留叫停权）。
+- **历史同步基线**（2026-09-22 实测，快照事实，引用前先刷新）：各订阅子仓的 `.workloom-base-sync.json` 在当轮 required-only fanout（2026-09-21T16:26Z）后记录 `lastRequiredAssetsBaseSha=9bd0d268…`（该批基座合并点），`lastSyncedBaseSha=55f57a9…`（实验车道 `WorkLoom-growth` 为 `8789675…`，因其 lastSyncedBaseSha 仅在 full 波次推进）。现行通道为“基座 fanout 建 PR → 当前 Codex 会话审查/实测并 handoff → 原仓必需 CI → 不可修改候选普通串行集成”；冷却时间、同步白名单或旧 `merge-sync-prs.mjs` 入口不能代替审查回执，也不直接合并。准确下发完成状态须回读目标源码与受控资产摘要，机制见 §14 与 `docs/FLEET-AUTO-SYNC.md`。
 
 后续跨仓开发默认顺序：先判断能力属于公共基座、平台中枢还是行业包；公共机制优先在 `workloom-im` 实现并通过同步下发；行业语义仅在对应 bundle/子仓实现；平台运营工程仅在 Andromeda；同步后逐仓运行类型检查、测试、围栏/评测和打包门禁，不能只看文件复制成功。
 
@@ -366,13 +370,15 @@ WorkData 事件以五元结构记录业务事实（`packages/shared/src/event-sc
 
 ### 9.1 托管迁移后的引用失配（2026-09-18 已解决）
 
+本节迁移与欠项记录属于历史快照；2026-10-07 研发交付路径已变更，现行合并与保护以 §14.6/§14.7 为准。
+
 **已修复**：九仓 `product.manifest.json#repository`、`.workloom-runtime-deps/metadata.json#product.repository`、`.workloom-base-sync.json#baseRepo`、`sync/child-repos.json`（baseRepo 与 8 个 children）、同步器/校验器常量与测试夹具、README 与官网链接全部切到 `cnb.cool/workloom-ai`；`runtime:deps:verify` 的输入摘要已随标识迁移刷新。
 
 **仍待处理**：
 
-- 迁移后的 `main` 历史仍是单次 “rescue” 提交（CNB 侧保留），依赖 `git log`/blame 的审计路径需另行设计；
+- 迁移时历史被收敛为单次 “rescue” 提交（历史快照）；后续已存在真实普通合并历史，不能再把当前 main 描述成单提交。迁移前的 blame/审计追溯仍须结合保存的原树来源；
 - `.github/workflows/*` 保留为遗留（CNB 上不生效），发布类工作流需按需迁移；
-- ~~自动 fanout 的 GitHub App 未配置（DEF-P2-0016），跨仓同步暂以受控脚本 + PR 执行。~~ **已解决（2026-09-19）**：CNB 原生 fanout（`sync/fanout-cnb.mjs`）按资产摘要做漂移预检并对漂移子仓开 `sync/base-*` PR，纯同步 PR 由 `sync/merge-sync-prs.mjs` 在白名单 + 全门禁 success 后自动合并；GitHub App 不再需要。
+- ~~自动 fanout 的 GitHub App 未配置（DEF-P2-0016），跨仓同步暂以受控脚本 + PR 执行。~~ **已解决（2026-09-19）**：改用 CNB 原生 fanout 创建 `sync/base-*` PR，GitHub App 不再需要。**2026-10-07 现行修订**：`merge-sync-prs.mjs` 仅派发仓级执行器；同步 PR 仍须当前 Codex 会话 review/实测、原仓 CI 和不可修改候选普通集成，不存在免审直合并通道。
 
 ### 9.1.1 CNB 闸门落地（2026-09-18）
 
@@ -445,11 +451,11 @@ WorkData 事件以五元结构记录业务事实（`packages/shared/src/event-sc
 
 ## 11. 凭证与“记忆”说明
 
-- 本文没有保存任何令牌、密钥或客户凭证；十二仓均为开源项目，读取与继承上下文不需要私人令牌（本次核验即匿名只读克隆）。按 `AGENTS.md` §7，凭据来源不设限（含当前任务中由所有者提供的会话令牌），但任何凭据都不得写入本文、仓库、日志或任何外发产物。
+- 本文没有保存任何令牌、密钥或客户凭证；十二仓均为开源项目，读取与继承上下文不需要私人令牌（2026-09 全景快照核验以匿名只读克隆完成）。按 `AGENTS.md` §7，凭据来源不设限（含当前任务中由所有者提供的会话令牌），但任何凭据都不得写入本文、仓库、日志或任何外发产物。
 - 十个订阅仓根目录持有 `WORKLOOM_PRODUCT_CONTEXT.md`（随基座同步刷新）与根级 `AGENTS.md`；两个隔离副本中的同名文件是**建仓时复制的冻结副本**（2026-09-19.2 版），隔离期内不更新，不代表最新认知。
 - `workloom-im` 是本文唯一受控原文；订阅仓只接收校验过的副本；隔离副本不接收下发。新行业仓必须通过 `sync/adopt.sh --new-industry` 接入；有意与基座拆分的仓登记进 `sync/child-repos.json#isolatedRepos`（协议 §11）。
 - 多仓审计台账（`AUDIT_PROGRESS.md` 等）目前只存在本地，因为 `workroom-andromeda` 是公开仓、不能承载敏感发现；在独立私有控制仓提供前，权威台账的落点问题（BLK-CTL-05-001）仍未关闭。
-- 本次核验方式：匿名 `git clone --depth 30 https://cnb.cool/workloom-ai/<repo>.git` + 逐模块精读（模块入口注释、导出面、围栏/管线/技能定义、测试清单、审计文档），跨仓做内容指纹与差异比对；**未执行安装、构建、测试或数据库操作**。
+- 2026-09 全景快照核验方式：匿名 `git clone --depth 30 https://cnb.cool/workloom-ai/<repo>.git` + 逐模块精读（模块入口注释、导出面、围栏/管线/技能定义、测试清单、审计文档），跨仓做内容指纹与差异比对；该轮**未执行安装、构建、测试或数据库操作**。2026-10-07 研发交付专项另有实际测试、普通集成与原生运行证据，见 §14.6；两者不能互相扩大验证范围。
 - 未来任务应把本文作为可版本化的持久项目上下文，而不是模型的隐式跨对话记忆；实际开发前仍应检查目标仓最新提交和仓内规则，避免把 2026-09-17 快照当成永久现状。
 
 ## 12. 开源组件与仓库完整性（回答“每个仓是不是完整系统”）
@@ -475,13 +481,13 @@ WorkData 事件以五元结构记录业务事实（`packages/shared/src/event-sc
 
 ## 13. 审计程序与验证成熟度（2026-09-15/16 → 09-18）
 
-产品所有者于 2026-09-15/16 运行了多仓审计程序 `WORKLOOM-AUDIT-2026-09`（台账 `AUDIT_PROGRESS.md`、高优清单 `WorkLoom-高优核心能力审计执行清单.md`），冻结基座 `main@4f2296f…`，并要求“公共根因先在 WorkLoom IM 修复、再受控同步下游”。截至本版核验：
+产品所有者于 2026-09-15/16 运行了多仓审计程序 `WORKLOOM-AUDIT-2026-09`（台账 `AUDIT_PROGRESS.md`、高优清单 `WorkLoom-高优核心能力审计执行清单.md`），冻结基座 `main@4f2296f…`，并要求“公共根因先在 WorkLoom IM 修复、再受控同步下游”。以下为原行业审计快照，未因本次文档更新重新核销 HP/DEF/BLK；研发交付的新验证范围与剩余边界另见 §14.6/§14.7：
 
 **工程化落地（2026-09-18 新增）**
 
 - CNB 闸门已接管原 GitHub Actions 的角色：基座三条必需流水线 + 子仓分层闸门（详见 §9.1.1）；
 - `@workloom/ui` 制品、仓库标识、九仓闸门三件事已全部完成并实测；
-- 仍需人工配置：CNB 分支保护规则（当前令牌无仓库设置权限）；桌面签名/公证 secrets（BLK-B-01-003）。
+- 旧快照中的 CNB 分支保护人工欠项已由本轮十二仓研发安装的实际回读更新：main、不可修改候选和控制账本均有强保护证明，见 §14.6；不再沿用旧令牌权限推断现状。桌面签名/公证 secrets 的既有欠项（BLK-B-01-003）未在本次研发交付安装中核销。
 
 **已合并并有门禁证据的修复（代码中可验证）**
 
@@ -519,13 +525,13 @@ WorkData 事件以五元结构记录业务事实（`packages/shared/src/event-sc
 | 环节 | 自动化方式 |
 |---|---|
 | 提交规范校验 / 并发冲突检测 | 每仓 `.cnb.yml` 协议门禁 stage（`scripts/ci/verify-*.mjs`，含自检与真实校验） |
-| 类型检查 / 测试 / 构建 / 迁移种子验链 / 三端视觉 | 基座三条必需流水线（static/db/ui）+ 各仓 static/db 阻断 |
-| 禁止直推 / 强推 / 删除 / NPC 自批 | CNB 分支保护规则（十个订阅仓已配；隔离副本仓不新增/修改） |
+| 类型检查 / 测试 / 构建 / 迁移种子验链 / 三端视觉 | 保留各仓原有产品必需检查，再叠加交付门禁；基座 static/db/ui、Tiger py/oss/protocol 等以各仓准确 trusted main 与平台保护回读为准，不统一替换成相同检查 |
+| 禁止直推 / 强推 / 删除 / 管理员手动绕过 | 十二仓本轮研发安装已回读 main、不可修改候选与控制账本保护；隔离副本的本仓点名安装不等于默认舰队纳管，见 §14.5/§14.6 |
 | **新仓发现与纳管** | 每日 cron（09:00）`scripts/tools/fleet-scan.mjs --issue --provision`：识别 → 开扫描卡 → 自动建纳管 PR（隔离副本仓按 `isolatedRepos` 跳过，只单列报告） |
 | 任务卡建卡 / 回执 / 关单 | `scripts/tools/task.mjs new|list|receipt` |
 | 实验路径护栏 | 每日 cron `scripts/tools/experiment-guard.mjs --check` |
 | **基座资产分发**（根级受控资产 → 各仓 `sync/base-*` PR → 合并） | 30 分钟 cron + `api_trigger_base_sync`：`sync/fanout-cnb.mjs` 创建 PR；独立仓级 `scripts/delivery/cnb.yml` 每 5 分钟恢复和集成；旧 merge-sync-prs 只派发 |
-| **代码类 PR 合并 / 高风险裁决 / 协议发布** | **AI 执行合并**（门禁全绿 + 串行；`risk/review` 放行后合并，`risk/block` 永不合并）；**人**保留高风险裁决与随时叫停 / 回滚权 |
+| **代码类 PR / 协议交付** | 当前 Codex 会话 review/实测并 handoff 后，原生执行器在原仓必需 CI 全绿时普通候选串行集成；`risk/review` 加强审查，`risk/block` 不自动合并；真实经营高风险动作仍须单独授权，人保留叫停 / revert 回滚权 |
 
 ### 14.3 工具与服务
 
@@ -540,6 +546,7 @@ WorkData 事件以五元结构记录业务事实（`packages/shared/src/event-sc
 | `sync/fanout-cnb.mjs` | 基座 fanout：资产摘要漂移预检 → 只对真漂移子仓 clone → 建 `sync/base-*` PR（在途去重、不强推）；入口过滤隔离副本（`isolatedRepos` 不下发） |
 | `sync/merge-sync-prs.mjs` | 兼容入口，只派发各订阅仓的 trusted-main 执行器，无第二条直接合并路径 |
 | `scripts/delivery/queue-*.mjs` | Git CAS 持久化状态、限时租约、依赖 DAG、Codex 会话 review/实测记录、准确候选集成、失败诊断与冻结 SHA 发布回执；是否已激活以平台/状态回读为准 |
+| `scripts/delivery/install-account.mjs` | 从已激活基座当前 main 完整分页发现 Owner/active 仓库，幂等准备和恢复安装；一仓失败不停止其余仓，缺实际 Codex review/测试保持等待 |
 
 **任务集看板**：`workloom-ai/WorkLoom-Dev-Dispatch`（纳入十仓，按 `t/*` 标签分列；CNB 任务集名不允许空格与中文）。**标签体系**：每仓 10 个（CNB 硬上限，实测第 11 个返回 201 但不落库）。隔离副本仓不参与任务集看板与协议纳管。
 
@@ -565,6 +572,42 @@ WorkData 事件以五元结构记录业务事实（`packages/shared/src/event-sc
 - **回流**：隔离副本的改动不进基座、不下发其他仓；通用能力要公共化须另开提案任务卡按 L2→L1→L0 重做。
 - **验收口径**：两仓**默认不进十仓 RDAS 队列**；要验收须由产品所有者点名，走"隔离副本通道"——以该仓自己的计划/账本为规格来源、报告中标注"隔离副本，不作为基座证据"、并显式记录对基座不变量的有意偏离（如去审批化的补偿控制）。落地位置：`docs/acceptance/ROLLOUT.md` §隔离副本通道。
 - **规格来源**：growthmatrix 以 `docs/GROWTHMATRIX-EXECUTION-PLAN.md` + `docs/GROWTHMATRIX-DEV-LEDGER.md` 为准；growthtest 以 `CHANGELOG.md` + 提交信息 + 代码内产品决定注释为准（其 Codex 工作台计划 `docs/CODEX-WORKBENCH-PLAN.md` 截至 2026-09-22 尚未入库）。
+- **2026-10-07 点名研发安装例外**：产品所有者要求十二项目各自安装并发研发机制，两隔离副本已在各自仓内完成准确 review/实测、普通集成、研发分支保护与原生执行回读。此授权仅覆盖该次本仓研发机制，未解除 `none-in-none-out`、未进入 `children`/业务 fanout，亦未覆盖其冻结产品全景文档；后续本仓例外仍须按本仓范围审查，不能借此回流实验语义。
+
+### 14.6 十二仓研发交付的实际上线快照（2026-10-07）
+
+本节记录北京时间 2026-10-07 凌晨完成的专项验证，**不是行业业务全量审计或永久运行保证**。准确源码、PR、原生构建身份与校验结果保存在基座 [专项回读证据](https://cnb.cool/workloom-ai/workloom-im/-/blob/main/docs/development-delivery/2026-10-07-verification.json)。此证据按真实回读计 **B 级**；代码行为由 `scripts/delivery/README.md` 及对应实现支撑，后续 main 漂移必须重新读取。
+
+| 仓库 | 本轮验收 main | 最新修复源 PR → 普通候选 | 验收快照 main 的原生集成/发布 |
+|---|---|---|---|
+| workloom-im | `9bf6a1a09ff4` | [#269 → #270](https://cnb.cool/workloom-ai/workloom-im/-/pulls/270) | [两条成功](https://cnb.cool/workloom-ai/workloom-im/-/build/logs/cnb-0m1-1k49c82v9) |
+| workroom-andromeda | `100842119ce8` | [#91 → #92](https://cnb.cool/workloom-ai/workroom-andromeda/-/pulls/92) | [两条成功](https://cnb.cool/workloom-ai/workroom-andromeda/-/build/logs/cnb-9jp-1k49ch859) |
+| workloom-hotel | `5a04120a225d` | [#104 → #105](https://cnb.cool/workloom-ai/workloom-hotel/-/pulls/105) | [两条成功](https://cnb.cool/workloom-ai/workloom-hotel/-/build/logs/cnb-itq-1k49c83ti) |
+| hyperreality-system | `08df432a107c` | [#90 → #91](https://cnb.cool/workloom-ai/hyperreality-system/-/pulls/91) | [两条成功](https://cnb.cool/workloom-ai/hyperreality-system/-/build/logs/cnb-p3k-1k49ch7rh) |
+| workloom | `f608da6cfae5` | [#88 → #89](https://cnb.cool/workloom-ai/workloom/-/pulls/89) | [两条成功](https://cnb.cool/workloom-ai/workloom/-/build/logs/cnb-vbb-1k49ch7ru) |
+| WorkLoom-growth | `73767dc51658` | [#339 → #340](https://cnb.cool/workloom-ai/WorkLoom-growth/-/pulls/340) | [两条成功](https://cnb.cool/workloom-ai/WorkLoom-growth/-/build/logs/cnb-o7f-1k49cqfk0) |
+| panda-cineforge | `80d16853bcc8` | [#87 → #88](https://cnb.cool/workloom-ai/panda-cineforge/-/pulls/88) | [两条成功](https://cnb.cool/workloom-ai/panda-cineforge/-/build/logs/cnb-aeo-1k49ch7sq) |
+| workroom-tiger | `5fc58513363f` | [#85 → #86](https://cnb.cool/workloom-ai/workroom-tiger/-/pulls/86) | [两条成功](https://cnb.cool/workloom-ai/workroom-tiger/-/build/logs/cnb-gfa-1k49ch812) |
+| workroom-eagle | `2771ffeab025` | [#91 → #92](https://cnb.cool/workloom-ai/workroom-eagle/-/pulls/92) | [两条成功](https://cnb.cool/workloom-ai/workroom-eagle/-/build/logs/cnb-420-1k49cqfmu) |
+| workroom-fox | `e22d80fea9a7` | [#84 → #85](https://cnb.cool/workloom-ai/workroom-fox/-/pulls/85) | [两条成功](https://cnb.cool/workloom-ai/workroom-fox/-/build/logs/cnb-690-1k49c83vf) |
+| workloom-growthtest（隔离） | `c28f11cd3d20` | [#114 → #115](https://cnb.cool/workloom-ai/workloom-growthtest/-/pulls/115) | [两条成功](https://cnb.cool/workloom-ai/workloom-growthtest/-/build/logs/cnb-cos-1k49ch82u) |
+| workloom-growthmatrix（隔离） | `6e7bb78749a4` | [#137 → #138](https://cnb.cool/workloom-ai/workloom-growthmatrix/-/pulls/138) | [两条成功](https://cnb.cool/workloom-ai/workloom-growthmatrix/-/build/logs/cnb-v03-1k49ch7tc) |
+
+- **安装与保护【B】**：十二仓均已真实 `active`；原仓必需 CI、准确 Codex 会话 review/实测、安装闭包、普通候选 merge 与准确两个父提交已回读。main 禁止直接 push/force/delete/管理员手动绕过；候选创建后禁止改写；控制账本通过普通快进 CAS 写入。十一仓临时暂停的原生 cron 已逐字段恢复，基座 cron 持续启用。
+- **运行与账本【B】**：每仓准确 main/config SHA 的 `delivery-reconcile`、`delivery-releases` 五分钟原生运行均成功，任务退出码为 0；十二仓受保护账本的完整事件摘要链校验通过。其中 7/12 仓在本次选定运行窗口中有匹配事件与 Git 写入时间，其余五仓没有同类窗口匹配，不能给空闲执行补造写入。时间关联不是密码学执行者签名。
+- **实际测试【B】**：基座机制回归 290 项，290 通过、0 失败、0 跳过；十一仓更新源码执行 1415 次，1404 通过、11 跳过、0 失败。十仓各 115 项、严格 growthtest 265 项；跳过项均因目标没有 UI 发布通道。跨仓重复执行不累计成新的独立用例，也不等于行业产品套件或 RDAS 全量通过。
+- **审查与费用边界【A+B】**：当前 Codex 自带模型完成完整变化文件及直接依赖审查、必要测试，再保存 repo/PR/source/main/policy/完整范围绑定的 handoff 回执；原生执行器只核验，不调用平台模型。旧 `delivery-ai-review` / `delivery-bootstrap-review` 名称仅为保留历史 CI 身份，执行内容为确定性核验。平台 AI 审核与 NPC 修复入口已禁用；停用后的费用观察不构成账户永久零 Credit 或逐 PR 费用归因承诺。
+- **幂等与调度【B】**：账户安装器从已激活基座当时 main 再执行，十二仓 active、零新安装差异与 PR。用户取消的 Codex chat 账户安装 heartbeat 保持删除，未重建；各仓 CNB 原生五分钟交付独立启用。未来新增仓仍需另行执行/授权安装调度与真实 Codex review/实测，不能把目录准备或缺审查的定时任务写成已上线。
+
+### 14.7 日常研发流程与未覆盖边界
+
+日常 agent 在独立工作树开发；普通路径重叠仅提示，敏感范围使用 owner/generation 限时租约，等待 CI/审查前显式释放。当前 Codex 精读、修复和实测后生成准确会话记录，再按协议执行 `queue-runner.mjs handoff`。源 CI 与不可修改候选 CI 满足后，原生执行器串行普通集成；合并与发布各有独立原生锁，慢发布不占住源码集成。【A；实现见 `queue-model.mjs`、`queue-controller.mjs`、`queue-release.mjs`】
+
+会话退出后从受保护 Git 账本恢复。源码/main/policy 或完整检查实现漂移使旧回执失效；CI 红灯和语义冲突留下 `repairRequired` 诊断，由 Codex 会话修复并重新 review/实测，定时脚本不会代造审查。外部写响应不明先查真实平台结果，不能盲目重复合并或发布。CNB merge 接口没有 expected head/base CAS 参数；实现通过不可修改候选、原生仓级锁、写前再次核验和写后准确双亲证明收紧竞态，不能把客户端 generation 说成平台端 fencing。【A】
+
+本轮没有新发客户/桌面安装包，未核销桌面签名或旧行业审计欠项，未演练未来新增仓完整生产首装，也未验证长期吞吐量与 SLA。旧业务 PR 仍需各自准确 Codex 回执和实测，不能因新机制上线就声称历史积压已全部交付。Panda 原有非阻断 typecheck 曾报 `packages/base/fence-engine/fence-engine.test.ts:210` 的 TS2554（预期三个参数，实际两个），本轮发现未修，未改变其原阻断政策。【B；不作行业全量质量结论】
+
+本地受控认知以 `~/.codex/workloom-context/WORKLOOM_PRODUCT_CONTEXT.md` 为缓存，云端唯一原文是基座根文件。文档普通 PR 合入 main 后运行本地 `sync-context.sh`，按准确基座 main、全景与协议 SHA-256 回读一致性；订阅仓副本走受控 base-sync，隔离副本的冻结文档不强行对齐。脚本定义位于本机 workloom-context 技能，不能从“本地已有文件”推定云端已更新。
 
 ## 附录 A · 核验方法与覆盖率（2026-09-17 深读 + 2026-09-22 增补）
 
