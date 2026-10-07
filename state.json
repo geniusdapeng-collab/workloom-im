@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 2538,
+  "revision": 2540,
   "tasks": {
     "231": {
       "number": 231,
@@ -5039,7 +5039,7 @@
           "protocol": 88
         }
       },
-      "updatedAt": 1791331816063,
+      "updatedAt": 1791332587908,
       "headSha": "ac8802c8f724a76c8a5655e890de67cfa915d1df",
       "mainSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
       "branch": "task/T-2026-1007-1003",
@@ -104966,6 +104966,45 @@
       },
       "previous": "529d595a8eef2e57d0596d5ffff2924bd265f396cae0ed2cb1f55190730874b7",
       "digest": "ba99e400087c35281cf960c6425c4f5ad5de92def0f5314bba841e74d868080a"
+    },
+    {
+      "sequence": 2539,
+      "at": "2026-10-07T00:23:07.908Z",
+      "kind": "task",
+      "data": {
+        "number": 272,
+        "patch": {
+          "headSha": "ac8802c8f724a76c8a5655e890de67cfa915d1df",
+          "mainSha": "9bf6a1a09ff4805c332f577022b2e079e8daa6b4",
+          "branch": "task/T-2026-1007-1003",
+          "intent": {
+            "taskId": "T-2026-1007-1003",
+            "ready": true,
+            "dependsOn": [],
+            "releases": []
+          },
+          "originalBody": "补齐产品全景中的十二仓实际启用与原生执行验收事实，更新现行 Codex 审查实测、失败隔离、独立发布、保护与隔离副本点名安装边界；修正历史同步直合并和旧保护说明的时态。行业统计仍明确为 2026-09-22 快照。新增只含公开仓/PR/构建身份和实际校验结果的可追溯证据 JSON。同步补充研发协议，主干合入后从唯一受控原文刷新本地缓存并比对散列。\n\n验证：完整文档及直接依赖复核、独立 Codex 文案复核、元数据/JSON/源码引用/证据一致性及秘密扫描；原必需 CI 与不可修改候选普通集成。无运行时、依赖或 CI 变更，无平台模型调用、force 或 main 直推。任务卡 #271。\n\n<!-- product-context-delivery-verification:20261007 -->\n\n<!-- workloom-delivery\n{\n  \"task_id\": \"T-2026-1007-1003\",\n  \"ready\": true,\n  \"depends_on\": [],\n  \"releases\": []\n}\n-->",
+          "files": [
+            "WORKLOOM_PRODUCT_CONTEXT.md",
+            "docs/DEVELOPMENT-PROTOCOL.md",
+            "docs/development-delivery/2026-10-07-verification.json"
+          ],
+          "status": "waiting_ci",
+          "ciSince": 1791331816063
+        }
+      },
+      "previous": "ba99e400087c35281cf960c6425c4f5ad5de92def0f5314bba841e74d868080a",
+      "digest": "32628ea98ffbcfe5ecf23a9236d1a2e7cc679ee1bdfa04d4b49470c1b2c3d403"
+    },
+    {
+      "sequence": 2540,
+      "at": "2026-10-07T00:23:51.917Z",
+      "kind": "transaction",
+      "data": {
+        "id": "0dbc993c-bc3f-4fdf-a7cf-cedda774e564"
+      },
+      "previous": "32628ea98ffbcfe5ecf23a9236d1a2e7cc679ee1bdfa04d4b49470c1b2c3d403",
+      "digest": "7d691a483d2c58696f7c8b0b488b9bb426cf0454f293b9046e05b06b51fe0b6a"
     }
   ]
 }
