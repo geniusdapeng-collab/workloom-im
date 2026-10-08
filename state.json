@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 3486,
+  "revision": 3488,
   "tasks": {
     "231": {
       "number": 231,
@@ -95,12 +95,12 @@
         "tests/ui/workloom-clients.spec.ts"
       ],
       "ciSince": 1791332715875,
-      "updatedAt": 1791468611253,
+      "updatedAt": 1791468912413,
       "alignmentCount": 1,
       "alignmentIntent": null,
       "review": null,
-      "error": "检查/评审阻断：Developer has not handed off; Codex review identity differs from the exact repository/source/main/policy",
-      "blockedUntil": 1791469211253,
+      "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+      "blockedUntil": 1791469512413,
       "recoveryCount": 0,
       "recoveryIntent": null,
       "recovery": {
@@ -147403,6 +147403,31 @@
       },
       "previous": "bd5efacf2eab398ac5ca71145c985fe4e7b9eaa61682f52ac02058613e3464b3",
       "digest": "1509a8dd8a94e1b68f001ed6768fcc65dd53af88d6c59025f41c9ccf3dc03d23"
+    },
+    {
+      "sequence": 3487,
+      "at": "2026-10-08T14:15:12.413Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "status": "parked",
+          "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+          "blockedUntil": 1791469512413
+        }
+      },
+      "previous": "1509a8dd8a94e1b68f001ed6768fcc65dd53af88d6c59025f41c9ccf3dc03d23",
+      "digest": "3f759173b3f915b77b423e86363fb364d3816a6f8d9ffa22559f7f5c6ec65958"
+    },
+    {
+      "sequence": 3488,
+      "at": "2026-10-08T14:15:24.218Z",
+      "kind": "transaction",
+      "data": {
+        "id": "cfa9d52c-1b7a-4924-b773-39bc1890b8f1"
+      },
+      "previous": "3f759173b3f915b77b423e86363fb364d3816a6f8d9ffa22559f7f5c6ec65958",
+      "digest": "ff2471d1ce9dbedb1ceb84ee754db7f81cf10ebe895cec1f368d22cf6da96c66"
     }
   ]
 }
