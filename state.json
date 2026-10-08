@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 3662,
+  "revision": 3664,
   "tasks": {
     "231": {
       "number": 231,
@@ -95,12 +95,12 @@
         "tests/ui/workloom-clients.spec.ts"
       ],
       "ciSince": 1791332715875,
-      "updatedAt": 1791490214757,
+      "updatedAt": 1791491112989,
       "alignmentCount": 1,
       "alignmentIntent": null,
       "review": null,
-      "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231 :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
-      "blockedUntil": 1791490814757,
+      "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+      "blockedUntil": 1791491712989,
       "recoveryCount": 0,
       "recoveryIntent": null,
       "recovery": {
@@ -154399,6 +154399,31 @@
       },
       "previous": "cf6a673a9d817fb8847f53fab267eb9fdb87f02f8072a63ee9cbe9c416070afd",
       "digest": "0fdcfd1b580c66c91724a59a840209104a57661829397f490de11fb9b9cc525c"
+    },
+    {
+      "sequence": 3663,
+      "at": "2026-10-08T20:25:12.989Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "status": "parked",
+          "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+          "blockedUntil": 1791491712989
+        }
+      },
+      "previous": "0fdcfd1b580c66c91724a59a840209104a57661829397f490de11fb9b9cc525c",
+      "digest": "2d51a92ae968f113f146f3f5e23adfe48dbdb73c73d9285945427eceb4b94cb3"
+    },
+    {
+      "sequence": 3664,
+      "at": "2026-10-08T20:25:19.579Z",
+      "kind": "transaction",
+      "data": {
+        "id": "7c1729a6-f6f8-491d-8603-cdd197dcac72"
+      },
+      "previous": "2d51a92ae968f113f146f3f5e23adfe48dbdb73c73d9285945427eceb4b94cb3",
+      "digest": "9e91ec6e1123122247fca94688b8b2d97018d682d5fc8ed1b2cb1505b84b7570"
     }
   ]
 }
