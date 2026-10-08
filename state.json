@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 3146,
+  "revision": 3148,
   "tasks": {
     "231": {
       "number": 231,
@@ -95,12 +95,12 @@
         "tests/ui/workloom-clients.spec.ts"
       ],
       "ciSince": 1791332715875,
-      "updatedAt": 1791424214439,
+      "updatedAt": 1791424819761,
       "alignmentCount": 1,
       "alignmentIntent": null,
       "review": null,
-      "error": "检查/评审阻断：Developer has not handed off; Codex review identity differs from the exact repository/source/main/policy",
-      "blockedUntil": 1791424814439,
+      "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+      "blockedUntil": 1791425419761,
       "recoveryCount": 0,
       "recoveryIntent": null,
       "recovery": {
@@ -132463,6 +132463,31 @@
       },
       "previous": "9dbd60c4b37570b66ec1f2ad522de56a309a068b5ac2e6af444df9c2a8142510",
       "digest": "004e7f18c67be4d7875a73c3f3e6bacf6ebcb4c308d5bfd1e0ea9383bc784b1a"
+    },
+    {
+      "sequence": 3147,
+      "at": "2026-10-08T02:00:19.761Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "status": "parked",
+          "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+          "blockedUntil": 1791425419761
+        }
+      },
+      "previous": "004e7f18c67be4d7875a73c3f3e6bacf6ebcb4c308d5bfd1e0ea9383bc784b1a",
+      "digest": "e4ff974ef3f385409eb66190c686393f11d9e277ec4503fe9e5b9a652b924428"
+    },
+    {
+      "sequence": 3148,
+      "at": "2026-10-08T02:00:29.444Z",
+      "kind": "transaction",
+      "data": {
+        "id": "33130945-938f-42d9-9b24-efc29900f1ae"
+      },
+      "previous": "e4ff974ef3f385409eb66190c686393f11d9e277ec4503fe9e5b9a652b924428",
+      "digest": "781ddfbf0d5263372672cb487b9f4b83e5f3f775a5587fe6613c196fb104e450"
     }
   ]
 }
