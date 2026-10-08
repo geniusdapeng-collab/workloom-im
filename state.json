@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 3682,
+  "revision": 3684,
   "tasks": {
     "231": {
       "number": 231,
@@ -95,12 +95,12 @@
         "tests/ui/workloom-clients.spec.ts"
       ],
       "ciSince": 1791332715875,
-      "updatedAt": 1791492614111,
+      "updatedAt": 1791493218293,
       "alignmentCount": 1,
       "alignmentIntent": null,
       "review": null,
-      "error": "检查/评审阻断：Developer has not handed off; Codex review identity differs from the exact repository/source/main/policy",
-      "blockedUntil": 1791493214111,
+      "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+      "blockedUntil": 1791493818293,
       "recoveryCount": 0,
       "recoveryIntent": null,
       "recovery": {
@@ -155257,6 +155257,31 @@
       },
       "previous": "5c452dbe576e99fd36cc03e75439a80217576985f9b743e9d278f23db009709c",
       "digest": "0b21175780f877bda7370087978367be5bb764e288aceda50ed5548e2539d51c"
+    },
+    {
+      "sequence": 3683,
+      "at": "2026-10-08T21:00:18.293Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "status": "parked",
+          "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+          "blockedUntil": 1791493818293
+        }
+      },
+      "previous": "0b21175780f877bda7370087978367be5bb764e288aceda50ed5548e2539d51c",
+      "digest": "453284772a975781bce137dd31ac0964de7425cbb7043adc2578d7e0240e99a6"
+    },
+    {
+      "sequence": 3684,
+      "at": "2026-10-08T21:00:25.051Z",
+      "kind": "transaction",
+      "data": {
+        "id": "8390f1f1-6a24-4236-91ac-b8b96fae4bd7"
+      },
+      "previous": "453284772a975781bce137dd31ac0964de7425cbb7043adc2578d7e0240e99a6",
+      "digest": "a21db842c3b1bb69a8f18d67f72a02dabfafd17835bcb22565621f1b8a0b8f44"
     }
   ]
 }
