@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 3236,
+  "revision": 3238,
   "tasks": {
     "231": {
       "number": 231,
@@ -95,12 +95,12 @@
         "tests/ui/workloom-clients.spec.ts"
       ],
       "ciSince": 1791332715875,
-      "updatedAt": 1791437113313,
+      "updatedAt": 1791438916439,
       "alignmentCount": 1,
       "alignmentIntent": null,
       "review": null,
-      "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
-      "blockedUntil": 1791437713313,
+      "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231 :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+      "blockedUntil": 1791439516439,
       "recoveryCount": 0,
       "recoveryIntent": null,
       "recovery": {
@@ -136349,6 +136349,31 @@
       },
       "previous": "03828b78aae2526a3d1e050bc797020b800140d49820ec1f22e46dbf45e7775f",
       "digest": "e089fbfdba06b83431de7ab8814934b6171176e09219b18fb71e9a9689745df7"
+    },
+    {
+      "sequence": 3237,
+      "at": "2026-10-08T05:55:16.439Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "status": "parked",
+          "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231 :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+          "blockedUntil": 1791439516439
+        }
+      },
+      "previous": "e089fbfdba06b83431de7ab8814934b6171176e09219b18fb71e9a9689745df7",
+      "digest": "3a9293162db3b9211504698b3b07988fbb267208834bfcec00327eb226ef2297"
+    },
+    {
+      "sequence": 3238,
+      "at": "2026-10-08T05:55:25.779Z",
+      "kind": "transaction",
+      "data": {
+        "id": "355f9584-e5d8-41bd-91f8-9fc8aebdf723"
+      },
+      "previous": "3a9293162db3b9211504698b3b07988fbb267208834bfcec00327eb226ef2297",
+      "digest": "344e32bbd43ab8bd7063244a13cb7557e0931e9c1516c948e66ec1e5ad1c10e5"
     }
   ]
 }
