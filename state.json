@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 3370,
+  "revision": 3372,
   "tasks": {
     "231": {
       "number": 231,
@@ -95,12 +95,12 @@
         "tests/ui/workloom-clients.spec.ts"
       ],
       "ciSince": 1791332715875,
-      "updatedAt": 1791454817172,
+      "updatedAt": 1791455116487,
       "alignmentCount": 1,
       "alignmentIntent": null,
       "review": null,
-      "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
-      "blockedUntil": 1791455417172,
+      "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231 :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+      "blockedUntil": 1791455716487,
       "recoveryCount": 0,
       "recoveryIntent": null,
       "recovery": {
@@ -142491,6 +142491,31 @@
       },
       "previous": "46f04f05962edae8ded510bdab7e88ea92c58b056ac5609dd1c71eec4af280e6",
       "digest": "95558a2b765cad170eac8949ed69752f8008b9d28d50e01a51bee854f93e1f3b"
+    },
+    {
+      "sequence": 3371,
+      "at": "2026-10-08T10:25:16.487Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "status": "parked",
+          "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231 :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+          "blockedUntil": 1791455716487
+        }
+      },
+      "previous": "95558a2b765cad170eac8949ed69752f8008b9d28d50e01a51bee854f93e1f3b",
+      "digest": "de099963a26e16f55535c18fbd372ebfcbefa88a7aaa2b207431ee7fa9f84fb4"
+    },
+    {
+      "sequence": 3372,
+      "at": "2026-10-08T10:25:26.637Z",
+      "kind": "transaction",
+      "data": {
+        "id": "ea7b6d97-b058-4d77-8503-8b16314e5ff0"
+      },
+      "previous": "de099963a26e16f55535c18fbd372ebfcbefa88a7aaa2b207431ee7fa9f84fb4",
+      "digest": "787dff7314f81253873c2dbadce6aa3c884828dd0b62ed2346dcfabd34af16f1"
     }
   ]
 }
