@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 3528,
+  "revision": 3530,
   "tasks": {
     "231": {
       "number": 231,
@@ -95,12 +95,12 @@
         "tests/ui/workloom-clients.spec.ts"
       ],
       "ciSince": 1791332715875,
-      "updatedAt": 1791473417126,
+      "updatedAt": 1791474314246,
       "alignmentCount": 1,
       "alignmentIntent": null,
       "review": null,
-      "error": "检查/评审阻断：Developer has not handed off; Codex review identity differs from the exact repository/source/main/policy",
-      "blockedUntil": 1791474017126,
+      "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+      "blockedUntil": 1791474914246,
       "recoveryCount": 0,
       "recoveryIntent": null,
       "recovery": {
@@ -149262,6 +149262,31 @@
       },
       "previous": "ae016e7263dc02cf642e58008a064a5760d302caab973085fb53ca8cbb8fda42",
       "digest": "21a2a09a8291e9cb2843c95db6340c351b3fcf2d1d5236e609f4cbe263a746f1"
+    },
+    {
+      "sequence": 3529,
+      "at": "2026-10-08T15:45:14.246Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "status": "parked",
+          "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+          "blockedUntil": 1791474914246
+        }
+      },
+      "previous": "21a2a09a8291e9cb2843c95db6340c351b3fcf2d1d5236e609f4cbe263a746f1",
+      "digest": "5783ec08464162c57c118041885a2521372643e4524c7b555150d9f197288c91"
+    },
+    {
+      "sequence": 3530,
+      "at": "2026-10-08T15:45:22.525Z",
+      "kind": "transaction",
+      "data": {
+        "id": "217b84cf-4663-40f3-a8db-13aac5c29719"
+      },
+      "previous": "5783ec08464162c57c118041885a2521372643e4524c7b555150d9f197288c91",
+      "digest": "a4db9a49d2b0a9c11151988860e596505b97b17dc8478143ddb49bbc439db3bb"
     }
   ]
 }
