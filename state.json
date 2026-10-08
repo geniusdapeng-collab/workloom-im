@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 3216,
+  "revision": 3218,
   "tasks": {
     "231": {
       "number": 231,
@@ -95,12 +95,12 @@
         "tests/ui/workloom-clients.spec.ts"
       ],
       "ciSince": 1791332715875,
-      "updatedAt": 1791433214707,
+      "updatedAt": 1791434414096,
       "alignmentCount": 1,
       "alignmentIntent": null,
       "review": null,
-      "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
-      "blockedUntil": 1791433814707,
+      "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231 :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+      "blockedUntil": 1791435014096,
       "recoveryCount": 0,
       "recoveryIntent": null,
       "recovery": {
@@ -135373,6 +135373,31 @@
       },
       "previous": "7ca8b5d593109d11d3ae6b12cd8e29903a935b6141b70b1570031b6a875925e5",
       "digest": "b2c388fea011cc9f40ebb577535b75c647b167801cf6c51feb3733b0cfa8185e"
+    },
+    {
+      "sequence": 3217,
+      "at": "2026-10-08T04:40:14.096Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "status": "parked",
+          "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231 :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+          "blockedUntil": 1791435014096
+        }
+      },
+      "previous": "b2c388fea011cc9f40ebb577535b75c647b167801cf6c51feb3733b0cfa8185e",
+      "digest": "10f68c47952cb4b81845737f06c31cdff5611f60824c6924c463eb9b86aa1c1d"
+    },
+    {
+      "sequence": 3218,
+      "at": "2026-10-08T04:40:20.419Z",
+      "kind": "transaction",
+      "data": {
+        "id": "62da4b91-7aca-4b01-b3df-7c1c83a77866"
+      },
+      "previous": "10f68c47952cb4b81845737f06c31cdff5611f60824c6924c463eb9b86aa1c1d",
+      "digest": "f54de18524efe67b24672a20ab965379277f27fa061557cab6bedea565a8f9b5"
     }
   ]
 }
