@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 3818,
+  "revision": 3820,
   "tasks": {
     "231": {
       "number": 231,
@@ -95,12 +95,12 @@
         "tests/ui/workloom-clients.spec.ts"
       ],
       "ciSince": 1791332715875,
-      "updatedAt": 1791518118275,
+      "updatedAt": 1791519321555,
       "alignmentCount": 1,
       "alignmentIntent": null,
       "review": null,
-      "error": "检查/评审阻断：Developer has not handed off; Codex review identity differs from the exact repository/source/main/policy",
-      "blockedUntil": 1791518718275,
+      "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+      "blockedUntil": 1791519921555,
       "recoveryCount": 0,
       "recoveryIntent": null,
       "recovery": {
@@ -161077,6 +161077,31 @@
       },
       "previous": "cee0eb47cf694733a3d60cac33b7b4f3342c7c22cb8654d9fb672b7a368c0dd1",
       "digest": "8cd573a3b6f3c5a97b34254483d384d7bd6c9b11e35672c7733ded3dfea6cf9f"
+    },
+    {
+      "sequence": 3819,
+      "at": "2026-10-09T04:15:21.555Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "status": "parked",
+          "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231/commit-statuses :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+          "blockedUntil": 1791519921555
+        }
+      },
+      "previous": "8cd573a3b6f3c5a97b34254483d384d7bd6c9b11e35672c7733ded3dfea6cf9f",
+      "digest": "6caef82071fed9f1ba035991d58d4e951b4baff0bd427b30efb45e6aff435abe"
+    },
+    {
+      "sequence": 3820,
+      "at": "2026-10-09T04:15:28.486Z",
+      "kind": "transaction",
+      "data": {
+        "id": "92ade8fe-504d-48b8-922a-d0b58ab8a3f8"
+      },
+      "previous": "6caef82071fed9f1ba035991d58d4e951b4baff0bd427b30efb45e6aff435abe",
+      "digest": "75d428911ba889c6def84601de9e50a58f4ea1336e20b4723278cb8352008b88"
     }
   ]
 }
