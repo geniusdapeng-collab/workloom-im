@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 3752,
+  "revision": 3754,
   "tasks": {
     "231": {
       "number": 231,
@@ -95,12 +95,12 @@
         "tests/ui/workloom-clients.spec.ts"
       ],
       "ciSince": 1791332715875,
-      "updatedAt": 1791509720082,
+      "updatedAt": 1791510924254,
       "alignmentCount": 1,
       "alignmentIntent": null,
       "review": null,
       "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231 :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
-      "blockedUntil": 1791510320082,
+      "blockedUntil": 1791511524254,
       "recoveryCount": 0,
       "recoveryIntent": null,
       "recovery": {
@@ -158099,6 +158099,31 @@
       },
       "previous": "30a12db5586ec06c8687f341cce240a5fca2e7b1e26aa93cf0f42a6716ae9a0c",
       "digest": "ef44d588c883bdcf45dc4dc22bd93950e50aa15b5ffe05805cb9683998fffa0e"
+    },
+    {
+      "sequence": 3753,
+      "at": "2026-10-09T01:55:24.254Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "status": "parked",
+          "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231 :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+          "blockedUntil": 1791511524254
+        }
+      },
+      "previous": "ef44d588c883bdcf45dc4dc22bd93950e50aa15b5ffe05805cb9683998fffa0e",
+      "digest": "ce478724a069c4b42cad82754fa5c6d43337f6a573525c17f58052dfe2ab366b"
+    },
+    {
+      "sequence": 3754,
+      "at": "2026-10-09T01:55:35.262Z",
+      "kind": "transaction",
+      "data": {
+        "id": "d97f3bfa-23be-47c5-be57-3772017f0f92"
+      },
+      "previous": "ce478724a069c4b42cad82754fa5c6d43337f6a573525c17f58052dfe2ab366b",
+      "digest": "dd2982a92b9bae63b9bdd92cc90d0881177c2055b2c7ec6c085bce727f13b1ea"
     }
   ]
 }
