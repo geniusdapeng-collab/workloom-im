@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repo": "workloom-ai/workloom-im",
-  "revision": 3750,
+  "revision": 3752,
   "tasks": {
     "231": {
       "number": 231,
@@ -95,12 +95,12 @@
         "tests/ui/workloom-clients.spec.ts"
       ],
       "ciSince": 1791332715875,
-      "updatedAt": 1791509424524,
+      "updatedAt": 1791509720082,
       "alignmentCount": 1,
       "alignmentIntent": null,
       "review": null,
-      "error": "检查/评审阻断：Developer has not handed off; Codex review identity differs from the exact repository/source/main/policy",
-      "blockedUntil": 1791510024524,
+      "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231 :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+      "blockedUntil": 1791510320082,
       "recoveryCount": 0,
       "recoveryIntent": null,
       "recovery": {
@@ -158074,6 +158074,31 @@
       },
       "previous": "e6074826696211986aa33477b68a7bcefe8a1084bf362a7c9cc3a33836f120b5",
       "digest": "3d050797e9b31bbf807482a1188e062b9434324ec9f562ceda16566032cafc03"
+    },
+    {
+      "sequence": 3751,
+      "at": "2026-10-09T01:35:20.082Z",
+      "kind": "task",
+      "data": {
+        "number": 231,
+        "patch": {
+          "status": "parked",
+          "error": "CNB 429 https://api.cnb.cool/workloom-ai/workloom-im/-/pulls/231 :: {\"errcode\":8,\"errmsg\":\"Too many requests. Please try again later.\"}\n",
+          "blockedUntil": 1791510320082
+        }
+      },
+      "previous": "3d050797e9b31bbf807482a1188e062b9434324ec9f562ceda16566032cafc03",
+      "digest": "30a12db5586ec06c8687f341cce240a5fca2e7b1e26aa93cf0f42a6716ae9a0c"
+    },
+    {
+      "sequence": 3752,
+      "at": "2026-10-09T01:35:29.204Z",
+      "kind": "transaction",
+      "data": {
+        "id": "eadd8069-bf06-426c-bea4-80951929a1a1"
+      },
+      "previous": "30a12db5586ec06c8687f341cce240a5fca2e7b1e26aa93cf0f42a6716ae9a0c",
+      "digest": "ef44d588c883bdcf45dc4dc22bd93950e50aa15b5ffe05805cb9683998fffa0e"
     }
   ]
 }
