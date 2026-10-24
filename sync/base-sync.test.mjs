@@ -81,6 +81,7 @@ function fixture() {
   copyFileSync(INSTALL_UI_GOVERNANCE, join(base, "sync/install-ui-governance.mjs"));
   // 引擎现在常驻导入 UI 完整性绑定模块（full 同步重算 lock 后重新注入稳定制品 SRI）。
   copyFileSync(UI_LOCKFILE_INTEGRITY, join(base, "sync/ui-lockfile-integrity.mjs"));
+  for (const path of ["repository-registry.mjs", "repository-registry.json"]) copyFileSync(join(HERE, path), join(base, "sync", path));
   mkdirSync(join(base, "scripts"), { recursive: true });
   copyFileSync(SCANNER, join(base, "scripts/secret-scan.mjs"));
   write(join(base, "scripts/verify-ui-consumer.mjs"), "// fixture UI consumer verifier\n");
@@ -532,10 +533,10 @@ test("缺少 B 端移动客户端时只报告第一阶段迁移，绝不伪装�
   }
 });
 
-test("v19 scope 明确保护产品身份、仓级发布器、桌面发布封口器、同步认证、产品派生锁、依赖闭包与 Bundle 装配契约", () => {
+test("v20 scope 明确保护产品身份、仓级发布器、桌面发布封口器、同步认证、产品派生锁、依赖闭包与 Bundle 装配契约", () => {
   const scope = JSON.parse(readFileSync(join(REAL_BASE, "sync/base-scope.json"), "utf8"));
   const ci = readFileSync(join(REAL_BASE, ".github/workflows/ci.yml"), "utf8");
-  assert.equal(scope.version, 19);
+  assert.equal(scope.version, 20);
   // HP-01 收尾边界：单 active 迁移必须随公共分发下发，审计复现脚本只留基座仓
   assert.ok(scope.publicAppendOnlyFiles.includes("packages/db/migrations/0035_tenant_overlay_single_active.sql"));
   assert.ok(scope.newIndustryBootstrapFiles.includes("packages/db/migrations/0035_tenant_overlay_single_active.sql"));
@@ -692,9 +693,9 @@ test("v19 scope 明确保护产品身份、仓级发布器、桌面发布封口�
   assert.match(ci, /secret-scan\.mjs --range "\$BASE_SHA" "\$HEAD_SHA" --acceptance-manifest sync\/base-scope\.json/);
 });
 
-test("v19 scope 登记排雷、真实证据和预算受控资产，并保持显式审查边界", () => {
+test("v20 scope 登记排雷、真实证据和预算受控资产，并保持显式审查边界", () => {
   const scope = JSON.parse(readFileSync(join(REAL_BASE, "sync/base-scope.json"), "utf8"));
-  assert.equal(scope.version, 19);
+  assert.equal(scope.version, 20);
   const required = scope.requiredRootAssets.files;
   for (const path of [
     "docs/MINE-CLEAR-DELIVERY-SPEC.md",
@@ -726,7 +727,7 @@ test("v19 scope 登记排雷、真实证据和预算受控资产，并保持显�
   }
 });
 
-test("v19 required-only 分发包含持久交付器、AI 审查、租约与独立发布的完整运行闭包", () => {
+test("v20 required-only 分发包含持久交付器、AI 审查、租约与独立发布的完整运行闭包", () => {
   const scope = JSON.parse(readFileSync(join(REAL_BASE, "sync/base-scope.json"), "utf8"));
   for (const path of [
     "scripts/delivery/queue-model.mjs",

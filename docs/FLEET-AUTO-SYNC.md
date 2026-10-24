@@ -1,5 +1,8 @@
 # 舰队自动更新机制（本地 + 云端）
 
+> **2026-10-24 现行平台政策**：GitHub 是默认开发、PR、main 集成与发布平台，地址/车道唯一登记在 `sync/repository-registry.json`。使用 `sync/fanout-github.mjs` 的 registry 受控候选通道和 `scripts/delivery/github.mjs` 的 exact-head 普通 merge/main 回读；CNB 只单独排队作延迟镜像，本次只备份地址与策略，不执行全产品同步。隔离副本和三个新发现产品只允许 config-only，不加 children。下列 CNB 原生运行、激活和账本数字均为注明日期的历史执行器证据，不能据此宣称 GitHub 云端分布式队列已上线。当前会话自带模型负责实际 review/测试，禁止平台 AI/NPC。
+
+
 > 适用：基座 `workloom-im` 与 `sync/child-repos.json#children` 里的全部子仓（含实验车道 fox / growth）。
 > **不适用**：`sync/child-repos.json#isolatedRepos` 登记的隔离副本（`workloom-growthtest` / `workloom-growthmatrix`）——
 > 它们双向不同步（基座不下发、本仓不回流），扫描 / 纳管 / fanout 一律跳过，规则见 `docs/DEVELOPMENT-PROTOCOL.md` §11。
@@ -48,7 +51,7 @@ node sync/merge-sync-prs.mjs                             # 派发仓内 trusted-
 
 `sync/merge-sync-prs.mjs` 是兼容派发入口，不直接写主干。各仓 trusted main 执行器具有同一 CNB 原生合并锁和 Git CAS 状态；fanout 失败不能跳过该仓恢复/集成。
 
-原 PR 非 WIP、未 `risk/block`、已交接或满足旧 PR 冷却期、真实前置依赖完成、源码含当前 main、原仓必需 CI 通过后，建立 `delivery/candidate/**` 不可修改候选。候选再次运行必需 CI 和真实 CodeBuddy 审查；完整文件清单、source/main/policy、NPC Approve 与准确双亲合并回执都必须满足。`AGENTS.md`、协议、sync、CI、迁移等正常研发治理代码不再因路径永久等待用户点击审批；真实业务/秘密/实盘仍受独立授权约束。
+原 PR 非 WIP、未 `risk/block`、已交接或满足旧 PR 冷却期、真实前置依赖完成、源码含当前 main、原仓必需 CI 通过后，建立 `delivery/candidate/**` 不可修改候选。候选再次运行必需 CI 并核对当前 Codex 会话的准确审查实测记录；完整文件清单、source/main/policy、Codex 会话审查实测回执 与准确双亲合并回执都必须满足。`AGENTS.md`、协议、sync、CI、迁移等正常研发治理代码不再因路径永久等待用户点击审批；真实业务/秘密/实盘仍受独立授权约束。
 
 “开了 PR”“准备了候选”“发起了构建”都不是已完成。只有对应准确源码已真实合入，才关闭原 PR；开发者追加新提交则保留原 PR 继续交付。所声明安装包/制品须另完成标签与实际字节验证。主干变化时普通 merge 到原开发分支并重跑检查；自动冲突修复有预算，保留所有原代码和分支，失败只停相关任务。
 
@@ -66,8 +69,8 @@ node sync/merge-sync-prs.mjs                             # 派发仓内 trusted-
 
 1. 在目标当前 main 的独立 `chore/protocol-onboarding-*` 分支准备完整 delivery/CI 依赖闭包，追加 `scripts/delivery/cnb.yml` 与 `scripts/delivery/bootstrap-cnb.yml` include，保留原流水线、阶段、行业配置及隔离状态；开准确路径、四问、验收和回滚任务卡/安装 PR。只对共享研发资产升级，不用全量旧纳管器清理目标标签。
 2. 推送准确安装源码后，设置权限者在该源码工作树执行 `node scripts/delivery/queue-runner.mjs prepare-install --repo <org/repo> --pr <安装PR>`。此步骤创建并回读强保护状态分支、保存准确 source/main 的 installation_prepared；源 PR 原生令牌仅回读，bootstrap 的 verify-install 缺该证据就拒绝 AI 批准。
-3. 安装 PR 必须通过**目标仓全部原必需检查及真实 bootstrap AI**。回读完整覆盖与准确 source/main、当前独立 CodeBuddy Approve，才按平台保护普通 merge；不强制合并、不直推 main，不用本地通过替代云端通过。
-4. 在合入后的目标当前 main 执行 `node scripts/delivery/queue-runner.mjs activate --repo <org/repo> --pr <安装PR>`：验证合并、原准确测试双亲和独立 AI，安装不可修改候选规则、保留 main 强保护/自有 NPC 自批限制、取消额外管理员批准并写 activation。再回读每五分钟原生流水线的实际状态写入，才记录该仓已接管。
+3. 安装 PR 必须通过**目标仓全部原必需检查及确定性 bootstrap 检查**。回读完整覆盖与准确 source/main、当前 Codex 会话的真实审查实测记录，才按平台保护普通 merge；不强制合并、不直推 main，不用本地通过替代云端通过。
+4. 在合入后的目标当前 main 执行 `node scripts/delivery/queue-runner.mjs activate --repo <org/repo> --pr <安装PR>`：验证合并、原准确测试双亲和 Codex 会话审查实测记录，安装不可修改候选规则、保留 main 强保护并写 activation。再回读每五分钟原生流水线的实际状态写入，才记录该仓已接管；遗留 AI/NPC 阶段名不表示仍调用平台模型。
 5. 未完成此闭环的仓保持“安装中”，继续保留原 PR/分支及明确欠项；不恢复旧的第二条直接 merge 车道。安装完成的仓独立开始恢复，不等待全部仓同时就绪。两个隔离副本按本次明确授权各自安装，不加入业务分发队列。
 
 后续新仓也须先完成同一首装闭环；原生 CI 令牌只有仓库设置读权限，不能用它伪装首次保护安装成功。缺设置写权限时由当前任务授权的持续安装端负责，不将会话令牌保存为 CI 变量或文件。
@@ -97,7 +100,7 @@ fanout 只在读取结果通过完整身份与历史哈希链验证，且存在 
 |---|---|---|
 | `🔒 权限不足` | 定时任务跨仓开关未开 | 开组织开关；或改用 API 触发 / 本地兜底 |
 | `CNB 429 Too many requests` | 舰队级巡检触发限流 | 已在 `scripts/tools/cnb-api.mjs` 内置指数退避重试（尊重 `Retry-After`），无需人工 |
-| 子仓 PR 门禁红 | 代码漂移、行业化改动冲突 | 交付器仅停相关 PR；对齐主干并按预算派发 CodeBuddy 工作模式修复，独立审查与检查通过后继续 |
+| 子仓 PR 门禁红 | 代码漂移、行业化改动冲突 | 交付器仅停相关 PR；对齐主干并由当前 Codex 会话修复并实际测试，独立审查与检查通过后继续 |
 | `waiting-installation` 且 fanout 退出 78 | 既有订阅仓缺准确首装准备回执，属于可恢复的首装窗口 | 授权安装端按 §1.3.2 补齐准备、真实审查/检查、普通合入、激活和原生状态写入；其他已就绪仓仍完成各自处理；混合真实故障返回 1 |
 | 子仓 PR 门禁绿但停在队列 | PR 含 `sync/**`、`AGENTS.md`、协议、验收执行器或工作流等治理资产 | 查看仓级 state 的实际 AI/CI/依赖原因；正常研发不等待人工批准，权限/未安装/审查失败保留真实欠项 |
 | `verify-lock-conflict` 拒绝 | 同仓另有 open PR 改了同一路径（例如 `.workloom-base-sync.json`） | 普通文件重叠只提示；有效敏感开发租约等待 TTL/交接释放，源码主干落后则对齐，不为解锁删除在途 PR |

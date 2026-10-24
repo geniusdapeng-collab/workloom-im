@@ -142,7 +142,8 @@
         "adoptBaseClientPaths": [
           "apps/*/package.json",
           "apps/webb/src/Auth.tsx"
-        ]
+        ],
+        "rolloutResumeNote": "2026-09-30 解除挂起（恢复 W3B）：前置条件①「仓级扩展路径全链路」已落地（T-2026-0930-0003，本会话 follow-up 补齐 adoptBaseClientPaths）。本仓 24 条产品分叉路径由本仓自持（rollout 退管并记入 state.retiredManagedForks）；三端 apps/*/package.json 与文案代差的 apps/webb/src/Auth.tsx 显式声明为「采纳基座版」，保证 @workloom/ui 版本与 lock 完整性仍走基座通道。实测升级计划 ready=true：退管 71 条、更新 5 文件（三端 package.json、webb/Auth.tsx、web/main.tsx）+ 新建 styles/subtitle.css。"
       }
     },
     {
@@ -228,7 +229,8 @@
         "tolerateExtensionSnapshotOverlap": true,
         "adoptBaseClientPaths": [
           "apps/*/package.json"
-        ]
+        ],
+        "rolloutResumeNote": "2026-09-30 解除挂起（恢复 W3B）：协议 §10.3「实验车道受管文件分叉容差」已落地，本仓 lane=experiment 默认开启；本会话把 industryExtensionPaths 由 23 条补齐到 39 条（2026-09-20 之后长出的 lib/audio/loomball/mate-guide/onboarding/pages/shell/vite|vitest 配置等），并显式声明 apps/*/package.json 为「采纳基座版」。实测升级计划 ready=true：退管 71 条、更新 4 文件 + 新建 styles/subtitle.css。"
       }
     },
     {
@@ -411,7 +413,8 @@
           "apps/*/src/components/fox-campaign/**",
           "apps/*/src/pages/p0/**",
           "apps/*/src/voice/**"
-        ]
+        ],
+        "rolloutResumeNote": "2026-09-27 恢复波次（W5）：协议 §10.3 落地「实验车道受管文件分叉容差」——稳定快照或旧 state 占用本仓声明的 industryExtensionPaths 时，不再 fail closed，而是把这些路径从受管集合退管（记入 state.retiredManagedForks）并原样保留本仓版本；非实验车道保持严格模式。"
       }
     },
     {

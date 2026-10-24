@@ -25,15 +25,17 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { devNull, tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { bindUiLockfileIntegrity } from "./ui-lockfile-integrity.mjs";
+import { addressFor, loadRegistry, repository, repositoryFromRemote } from "./repository-registry.mjs";
 
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(SCRIPT_PATH);
-const DEFAULT_BASE_REPO = "workloom-ai/workloom-im";
+const REGISTRY = loadRegistry();
+const DEFAULT_BASE_REPO = addressFor(REGISTRY, REGISTRY.baseLogicalId).repository;
 const STATE_FILE = ".workloom-base-sync.json";
 const UI_STATE_FILE = ".workloom-ui.json";
 const MODULE_SOURCE_EXTENSIONS = Object.freeze([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".json"]);
@@ -50,7 +52,8 @@ function parseArgs(argv) {
     repo: opt("--repo"),
     base: opt("--base"),
     baseDir: opt("--base-dir"),
-    baseUrl: opt("--base-url", "https://cnb.cool"),
+    baseUrl: opt("--base-url", "https://github.com"),
+    explicitBaseUrl: has("--base-url"),
     extraExclude: opt("--extra-exclude") ? opt("--extra-exclude").split(",").filter(Boolean) : [],
     dryRun: has("--dry-run"),
     json: has("--json"),
@@ -62,7 +65,7 @@ function parseArgs(argv) {
 }
 
 /* ---------------- 安全的命令执行与认证 ---------------- */
-function redact(value, token = process.env.GH_TOKEN || "") {
+function redact(value, token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN || "") {
   let text = String(value ?? "");
   const secrets = [token, token ? encodeURIComponent(token) : "", token ? Buffer.from(`x-access-token:${token}`).toString("base64") : ""].filter(Boolean);
   for (const secret of secrets) text = text.split(secret).join("[REDACTED]");
@@ -72,22 +75,25 @@ function redact(value, token = process.env.GH_TOKEN || "") {
     .replace(/(https?:\/\/)[^/@\s]+@/g, "$1[REDACTED]@");
 }
 
-function gitAuthEnv(token = process.env.GH_TOKEN || "") {
+function gitAuthEnv(token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN || "") {
   const env = { ...process.env, GIT_TERMINAL_PROMPT: "0" };
-  if (!token) return env;
-  const count = Number.parseInt(env.GIT_CONFIG_COUNT || "0", 10) || 0;
-  env.GIT_CONFIG_COUNT = String(count + 1);
-  env[`GIT_CONFIG_KEY_${count}`] = "http.https://github.com/.extraHeader";
-  env[`GIT_CONFIG_VALUE_${count}`] = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`;
+  for (const key of Object.keys(env)) if (/^GIT_CONFIG_(?:COUNT|KEY_\d+|VALUE_\d+)$/.test(key)) delete env[key];
+  env.GIT_CONFIG_GLOBAL = devNull; env.GIT_CONFIG_NOSYSTEM = '1';
+  env.GIT_CONFIG_COUNT = token ? '2' : '1';
+  env.GIT_CONFIG_KEY_0 = 'credential.helper'; env.GIT_CONFIG_VALUE_0 = '';
+  if (token) {
+    env.GIT_CONFIG_KEY_1 = "http.https://github.com/.extraHeader";
+    env.GIT_CONFIG_VALUE_1 = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`;
+  }
   return env;
 }
 
-function sh(cmd, cmdArgs, cwd, { auth = false } = {}) {
+function sh(cmd, cmdArgs, cwd, { auth = false, network = false } = {}) {
   try {
     return execFileSync(cmd, cmdArgs, {
       cwd,
       encoding: "utf8",
-      env: auth ? gitAuthEnv() : { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+      env: network ? gitAuthEnv(auth ? (process.env.GH_TOKEN || process.env.GITHUB_TOKEN || '') : '') : { ...process.env, GIT_TERMINAL_PROMPT: "0" },
       stdio: ["ignore", "pipe", "pipe"],
     }).trim();
   } catch (error) {
@@ -108,7 +114,7 @@ function credentialFreeRemote(url) {
 }
 
 function canSendGithubHeader(url) {
-  if (!process.env.GH_TOKEN || !/^https?:\/\//i.test(url)) return false;
+  if (!(process.env.GH_TOKEN || process.env.GITHUB_TOKEN) || !/^https?:\/\//i.test(url)) return false;
   try {
     return new URL(url).origin === "https://github.com";
   } catch {
@@ -118,7 +124,7 @@ function canSendGithubHeader(url) {
 
 function gitNetwork(cwd, remoteUrl, ...args) {
   const safeUrl = credentialFreeRemote(remoteUrl);
-  return sh("git", args, cwd, { auth: canSendGithubHeader(safeUrl) });
+  return sh("git", args, cwd, { auth: canSendGithubHeader(safeUrl), network: true });
 }
 
 function repoUrl(baseUrl, repo) {
@@ -974,7 +980,7 @@ function changedPaths(repoRoot) {
 function statePayload(old, baseSha, digests, changed, extraExclude, options, pathPrefix) {
   const payload = {
     ...(old ?? {}),
-    baseRepo: old?.baseRepo ?? DEFAULT_BASE_REPO,
+    baseRepo: recordedBaseRepo(old?.baseRepo, options),
     ...(!options.requiredOnly ? { lastSyncedBaseSha: baseSha } : {}),
     lastRequiredAssetsBaseSha: baseSha,
     lastSyncAt: new Date().toISOString(),
@@ -991,6 +997,7 @@ function statePayload(old, baseSha, digests, changed, extraExclude, options, pat
 function stateNeedsUpdate(oldState, baseSha, digests, extraExclude, options, pathPrefix) {
   const recordedSha = options.requiredOnly ? oldState?.lastRequiredAssetsBaseSha : oldState?.lastSyncedBaseSha;
   if (!oldState || recordedSha !== baseSha) return true;
+  if (oldState.baseRepo !== recordedBaseRepo(oldState.baseRepo, options)) return true;
   if (oldState.pathPrefix !== pathPrefix) return true;
   if (JSON.stringify(oldState.requiredRootAssetsSha256 ?? {}) !== JSON.stringify(digests)) return true;
   if ((extraExclude.length || options.authoritativeExtraExclude) && JSON.stringify(oldState.extraExclude ?? []) !== JSON.stringify(extraExclude)) return true;
@@ -1431,15 +1438,50 @@ function effectiveExtra(state, options, configured = []) {
 }
 
 /* ---------------- CLI modes ---------------- */
+function canonicalBaseRepo(recorded) {
+  const base = REGISTRY.repositories.find(entry => entry.logicalId === REGISTRY.baseLogicalId);
+  return !recorded || recorded === base.cnb?.repository ? base.github.repository : recorded;
+}
+function recordedBaseRepo(recorded, options) {
+  if (!options.explicitBaseUrl) return canonicalBaseRepo(recorded);
+  return repositoryAtUrl(recorded ?? REGISTRY.baseLogicalId, options.baseUrl);
+}
+function repositoryAtUrl(identity, url) {
+  if (url === 'https://github.com') return addressFor(REGISTRY, identity, 'github').repository;
+  if (url === 'https://cnb.cool') return addressFor(REGISTRY, identity, 'cnb').repository;
+  return identity === REGISTRY.baseLogicalId ? DEFAULT_BASE_REPO : identity;
+}
+function baseSource(state, options) {
+  if (options.explicitBaseUrl) return { repo: recordedBaseRepo(state?.baseRepo, options), url: options.baseUrl };
+  // A historical CNB state identifies the same logical base; it must not make
+  // a default GitHub operation silently address a different owner namespace.
+  const address = addressFor(REGISTRY, canonicalBaseRepo(state?.baseRepo));
+  return { repo: address.repository, url: 'https://github.com' };
+}
+function assertProductSyncAllowed(repoRoot) {
+  let entry;
+  const configPath = join(repoRoot, '.workloom-repository.json');
+  let configStat;
+  try { configStat = lstatSync(configPath); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  if (configStat) {
+    if (!configStat.isFile() || configStat.isSymbolicLink()) throw new Error('Repository policy must be a regular file');
+    entry = repository(REGISTRY, JSON.parse(readFileSync(configPath, 'utf8')).logicalId);
+  }
+  const remote = spawnSync('git', ['remote', 'get-url', 'origin'], { cwd: repoRoot, encoding: 'utf8', env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
+  const observed = remote.status === 0 ? repositoryFromRemote(REGISTRY, remote.stdout) : null;
+  if (entry && observed && entry.logicalId !== observed.logicalId) throw new Error('Repository policy identity differs from its registered origin');
+  entry ??= observed;
+  if (entry && entry.baseSync.receive !== 'subscribed') throw new Error(`Product base-sync is forbidden for ${entry.logicalId}; use the dedicated repository-config channel`);
+}
 function modeDetect(options) {
   const { childDir, repoRoot } = resolveChildTarget(options.repo);
   const state = readState(childDir, repoRoot);
-  const baseRepo = state?.baseRepo ?? DEFAULT_BASE_REPO;
   let baseDir = options.baseDir ? resolve(options.baseDir) : "";
   let temporary = false;
   try {
     if (!baseDir) {
-      baseDir = ensureBaseClone(baseRepo, options.baseUrl);
+      const source = baseSource(state, options);
+      baseDir = ensureBaseClone(source.repo, source.url);
       temporary = true;
     }
     const baseSha = git(baseDir, "rev-parse", "HEAD");
@@ -1483,13 +1525,15 @@ function modeDetect(options) {
 
 function modePull(options) {
   const { childDir, repoRoot } = resolveChildTarget(options.repo);
+  assertProductSyncAllowed(repoRoot);
   if (!options.noCommit && !options.dryRun) assertClean(repoRoot, options.push ? "自动推送" : "自动提交");
   const state = readState(childDir, repoRoot);
   let baseDir = options.baseDir ? resolve(options.baseDir) : "";
   let temporary = false;
   try {
     if (!baseDir) {
-      baseDir = ensureBaseClone(state?.baseRepo ?? DEFAULT_BASE_REPO, options.baseUrl);
+      const source = baseSource(state, options);
+      baseDir = ensureBaseClone(source.repo, source.url);
       temporary = true;
     }
     const extra = effectiveExtra(state, options);
@@ -1515,17 +1559,23 @@ function modePull(options) {
 }
 
 function modePush(options) {
-  if (!options.dryRun) throw new Error("直接推送 main 已禁止；请使用 sync/fanout-cnb.mjs 创建 PR，门禁通过后串行合并");
+  if (!options.dryRun) throw new Error("直接推送 main 已禁止；请使用 sync/fanout-github.mjs 创建 PR，门禁通过后串行合并");
   const baseDir = resolve(options.base || join(SCRIPT_DIR, ".."));
   const baseScope = loadScope(baseDir);
   verifyBaseSourcesAtHead(baseDir, baseScope, options.requiredOnly, ["sync/child-repos.json"]);
   const children = JSON.parse(readFileSync(join(baseDir, "sync/child-repos.json"), "utf8"));
   const results = [];
   for (const child of children.children) {
+    if ((children.isolatedRepos ?? []).some(entry => entry.repo === child.repo)) continue;
+    if (!options.explicitBaseUrl) {
+      const entry = repository(REGISTRY, child.repo);
+      if (entry.baseSync.receive !== 'subscribed' || (!options.requiredOnly && entry.baseSync.uiRolloutWave === 'paused')) continue;
+    }
     const report = { repo: child.repo, ok: false, dryRun: options.dryRun };
     const dir = mkdtempSync(join(tmpdir(), "workloom-child-"));
     try {
-      const url = repoUrl(options.baseUrl, child.repo);
+      const slug = repositoryAtUrl(child.repo, options.baseUrl);
+      const url = repoUrl(options.baseUrl, slug);
       gitNetwork(undefined, url, "clone", "--depth", "1", "--branch", "main", "--single-branch", url, dir);
       verifyClonedMain(dir);
       assertClean(dir, "父仓自动同步");
@@ -1554,7 +1604,7 @@ function modePush(options) {
 function main(argv = process.argv.slice(2)) {
   const options = parseArgs(argv);
   if (options.push || (options.mode === "push" && !options.dryRun)) {
-    console.error("直接推送 main 已禁止；请使用 sync/fanout-cnb.mjs 创建 PR，门禁通过后串行合并");
+    console.error("直接推送 main 已禁止；请使用 sync/fanout-github.mjs 创建 PR，门禁通过后串行合并");
     return 64;
   }
   if (!["detect", "pull", "push"].includes(options.mode)) {
@@ -1602,6 +1652,7 @@ if (isDirectExecution()) {
 
 export {
   anchorNeedsSync,
+  baseSource,
   dependencyClosureViolations,
   extractManagedSection,
   gitAuthEnv,

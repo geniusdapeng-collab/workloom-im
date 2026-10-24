@@ -1,13 +1,16 @@
 <!--
 document_schema: workloom.product-context/v1
 document_id: workloom-product-and-code-panorama
-context_version: 2026-10-07.2
+context_version: 2026-10-24.1
+repository_policy_updated_at: 2026-10-24
 development_policy_updated_at: 2026-10-07  # 研发交付政策、十二仓实际启用与原生运行证据；其余仓库统计仍为 snapshot_date 快照
 development_delivery_verified_at: 2026-10-07T04:06:40+08:00
 development_delivery_evidence: docs/development-delivery/2026-10-07-verification.json
 snapshot_date: 2026-09-22
 timezone: Asia/Shanghai
-canonical_repository: cnb.cool/workloom-ai/workloom-im
+canonical_repository: github.com/geniusdapeng-collab/workloom-im
+mirror_repository: cnb.cool/workloom-ai/workloom-im
+repository_registry: sync/repository-registry.json
 canonical_path: /WORKLOOM_PRODUCT_CONTEXT.md
 distribution: controlled-base-sync
 verified_host: cnb.cool/workloom-ai
@@ -31,7 +34,7 @@ classification: public-product-context-no-secrets
 >
 > - 本文件在 `workloom-im` 根目录维护，是 WorkLoom 跨仓产品与架构认知的唯一受控原文；行业仓中的同名文件是只读分发副本，不应直接修改。
 > - `context_version` 表示认知版本，`snapshot_date` 表示行业业务与仓库统计的全景快照时间；局部核验另有专用日期与证据，不能据此推定全文已重新核验。更新产品边界、系统不变量或仓库快照时，必须同步更新相应元数据，并通过受控 base-sync 分发。
-> - 2026-09-14，产品所有者确认九个仓库全部为开源项目并补充正式定位；2026-09-17，产品所有者确认九仓已迁移至腾讯 CNB（`cnb.cool/workloom-ai`），原 GitHub 账号 `geniusdapeng-collab` 已不可用。
+> - 2026-09-14，产品所有者确认九个仓库全部为开源项目并补充正式定位；2026-09-17，产品所有者确认九仓已迁移至腾讯 CNB（`cnb.cool/workloom-ai`），当时原 GitHub 账号 `geniusdapeng-collab` 不可用；这是历史记录，现行平台政策已于 2026-10-24 改为下述 GitHub 主交付。
 > - 2026-09-17.2 深读版按产品所有者要求做了**逐仓模块级深读**：九仓全量克隆、逐模块精读、跨仓差异计算，并对照 2026-09-15/16 的审计台账；该轮**未执行安装、构建与测试**，凡“是否跑得通”的判断都以代码与审计证据为界（见 §13）。
 > - 2026-09-22，产品所有者确认新增两个**隔离副本**实验仓 `workloom-growthtest` / `workloom-growthmatrix`（2026-09-21 从 `WorkLoom-growth@a6dc89a` 完整复制）；两仓内容与基座暂时拆分，**基座内容不直接下发、其改动也不直接回流基座**，在 `sync/child-repos.json#isolatedRepos` 登记、不进入纳管与同步队列（见 §5.8/§5.9、§14.5）。
 > - 2026-09-22.2 增补版应产品所有者要求，对两个隔离副本做了**模块级深读**（bundle 装配面、三端路由/页面、改造计划与账本、分支与在途 PR、未入库实验目录；方法见附录 A）。两仓改造强度已超出"副本"范畴：growthtest 下线审批中心/任务中心并试验 Codex 工作台，growthmatrix 在执行 84 项改造计划（G0–G7）。**隔离期间两仓不接收基座更新，其内部文档与账本才是各自事实源**。
@@ -41,6 +44,17 @@ classification: public-product-context-no-secrets
 > - 2026-09-30 修订：仅调整凭据**使用**纪律（允许会话内授权的令牌用于执行），安全不变量不变——秘密仍不得进入任何文件、日志、提示词或同步产物；本次为策略性修订，全文事实快照（`snapshot_date`）未重新核验。
 > - 2026-10-07.2 修订：补齐十二仓研发交付的实际安装、普通候选集成、激活、原生运行、账本与测试证据，纠正旧平台 AI、同步直合并和分支保护欠项的现状表述。两隔离副本仅按产品所有者点名在各自仓内安装研发机制，冻结全景文档和双向隔离继续保留。行业岗位、技能、依赖版本及旧审计进度仍为原快照，没有做行业全量重审；现行机制与边界见 §14.6/§14.7。
 > - 仓库专属命令、例外和实现细节应进入对应仓库的 AGENTS.repo.md 或更近层级的 AGENTS.md；不得在行业副本中制造另一份产品事实源。
+
+## 现行仓库与交付策略（2026-10-24）
+
+- 默认事实地址、开发 PR、主干集成和发布迁回 GitHub；精确映射在 `sync/repository-registry.json`，不按仓库名相似度猜测归属。当前登记 15 个真实 product manifest 仓库，其中 14 个有已核实 CNB 地址，geo-evidence-studio 的 CNB 地址为 null，不自动创建仓库。
+- 原 9 个子仓订阅关系保持，两个隔离副本仍不接收产品内容、不回流产品语义。geo-evidence-studio、workloom-BusinessManagementSystem、WorkLoom-video-edit 仅接入仓库地址与交付策略治理，不自动进入 children。
+- GitHub 由当前 Codex 会话实际审查/测试，保留原有 CI 和平台保护，普通 PR merge 后回读准确 head/base/main/tree 才记交付完成；开放 PR、进入队列、收到启动响应均不等于完成。新入口为 `sync/fanout-github.mjs` 与 `scripts/delivery/github.mjs`。
+- CNB 作为延迟镜像，单独记录来源 GitHub main SHA/tree、目标地址和未完成项。本次专用配置备份可进入 `workloom/config-backup/` 分支，不表示 CNB main 或全产品代码已对齐；不触发全产品 fanout，不开付费平台 AI 审核。
+- 两隔离副本和三新发现产品允许专用 config-only 更新 `.workloom-repository.json`、`.workloom-delivery.json` 及 manifest.repository；其余产品身份、部署字段和业务文件逐字节保留。此配置例外不解除产品隔离。
+- UI 0.1.19/0.1.20 的原制品按源 tag SHA 与登记 SHA-512 逐字节镜像到 GitHub；新生成 consumer state 明确 `artifact.platform=github`，旧 CNB state 仍按固定 legacy 契约验证。传输地址变更不修改版本、制品字节、SRI 或客户端基座历史来源。
+
+本节只修订仓库与交付政策；下文行业能力、员工/技能数量、历史 SHA、旧 CNB 运行记录仍属于各自注明日期的快照，不声称做过新的行业全量审计。
 
 # WorkLoom 产品与代码全景认知
 

@@ -2,6 +2,26 @@
 
 `base-sync` 把 WorkLoom IM 的公共能力安全分发给行业仓，同时保护行业仓自有代码。同步边界的唯一事实源是 `sync/base-scope.json`。
 
+## 默认平台与专用仓库配置通道（2026-10-24）
+
+`repository-registry.json` 是 GitHub/CNB 地址与平台策略事实源；`child-repos.json` 继续定义产品订阅与隔离边界。GitHub 主交付、CNB 延迟镜像，不自动切换身份或平台。当前发现的 15 个产品都可接受 config-only 地址治理，只有原 9 个 children 可接受产品 fanout；两个隔离副本和三个新发现产品不进入 full/required-only。
+
+```bash
+# 纯本地计划，不发网络请求或获取令牌
+node sync/fanout-github.mjs --mode repository-config --dry-run
+# 当前任务已授权的单次进程凭据执行：只开候选 PR
+node sync/fanout-github.mjs --mode repository-config --only workloom-hotel
+# 在已有独立 checkout 生成配置；先计划，再写入（不提交、不推送）
+node sync/repository-config.mjs --repo-dir TARGET_ROOT --logical-id workloom-hotel
+node sync/repository-config.mjs --repo-dir TARGET_ROOT --logical-id workloom-hotel --write
+```
+
+config-only 仅写 `.workloom-repository.json`、`.workloom-delivery.json` 和 product.manifest.json.repository，保持其他 manifest 字段及所有业务字节；身份、路径、脏树、并发变更或后续写入失败均停止/回滚。产品同步仍重用现有 base-sync 的完整 scope、污染、秘密扫描和事务守卫，GitHub 入口按 registry 映射地址。PR 创建不等于完成；精确 review/tests/现存 CI 通过后须用 `scripts/delivery/github.mjs` 普通 merge 并回读 main 回执。
+
+`fanout-cnb.mjs` 默认只记录 deferred、零远端写入。显式 `--legacy-cnb-product-sync` 仅保留历史执行器兼容，不能作为默认主交付或授权外的自动兜底。CNB 专用配置备份分支不触发全产品同步，不表示 CNB main 已完成。
+
+UI 制品默认固定 GitHub 同版本 Release URL，consumer state 以 artifact.platform 明确传输平台；原始 SHA-512、版本和字节保持。未声明 platform 的历史 CNB source 只接受固定 CNB legacy URL，不自动改主机或接受任意 URL。治理脚本仍由 install-ui-governance 的旧指纹验真/新指纹封装通道发布，不进入普通整文件覆盖。
+
 ## 三类基座资产
 
 ### 根级必备资产
@@ -128,13 +148,13 @@ pnpm 10.14 对 URL tarball 生成的 lockfile 只登记 `resolution.tarball`，�
 
 没有 `.workloom-client-foundation.json` 的存量仓不会被猜测覆盖：与目标稳定标签逐字节相同的文件可建立初始指纹；任何不同内容都以 `UNTRACKED_MANAGED_FILE` 阻断，要求人工先把合法行业差异迁入白名单扩展路径。已登记 state 后，`MANAGED_FILE_MODIFIED`、`MANAGED_FILE_DELETED`、非法客户端路径同样阻断整个 PR。
 
-## 自动化与凭据（当前 CNB 通道）
+## 自动化与凭据（显式 legacy CNB 执行器）
 
-当前有效执行器是 `.cnb.yml`：基座每 30 分钟调用 `fanout-cnb.mjs` 创建受控同步 PR；各仓 `scripts/delivery/cnb.yml` 按目标分支事件与每 5 分钟恢复。兼容入口 `merge-sync-prs.mjs` 只派发 trusted-main 执行器，fanout 失败不占用仓级集成或发布锁。新仓扫描与 OSS 扫描按相应流水线的 crontab。`.github/workflows/*` 留作历史模板和部分发布策略校验源，文件存在不代表 GitHub 通道仍在运行。
+以下描述保留 CNB 原生执行器及历史运行方式，不是默认平台：`.cnb.yml` 原有定时入口调用 `fanout-cnb.mjs`，但该命令现默认返回 deferred，零远端产品写入；只有显式选择 `--legacy-cnb-product-sync` 才进入原通道。各仓 `scripts/delivery/cnb.yml` 与兼容入口 `merge-sync-prs.mjs` 仍执行原 trusted-main 队列。GitHub 当前使用上文 registry、受控 PR 与 main 回读入口；工作流是否实际运行须以目标平台运行回执为准。
 
 - `@workloom/ui` 以同版本 CNB Release 的不可变 tarball 分发；rollout 对本地 pack、登记 SRI 和下载字节做三方比较。下载失败、同版本异内容或散列不匹配即阻断。
 - `fanout-cnb.mjs` 先固定基座 commit，逐仓生成同步分支和 PR；公共机制、行业资产与隔离副本边界由 `base-scope.json` 和 `child-repos.json` 执行。
-- 同步 PR 与普通代码进入同一不可修改候选和独立 AI 审查通道；门禁绑定当前 source/main 双亲、完整范围、risk 标签与精确 CI 迁移回执。正常协议、治理和 CI 研发由真正 CodeBuddy Bot 批准，不等待用户逐 PR 点击；真实资金、秘密与不可逆经营动作仍需单独授权。没有免审白名单。
+- 同步 PR 与普通代码进入同一不可修改候选和独立 AI 审查通道；门禁绑定当前 source/main 双亲、完整范围、risk 标签与精确 CI 迁移回执。正常协议、治理和 CI 研发由当前 Codex 会话完成真实审查与测试，不等待用户逐 PR 点击；真实资金、秘密与不可逆经营动作仍需单独授权。没有免审白名单。
 - 根级 `base-sync.mjs pull --push` 和非 dry-run 的 `push` 模式已 fail-closed；所有远端落地都走任务分支和 PR，门禁全绿后串行合并，合后回读。
 - 同步计划、污染检查、只含白名单的暂存、秘密扫描和事务回滚仍由引擎执行；`--no-commit` 只把审查结果留在本地。
 - 凭据只进入需要认证的进程环境：限定 `https://cnb.cool/` 的一次性 HTTP header，不写 remote URL、Git config、脚本、日志或 PR。只读公开 GitHub 上游保持匿名。成功、失败及 dry-run 都清理临时 clone。
@@ -146,7 +166,7 @@ pnpm 10.14 对 URL tarball 生成的 lockfile 只登记 `resolution.tarball`，�
 
 fanout 的 waiting-installation 是后续更新的保护门禁；首次安装不依赖 fanout。安装端必须先从准确的基座提交取得完整运行闭包（含 scripts/delivery/runtime/package.json、package-lock.json、cnb.yml、bootstrap-cnb.yml 与 queue-runner 直接依赖），在独立安装分支落地并加入 CI include，再推送和创建安装 PR。PROTOCOL_ASSETS 明确包含这些根级文件；账户交付安装器同样直接复制闭包，不先读取 fanout 的 ready 状态，也不使用行业 pathPrefix。缺任一资产不得创建部分纳管 PR。
 
-首次安装端随后在该 PR 的准确 source 检出上运行 prepare-install：安装并回读账本保护，保存 source/main 接纳和 installation_prepared 事件。bootstrap 的 verify-install 等待这份准确准备回执，随后真实 AI 与原仓必需门禁共同验收；普通 merge 后在当前 main activate 并回读。直到这一步才是已启用。普通 fanout 在 installation_prepared 之后可以更新资产，但不能把这份准备事件称为 activation；已启用仓账本缺失保持失败闭合。
+首次安装端随后在该 PR 的准确 source 检出上运行 prepare-install：安装并回读账本保护，保存 source/main 接纳和 installation_prepared 事件。bootstrap 的 verify-install 等待这份准确准备回执，随后当前 Codex 会话真实审查实测与原仓必需门禁共同验收；普通 merge 后在当前 main activate 并回读。直到这一步才是已启用。普通 fanout 在 installation_prepared 之后可以更新资产，但不能把这份准备事件称为 activation；已启用仓账本缺失保持失败闭合。
 
 因此新仓可以在没有 automation/delivery-state 时取得首次安装代码，fanout 不能阻断这一独立路径。CNB 原生令牌没有仓库设置写权限，账户新仓首装由本任务授权的 Codex 安装调度处理；权限失效明确保留待安装任务，不等待用户逐 PR 点 Approve。既有 provision-protocol 只生成安装 PR，单独执行它不等于完成上述准备、合并和启用步骤。
 

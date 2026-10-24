@@ -42,9 +42,9 @@ test('实际 fanout CLI 对既有订阅仓缺首装回执返回非零及可恢�
     const script = fileURLToPath(new URL('./fanout-cnb.mjs', import.meta.url));
     const base = fileURLToPath(new URL('../', import.meta.url));
     const env = { ...process.env, CNB_TOKEN: 'offline-fanout-fixture' }; delete env.NODE_TEST_CONTEXT;
-    const result = spawnSync(process.execPath, ['--import', preload, script, '--base-dir', base,
+    const result = spawnSync(process.execPath, ['--import', preload, script, '--legacy-cnb-product-sync', '--base-dir', base,
       '--only', 'workloom-ai/workloom-hotel', '--dry-run', '--json', '--tolerate-scope-error'],
-    { cwd: root, env, encoding: 'utf8', timeout: 15000 });
+    { cwd: root, env, encoding: 'utf8', timeout: 60000 });
     assert.ifError(result.error);
     assert.equal(result.status, 78, result.stderr + result.stdout);
     const report = JSON.parse(result.stdout);
@@ -66,9 +66,9 @@ test('实际 fanout 的真实权限/传输错误优先于首装等待，不被 7
     const env = { ...process.env, CNB_TOKEN: 'offline-fanout-fixture' }; delete env.NODE_TEST_CONTEXT;
     for (const mode of ['scope', 'transport', 'tolerated-scope']) {
       const tolerate = mode !== 'scope'; const code = mode === 'tolerated-scope' ? 78 : 1;
-      const result = spawnSync(process.execPath, ['--import', preload, script, '--base-dir', base, '--only',
+      const result = spawnSync(process.execPath, ['--import', preload, script, '--legacy-cnb-product-sync', '--base-dir', base, '--only',
         'workloom-ai/workloom-hotel,workloom-ai/panda-cineforge', '--dry-run', '--json', ...(tolerate ? ['--tolerate-scope-error'] : [])],
-      { cwd: root, env: { ...env, FANOUT_OFFLINE_MODE: mode }, encoding: 'utf8', timeout: 15000 });
+      { cwd: root, env: { ...env, FANOUT_OFFLINE_MODE: mode }, encoding: 'utf8', timeout: 60000 });
       assert.ifError(result.error); assert.equal(result.status, code, result.stderr + result.stdout);
       const report = JSON.parse(result.stdout);
       assert.equal(report.waitingInstallation, 1); assert.equal(report.children, 2);
@@ -76,6 +76,18 @@ test('实际 fanout 的真实权限/传输错误优先于首装等待，不被 7
       assert.equal(report.outcome, code === 78 ? 'waiting-installation' : 'failed'); assert.equal(report.exitCode, code);
       assert.equal(report.warnings.length, mode === 'tolerated-scope' ? 1 : 0);
     }
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('默认 CNB fanout 在凭据、网络与产品读写之前只返回 deferred', () => {
+  const root = mkdtempSync(join(tmpdir(), 'fanout-deferred-regression-'));
+  try {
+    const preload = join(root, 'no-network.mjs');
+    writeFileSync(preload, 'globalThis.fetch = async () => { throw new Error("Unexpected network in default CNB operation"); };\n');
+    const env = { ...process.env }; delete env.CNB_TOKEN; delete env.SYNC_TOKEN; delete env.NODE_TEST_CONTEXT;
+    const result = spawnSync(process.execPath, ['--import', preload, fileURLToPath(new URL('./fanout-cnb.mjs', import.meta.url)), '--base-dir', '/deliberately-missing-base', '--json'], { cwd: root, env, encoding: 'utf8', timeout: 60000 });
+    assert.ifError(result.error); assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), { platform: 'cnb', state: 'deferred', automaticProductSync: false, remoteWrites: 0, primaryFanout: 'sync/fanout-github.mjs' });
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

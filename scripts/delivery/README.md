@@ -3,6 +3,20 @@
 > 规范：`docs/MINE-CLEAR-DELIVERY-SPEC.md`（mcd/v1.0）｜台账 schema：`docs/mine-clear/ledger.schema.json`｜报告模板：`docs/mine-clear/report-template.md`｜投喂模板：`docs/mine-clear/prompt-pack.md`
 > 本目录随基座 base-sync 分发到各仓（`sync/base-scope.json#requiredRootAssets`）；**行业差异不要改这里的代码**。
 
+## GitHub 默认交付入口（2026-10-24）
+
+地址/车道来自 `sync/repository-registry.json`，精确部署策略由 `.workloom-delivery.json` 表达。`github.mjs` 不运行模型；当前 Codex 会话先完成真实 review 和实际测试，再保存 `workloom.codex-review/v1` JSON，字段包括 repository、headSha、baseSha、policySha256、完整 files，review 的 actor/status/evidenceSha256，及 tests 的 command/status/evidenceSha256。policySha256 按 `JSON.stringify(deliveryConfiguration())` 的 SHA-256 计算。证据必须是真实日志与审查内容的摘要，示例值不能用于真实交付。
+
+```bash
+node scripts/delivery/github.mjs inspect --logical-id workloom-hotel --pr PR_NUMBER --head HEAD_SHA --base MAIN_SHA --review ACTUAL_REVIEW_JSON
+node scripts/delivery/github.mjs merge --logical-id workloom-hotel --pr PR_NUMBER --head HEAD_SHA --base MAIN_SHA --review ACTUAL_REVIEW_JSON --output MAIN_INTEGRATION_JSON
+node scripts/delivery/github.mjs mirror-plan --logical-id workloom-hotel --integration MAIN_INTEGRATION_JSON
+```
+
+所有现存 status/check-run 及保护规则仍需通过，风险阻断/WIP/未审文件拒绝合并。操作只接受注册 GitHub 地址、精确 source/main 和普通 merge；成功后回读合并双亲、main 与 tree。GitHub REST 对 head 提供比较条件，base 若在窗口内变化，后验会拒绝 verified 并显式指出合并已经发生，不能假装没有副作用。CLI 不提供 force、平台规则 bypass 或替代模型审核。
+
+CNB mirror-plan 只生成独立延迟状态；不存在 CNB 地址时记录 not-configured，不自动建仓。legacy queue-*.mjs 及 cnb.yml 继续描述 CNB 原生执行器；它们不是 GitHub 的隐式后备，不能据本地 registry 标记推断云端分布式队列已经部署。MCD 命令与下列证据门禁不变。
+
 ## 触发
 
 命中以下任一意图即启用本机制（规范 §0）：**排雷 / 排雷式交付 / 系统性排查 / 交付前排查 / 交付体检 / 挖问题 / 问题台账 / 修复排期 / 假修复 / 联动地雷 / MCD / mine-clear**。

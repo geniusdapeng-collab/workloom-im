@@ -14,5 +14,5 @@ test('parent push rejects before any clone; PR fanout is the supported mutation 
   const result = spawnSync(process.execPath, [script, 'push', '--base', '/deliberately-missing-base'], { encoding: 'utf8' });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /直接推送.*main.*禁止/);
-  assert.match(result.stderr, /fanout-cnb/);
+  assert.match(result.stderr, /fanout-github/);
 });

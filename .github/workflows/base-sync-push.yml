@@ -210,7 +210,7 @@ jobs:
         run: CI=true pnpm install --frozen-lockfile --ignore-scripts
 
       - name: 基座同步引擎测试
-        run: node --test sync/base-sync.test.mjs sync/client-foundation.test.mjs sync/set-ui-version.test.mjs sync/ui-upgrade-pr.test.mjs
+        run: node --test sync/base-sync.test.mjs sync/client-foundation.test.mjs sync/set-ui-version.test.mjs sync/ui-upgrade-pr.test.mjs sync/repository-governance.test.mjs sync/fanout-github.test.mjs sync/ui-host-migration.test.mjs
 
       - name: 本地验证报告（Job Summary）
         if: always()
@@ -270,10 +270,10 @@ jobs:
           EXPECTED_OWNER: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
-          REPOSITORIES="$(node -e '
-            const manifest = JSON.parse(require("fs").readFileSync("sync/child-repos.json", "utf8"));
+          REPOSITORIES="$(node --input-type=module -e '
+            import { loadRegistry, fanoutTargets } from "./sync/repository-registry.mjs";
             const prefix = process.env.EXPECTED_OWNER + "/";
-            const repos = manifest.children.map((item) => item.repo);
+            const repos = fanoutTargets(loadRegistry(), {mode:"required-only"}).map((item) => item.github.repository);
             if (repos.length === 0 || new Set(repos).size !== repos.length) throw new Error("child repo list must be non-empty and unique");
             for (const repo of repos) {
               if (!repo.startsWith(prefix) || !/^[-A-Za-z0-9_.]+\/[-A-Za-z0-9_.]+$/.test(repo)) throw new Error("invalid or cross-owner child repo: " + repo);
@@ -333,10 +333,11 @@ jobs:
           }
           trap cleanup_fanout EXIT
 
-          mapfile -t TARGETS < <(node -e '
-            const manifest = JSON.parse(require("fs").readFileSync("sync/child-repos.json", "utf8"));
+          mapfile -t TARGETS < <(node --input-type=module -e '
+            import { loadRegistry, fanoutTargets } from "./sync/repository-registry.mjs";
             const prefix = process.env.EXPECTED_OWNER + "/";
-            for (const { repo } of manifest.children) {
+            for (const entry of fanoutTargets(loadRegistry(), {mode:process.env.SYNC_MODE})) {
+              const repo = entry.github.repository;
               if (!repo.startsWith(prefix) || !/^[-A-Za-z0-9_.]+\/[-A-Za-z0-9_.]+$/.test(repo)) throw new Error("invalid child repo");
               console.log(repo);
             }
