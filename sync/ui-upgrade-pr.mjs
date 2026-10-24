@@ -346,6 +346,9 @@ export function validateChildInventory(children, waveOrder) {
     throw new Error("child-repos.json 必须提供无重复的 uiRolloutWaveOrder");
   }
   for (const child of children) {
+    if (child.strictUiConsumerContract !== undefined && typeof child.strictUiConsumerContract !== 'boolean') {
+      throw new Error(`${child.repo} strictUiConsumerContract 必须是显式布尔值`);
+    }
     /**
      * 「仓级扩展路径全链路」的登记约束（T-2026-0930-0003 + follow-up）：
      * 非实验车道的**产品分叉仓**用 `tolerateExtensionSnapshotOverlap: true` 打开分叉容差
@@ -438,10 +441,12 @@ export function resolvePreflightTarget(manifest, packageJson, requestedVersion) 
  * 其 `industryExtensionPaths` 内的客户端面由本仓自持、升级时退管——基座的 UI 消费契约只约束
  * **基座受管面**，因此把 `UI_CONSUMER_CONTRACT_FAILED` 从阻断项降级为建议项（`advisories`）：
  * 报告里照旧可见（可另立产品迁移任务卡），但不阻断波次顺序推进。
+ * 精确局部所有权声明可另设 strictUiConsumerContract=true；这只保留路径退管，
+ * 全仓 UI 消费契约仍是硬阻断，不能因六个自持路径豁免无关客户端缺陷。
  */
 export function splitForkContractAdvisories(child, blockers) {
   const declaredFork = child?.lane === "experiment" || child?.tolerateExtensionSnapshotOverlap === true;
-  if (!declaredFork) return { blockers, advisories: [] };
+  if (!declaredFork || child?.strictUiConsumerContract === true) return { blockers, advisories: [] };
   const advisories = [];
   const kept = blockers.filter((item) => {
     if (item.code !== "UI_CONSUMER_CONTRACT_FAILED") return true;
