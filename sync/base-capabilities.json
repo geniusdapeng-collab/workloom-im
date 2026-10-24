@@ -20,7 +20,7 @@
     "sourceDirectory": "packages/ui",
     "distribution": {
       "type": "github-release-tarball",
-      "urlTemplate": "https://cnb.cool/workloom-ai/workloom-im/-/releases/download/ui-v{version}/workloom-ui-{version}.tgz",
+      "urlTemplate": "https://github.com/geniusdapeng-collab/workloom-im/releases/download/ui-v{version}/workloom-ui-{version}.tgz",
       "assetNameTemplate": "workloom-ui-{version}.tgz",
       "integrityByVersion": {
         "0.1.0": "sha512-0O2dJkxvzNoRQcnVH6v8o7qyWW/yYmImrNhaaUWqR/FgovwJI3sHzugAaa4mHeCERWeMihxCRX/jIY93WHW8Vw==",
@@ -45,7 +45,8 @@
         "0.1.19": "sha512-kplOLAtovega6BLpBwtFM1DfBS3q4ZjLp9yA942o+v9QlbREm/VsYNK/Jz7f/9ytDWSFXCvmh10C3ZHrPHkcSA==",
         "0.1.20": "sha512-Qi84gJKEXQA4EX8nSesCQumEn4H80LV9axcsxrbt7pkqNs4MtwKlTYFG/1XGd9ynW1jBI4yuCPgaW9BkF4FiPg=="
       },
-      "comment": "2026-09-17 起 @workloom/ui 制品托管在 CNB Release（cnb.cool/workloom-ai/workloom-im），替代已失效的 GitHub Release tarball；type 枚举保留历史值以兼容各仓 state。"
+      "comment": "2026-10-24 起 GitHub 为主制品地址。0.1.19/0.1.20 已按原 CNB tag SHA 和登记 SRI 逐字节镜像。baseRepository 保留稳定历史逻辑身份以保持 clientFoundation 同标签来源契约；platform 明确传输平台，旧未声明 platform 的 CNB consumer state 仅按固定 legacy 地址验证，不自动回退。",
+      "platform": "github"
     }
   },
   "clientFoundation": {
