@@ -7,6 +7,7 @@ import { addressFor, deliveryConfiguration, loadRegistry, repository } from '../
 
 const SHA = /^[a-f0-9]{40}$/;
 const digest = /^[a-f0-9]{64}$/;
+const workflowPath = path => typeof path === 'string' && /^\.github\/workflows\/.+\.ya?ml$/i.test(path) && !/[\x00-\x1f\\]/.test(path) && !path.split('/').some(part => !part || part === '.' || part === '..');
 export const deliveryPolicySha256 = () => createHash('sha256').update(JSON.stringify(deliveryConfiguration())).digest('hex');
 export function createGithubClient({ token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN, fetchImpl = fetch } = {}) {
   return async function request(method, path, body) {
@@ -39,7 +40,58 @@ export function validateReviewReceipt(receipt, { repository: slug, headSha, base
   if (!Array.isArray(receipt.files) || !receipt.files.length || new Set(receipt.files).size !== receipt.files.length || receipt.files.some(path => typeof path !== 'string' || !path || path.startsWith('/') || path.split('/').includes('..'))) throw new Error('A complete unique reviewed file list is required');
   if (receipt.review?.actor !== 'codex' || receipt.review.status !== 'passed' || !digest.test(receipt.review.evidenceSha256 ?? '')) throw new Error('A passed Codex review with hashed evidence is required');
   if (!Array.isArray(receipt.tests) || !receipt.tests.length || receipt.tests.some(t => t.status !== 'passed' || !t.command || !digest.test(t.evidenceSha256 ?? ''))) throw new Error('Passed test receipts with commands and evidence hashes are required');
+  const ci = receipt.ciApplicability;
+  if (!ci || !['applicable', 'not-applicable'].includes(ci.status) || ci.headSha !== headSha || ci.baseSha !== baseSha || ci.policySha256 !== receipt.policySha256) throw new Error('CI applicability must bind the exact reviewed head/base/policy');
+  if (typeof ci.reason !== 'string' || ci.reason.trim().length < 20 || !digest.test(ci.evidenceSha256 ?? '')) throw new Error('CI applicability requires a specific inspected reason and evidence digest');
+  if (!Array.isArray(ci.completeWorkflowFiles) || new Set(ci.completeWorkflowFiles).size !== ci.completeWorkflowFiles.length || ci.completeWorkflowFiles.some(path => !workflowPath(path))) throw new Error('A complete unique workflow file list is required for CI applicability');
+  if (!Array.isArray(ci.expectedCheckNames) || new Set(ci.expectedCheckNames).size !== ci.expectedCheckNames.length || ci.expectedCheckNames.some(name => typeof name !== 'string' || !name.trim() || name.length > 300 || /[\x00-\x1f]/.test(name))) throw new Error('CI expected check names must be a complete unique literal list');
+  if ((ci.status === 'applicable') !== (ci.expectedCheckNames.length > 0)) throw new Error('Applicable CI requires expected check names; no-applicable CI cannot declare checks');
   return receipt;
+}
+async function inspectWorkflowSource(request, prefix, headSha, ci) {
+  // Resolve the exact commit's tree, then walk only .github/workflows. Non-recursive
+  // reads avoid the recursive tree API's truncation limit for unrelated product files.
+  const commit = await request('GET', `${prefix}/git/commits/${headSha}`);
+  if (commit?.sha !== headSha || !SHA.test(commit.tree?.sha ?? '')) throw new Error('CI workflow source commit identity cannot be verified');
+  let visited = 0;
+  const readTree = async sha => {
+    if (++visited > 100) throw new Error('CI workflow tree traversal exceeded its bounded limit');
+    const tree = await request('GET', `${prefix}/git/trees/${sha}`);
+    if (tree?.sha !== sha || tree.truncated !== false || !Array.isArray(tree.tree) || tree.tree.length > 10000) throw new Error('CI workflow source tree is incomplete or has a different identity');
+    const names = new Set();
+    for (const item of tree.tree) {
+      if (typeof item.path !== 'string' || !item.path || /[\x00-\x1f/\\]/.test(item.path) || ['.', '..'].includes(item.path) || names.has(item.path) || !SHA.test(item.sha ?? '')) throw new Error('CI workflow source tree contains an invalid or duplicate entry');
+      names.add(item.path);
+    }
+    return tree.tree;
+  };
+  const root = await readTree(commit.tree.sha);
+  const github = root.find(item => item.path === '.github');
+  const blobs = [];
+  if (github) {
+    if (github.type !== 'tree' || github.mode !== '040000') throw new Error('CI .github source must be a regular tree');
+    const children = await readTree(github.sha);
+    const workflows = children.find(item => item.path === 'workflows');
+    if (workflows) {
+      if (workflows.type !== 'tree' || workflows.mode !== '040000') throw new Error('CI workflows source must be a regular tree');
+      const pending = [{ sha: workflows.sha, path: '.github/workflows' }];
+      while (pending.length) {
+        const next = pending.pop();
+        for (const item of await readTree(next.sha)) {
+          const path = `${next.path}/${item.path}`;
+          if (item.type === 'tree' && item.mode === '040000') pending.push({ sha: item.sha, path });
+          else if (workflowPath(path)) {
+            if (item.type !== 'blob' || !['100644', '100755'].includes(item.mode)) throw new Error('CI workflow file must be a regular exact-head blob');
+            blobs.push({ path, sha: item.sha, mode: item.mode });
+          }
+        }
+      }
+    }
+  }
+  blobs.sort((a, b) => a.path.localeCompare(b.path));
+  const files = blobs.map(item => item.path).sort();
+  if (JSON.stringify(files) !== JSON.stringify([...ci.completeWorkflowFiles].sort())) throw new Error('CI applicability workflow list is not complete for the exact head');
+  return { headTreeSha: commit.tree.sha, workflowFiles: files, workflowBlobs: blobs };
 }
 export async function inspectGithubPull({ request, address, pullNumber, headSha, baseSha, reviewReceipt }) {
   if (!Number.isSafeInteger(pullNumber) || pullNumber <= 0 || !SHA.test(headSha) || !SHA.test(baseSha)) throw new Error('Invalid PR number or exact commit SHA');
@@ -62,6 +114,12 @@ export async function inspectGithubPull({ request, address, pullNumber, headSha,
   for (const item of statuses) if (!latest.has(item.context)) latest.set(item.context, item);
   const checks = await pages(request, `${prefix}/commits/${headSha}/check-runs?filter=latest`, 'check_runs');
   if (status.state === 'failure' || status.state === 'error' || [...latest.values()].some(s => s.state !== 'success') || checks.some(c => c.status !== 'completed' || !['success', 'neutral', 'skipped'].includes(c.conclusion))) throw new Error('Existing GitHub checks have not passed');
+  const ci = reviewReceipt.ciApplicability;
+  if (ci.status === 'not-applicable' && (latest.size || checks.length)) throw new Error('CI no-applicable declaration conflicts with observed checks; review actual CI applicability');
+  for (const name of ci.expectedCheckNames) {
+    if (latest.get(name)?.state !== 'success' && !checks.some(check => check.name === name && check.status === 'completed' && check.conclusion === 'success')) throw new Error(`Expected CI check is missing or unsuccessful: ${name}`);
+  }
+  const workflowSource = await inspectWorkflowSource(request, prefix, headSha, ci);
   let protection = null;
   try { protection = await request('GET', `${prefix}/branches/${encodeURIComponent(address.branch)}/protection`); }
   catch (error) { if (error.status !== 404 || branch.protected) throw error; }
@@ -72,7 +130,8 @@ export async function inspectGithubPull({ request, address, pullNumber, headSha,
     const validCheck = checks.some(c => c.name === wanted.context && c.status === 'completed' && c.conclusion === 'success' && (wanted.app_id == null || wanted.app_id === -1 || c.app?.id === wanted.app_id));
     if (!validStatus && !validCheck) throw new Error(`Required GitHub check is missing or unsuccessful: ${wanted.context}`);
   }
-  return { pull, branch, files: paths, statuses: [...latest.values()], checks, protection };
+  return { pull, branch, files: paths, statuses: [...latest.values()], checks, protection,
+    ciVerification: { ...workflowSource, status: ci.status, expectedCheckNames: ci.expectedCheckNames, applicabilityEvidenceSha256: ci.evidenceSha256 } };
 }
 export async function mergeGithubPull(options) {
   const { request, address, pullNumber, headSha, baseSha } = options;
@@ -93,6 +152,7 @@ export async function mergeGithubPull(options) {
     existingCheckCount: snapshot.checks.length + snapshot.statuses.length,
     files: snapshot.files, policySha256: deliveryPolicySha256(),
     reviewReceipt: options.reviewReceipt,
+    ciVerification: snapshot.ciVerification,
     mirror: { platform: 'cnb', state: 'deferred', blocksDelivery: false },
   };
 }

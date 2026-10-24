@@ -12,7 +12,7 @@ import { createGithubClient, deliveryPolicySha256, inspectGithubPull, mergeGithu
 import { sensitiveScopes } from '../scripts/delivery/queue-model.mjs';
 
 const doc = loadRegistry();
-const SHA = { head: 'a'.repeat(40), base: 'b'.repeat(40), merge: 'c'.repeat(40), tree: 'd'.repeat(40) };
+const SHA = { head: 'a'.repeat(40), base: 'b'.repeat(40), merge: 'c'.repeat(40), tree: 'd'.repeat(40), headTree: 'e'.repeat(40), githubTree: '1'.repeat(40), workflowsTree: '2'.repeat(40) };
 const hash = data => createHash('sha256').update(data).digest('hex');
 const git = (root, ...args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' }).trim();
 function fixture(identity = 'workloom-growthtest') {
@@ -27,14 +27,21 @@ function fixture(identity = 'workloom-growthtest') {
 function review() {
   return { schemaVersion: 'workloom.codex-review/v1', repository: 'geniusdapeng-collab/workloom-hotel', headSha: SHA.head, baseSha: SHA.base,
     files: ['.workloom-repository.json'], policySha256: deliveryPolicySha256(),
-    review: { actor: 'codex', status: 'passed', evidenceSha256: hash('review evidence') }, tests: [{ command: 'node --test', status: 'passed', evidenceSha256: hash('test evidence') }] };
+    review: { actor: 'codex', status: 'passed', evidenceSha256: hash('review evidence') }, tests: [{ command: 'node --test', status: 'passed', evidenceSha256: hash('test evidence') }],
+    ciApplicability: { status: 'applicable', headSha: SHA.head, baseSha: SHA.base, policySha256: deliveryPolicySha256(),
+      reason: 'The complete exact-head workflow and PR event were independently inspected.', evidenceSha256: hash('workflow applicability evidence'),
+      completeWorkflowFiles: ['.github/workflows/ci.yml'], expectedCheckNames: ['original-ci'] } };
 }
 function apiFixture(mutate = () => {}) {
   const address = addressFor(doc, 'workloom-hotel'); const prefix = `/repos/${address.repository}`; const calls = [];
   const data = {
     pull: { state: 'open', draft: false, changed_files: 1, head: { sha: SHA.head, repo: { full_name: address.repository } }, base: { sha: SHA.base, ref: 'main', repo: { full_name: address.repository } } },
     files: [{ filename: '.workloom-repository.json' }],
-    branch: { commit: { sha: SHA.base }, protected: false }, status: { state: 'success' }, statuses: [], checks: [], protection: null,
+    branch: { commit: { sha: SHA.base }, protected: false }, status: { state: 'success' }, statuses: [], checks: [{ name: 'original-ci', status: 'completed', conclusion: 'success' }], protection: null,
+    headCommit: { sha: SHA.head, tree: { sha: SHA.headTree } },
+    rootTree: { sha: SHA.headTree, truncated: false, tree: [{ path: '.github', mode: '040000', type: 'tree', sha: SHA.githubTree }] },
+    githubTree: { sha: SHA.githubTree, truncated: false, tree: [{ path: 'workflows', mode: '040000', type: 'tree', sha: SHA.workflowsTree }] },
+    workflowsTree: { sha: SHA.workflowsTree, truncated: false, tree: [{ path: 'ci.yml', mode: '100644', type: 'blob', sha: '3'.repeat(40) }] },
     merge: { merged: true, sha: SHA.merge }, commit: { parents: [{ sha: SHA.base }, { sha: SHA.head }], commit: { tree: { sha: SHA.tree } } },
     main: { commit: { sha: SHA.merge } },
   };
@@ -52,6 +59,10 @@ function apiFixture(mutate = () => {}) {
     if (path === `${prefix}/commits/${SHA.head}/status?per_page=100`) return structuredClone(data.status);
     if (path.includes(`/commits/${SHA.head}/statuses?`)) return structuredClone(data.statuses);
     if (path.includes(`/commits/${SHA.head}/check-runs?`)) return { check_runs: structuredClone(data.checks) };
+    if (path === `${prefix}/git/commits/${SHA.head}`) return structuredClone(data.headCommit);
+    if (path === `${prefix}/git/trees/${SHA.headTree}`) return structuredClone(data.rootTree);
+    if (path === `${prefix}/git/trees/${SHA.githubTree}`) return structuredClone(data.githubTree);
+    if (path === `${prefix}/git/trees/${SHA.workflowsTree}`) return structuredClone(data.workflowsTree);
     if (method === 'PUT' && path === `${prefix}/pulls/1/merge`) { merged = true; return structuredClone(data.merge); }
     if (path === `${prefix}/commits/${SHA.merge}`) return structuredClone(data.commit);
     throw new Error(`Unexpected fixture API call: ${method} ${path}`);
@@ -169,7 +180,7 @@ test('manifest governance cannot edit business identity via a crafted plan', () 
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 test('verified merge binds exact reviewed parents, existing checks and current main', async () => {
-  const { options, calls } = apiFixture(data => { data.checks.push({ name: 'original-ci', status: 'completed', conclusion: 'success' }); });
+  const { options, calls } = apiFixture();
   const receipt = await mergeGithubPull(options);
   assert.equal(receipt.status, 'verified'); assert.equal(receipt.mainSha, SHA.merge); assert.equal(receipt.treeSha, SHA.tree);
   assert.equal(receipt.existingCheckCount, 1);
@@ -223,4 +234,94 @@ test('API adapter scopes tokens to fixed GitHub host and redacts all response er
 });
 test('GitHub workflows receive the same sensitive governance classification as CNB CI', () => {
   assert.deepEqual(sensitiveScopes(['.github/workflows/ci.yml']), ['protocol']);
+});
+test('CI registration gap rejects zero observed checks before any merge', async () => {
+  const { options, calls } = apiFixture(d => { d.status.state = 'pending'; d.checks = []; });
+  await assert.rejects(mergeGithubPull(options), /CI|check/i);
+  assert.equal(calls.some(c => c.method !== 'GET'), false);
+});
+test('CI registration gap rejects the first passing check when another expected job is absent', async () => {
+  const { options, calls } = apiFixture();
+  options.reviewReceipt.ciApplicability.expectedCheckNames.push('late-job');
+  await assert.rejects(mergeGithubPull(options), /late-job/);
+  assert.equal(calls.some(c => c.method !== 'GET'), false);
+});
+test('CI registration requires success rather than skipped or neutral for every expected job', async () => {
+  for (const conclusion of ['skipped', 'neutral']) {
+    const { options, calls } = apiFixture(d => { d.checks[0].conclusion = conclusion; });
+    await assert.rejects(mergeGithubPull(options), /original-ci/);
+    assert.equal(calls.some(c => c.method !== 'GET'), false);
+  }
+});
+test('CI applicability rejects a missing, stale, unproven or incomplete declaration before network', async () => {
+  for (const mutate of [
+    r => { delete r.ciApplicability; }, r => { r.ciApplicability.headSha = SHA.base; },
+    r => { r.ciApplicability.baseSha = SHA.head; }, r => { r.ciApplicability.policySha256 = '0'.repeat(64); },
+    r => { r.ciApplicability.evidenceSha256 = ''; }, r => { r.ciApplicability.reason = 'assumed'; },
+    r => { r.ciApplicability.expectedCheckNames = []; }, r => { r.ciApplicability.completeWorkflowFiles = undefined; },
+    r => { r.ciApplicability.completeWorkflowFiles = ['.github/workflows/../outside.yml']; },
+  ]) {
+    const { options, calls } = apiFixture(); mutate(options.reviewReceipt);
+    await assert.rejects(mergeGithubPull(options), /CI|workflow/i);
+    assert.equal(calls.length, 0);
+  }
+});
+test('CI applicability must name every exact-head workflow file', async () => {
+  const { options, calls } = apiFixture();
+  options.reviewReceipt.ciApplicability.completeWorkflowFiles = [];
+  await assert.rejects(mergeGithubPull(options), /workflow.*complete|complete.*workflow/i);
+  assert.equal(calls.some(c => c.method !== 'GET'), false);
+});
+test('CI applicability rejects truncated or wrong-identity workflow source trees', async () => {
+  for (const mutate of [d => { d.workflowsTree.truncated = true; }, d => { d.headCommit.sha = SHA.base; }, d => { d.rootTree.sha = SHA.tree; }]) {
+    const { options, calls } = apiFixture(mutate);
+    await assert.rejects(mergeGithubPull(options), /workflow|commit|tree/i);
+    assert.equal(calls.some(c => c.method !== 'GET'), false);
+  }
+});
+test('CI zero-check exception needs explicit exact-head evidence that no workflow applies', async () => {
+  const { options, calls } = apiFixture(d => { d.status.state = 'pending'; d.checks = []; d.rootTree.tree = []; });
+  Object.assign(options.reviewReceipt.ciApplicability, { status: 'not-applicable', expectedCheckNames: [], completeWorkflowFiles: [],
+    reason: 'The complete exact-head tree contains no GitHub workflow files, and no external check is configured.' });
+  const receipt = await mergeGithubPull(options);
+  assert.equal(receipt.status, 'verified');
+  assert.equal(receipt.existingCheckCount, 0);
+  assert.equal(calls.filter(c => c.method !== 'GET').length, 1);
+});
+test('CI no-applicable declaration cannot override an observed check or required protection', async () => {
+  for (const protectedBranch of [false, true]) {
+    const { options, calls } = apiFixture(d => {
+      d.rootTree.tree = [];
+      if (protectedBranch) { d.checks = []; d.protection = { required_status_checks: { contexts: ['required-ci'] } }; }
+    });
+    Object.assign(options.reviewReceipt.ciApplicability, { status: 'not-applicable', expectedCheckNames: [], completeWorkflowFiles: [] });
+    await assert.rejects(mergeGithubPull(options), /CI|Required GitHub check/i);
+    assert.equal(calls.some(c => c.method !== 'GET'), false);
+  }
+});
+test('CI exact expected status context can satisfy a job without a check-run', async () => {
+  const { options } = apiFixture(d => { d.checks = []; d.statuses = [{ context: 'original-ci', state: 'success' }]; });
+  const receipt = await mergeGithubPull(options);
+  assert.equal(receipt.existingCheckCount, 1);
+  assert.deepEqual(receipt.ciVerification.expectedCheckNames, ['original-ci']);
+  assert.deepEqual(receipt.ciVerification.workflowFiles, ['.github/workflows/ci.yml']);
+});
+test('CI no-applicable evidence can cover present workflows filtered out for the reviewed event', async () => {
+  const { options } = apiFixture(d => { d.checks = []; d.status.state = 'pending'; });
+  Object.assign(options.reviewReceipt.ciApplicability, { status: 'not-applicable', expectedCheckNames: [],
+    reason: 'Every exact-head workflow is dispatch-only for this isolated fixture; the reviewed pull event has no applicable job.' });
+  const receipt = await mergeGithubPull(options);
+  assert.equal(receipt.existingCheckCount, 0);
+  assert.deepEqual(receipt.ciVerification.workflowFiles, ['.github/workflows/ci.yml']);
+});
+test('CI source inspection rejects symlinked, malformed or duplicate workflow entries', async () => {
+  for (const mutate of [
+    d => { d.workflowsTree.tree[0].mode = '120000'; },
+    d => { d.workflowsTree.tree[0].sha = 'invalid'; },
+    d => { d.workflowsTree.tree.push({ ...d.workflowsTree.tree[0] }); },
+  ]) {
+    const { options, calls } = apiFixture(mutate);
+    await assert.rejects(mergeGithubPull(options), /workflow|tree/i);
+    assert.equal(calls.some(c => c.method !== 'GET'), false);
+  }
 });
