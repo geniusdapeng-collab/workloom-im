@@ -279,7 +279,7 @@
       "reason": "环境示例仅展示带省略号的 Ed25519 PEM 结构，并明确要求私钥只能进入密钥库；不含可用私钥。"
     },
     ".github/workflows/ui-release.yml": {
-      "sha256": "2c10bcbd92d7b1b880f8859bb55d4b7c2d1d9aef28ecb484aeec81c891871f89",
+      "sha256": "e4fea6090901bdb23461f7ab70b22ddb473187e901f96ec0afca422dfdfd002f",
       "findings": [
         {
           "rule": "credential-in-url",
