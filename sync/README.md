@@ -140,7 +140,11 @@ bash sync/adopt.sh /path/to/new-industry --new-industry --dry-run
 
 ## 存量八仓按波次升级
 
-`sync/ui-upgrade-pr.mjs --rollout` 每次都先要求执行提交固定在同版本 `ui-v*` 标签，以 npm 11.6.2 / pnpm 10.14.0 从标签隔离生成本地 `npm pack`，再把本地 tarball 的 sha512、`base-capabilities.json` 对应版本的 SRI 登记、同标签 CNB Release 的真实下载字节做三方比较；只确认版本号、URL 可访问或资产名相同都不授予 rollout 权限。完整性一致后才加载客户端基座，并只在临时 clone 中做指纹升级、lockfile 更新和消费门禁。验证通过才推送 `chore/workloom-ui-v<版本>` 独立分支并创建 PR，永不直推 `main`。W1 → W5 顺序是可执行门禁；更晚波次不能越过未完成前序。dry-run 同样执行制品完整性核验，并在临时 clone 中运行真实迁移和门禁，但不写远端仓、分支或 PR。
+`sync/ui-upgrade-pr.mjs --rollout` 每次都先要求执行提交固定在同版本 `ui-v*` 标签，以 npm 11.6.2 / pnpm 10.14.0 从标签隔离生成本地 `npm pack`，再把本地 tarball 的 sha512、`base-capabilities.json` 对应版本的 SRI 登记、同标签 GitHub Release 的真实下载字节做三方比较；只确认版本号、URL 可访问或资产名相同都不授予 rollout 权限。完整性一致后才加载客户端基座，并只在临时 clone 中做指纹升级、lockfile 更新和消费门禁。验证通过才推送 `chore/workloom-ui-v<版本>` 独立分支并创建 PR，永不直推 `main`。W1 → W5 顺序是可执行门禁；更晚波次不能越过未完成前序。dry-run 同样执行制品完整性核验，并在临时 clone 中运行真实迁移和门禁，但不写远端仓、分支或 PR。
+
+升级器默认按同标签 registry 将历史 CNB 身份解析为 GitHub 地址，仅接受本次操作的 GH_TOKEN/GITHUB_TOKEN，克隆和 PR API 均固定到所选平台。两个隔离副本与三个 config-only 产品不能借 UI 入口接收产品内容。`--repos` 可用 logicalId、原 CNB slug 或 GitHub slug，都会先解析到同一注册身份；产品 manifest 的历史地址可作为同一身份别名读取，不据此改写产品部署字段。显式 legacy CNB 产品路径必须同时给出 `--platform cnb --legacy-cnb-product-sync`；没有自动切换或凭据兜底。
+
+GitHub Actions 的自动发布保留原有产品 CI、三端实测和 Release 原生短期 token；手动 continue-rollout 仅执行 `--rollout --dry-run` 与实际完整性验证，不保存跨仓 PAT。当前 Codex 会话随后使用已授权的本次操作 token 执行相同版本和波次的写 PR，再独立审查、测试、通过现有 CI、普通 merge 并回读 main。新的 controller 和 registry 都必须封存在同一个未来稳定标签；旧 ui-v0.1.19/0.1.20 的 tag、产品指纹、SRI 与历史制品不重写，也不能用新 controller 冒充旧标签已验证的新发布。
 
 pnpm 10.14 对 URL tarball 生成的 lockfile 只登记 `resolution.tarball`，默认不写 `resolution.integrity`；因此仅把 SHA-512 放在 `.workloom-ui.json` 并不能让包管理器校验下载字节。新行业接入和存量 rollout 都必须先执行 `install --lockfile-only`，再由零外部依赖的 `sync/ui-lockfile-integrity.mjs` 校验 stable state、canonical Release URL、根 override、固定三端 importer 与唯一 packages 记录，并原子注入 state 的 SHA-512；随后才执行 `install --frozen-lockfile`。安装完成后的 consumer verifier 使用固定 `yaml-governance=npm:yaml@2.9.0` 再做完整 YAML 语义复验。缺摘要、摘要不一致、同 URL 异字节、重复 UI 记录或任一端未绑定都必须 fail closed。
 

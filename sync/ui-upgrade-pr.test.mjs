@@ -258,6 +258,7 @@ function writeTaggedReleaseSource(root) {
     uiRolloutWaveOrder: ["W1"],
     children: Array.from({ length: 9 }, (_, index) => ({ repo: `org/repo-${index}`, uiRolloutWave: "W1" })),
   });
+  writeFileSync(join(root, "sync/repository-registry.json"), readFileSync(join(repoRoot, "sync/repository-registry.json")));
   writeFileSync(join(root, "sync/ui-consumer-template.yml"), "name: consumer\n# __REPO_DIR__\n");
   for (const path of [
     "sync/ui-upgrade-pr.mjs",
@@ -266,6 +267,7 @@ function writeTaggedReleaseSource(root) {
     "sync/install-ui-governance.mjs",
     "sync/install-adoption-assets.mjs",
     "sync/ui-lockfile-integrity.mjs",
+    "sync/repository-registry.mjs",
   ]) writeFileSync(join(root, path), `// release controller ${path}\n`);
   for (const path of [
     "scripts/verify-ui-consumer.mjs",
@@ -358,7 +360,7 @@ describe("UI 稳定发布门禁", () => {
       assert.match(tagged.integrity, /^sha512-/u);
       assert.equal(assertReleasePayloadIntegrity(tagged.releasePayload), true);
       assert.ok(tagged.releasePayload.clientFoundation.fileCount >= 7);
-      assert.equal(tagged.releasePayload.governance.fileCount, 13);
+      assert.equal(tagged.releasePayload.governance.fileCount, 15);
       assert.ok(tagged.releasePayload.files.some((file) => (
         file.category === "governance" && file.path === "sync/ui-lockfile-integrity.mjs"
       )));
@@ -418,6 +420,8 @@ describe("UI 稳定发布门禁", () => {
         "sync/set-ui-version.mjs",
         "sync/install-ui-governance.mjs",
         "sync/install-adoption-assets.mjs",
+        "sync/repository-registry.mjs",
+        "sync/repository-registry.json",
       ]) {
         const controllerPath = join(root, controller);
         const original = execFileSync("git", ["show", `refs/tags/ui-v1.2.3:${controller}`], { cwd: root });
@@ -763,14 +767,14 @@ process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", f
     const targets = [];
     const delays = [];
     try {
-      const checkout = cloneChildReadOnly({ repo: "org/example" }, root, "", {
+      const checkout = cloneChildReadOnly({ repo: "workloom-ai/workloom-hotel" }, root, "", {
         backoffMs: 2,
         sleep(milliseconds) { delays.push(milliseconds); },
         cloneRunner({ attempt, target, args }) {
           targets.push(target);
           assert.deepEqual(args.slice(0, 3), ["-c", "http.version=HTTP/1.1", "clone"]);
           assert.deepEqual(args.slice(3, 6), ["--depth", "1", "--no-tags"]);
-          assert.equal(args.at(-2), "https://cnb.cool/org/example.git");
+          assert.equal(args.at(-2), "https://github.com/geniusdapeng-collab/workloom-hotel.git");
           assert.equal(args.at(-1), target);
           if (attempt < 3) {
             mkdirSync(target, { recursive: true });
@@ -801,12 +805,12 @@ process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", f
     let attempts = 0;
     let caught;
     try {
-      cloneChildReadOnly({ repo: "org/missing" }, root, token, {
+      cloneChildReadOnly({ repo: "workloom-ai/workloom-hotel" }, root, token, {
         backoffMs: 0,
         sleep() {},
         cloneRunner({ target, args }) {
           attempts += 1;
-          assert.equal(args.at(-2), "https://cnb.cool/org/missing.git");
+          assert.equal(args.at(-2), "https://github.com/geniusdapeng-collab/workloom-hotel.git");
           assert.doesNotMatch(args.join(" "), /x-access-token|ghp_/u, "认证不得进入 URL 或命令参数");
           mkdirSync(target, { recursive: true });
           writeFileSync(join(target, "partial"), "incomplete\n");
@@ -1122,21 +1126,32 @@ process.stdout.write(JSON.stringify([{ name: "@workloom/ui", version: "1.2.3", f
     const tokenSteps = Object.entries(parsed.jobs).flatMap(([jobName, job]) => (job.steps ?? [])
       .filter((step) => step.env?.SYNC_TOKEN !== undefined)
       .map((step) => `${jobName}:${step.name}`));
-    assert.deepEqual(tokenSteps, [
-      "continue-rollout:按严格波次继续创建独立升级 PR",
-    ]);
+    assert.deepEqual(tokenSteps, []);
     assert.doesNotMatch(JSON.stringify(automaticRollout), /SYNC_TOKEN|--rollout/u);
     assert.match(JSON.stringify(automaticRollout), /--verify-artifact/u);
     const fakeRollout = structuredClone(parsed);
     fakeRollout.jobs["continue-rollout"].steps
-      .find((step) => step.name === "按严格波次继续创建独立升级 PR").run = [
-        "ARGS=(--rollout --version \"$STABLE_VERSION\")",
+      .find((step) => step.name === "按严格波次生成只读升级计划").run = [
+        "ARGS=(--rollout --dry-run --version \"$STABLE_VERSION\")",
         "# node sync/ui-upgrade-pr.mjs \"${ARGS[@]}\"",
         "echo \"没有执行跨仓写入\"",
       ].join("\n");
     assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(fakeRollout))
-      .some((risk) => risk.includes("只能在实际写 rollout 的 step")),
-    "只有 ARGS 或注释中的命令不得获得 SYNC_TOKEN");
+      .some((risk) => risk.includes("实际执行只读迁移计划")),
+    "只有 ARGS 或注释中的命令不得冒充实际只读迁移计划");
+
+    const ambientCrossRepositorySecret = structuredClone(parsed);
+    ambientCrossRepositorySecret.jobs["continue-rollout"].steps
+      .find((step) => step.name === "按严格波次生成只读升级计划").env.SYNC_TOKEN = "${{ secrets.SYNC_TOKEN }}";
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(ambientCrossRepositorySecret)).some(risk => risk.includes("不得在 GitHub UI workflow 注入跨仓")));
+    const actualCloudWrite = structuredClone(parsed);
+    actualCloudWrite.jobs["continue-rollout"].steps
+      .find((step) => step.name === "按严格波次生成只读升级计划").run = actualCloudWrite.jobs["continue-rollout"].steps
+        .find((step) => step.name === "按严格波次生成只读升级计划").run.replace("--rollout --dry-run", "--rollout");
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(actualCloudWrite)).some(risk => risk.includes("不得在 Actions 写跨仓 PR")));
+    actualCloudWrite.jobs["continue-rollout"].steps
+      .find((step) => step.name === "按严格波次生成只读升级计划").run += '\necho --dry-run\n';
+    assert.ok(findUiReleaseWorkflowRisks(YAML.stringify(actualCloudWrite)).some(risk => risk.includes("不得在 Actions 写跨仓 PR")), "无关 echo 中的 dry-run 不得替实际写命令获得只读认定");
 
     const versionOnlyManualGate = structuredClone(parsed);
     versionOnlyManualGate.jobs["continue-rollout"].steps

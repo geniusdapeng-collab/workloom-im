@@ -3,7 +3,7 @@
  * WorkLoom 共享 UI + 三端客户端基座的下游发布门禁与升级 PR 编排。
  *
  * 发布严格分成两个阶段：
- * 1. --preflight：只读克隆全部八个下游仓，确认清单与访问能力，同时把迁移缺口
+ * 1. --preflight：只读克隆全部九个订阅子仓，确认清单与访问能力，同时把迁移缺口
  *    结构化输出。存量仓未迁移不反向锁死基座稳定制品，只有清单/访问失败才阻断发布。
  * 2. --rollout：确认 canonical GitHub Release 中已存在目标稳定制品，并从同一 ui-v* 不可变标签
  *    读取三端应用壳，再按 child-repos.json 的波次处理。受管文件经旧版 SHA-256
@@ -22,7 +22,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { devNull, tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { verifyUiConsumerRepo } from "../scripts/verify-ui-consumer.mjs";
@@ -38,12 +38,14 @@ import {
 } from "./client-foundation.mjs";
 import { resolveUiReleaseArtifact, resolveUiVersion, setUiVersion } from "./set-ui-version.mjs";
 import { bindUiLockfileIntegrity } from "./ui-lockfile-integrity.mjs";
+import { addressFor, loadRegistry, repository, validateRegistry } from "./repository-registry.mjs";
 
 const syncDir = dirname(fileURLToPath(import.meta.url));
 const baseDir = resolve(syncDir, "..");
 // 舰队规模：八行业仓 + WorkLoom-growth；增删舰队成员时同步更新（配合 sync/child-repos.json）
 const EXPECTED_DOWNSTREAM_COUNT = 9;
 const CANONICAL_BASE_REPOSITORY = "workloom-ai/workloom-im";
+const CANONICAL_BASE_URL = "https://github.com/geniusdapeng-collab/workloom-im.git";
 const RELEASE_PAYLOAD_SCHEMA = "workloom.ui-release-payload/v1";
 const RELEASE_GOVERNANCE_PAYLOAD_PATHS = Object.freeze([
   ...GOVERNANCE_FILES,
@@ -51,6 +53,8 @@ const RELEASE_GOVERNANCE_PAYLOAD_PATHS = Object.freeze([
   "sync/ui-consumer-template.yml",
   "sync/base-capabilities.json",
   "sync/child-repos.json",
+  "sync/repository-registry.json",
+  "sync/repository-registry.mjs",
   // 这些控制器会决定从标签读取什么、写入哪些下游文件以及如何验真，属于 rollout
   // TCB；仅封存最终 payload 而不封存控制器本身，脏工作树仍可绕过全部门禁。
   "sync/ui-upgrade-pr.mjs",
@@ -77,12 +81,16 @@ function parseArgs(argv) {
     throw new Error("--verify-artifact 与 --rollout 不得同时使用");
   }
   const repositories = (value("--repos") ?? "").split(",").map((item) => item.trim()).filter(Boolean);
+  const platform = value("--platform") ?? "github";
+  if (!["github", "cnb"].includes(platform)) throw new Error("--platform 只接受 github 或显式 legacy cnb");
+  if (platform === "cnb" && !argv.includes("--legacy-cnb-product-sync")) throw new Error("CNB 产品 rollout 只允许显式 --legacy-cnb-product-sync，不是默认镜像动作");
   return {
     mode: verifyArtifact ? "verify-artifact" : argv.includes("--rollout") ? "rollout" : "preflight",
     requestedVersion: value("--version"),
     reportPath: value("--report"),
     wave: value("--wave")?.trim() || undefined,
     repositories,
+    platform,
     dryRun: argv.includes("--dry-run") || legacyValidate,
   };
 }
@@ -212,20 +220,40 @@ export function stageExactUpgradeChanges({ repoRoot, allowedPaths }) {
   return changed;
 }
 
-function canonicalGitEnvironment(token) {
-  const environment = { GIT_TERMINAL_PROMPT: "0" };
+export function canonicalGitEnvironment(token, platform = "github") {
+  if (!["github", "cnb"].includes(platform)) throw new Error("非法 UI 传输平台");
+  const environment = {
+    GIT_TERMINAL_PROMPT: "0", GIT_CONFIG_GLOBAL: devNull, GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_COUNT: token ? "2" : "1", GIT_CONFIG_KEY_0: "credential.helper", GIT_CONFIG_VALUE_0: "",
+  };
   if (!token) return environment;
   // 凭据只经子进程环境传递，绝不写入 remote URL、日志或仓库配置。
   return {
     ...environment,
-    GIT_CONFIG_COUNT: "1",
-    GIT_CONFIG_KEY_0: "http.https://cnb.cool/.extraheader",
-    GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${Buffer.from(`cnb:${token}`).toString("base64")}`,
+    GIT_CONFIG_KEY_1: `http.https://${platform === "github" ? "github.com" : "cnb.cool"}/.extraheader`,
+    GIT_CONFIG_VALUE_1: `AUTHORIZATION: basic ${Buffer.from(`${platform === "github" ? "x-access-token" : "cnb"}:${token}`).toString("base64")}`,
   };
 }
 
-function repositoryUrl(repo) {
-  return `https://cnb.cool/${repo}.git`;
+export function uiOperationToken(platform = "github", environment = process.env) {
+  if (platform === "github") return environment.GH_TOKEN || environment.GITHUB_TOKEN || "";
+  if (platform === "cnb") return environment.CNB_TOKEN || environment.SYNC_TOKEN || "";
+  throw new Error("非法 UI 传输平台");
+}
+
+export function prepareUiChildren(doc, children, platform = "github") {
+  return children.map(child => {
+    const entry = repository(doc, child.repo);
+    if (entry.baseSync.receive !== "subscribed") throw new Error(`${entry.logicalId} 不允许产品 UI rollout`);
+    const address = addressFor(doc, entry.logicalId, platform);
+    return { ...child, repo: address.repository, platform,
+      repositoryAliases: [entry.github.repository, entry.cnb?.repository].filter(Boolean) };
+  });
+}
+
+function repositoryUrl(repo, platform = "github") {
+  const address = addressFor(loadRegistry(), repo, platform);
+  return `${address.url}.git`;
 }
 
 const READ_ONLY_CLONE_ATTEMPTS = 3;
@@ -520,7 +548,7 @@ export function inspectMigratedConsumer(repoRoot, child, manifest) {
         "按行业经营体、运营中枢或试验田角色登记产品身份。",
       ));
     }
-    if (product.repository !== child.repo) {
+    if (!(child.repositoryAliases ?? [child.repo]).includes(product.repository)) {
       blockers.push(blocker(
         "PRODUCT_REPOSITORY_MISMATCH",
         "product.manifest.json",
@@ -725,11 +753,11 @@ export function cloneChildReadOnly(child, attemptRoot, token = "", options = {})
           "--depth",
           "1",
           "--no-tags",
-          repositoryUrl(child.repo),
+          repositoryUrl(child.repo, child.platform),
           checkout,
         ],
         cwd: baseDir,
-        env: canonicalGitEnvironment(token),
+        env: canonicalGitEnvironment(token, child.platform),
       });
       if (!existsSync(join(checkout, ".git"))) {
         throw new Error("git clone 未生成可验证的工作树");
@@ -828,7 +856,7 @@ export function preflightChildren({ children, waveOrder, manifest, version, targ
           "CLONE_FAILED",
           ".",
           `只读克隆失败（${failure.classification}，已尝试 ${failure.attempts} 次）：${failure.diagnostic}`,
-          "检查仓库可访问性和 SYNC_TOKEN 只读权限后重试；不得跳过该仓发布。",
+          "检查注册地址与当前操作平台的只读权限后重试；不得切换账号或跳过该仓发布。",
           "access",
         )].map((item) => ({
           ...item,
@@ -970,8 +998,10 @@ export function renderConsumerWorkflow(pathPrefix = "") {
   return readFileSync(join(syncDir, "ui-consumer-template.yml"), "utf8").replaceAll("__REPO_DIR__", repoDir);
 }
 
-async function createPullRequest({ repo, token, branch, version }) {
+export async function createPullRequest({ repo, token, branch, version, platform = "github", fetchImpl = fetch }) {
   assertIndependentUpgradeBranch(branch);
+  const address = addressFor(loadRegistry(), repo, platform);
+  repo = address.repository;
   const title = `sync(ui): 三端客户端基座升级至 ${version}`;
   const payload = {
     title,
@@ -980,43 +1010,31 @@ async function createPullRequest({ repo, token, branch, version }) {
     body: buildUpgradePullRequestBody(version),
   };
   // 同 head/base 的 PR 已存在时保持幂等：先查 open PR，避免把「已在验证」误判为失败。
-  const openListUrl = `https://api.cnb.cool/${repo}/-/pulls?state=open&base_ref=main&page_size=100`;
-  try {
-    const listResponse = await fetch(openListUrl, {
-      headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
-    });
-    if (listResponse.ok) {
-      const listed = await listResponse.json();
-      const items = Array.isArray(listed) ? listed : (listed?.data ?? []);
-      // CNB 返回的 head.ref 是完整 refs/heads/<branch>，必须归一后再比较，
-      // 否则幂等判定失效、重复创建 PR 会撞 409。
-      const normalizeRef = (value) => String(value ?? "").replace(/^refs\/heads\//u, "");
-      const existing = items.find((item) => normalizeRef(
-        item?.head?.ref ?? item?.sourceBranch ?? item?.source_branch ?? item?.head_ref,
-      ) === normalizeRef(branch));
-      if (existing) return { html_url: "已存在", number: existing.number ?? existing.id };
-    }
-  } catch {
-    // 列表查询失败不阻断创建路径；后续创建会给出更明确的错误。
+  const endpoint = platform === "github" ? `https://api.github.com/repos/${repo}/pulls` : `https://api.cnb.cool/${repo}/-/pulls`;
+  const headers = { Accept: platform === "github" ? "application/vnd.github+json" : "application/json", Authorization: `Bearer ${token}` };
+  if (platform === "github") headers["X-GitHub-Api-Version"] = "2026-03-10";
+  async function request(method, url, body) {
+    let response;
+    try { response = await fetchImpl(url, { method, headers: { ...headers, ...(body ? { "Content-Type": "application/json" } : {}) },
+      ...(body ? { body: JSON.stringify(body) } : {}), redirect: "error", signal: AbortSignal.timeout(30000) }); }
+    catch { throw new Error(`${platform} UI PR ${method} 网络失败；未自动重试写入`); }
+    if (!response.ok) throw new Error(`${platform} UI PR ${method} HTTP ${response.status}`);
+    try { return await response.json(); } catch { throw new Error(`${platform} UI PR ${method} 返回无效 JSON`); }
   }
-  const response = await fetch(`https://api.cnb.cool/${repo}/-/pulls`, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-  if (response.ok) return response.json();
-  const detail = await response.text();
-  // 422/409 通常代表相同 head/base 的 PR 已存在；保持幂等并交给现有 PR 继续验证。
-  if ((response.status === 422 || response.status === 409)
-    && /already exists|already have open pull|已存在/iu.test(detail)) {
-    const number = /"number":(\d+)/u.exec(detail)?.[1];
-    return { html_url: "已存在", number: number ? Number(number) : undefined };
-  }
-  throw new Error(`创建 PR 失败 ${response.status}: ${detail.slice(0, 500)}`);
+  const listQuery = platform === "github"
+    ? `?state=open&base=main&head=${encodeURIComponent(`${repo.split("/")[0]}:${branch}`)}&per_page=100`
+    : "?state=open&base_ref=main&page_size=100";
+  const listed = await request("GET", `${endpoint}${listQuery}`);
+  const items = Array.isArray(listed) ? listed : listed?.data;
+  if (!Array.isArray(items)) throw new Error(`${platform} UI PR 列表无效；拒绝盲目创建`);
+  const normalizeRef = value => String(value ?? "").replace(/^refs\/heads\//u, "");
+  const existing = items.find(item => normalizeRef(item?.head?.ref ?? item?.sourceBranch ?? item?.source_branch ?? item?.head_ref) === branch);
+  if (existing) return { html_url: existing.html_url ?? `${address.url}/pull/${existing.number ?? existing.id}`, number: existing.number ?? existing.id };
+  // A failed or unknown write is left for positive readback on the next run.
+  // Never turn an unverified 409/422 response into a successful PR receipt.
+  const created = await request("POST", endpoint, payload);
+  if (!Number.isSafeInteger(created.number ?? created.id) || !(created.html_url ?? created.url)) throw new Error(`${platform} UI PR 创建响应缺少实际标识`);
+  return { ...created, number: created.number ?? created.id, html_url: created.html_url ?? created.url };
 }
 
 function parseJson(value, label) {
@@ -1121,7 +1139,7 @@ function gitCommandSucceeds(root, args) {
 export function verifyCanonicalReleaseTag({
   root = baseDir,
   sourceRef,
-  expectedOriginUrl = `https://cnb.cool/${CANONICAL_BASE_REPOSITORY}.git`,
+  expectedOriginUrl = CANONICAL_BASE_URL,
 }) {
   const repositoryRoot = resolve(root);
   if (!/^refs\/tags\/ui-v\d+\.\d+\.\d+$/u.test(sourceRef ?? "")) {
@@ -1156,7 +1174,7 @@ export function verifyCanonicalReleaseTag({
         "fetch", "--force", "--no-tags", "origin",
         `+refs/heads/main:${mainRef}`,
         `+${sourceRef}:${tagRef}`,
-      ], repositoryRoot, { GIT_TERMINAL_PROMPT: "0" });
+      ], repositoryRoot, canonicalGitEnvironment("", expectedHost === "cnb.cool" ? "cnb" : "github"));
     } catch {
       throw new Error(`无法从 canonical origin 同时获取 main 与 ${sourceRef}`);
     }
@@ -1307,7 +1325,7 @@ export function packTaggedUiArtifact({
   root = baseDir,
   manifest,
   version,
-  expectedOriginUrl = `https://cnb.cool/${CANONICAL_BASE_REPOSITORY}.git`,
+  expectedOriginUrl = CANONICAL_BASE_URL,
   readNpmVersion = () => run("npm", ["--version"], resolve(root)),
   readPnpmVersion = () => run("pnpm", ["--version"], resolve(root)),
   prepack = ({ cwd }) => run("pnpm", ["run", "prepack"], cwd),
@@ -1582,10 +1600,10 @@ async function upgradeChild(child, manifest, version, token, dryRun, foundationS
     // 提交标题走 `sync(...)`：协议 §5 把"同步器产出"登记为豁免项（无需任务号）；
     // `chore(base)` 不在豁免清单里，会在下级仓的协议门禁被拒（W1 实测）。
     run("git", ["-c", "user.name=WorkLoom Base Release", "-c", "user.email=base-release@workloom.im", "commit", "-m", `sync(ui): 三端客户端基座升级至 ${version}`], checkout);
-    const remoteHead = run("git", ["ls-remote", "--heads", "origin", `refs/heads/${branch}`], checkout, canonicalGitEnvironment(token)).split(/\s+/)[0] || "";
+    const remoteHead = run("git", ["ls-remote", "--heads", "origin", `refs/heads/${branch}`], checkout, canonicalGitEnvironment(token, child.platform)).split(/\s+/)[0] || "";
     const lease = remoteHead ? `--force-with-lease=refs/heads/${branch}:${remoteHead}` : "--force-with-lease";
-    run("git", ["push", lease, "origin", `HEAD:refs/heads/${branch}`], checkout, canonicalGitEnvironment(token));
-    const pull = await createPullRequest({ repo: child.repo, token, branch, version });
+    run("git", ["push", lease, "origin", `HEAD:refs/heads/${branch}`], checkout, canonicalGitEnvironment(token, child.platform));
+    const pull = await createPullRequest({ repo: child.repo, token, branch, version, platform: child.platform });
     return { repo: child.repo, status: "pr-opened", url: pull.html_url, touched, foundationTouched };
   } finally {
     rmSync(temp, { recursive: true, force: true });
@@ -1632,10 +1650,13 @@ async function main() {
       `${verifiedArtifact.sourceRef} 的 child-repos.json`,
     )
     : JSON.parse(readFileSync(join(syncDir, "child-repos.json"), "utf8"));
-  const children = childManifest.children;
+  const registry = options.mode === "rollout"
+    ? validateRegistry(parseJson(taggedBlob(baseDir, verifiedArtifact.sourceRef, "sync/repository-registry.json").content.toString("utf8"), "稳定标签的 repository registry"))
+    : loadRegistry();
+  const children = prepareUiChildren(registry, childManifest.children, options.platform);
   const waveOrder = childManifest.uiRolloutWaveOrder;
   validateChildInventory(children, waveOrder);
-  const token = process.env.SYNC_TOKEN || process.env.CNB_TOKEN || process.env.GH_TOKEN || "";
+  const token = uiOperationToken(options.platform);
 
   const preflight = preflightChildren({ children, waveOrder, manifest, version, targetChannel: target.channel, token });
   if (options.mode === "preflight") {
@@ -1649,7 +1670,7 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  if (!options.dryRun && !token) throw new Error("缺少 SYNC_TOKEN/CNB_TOKEN 或 GH_TOKEN；拒绝创建无法审计的半成品分支");
+  if (!options.dryRun && !token) throw new Error(`缺少 ${options.platform === "github" ? "当前操作 GH_TOKEN/GITHUB_TOKEN" : "显式 legacy CNB_TOKEN/SYNC_TOKEN"}；拒绝切换身份或创建无法审计的半成品分支`);
   const foundationSnapshot = loadStableFoundationSnapshot(baseDir, manifest, version);
 
   const batch = selectRolloutBatch({
@@ -1657,7 +1678,7 @@ async function main() {
     waveOrder,
     repositories: preflight.repositories,
     wave: options.wave,
-    repositoryWhitelist: options.repositories,
+    repositoryWhitelist: options.repositories.map(identity => addressFor(registry, identity, options.platform).repository),
   });
   const results = [];
   if (batch.blockedByEarlierWave) {
@@ -1729,6 +1750,7 @@ async function main() {
     phase: options.dryRun ? "rollout-dry-run" : "post-publish-rollout",
     generatedAt: new Date().toISOString(),
     baseRepository: manifest.baseRepository,
+    operationPlatform: options.platform,
     targetVersion: version,
     targetArtifacts: {
       sharedUi: `${manifest.ui.package}@${version}`,

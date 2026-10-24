@@ -25,6 +25,19 @@ function hasExecutableRolloutCommand(runValue) {
   return Boolean(args && invocation && (args.index ?? -1) < (invocation.index ?? -1));
 }
 
+function hasDryRunRolloutCommand(runValue) {
+  const run = executableLines(runValue).join("\n");
+  const direct = /^node\s+sync\/ui-upgrade-pr\.mjs\s+([^\n]+)$/gmu;
+  for (const match of run.matchAll(direct)) {
+    const args = match[1].split(/\s+/u);
+    if (args.includes("--rollout") && args.includes("--dry-run")) return true;
+  }
+  const assignment = /^ARGS=\(\s*(--rollout(?:\s+[^)\n]*)?)\)\s*$/mu.exec(run);
+  const invocation = /^node\s+sync\/ui-upgrade-pr\.mjs\s+"\$\{ARGS\[@\]\}"\s*$/mu.exec(run);
+  return Boolean(assignment && invocation && assignment.index < invocation.index
+    && assignment[1].split(/\s+/u).includes("--dry-run"));
+}
+
 function hasExactArtifactVerificationCommand(runValue) {
   const lines = executableLines(runValue);
   return lines.length === 1
@@ -97,10 +110,8 @@ export function findUiReleaseWorkflowRisks(source) {
     }
     if (job?.env?.SYNC_TOKEN !== undefined) risks.push(`${jobName} 不得在 job scope 注入 SYNC_TOKEN`);
     for (const step of Array.isArray(job?.steps) ? job.steps : []) {
-      if (step?.env?.SYNC_TOKEN === undefined) continue;
-      if (!hasExecutableRolloutCommand(step.run)) {
-        risks.push(`${jobName} 只能在实际写 rollout 的 step 注入 SYNC_TOKEN`);
-      }
+      if (step?.env?.SYNC_TOKEN !== undefined || step?.env?.CNB_TOKEN !== undefined) risks.push(`${jobName} 不得在 GitHub UI workflow 注入跨仓 SYNC_TOKEN/CNB_TOKEN`);
+      if (jobName !== "publish-github-release" && (step?.env?.GH_TOKEN !== undefined || step?.env?.GITHUB_TOKEN !== undefined)) risks.push(`${jobName} 只做公开只读验证，不得注入跨仓 GitHub token`);
     }
   }
 
@@ -321,7 +332,8 @@ export function findUiReleaseWorkflowRisks(source) {
     const steps = Array.isArray(continueRollout.steps) ? continueRollout.steps : [];
     validateRolloutCheckout(fixedReleaseCheckout(steps), "continue-rollout", risks);
     const integrityIndexes = steps.map((step, index) => hasExactArtifactVerificationCommand(step?.run) ? index : -1).filter((index) => index >= 0);
-    const writeIndex = steps.findIndex((step) => step?.env?.SYNC_TOKEN !== undefined && hasExecutableRolloutCommand(step?.run));
+    const planIndex = steps.findIndex((step) => hasDryRunRolloutCommand(step?.run));
+    if (steps.some(step => hasExecutableRolloutCommand(step?.run) && !hasDryRunRolloutCommand(step?.run))) risks.push("continue-rollout 不得在 Actions 写跨仓 PR；当前 Codex 会话执行实际写入");
     const npmCliIndex = steps.findIndex(pinsArtifactNpmCli);
     if (integrityIndexes.length !== 1) {
       risks.push("continue-rollout 必须且只能执行一次 GitHub Release sha512 预校验");
@@ -333,8 +345,8 @@ export function findUiReleaseWorkflowRisks(source) {
       if (integrityStep.env?.SYNC_TOKEN !== undefined) {
         risks.push("continue-rollout 完整性预校验不得接触跨仓写入 token");
       }
-      if (writeIndex < 0 || integrityIndexes[0] >= writeIndex) {
-        risks.push("continue-rollout 必须先通过 GitHub Release sha512 预校验，再允许跨仓写入");
+      if (planIndex < 0 || integrityIndexes[0] >= planIndex) {
+        risks.push("continue-rollout 必须先通过 GitHub Release sha512 预校验，再实际执行只读迁移计划");
       }
       if (npmCliIndex < 0 || npmCliIndex >= integrityIndexes[0]) {
         risks.push("continue-rollout 必须先固定 npm 11.6.2，再复算稳定制品完整性");
