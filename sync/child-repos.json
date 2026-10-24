@@ -1,6 +1,6 @@
 {
-  "version": 5,
-  "description": "WorkLoom IM 基座同步的子仓订阅清单——父仓 push 模式按本清单逐仓同步；共享 UI 与三端客户端基座作为同一稳定版本按 uiRolloutWaveOrder 分波升级。新仓由 adopt.sh --new-industry 接入 latest stable 后追加。pathPrefix 用于仓内子目录形态（如 workroom-tiger 的前端在 governance/ 下）。extraExclude 为仓级追加排除（该仓的行业化文件，全局 scope 无法表达的按仓差异）。isolatedRepos 为『隔离副本』登记：既不接收基座下发，也不向基座回流；舰队扫描、纳管与 fanout 一律跳过（恢复同步必须由产品所有者重新下令 + 任务卡）。",
+  "version": 6,
+  "description": "基座产品订阅与隔离边界。repo 保留 CNB 历史地址供显式 legacy 通道使用；GitHub 主地址由 repository-registry.json 解析。隔离与新发现产品只接受专用 repository-config 地址/策略治理，不加入 children，不接收产品 fanout，也不回流产品语义。",
   "baseRepo": "workloom-ai/workloom-im",
   "isolatedRepos": [
     {
@@ -65,7 +65,18 @@
       "pathPrefix": "",
       "uiRolloutWave": "W2",
       "note": "酒店行业版",
-      "extraExclude": []
+      "extraExclude": [],
+      "tolerateExtensionSnapshotOverlap": true,
+      "clientForkReason": "酒店岗位成果页完整展示协作工件与资料引用，保留模拟经营标识和移动布局，包内预览使用生产 Vite 入口；六个精确路径由酒店仓独立维护，不向舰队回流。",
+      "industryExtensionPaths": [
+        "apps/web/src/components/SimBanner.tsx",
+        "apps/web/src/components/hud/messages.tsx",
+        "apps/web/src/pages/p2/P2.tsx",
+        "apps/web/vite.config.ts",
+        "apps/web/src/pages/p2/DeliveryArtifact.tsx",
+        "apps/web/src/pages/p2/DeliveryArtifact.test.tsx"
+      ],
+      "strictUiConsumerContract": true
     },
     {
       "repo": "workloom-ai/hyperreality-system",
@@ -226,5 +237,12 @@
       ],
       "tolerateExtensionSnapshotOverlap": true
     }
-  ]
+  ],
+  "primaryPlatform": "github",
+  "repositoryRegistry": "sync/repository-registry.json",
+  "mirrorPolicy": {
+    "platform": "cnb",
+    "mode": "deferred",
+    "automaticProductSync": false
+  }
 }

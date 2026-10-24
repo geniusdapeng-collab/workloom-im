@@ -1,0 +1,444 @@
+{
+  "schemaVersion": "workloom.repository-registry/v1",
+  "primaryPlatform": "github",
+  "baseLogicalId": "workloom-im",
+  "mirrorPolicy": {
+    "platform": "cnb",
+    "mode": "deferred",
+    "automaticProductSync": false,
+    "configBackupBranchPrefix": "workloom/config-backup/"
+  },
+  "configOnlyPaths": [
+    ".workloom-repository.json",
+    ".workloom-delivery.json",
+    "product.manifest.json"
+  ],
+  "repositories": [
+    {
+      "logicalId": "geo-evidence-studio",
+      "productId": "workloom-ai-acquisition",
+      "lane": "config-only-discovered",
+      "github": {
+        "repository": "geniusdapeng-collab/geo-evidence-studio",
+        "url": "https://github.com/geniusdapeng-collab/geo-evidence-studio",
+        "branch": "main"
+      },
+      "cnb": null,
+      "baseSync": {
+        "receive": "none",
+        "reflux": "none"
+      }
+    },
+    {
+      "logicalId": "hyperreality-system",
+      "productId": "hyperreality-system",
+      "lane": "industry",
+      "github": {
+        "repository": "geniusdapeng-collab/hyperreality-system",
+        "url": "https://github.com/geniusdapeng-collab/hyperreality-system",
+        "branch": "main"
+      },
+      "cnb": {
+        "repository": "workloom-ai/hyperreality-system",
+        "url": "https://cnb.cool/workloom-ai/hyperreality-system",
+        "branch": "main"
+      },
+      "baseSync": {
+        "receive": "subscribed",
+        "reflux": "proposal-only",
+        "pathPrefix": "",
+        "extraExclude": [],
+        "uiRolloutWave": "W3A"
+      }
+    },
+    {
+      "logicalId": "panda-cineforge",
+      "productId": "panda-cineforge",
+      "lane": "industry",
+      "github": {
+        "repository": "geniusdapeng-collab/panda-cineforge",
+        "url": "https://github.com/geniusdapeng-collab/panda-cineforge",
+        "branch": "main"
+      },
+      "cnb": {
+        "repository": "workloom-ai/panda-cineforge",
+        "url": "https://cnb.cool/workloom-ai/panda-cineforge",
+        "branch": "main"
+      },
+      "baseSync": {
+        "receive": "subscribed",
+        "reflux": "proposal-only",
+        "pathPrefix": "",
+        "extraExclude": [
+          "apps/server/src/service/contract.test.ts",
+          "apps/server/src/service/dialog.test.ts",
+          "apps/server/src/service/e2e.test.ts",
+          "packages/base/im-channels/im-channels.test.ts",
+          "packages/base/model-router/model-router.test.ts",
+          "packages/base/review-console/approvals.test.ts",
+          "packages/base/service-ticket/scenarios.test.ts",
+          "packages/base/service-ticket/service-ticket.test.ts",
+          "packages/base/tenancy/tenancy.test.ts",
+          "packages/base/workdata/atomicity.test.ts",
+          "packages/base/workdata/memory.test.ts",
+          "packages/base/workdata/recall.test.ts",
+          "packages/base/workdata/security-audit.test.ts",
+          "packages/base/workdata/workdata.test.ts",
+          "packages/shared/src/event-schema.test.ts",
+          "scripts/agent-tour.sh",
+          "scripts/e2e-service-c.mjs",
+          "scripts/release-gate.ts"
+        ],
+        "uiRolloutWave": "W4"
+      }
+    },
+    {
+      "logicalId": "workloom",
+      "productId": "workloom-ai-acquisition",
+      "lane": "industry",
+      "github": {
+        "repository": "geniusdapeng-collab/workloom",
+        "url": "https://github.com/geniusdapeng-collab/workloom",
+        "branch": "main"
+      },
+      "cnb": {
+        "repository": "workloom-ai/workloom",
+        "url": "https://cnb.cool/workloom-ai/workloom",
+        "branch": "main"
+      },
+      "baseSync": {
+        "receive": "subscribed",
+        "reflux": "proposal-only",
+        "pathPrefix": "",
+        "extraExclude": [],
+        "uiRolloutWave": "W3B",
+        "industryExtensionPaths": [
+          "apps/*/src/App.tsx",
+          "apps/*/src/audio/**",
+          "apps/*/src/components/AgentAvatar.tsx",
+          "apps/*/src/components/Floor3D.tsx",
+          "apps/*/src/components/MateWelcome.tsx",
+          "apps/*/src/components/SimBanner.tsx",
+          "apps/*/src/components/SkillDistBanner.tsx",
+          "apps/*/src/components/Stage3D.tsx",
+          "apps/*/src/components/ValueCounters.tsx",
+          "apps/*/src/components/WelcomeCeremony.tsx",
+          "apps/*/src/components/hud/**",
+          "apps/*/src/components/loomball/**",
+          "apps/*/src/components/loommate/**",
+          "apps/*/src/components/mate-guide/**",
+          "apps/*/src/components/star-ring/**",
+          "apps/*/src/components/welcomeScripts.ts",
+          "apps/*/src/lib/**",
+          "apps/*/src/onboarding/**",
+          "apps/*/src/pages/**",
+          "apps/*/src/shell/**",
+          "apps/*/src/vendor/**",
+          "apps/*/src/voice/**",
+          "apps/*/vitest.config.ts",
+          "apps/*/vite.config.ts"
+        ],
+        "tolerateExtensionSnapshotOverlap": true,
+        "adoptBaseClientPaths": [
+          "apps/*/package.json",
+          "apps/webb/src/Auth.tsx"
+        ]
+      }
+    },
+    {
+      "logicalId": "workloom-BusinessManagementSystem",
+      "productId": "business-management-system",
+      "lane": "config-only-discovered",
+      "github": {
+        "repository": "geniusdapeng-collab/workloom-BusinessManagementSystem",
+        "url": "https://github.com/geniusdapeng-collab/workloom-BusinessManagementSystem",
+        "branch": "main"
+      },
+      "cnb": {
+        "repository": "workloom-ai/workloom-BusinessManagementSystem",
+        "url": "https://cnb.cool/workloom-ai/workloom-BusinessManagementSystem",
+        "branch": "main"
+      },
+      "baseSync": {
+        "receive": "none",
+        "reflux": "none"
+      }
+    },
+    {
+      "logicalId": "WorkLoom-growth",
+      "productId": "workloom-ai-growth",
+      "lane": "experiment",
+      "github": {
+        "repository": "geniusdapeng-collab/WorkLoom-growth",
+        "url": "https://github.com/geniusdapeng-collab/WorkLoom-growth",
+        "branch": "main"
+      },
+      "cnb": {
+        "repository": "workloom-ai/WorkLoom-growth",
+        "url": "https://cnb.cool/workloom-ai/WorkLoom-growth",
+        "branch": "main"
+      },
+      "baseSync": {
+        "receive": "subscribed",
+        "reflux": "none",
+        "pathPrefix": "",
+        "extraExclude": [],
+        "uiRolloutWave": "W3B",
+        "industryExtensionPaths": [
+          "apps/*/src/audio/**",
+          "apps/*/src/components/AgentAvatar.tsx",
+          "apps/*/src/components/Floor3D.tsx",
+          "apps/*/src/components/SimBanner.tsx",
+          "apps/*/src/components/ValueCounters.tsx",
+          "apps/*/src/components/hud/**",
+          "apps/*/src/components/loomball/**",
+          "apps/*/src/components/mate-guide/**",
+          "apps/*/src/components/star-ring/**",
+          "apps/*/src/components/welcomeScripts.ts",
+          "apps/*/src/lib/**",
+          "apps/*/src/onboarding/**",
+          "apps/*/src/pages/**",
+          "apps/*/src/pages/p0/**",
+          "apps/*/src/shell/**",
+          "apps/*/vite.config.ts",
+          "apps/*/vitest.config.ts",
+          "apps/web/src/App.tsx",
+          "apps/web/src/components/MateWelcome.tsx",
+          "apps/web/src/components/SkillDistBanner.tsx",
+          "apps/web/src/components/Stage3D.tsx",
+          "apps/web/src/components/WelcomeCeremony.tsx",
+          "apps/web/src/components/loommate/**",
+          "apps/web/src/lib/display.test.ts",
+          "apps/web/src/lib/display.ts",
+          "apps/web/src/pages/accounts/**",
+          "apps/web/src/pages/dev/**",
+          "apps/web/src/pages/p1/**",
+          "apps/web/src/pages/p2/**",
+          "apps/web/src/pages/p21/**",
+          "apps/web/src/pages/p26/**",
+          "apps/web/src/pages/p3/**",
+          "apps/web/src/pages/p5/**",
+          "apps/web/src/pages/p6/**",
+          "apps/web/src/pages/p8/**",
+          "apps/web/src/shell/IndustryRoutes.test.tsx",
+          "apps/web/src/voice/**",
+          "apps/webb/src/App.tsx",
+          "apps/webb/src/Auth.tsx"
+        ],
+        "tolerateExtensionSnapshotOverlap": true,
+        "adoptBaseClientPaths": [
+          "apps/*/package.json"
+        ]
+      }
+    },
+    {
+      "logicalId": "workloom-growthmatrix",
+      "productId": "workloom-ai-growthmatrix",
+      "lane": "isolated",
+      "github": {
+        "repository": "geniusdapeng-collab/workloom-growthmatrix",
+        "url": "https://github.com/geniusdapeng-collab/workloom-growthmatrix",
+        "branch": "main"
+      },
+      "cnb": {
+        "repository": "workloom-ai/workloom-growthmatrix",
+        "url": "https://cnb.cool/workloom-ai/workloom-growthmatrix",
+        "branch": "main"
+      },
+      "baseSync": {
+        "receive": "none",
+        "reflux": "none"
+      }
+    },
+    {
+      "logicalId": "workloom-growthtest",
+      "productId": "workloom-ai-growth",
+      "lane": "isolated",
+      "github": {
+        "repository": "geniusdapeng-collab/workloom-growthtest",
+        "url": "https://github.com/geniusdapeng-collab/workloom-growthtest",
+        "branch": "main"
+      },
+      "cnb": {
+        "repository": "workloom-ai/workloom-growthtest",
+        "url": "https://cnb.cool/workloom-ai/workloom-growthtest",
+        "branch": "main"
+      },
+      "baseSync": {
+        "receive": "none",
+        "reflux": "none"
+      }
+    },
+    {
+      "logicalId": "workloom-hotel",
+      "productId": "workloom-hotel",
+      "lane": "industry",
+      "github": {
+        "repository": "geniusdapeng-collab/workloom-hotel",
+        "url": "https://github.com/geniusdapeng-collab/workloom-hotel",
+        "branch": "main"
+      },
+      "cnb": {
+        "repository": "workloom-ai/workloom-hotel",
+        "url": "https://cnb.cool/workloom-ai/workloom-hotel",
+        "branch": "main"
+      },
+      "baseSync": {
+        "receive": "subscribed",
+        "reflux": "proposal-only",
+        "pathPrefix": "",
+        "extraExclude": [],
+        "uiRolloutWave": "W2",
+        "industryExtensionPaths": [
+          "apps/web/src/components/SimBanner.tsx",
+          "apps/web/src/components/hud/messages.tsx",
+          "apps/web/src/pages/p2/P2.tsx",
+          "apps/web/vite.config.ts",
+          "apps/web/src/pages/p2/DeliveryArtifact.tsx",
+          "apps/web/src/pages/p2/DeliveryArtifact.test.tsx"
+        ],
+        "tolerateExtensionSnapshotOverlap": true,
+        "clientForkReason": "酒店岗位成果页完整展示协作工件与资料引用，保留模拟经营标识和移动布局，包内预览使用生产 Vite 入口；六个精确路径由酒店仓独立维护，不向舰队回流。",
+        "strictUiConsumerContract": true
+      }
+    },
+    {
+      "logicalId": "workloom-im",
+      "productId": "workloom-im",
+      "lane": "base",
+      "github": {
+        "repository": "geniusdapeng-collab/workloom-im",
+        "url": "https://github.com/geniusdapeng-collab/workloom-im",
+        "branch": "main"
+      },
+      "cnb": {
+        "repository": "workloom-ai/workloom-im",
+        "url": "https://cnb.cool/workloom-ai/workloom-im",
+        "branch": "main"
+      },
+      "baseSync": {
+        "receive": "none",
+        "reflux": "proposal-only"
+      }
+    },
+    {
+      "logicalId": "WorkLoom-video-edit",
+      "productId": "workloom-ai-video-edit",
+      "lane": "config-only-discovered",
+      "github": {
+        "repository": "geniusdapeng-collab/WorkLoom-video-edit",
+        "url": "https://github.com/geniusdapeng-collab/WorkLoom-video-edit",
+        "branch": "main"
+      },
+      "cnb": {
+        "repository": "workloom-ai/WorkLoom-video-edit",
+        "url": "https://cnb.cool/workloom-ai/WorkLoom-video-edit",
+        "branch": "main"
+      },
+      "baseSync": {
+        "receive": "none",
+        "reflux": "none"
+      }
+    },
+    {
+      "logicalId": "workroom-andromeda",
+      "productId": "workroom-andromeda",
+      "lane": "operations-hub",
+      "github": {
+        "repository": "geniusdapeng-collab/workroom-andromeda",
+        "url": "https://github.com/geniusdapeng-collab/workroom-andromeda",
+        "branch": "main"
+      },
+      "cnb": {
+        "repository": "workloom-ai/workroom-andromeda",
+        "url": "https://cnb.cool/workloom-ai/workroom-andromeda",
+        "branch": "main"
+      },
+      "baseSync": {
+        "receive": "subscribed",
+        "reflux": "proposal-only",
+        "pathPrefix": "",
+        "extraExclude": [
+          "platform-ops/**"
+        ],
+        "uiRolloutWave": "W1"
+      }
+    },
+    {
+      "logicalId": "workroom-eagle",
+      "productId": "workroom-eagle",
+      "lane": "industry",
+      "github": {
+        "repository": "geniusdapeng-collab/workroom-eagle",
+        "url": "https://github.com/geniusdapeng-collab/workroom-eagle",
+        "branch": "main"
+      },
+      "cnb": {
+        "repository": "workloom-ai/workroom-eagle",
+        "url": "https://cnb.cool/workloom-ai/workroom-eagle",
+        "branch": "main"
+      },
+      "baseSync": {
+        "receive": "subscribed",
+        "reflux": "proposal-only",
+        "pathPrefix": "",
+        "extraExclude": [],
+        "uiRolloutWave": "W1"
+      }
+    },
+    {
+      "logicalId": "workroom-fox",
+      "productId": "workroom-fox",
+      "lane": "experiment",
+      "github": {
+        "repository": "geniusdapeng-collab/workroom-fox",
+        "url": "https://github.com/geniusdapeng-collab/workroom-fox",
+        "branch": "main"
+      },
+      "cnb": {
+        "repository": "workloom-ai/workroom-fox",
+        "url": "https://cnb.cool/workloom-ai/workroom-fox",
+        "branch": "main"
+      },
+      "baseSync": {
+        "receive": "subscribed",
+        "reflux": "none",
+        "pathPrefix": "",
+        "extraExclude": [],
+        "uiRolloutWave": "W5",
+        "industryExtensionPaths": [
+          "apps/*/src/campaign/**",
+          "apps/*/src/components/fox-campaign/**",
+          "apps/*/src/pages/p0/**",
+          "apps/*/src/voice/**"
+        ]
+      }
+    },
+    {
+      "logicalId": "workroom-tiger",
+      "productId": "workroom-tiger",
+      "lane": "industry",
+      "github": {
+        "repository": "geniusdapeng-collab/workroom-tiger",
+        "url": "https://github.com/geniusdapeng-collab/workroom-tiger",
+        "branch": "main"
+      },
+      "cnb": {
+        "repository": "workloom-ai/workroom-tiger",
+        "url": "https://cnb.cool/workloom-ai/workroom-tiger",
+        "branch": "main"
+      },
+      "baseSync": {
+        "receive": "subscribed",
+        "reflux": "proposal-only",
+        "pathPrefix": "governance/",
+        "extraExclude": [
+          "apps/server/src/service/contract.test.ts",
+          "apps/server/src/service/dialog.test.ts",
+          "apps/server/src/service/e2e.test.ts"
+        ],
+        "uiRolloutWave": "W5"
+      }
+    }
+  ]
+}
