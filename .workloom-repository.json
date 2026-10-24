@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "workloom.repository/v1",
+  "logicalId": "workloom-im",
+  "productId": "workloom-im",
+  "lane": "base",
+  "primaryPlatform": "github",
+  "github": {
+    "repository": "geniusdapeng-collab/workloom-im",
+    "url": "https://github.com/geniusdapeng-collab/workloom-im",
+    "branch": "main"
+  },
+  "cnb": {
+    "repository": "workloom-ai/workloom-im",
+    "url": "https://cnb.cool/workloom-ai/workloom-im",
+    "branch": "main"
+  },
+  "mirrorPolicy": {
+    "platform": "cnb",
+    "mode": "deferred",
+    "automaticProductSync": false,
+    "configBackupBranchPrefix": "workloom/config-backup/"
+  },
+  "baseSync": {
+    "receive": "none",
+    "reflux": "proposal-only"
+  },
+  "registry": {
+    "repository": "geniusdapeng-collab/workloom-im",
+    "path": "sync/repository-registry.json"
+  }
+}

@@ -73,7 +73,7 @@ export function sensitiveScopes(files) {
   for (const file of files) {
     const path = String(file).replace(/^\.\//, '');
     if (/^sync\//.test(path)) result.add('sync');
-    if (/^(protocol\/|AGENTS(?:\.repo)?\.md$|docs\/DEVELOPMENT-PROTOCOL\.md$|scripts\/(ci|tools|delivery)\/|\.cnb(?:\.yml|\/))/.test(path)) result.add('protocol');
+    if (/^(protocol\/|AGENTS(?:\.repo)?\.md$|docs\/DEVELOPMENT-PROTOCOL\.md$|scripts\/(ci|tools|delivery)\/|\.cnb(?:\.yml|\/)|\.github\/workflows\/)/.test(path)) result.add('protocol');
     if (/(^|\/)migrations\//.test(path)) result.add('migrations');
     if (/^(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$/.test(path)) result.add('dependencies');
   }

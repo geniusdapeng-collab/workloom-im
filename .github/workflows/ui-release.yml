@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: "只做下游盘点，或对已发布稳定版继续下一波 rollout"
+        description: "只做下游盘点，或对已发布稳定版规划下一波 rollout；写 PR 由当前 Codex 会话执行"
         required: true
         type: choice
         options: [preflight, rollout]
@@ -436,20 +436,19 @@ jobs:
         env:
           STABLE_VERSION: ${{ needs.verify-and-preflight.outputs.release-version }}
         run: node sync/ui-upgrade-pr.mjs --verify-artifact --version "$STABLE_VERSION"
-      - name: 按严格波次继续创建独立升级 PR
+      - name: 按严格波次生成只读升级计划
         env:
-          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
           STABLE_VERSION: ${{ needs.verify-and-preflight.outputs.release-version }}
           ROLLOUT_WAVE: ${{ inputs.wave }}
           ROLLOUT_REPOSITORIES: ${{ inputs.repositories }}
           REPORT_PATH: ${{ runner.temp }}/ui-rollout.json
         run: |
           set -euo pipefail
-          test -n "${SYNC_TOKEN:-}" || { echo "❌ 缺少最小权限短期 SYNC_TOKEN"; exit 1; }
-          ARGS=(--rollout --version "$STABLE_VERSION" --report "$REPORT_PATH")
+          ARGS=(--rollout --dry-run --version "$STABLE_VERSION" --report "$REPORT_PATH")
           [ -n "$ROLLOUT_WAVE" ] && ARGS+=(--wave "$ROLLOUT_WAVE")
           [ -n "$ROLLOUT_REPOSITORIES" ] && ARGS+=(--repos "$ROLLOUT_REPOSITORIES")
           node sync/ui-upgrade-pr.mjs "${ARGS[@]}"
+          echo "::notice title=迁移计划已生成::Actions 不保存跨仓 PAT。当前 Codex 会话用本次操作 GH_TOKEN 执行同一版本和波次，审查/实测及现有 CI 通过后普通 merge 并回读 main。"
       - name: 留存本波次 rollout 结果
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

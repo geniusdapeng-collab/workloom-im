@@ -1,15 +1,25 @@
-# WorkLoom 开发协作协议（v2，2026-10-07 修订）
+# WorkLoom 开发协作协议（v2，2026-10-24 仓库策略修订）
 
 > 生效范围：workloom-im 唯一定义，base-sync 分发各订阅仓只读副本（舰队清单见 `sync/child-repos.json`；新仓由每日舰队扫描自动纳管；隔离副本仓不适用，见 §11）。
-> 定位：用 CNB 原生 Issue、保护分支、流水线、锁和 PR，配合 Git 持久化交付状态，完成开发占用、当前 Codex 会话审查实测、集成恢复与真实发布回执。
+> 定位：默认使用 GitHub Issue、保护分支、流水线和 PR，配合当前 Codex 会话审查实测与准确 main 回执完成交付；CNB 原生锁与 Git 持久化队列保留为显式 legacy 执行器。
 > 本协议适用默认研发规则；产品所有者对当前任务的明确授权优先。2026-10-07 明确要求当前 Codex 自带模型在提交/发布前完成 review 和实际测试，撤销 CNB/GitHub 等平台 AI 审核、模型代理和 NPC 自动修复；不要求用户逐 PR 点击批准；真实资金、秘密、客户数据与不可逆经营动作仍须单独明确授权。
 > 交付器代码：`scripts/delivery/queue-*.mjs`；运行配置：`scripts/delivery/cnb.yml`；持久状态：`automation/delivery-state`。不引入客户业务数据库或新常驻服务。
 > 修订记录：2026-09-22 · 新增 §11「隔离副本车道」（growthtest / growthmatrix 双向不同步）；统一任务号书写为 `T-YYYY-MMDD-XXXX` 并同步提交门禁提示。
 > 2026-10-07 实际启用补记：十二仓研发机制的准确源码、原生运行与账本回读见根级 `WORKLOOM_PRODUCT_CONTEXT.md` §14.6 及 `docs/development-delivery/2026-10-07-verification.json`。这是研发交付专项快照，不代表行业全量审计；两隔离副本的本仓点名安装例外见 §11。
 
+## 0. 默认平台与延迟镜像
+
+GitHub 是默认研发、PR、主干集成与发布平台，地址与车道由 `sync/repository-registry.json` 唯一定义，仓内落点为 `.workloom-repository.json` 和 `.workloom-delivery.json`。当前 Codex 会话使用自带模型实际审查完整变化范围与直接依赖、运行测试，再用 `scripts/delivery/github.mjs inspect|merge` 验证准确 head/base、完整 PR 文件清单、政策摘要、全部现有状态检查与保护项。采用普通 merge、携带预期 head SHA，不 bypass 平台规则；回读准确双亲和当前 main/tree 才形成 `workloom.main-integration/v1` 回执。base 在合并窗口变化时回执拒绝标记 verified，必须重新核实，不能把已发生但未经本轮证明的合并伪装成完成。
+
+Codex 会话审查回执是可信开发者声明与内容一致性证明，不是平台签名批准；`workloom.codex-review/v1` 必须记录 repository/headSha/baseSha/policySha256/完整 files、真实审查证据 SHA-256、实际测试命令及其证据 SHA-256。无真实证据不得生成通过声明。GitHub adapter 不自动派发模型，不把本机通过代替现存云端必需 CI。
+
+CNB 仅作延迟镜像，镜像计划绑定已验证 GitHub main SHA/tree，不阻塞 GitHub 完成交付。专用配置备份分支只证明该分支/路径已备份，不能表述为 CNB main 已集成或完整产品镜像。普通 `fanout-cnb.mjs` 默认输出 deferred、零远端写入；显式 legacy 产品同步必须另行选择，不作为自动兜底。下文 CNB 原生锁、账本分支、标签配额、安装与 reconcile 命令保留为既有 CNB 执行器说明，不冒充已迁移到 GitHub 的分布式队列。
+
+两隔离副本保持产品双向冻结，三个新发现产品不加入 children。专用 config-only 通道仅允许两份仓库策略 JSON 及 manifest.repository，不复制受控全景正文、业务文件、部署身份或产品能力；不借本次地址治理执行 adopt、provision 或 full/required-only fanout。
+
 ## 1. 五条硬规则
 
-1. **一任务一开发分支一原 PR**：任务卡为 CNB Issue（标题 `[T-YYYY-MMDD-XXXX]`），开发分支为 `task/T-YYYY-MMDD-XXXX`。交付器可以创建对应的不可修改候选 PR；这是同一任务的机器集成副本，不是新开发任务。
+1. **一任务一开发分支一原 PR**：任务卡默认为 GitHub Issue（显式 legacy CNB 任务仍在原平台）（标题 `[T-YYYY-MMDD-XXXX]`），开发分支为 `task/T-YYYY-MMDD-XXXX`。交付器可以创建对应的不可修改候选 PR；这是同一任务的机器集成副本，不是新开发任务。
 2. **任务号进提交信息**：`<type>(<layer>): <摘要> [T-YYYY-MMDD-XXXX]`，由 `verify-commit-msg.mjs` 校验。
 3. **开发占用与等待分开**：独立工作树开发；普通文件重叠只告警。敏感模块开发前取得限时租约，交接或等待 CI/评审前释放。open/WIP/红灯 PR 本身不持锁。
 4. **当前 Codex 会话 review/实测与必需检查满足后，由机器串行合并**：正常研发包括协议、CI、迁移和信任要素代码维护，当前会话精读所有变化文件及直接依赖、运行必要测试，再通过 handoff 保存绑定 repo/source/main/policy/完整范围的真实记录；不可修改候选重跑原仓 CI。禁止调用平台 AI 审核/模型/自动修复，不等待用户点击 Approve。平台 PR、状态检查和禁直推/强推保留，取消额外人工计数与管理员批准。`risk/block`、WIP 和真实经营执行/秘密路径不自动交付。`risk/review` 表示加强审查，不能跳过会话 review 和检查。
@@ -34,7 +44,7 @@
 
 代码中实现一个审批功能和用它执行真实转账是不同动作。交付器对 `platform-ops/secrets/`、`secrets/`、`trading/live/`、`broker/live/` 保持硬阻断；当前 Codex 会话必须核对业务授权和租户边界。
 
-凭据只在会话进程或平台原生 CI 环境内使用，禁止进入源码、文件、Git 配置/remote、PR/Issue、日志和 CI 自定义变量。用户会话令牌不能被写入持续执行器；云端只使用 CNB 自动注入的原生代码托管/CI 令牌，不使用模型或 CodeBuddy 凭据。
+凭据只在会话进程或平台原生 CI 环境内使用，禁止进入源码、文件、Git 配置/remote、PR/Issue、日志和 CI 自定义变量。用户会话令牌不能被写入持续执行器；云端只使用目标平台原生注入的代码托管/CI 令牌，不使用模型或 CodeBuddy 凭据。
 
 ## 4. 三类互斥与依赖
 
@@ -198,6 +208,8 @@ CNB 每仓**最多 10 个标签**（实测：创建第 11 个返回 201 但不�
 这些发现降级为 `advisories`（保留在 preflight 报告里可查、可另立产品迁移任务卡），**不再阻断波次推进**——
 否则 `targetVersionApplied` 永远为 false，会把 W3B 之后的整条波次链永久卡死（workloom / growth 实测各 207 项）。
 非分叉仓不受影响，仍是硬门禁；回滚即删除该降级逻辑。
+
+**精确局部所有权与严格消费门禁（2026-10-24）**：Hotel 在 canonical inventory 登记六个精确文件、充分的 clientForkReason 与 `tolerateExtensionSnapshotOverlap=true`，同时设 `strictUiConsumerContract=true`。后者由 rollout 实现强制保留整个 Hotel 的 `UI_CONSUMER_CONTRACT_FAILED` 硬门禁，不进入上述 advisory 降级；原有实验/分叉仓未选择此项时保持既有行为。Hotel 的四个既有受管文件在后续 rollout 会退管并由 Hotel 自持，不能继续声称它们随基座自动升级。旧 governance 的声明改变需单独绑定 canonical commit、旧 state 全字节摘要与真实治理脚本摘要，保留 stable 来源、managedFiles 和治理文件 hash；普通 installer 不提供静默政策变更入口。
 
 ## 11. 隔离副本车道（isolated：双向不同步，2026-09-22 新增）
 

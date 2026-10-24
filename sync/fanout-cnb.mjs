@@ -157,6 +157,11 @@ async function main() {
   const noPr = has("--no-pr");
   const json = has("--json");
   const tolerateScopeError = has("--tolerate-scope-error");
+  if (!has("--legacy-cnb-product-sync")) {
+    const deferred = { platform: "cnb", state: "deferred", automaticProductSync: false, remoteWrites: 0, primaryFanout: "sync/fanout-github.mjs" };
+    console.log(JSON.stringify(deferred));
+    return deferred;
+  }
   const token = requireToken();
 
   const scope = loadScope(baseDir);

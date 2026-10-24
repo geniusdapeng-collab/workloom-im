@@ -3,7 +3,7 @@
   "product": {
     "productId": "workloom-im",
     "role": "base",
-    "repository": "workloom-ai/workloom-im",
+    "repository": "geniusdapeng-collab/workloom-im",
     "includePlatformOps": false
   },
   "npmVersion": "11.17.0",
@@ -64,7 +64,7 @@
     },
     {
       "path": "product.manifest.json",
-      "sha256": "cd79d5cb5627b55fb7fc2d0547e45fb5fc0c3e611adcc066b3432a20a1ea7e2d"
+      "sha256": "d234fa64b4c24c0c3fe0c5b290fcf3a40fe6e7f3d73d9eaa1a13ef73f587ca3a"
     },
     {
       "path": "scripts/pack-nm-merge.mjs",

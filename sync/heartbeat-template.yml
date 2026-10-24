@@ -27,7 +27,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  BASE_REPO: workloom-ai/workloom-im
+  BASE_REPO: geniusdapeng-collab/workloom-im
   GIT_TERMINAL_PROMPT: "0"
 
 jobs:
@@ -88,7 +88,29 @@ jobs:
           echo "sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
           echo "基座已固定：${BASE_SHA:0:12}"
 
+      - name: 按受控 registry 核对产品订阅与隔离
+        id: policy
+        shell: bash
+        env:
+          BASE_DIR: ${{ steps.base.outputs.dir }}
+          DISPATCH_MODE: ${{ github.event.client_payload.mode }}
+        run: |
+          set -euo pipefail
+          node --input-type=module -e '
+            import { appendFileSync } from "node:fs";
+            import { pathToFileURL } from "node:url";
+            const { loadRegistry } = await import(pathToFileURL(process.env.BASE_DIR + "/sync/repository-registry.mjs"));
+            const entry = loadRegistry(process.env.BASE_DIR + "/sync/repository-registry.json").repositories.find(e => e.github.repository === process.env.GITHUB_REPOSITORY);
+            if (!entry) throw new Error("Target repository is not registered");
+            const mode = process.env.GITHUB_EVENT_NAME === "repository_dispatch" ? process.env.DISPATCH_MODE : "full";
+            if (!["required-only", "full"].includes(mode)) throw new Error("Invalid product sync mode");
+            const enabled = entry.baseSync.receive === "subscribed" && !(mode === "full" && entry.baseSync.uiRolloutWave === "paused");
+            appendFileSync(process.env.GITHUB_OUTPUT, `enabled=${enabled}\n`);
+            console.log(enabled ? "Product sync admitted by registry" : "Product sync skipped by isolation/config-only/paused policy; no product writes");
+          '
+
       - name: 基座认知文档与 Agent 指令密钥闸门
+        if: steps.policy.outputs.enabled == 'true'
         shell: bash
         run: |
           node "${{ steps.base.outputs.dir }}/scripts/secret-scan.mjs" --files \
@@ -96,9 +118,11 @@ jobs:
             "${{ steps.base.outputs.dir }}/WORKLOOM_PRODUCT_CONTEXT.md"
 
       - name: pnpm 就绪（锚点合并后刷新 lockfile）
+        if: steps.policy.outputs.enabled == 'true'
         run: corepack enable && corepack prepare pnpm@10.14.0 --activate
 
       - name: 在本地同步分支对齐基座
+        if: steps.policy.outputs.enabled == 'true'
         id: sync
         shell: bash
         env:
@@ -290,4 +314,4 @@ jobs:
             --base main \
             --head "$BRANCH" \
             --title "$TITLE" \
-            --body "由 base-sync heartbeat 生成。同步范围：${SYNC_MODE}；基座内容固定到提交 ${BASE_SHORT}；同步前 staged diff 与提交后完整 diff、认知文档和 AGENTS.md 均已通过严格密钥扫描。验证：${VERIFICATION}。三端迁移状态：${UI_STATUS}。缺端或未锁定稳定 UI 制品时，本 PR 不代表三端合规；须按两阶段迁移完成后再验收。请人工评审后合并。"
+            --body "由 base-sync heartbeat 生成。同步范围：${SYNC_MODE}；基座内容固定到提交 ${BASE_SHORT}；同步前 staged diff 与提交后完整 diff、认知文档和 AGENTS.md 均已通过严格密钥扫描。验证：${VERIFICATION}。三端迁移状态：${UI_STATUS}。缺端或未锁定稳定 UI 制品时，本 PR 不代表三端合规；须按两阶段迁移完成后再验收。交由当前 Codex 会话实际 review/测试并保留原有 CI，通过 scripts/delivery/github.mjs 普通 merge 与 main 回执验真后才算完成。"

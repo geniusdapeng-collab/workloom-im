@@ -6,9 +6,13 @@ import { fileURLToPath } from "node:url";
 const syncDir = dirname(fileURLToPath(import.meta.url));
 const CANONICAL_BASE_REPOSITORY = "workloom-ai/workloom-im";
 const UI_PACKAGE = "@workloom/ui";
-// 兼容字段：本枚举名沿用历史值（含各仓 state 与 capabilities），现指 CNB Release 托管的 UI tarball。
+// 兼容字段：本枚举名沿用历史值（含各仓 state 与 capabilities），按显式 platform 绑定 GitHub 主制品或 legacy CNB 制品。
 const DISTRIBUTION_TYPE = "github-release-tarball";
-const RELEASE_URL_TEMPLATE = "https://cnb.cool/workloom-ai/workloom-im/-/releases/download/ui-v{version}/workloom-ui-{version}.tgz";
+const GITHUB_BASE_REPOSITORY = "geniusdapeng-collab/workloom-im";
+const RELEASES = Object.freeze({
+  github: { host: "github.com", repository: GITHUB_BASE_REPOSITORY, prefix: "releases/download" },
+  cnb: { host: "cnb.cool", repository: CANONICAL_BASE_REPOSITORY, prefix: "-/releases/download" },
+});
 const RELEASE_ASSET_NAME_TEMPLATE = "workloom-ui-{version}.tgz";
 const EXACT_SEMVER = /^\d+\.\d+\.\d+$/u;
 
@@ -61,7 +65,7 @@ export function resolveUiReleaseArtifact(manifest, version) {
   if (!EXACT_SEMVER.test(version ?? "")) {
     throw new Error(`UI Release 制品版本必须是精确稳定 semver，当前为 ${version ?? "未登记"}`);
   }
-  if (manifest?.baseRepository !== CANONICAL_BASE_REPOSITORY) {
+  if (![CANONICAL_BASE_REPOSITORY, GITHUB_BASE_REPOSITORY].includes(manifest?.baseRepository)) {
     throw new Error(`UI Release 制品仓库必须为 ${CANONICAL_BASE_REPOSITORY}`);
   }
   if (manifest?.ui?.package !== UI_PACKAGE) {
@@ -74,7 +78,10 @@ export function resolveUiReleaseArtifact(manifest, version) {
   if (distribution.type !== DISTRIBUTION_TYPE) {
     throw new Error(`ui.distribution.type 必须为 ${DISTRIBUTION_TYPE}`);
   }
-  if (distribution.urlTemplate !== RELEASE_URL_TEMPLATE) {
+  const platform = distribution.platform ?? (manifest.baseRepository === CANONICAL_BASE_REPOSITORY ? "cnb" : "github");
+  const release = RELEASES[platform];
+  const expectedTemplate = release && `https://${release.host}/${release.repository}/${release.prefix}/ui-v{version}/workloom-ui-{version}.tgz`;
+  if (!release || distribution.urlTemplate !== expectedTemplate) {
     throw new Error("ui.distribution.urlTemplate 必须固定到 WorkLoom IM 官方 GitHub Release");
   }
   if (distribution.assetNameTemplate !== RELEASE_ASSET_NAME_TEMPLATE) {
@@ -103,19 +110,20 @@ export function resolveUiReleaseArtifact(manifest, version) {
   }
   if (
     parsed.protocol !== "https:"
-    || parsed.hostname !== "cnb.cool"
+    || parsed.hostname !== release.host
     || parsed.port
     || parsed.username
     || parsed.password
     || parsed.search
     || parsed.hash
-    || parsed.pathname !== `/${CANONICAL_BASE_REPOSITORY}/-/releases/download/ui-v${version}/${assetName}`
+    || parsed.pathname !== `/${release.repository}/${release.prefix}/ui-v${version}/${assetName}`
     || url !== parsed.href
   ) {
     throw new Error("UI Release 制品 URL 必须是官方仓库、HTTPS、同版本标签与同版本 tarball");
   }
   return {
     type: DISTRIBUTION_TYPE,
+    ...(distribution.platform ? { platform } : {}),
     assetName,
     url,
     sha512,
@@ -194,6 +202,7 @@ export function setUiVersion({ repo, prefix = "", version, manifest, requireAll 
     connectedClientPackages: touched,
     artifact: {
       type: artifact.type,
+      ...(artifact.platform ? { platform: artifact.platform } : {}),
       assetName: artifact.assetName,
       url: artifact.url,
       sha512: artifact.sha512,
