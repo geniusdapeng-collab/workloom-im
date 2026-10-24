@@ -4,7 +4,7 @@
   "role": "base",
   "displayName": "WorkLoom 织元",
   "packageName": "workloom-im",
-  "repository": "workloom-ai/workloom-im",
+  "repository": "geniusdapeng-collab/workloom-im",
   "defaultBundle": "ai-pm",
   "demoWorkspaceSlug": "ai-pm-demo",
   "demoMemberNo": "MEM-001",
@@ -19,8 +19,17 @@
     "portOffset": 0
   },
   "clients": {
-    "bPc": { "enabled": true, "entry": "apps/web" },
-    "bMobile": { "enabled": true, "entry": "apps/webb" },
-    "cMobile": { "enabled": true, "entry": "apps/webc" }
+    "bPc": {
+      "enabled": true,
+      "entry": "apps/web"
+    },
+    "bMobile": {
+      "enabled": true,
+      "entry": "apps/webb"
+    },
+    "cMobile": {
+      "enabled": true,
+      "entry": "apps/webc"
+    }
   }
 }
