@@ -7,6 +7,8 @@
 
 地址/车道来自 `sync/repository-registry.json`，精确部署策略由 `.workloom-delivery.json` 表达。`github.mjs` 不运行模型；当前 Codex 会话先完成真实 review 和实际测试，再保存 `workloom.codex-review/v1` JSON，字段包括 repository、headSha、baseSha、policySha256、完整 files，review 的 actor/status/evidenceSha256，及 tests 的 command/status/evidenceSha256。policySha256 按 `JSON.stringify(deliveryConfiguration())` 的 SHA-256 计算。证据必须是真实日志与审查内容的摘要，示例值不能用于真实交付。
 
+回执还必须提供 `ciApplicability`：`status=applicable|not-applicable`，与外层相同的 headSha/baseSha/policySha256，至少 20 字的适用性说明 reason、实际核实证据 evidenceSha256、准确提交的完整 completeWorkflowFiles，以及 expectedCheckNames。适用 CI 时 expectedCheckNames 非空，每项都要有实际 success；一项先绿不能代替尚未注册的其他工作。adapter 回读准确 head 的 Git tree 校验 workflow 全清单，拒绝截断、不同 SHA 或 symlink。只有完整触发条件证据表明本次没有适用 CI，且实际没有任何 status/check、没有受保护必需检查时，才允许 not-applicable。空检查列表或 combined status=pending 本身不构成“无需 CI”的证据；当前平台保护与所有已出现的检查仍照常执行。
+
 ```bash
 node scripts/delivery/github.mjs inspect --logical-id workloom-hotel --pr PR_NUMBER --head HEAD_SHA --base MAIN_SHA --review ACTUAL_REVIEW_JSON
 node scripts/delivery/github.mjs merge --logical-id workloom-hotel --pr PR_NUMBER --head HEAD_SHA --base MAIN_SHA --review ACTUAL_REVIEW_JSON --output MAIN_INTEGRATION_JSON
