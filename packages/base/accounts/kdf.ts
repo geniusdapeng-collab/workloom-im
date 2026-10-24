@@ -4,7 +4,7 @@
  * 说明：PRD 口径为 argon2id；自包含安装包要求零原生依赖（argon2 需编译），
  * 采用同等强度的 scrypt——KDF 可插拔，未来如需 argon2id 只换本文件。
  */
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 
 const N = 16384, R = 8, P = 1, KEYLEN = 64;
 
@@ -29,7 +29,6 @@ export function verifyPassword(plain: string, stored: string): boolean {
 
 /** 短码散列（验证码/邀请码/PIN/refresh token）：sha256 + 应用级盐即可（码本身高熵或短时效） */
 export function hashSecret(secret: string, salt = ""): string {
-  const { createHash } = require("node:crypto") as typeof import("node:crypto");
   return createHash("sha256").update(`wl-accounts:${salt}:${secret}`).digest("hex");
 }
 
