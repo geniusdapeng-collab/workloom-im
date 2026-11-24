@@ -19,10 +19,10 @@ This repository contains the **shared WorkLoom foundation** and the default **AI
 
 ## See the workspace
 
-Browser views captured from a local run of the source. Data comes from the AI Product Manager demo seed, with responses from a simulated model.
+These repository screenshots show the workspace and mobile service front with demo data.
 
-<img src="docs/readme/desktop-workspace.png" width="920" alt="PC workspace, AI Product Manager example"/>
-<img src="docs/readme/mobile-service.png" width="300" alt="Mobile service front, AI Product Manager example"/>
+<img src="docs/images/shots/pc-home.png" width="920" alt="PC workspace"/>
+<img src="docs/images/shots/mobile-c-service.png" width="300" alt="Mobile service front"/>
 
 [Capability tour](docs/capabilities.auto.md) · [Client preview checklist](PREVIEW_CHECKLIST.md)
 

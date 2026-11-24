@@ -19,10 +19,10 @@ WorkLoom IM 把对话、任务、审批和工作记录放进同一个工作区�
 
 ## 界面预览
 
-当前源码在本机运行的浏览器界面。数据来自 AI 产品经理演示种子，应答使用离线模拟模型。
+以下为仓库已有的界面展示，使用演示数据。
 
-<img src="docs/readme/desktop-workspace.png" width="920" alt="PC 工作台，AI 产品经理示例"/>
-<img src="docs/readme/mobile-service.png" width="300" alt="移动服务前台，AI 产品经理示例"/>
+<img src="docs/images/shots/pc-home.png" width="920" alt="PC 工作台"/>
+<img src="docs/images/shots/mobile-c-service.png" width="300" alt="移动服务前台"/>
 
 [浏览更多功能和界面](docs/capabilities.auto.md) · [三端体验清单](PREVIEW_CHECKLIST.md)
 
@@ -220,16 +220,6 @@ LLM_MODEL=deepseek-chat
 - 改完代码必须跑 `pnpm suite`；发布前必须跑 `pnpm release:gate`（未全过禁止发布，见 `docs/release-checklist.md`）
 - **UI 改动必须用浏览器能力实际打开页面截图核对**，禁止「改了就算完成」
 - 改了能力面（脚本/包/技能/演示页）必须跑 `pnpm capabilities` 重新生成人类版导览
-
-### 6.6 桌面安装包发布通道（CNB）
-
-仓库事实源在 CNB（GitHub 账号已失效），桌面安装包在 CNB 流水线内构建与发布：
-
-- **流水线**：`.cnb.yml#desktop-release`（触发 `api_trigger_desktop_release`，须以 `DESKTOP_RELEASE_VERSION=vX.Y.Z` 指定版本）。
-  编排为 `desktop-release-preflight`（发布输入/资产锁/发布策略/命名一致性）→ `desktop-release-macos`（自托管 mac 节点：签名 Bundle → 载荷装配 → dmg arm64/x64 → 验签+公证+拆包验收）→ `desktop-release-windows`（自托管 windows 节点：同源 PG 运行时 → NSIS exe → 拆包验收）→ `desktop-release-finalize`（回读候选字节逐字节复核 sha512，产出 `WorkLoom-SHA512SUMS.txt` 与 `WorkLoom-release-manifest.json`）。
-- **产物名（对外恒定，勿改）**：`WorkLoom-mac-arm64.dmg` / `WorkLoom-mac-x64.dmg` / `WorkLoom-win-x64.exe` + 校验表 `WorkLoom-SHA512SUMS.txt`（sha512）。命名一致性由 `node scripts/desktop-artifact-naming.mjs` 门禁守住（文档 / CNB 流水线 / 发布策略事实源三处口径必须一致）。
-- **前置（组织侧一次性）**：接入自托管 mac / windows 构建节点（组织设置 → 构建节点，tags 分别为 `mac,arm64` 与 `windows`），并在仓库密钥注入桌面签名/公证/Bundle 私钥。缺任一项时流水线 fail-closed（预检列出缺项），**不会**产出未签名或半套制品。当前登记：`BLK-B-01-003`（桌面签名与公证密钥未配置）。
-- **遗留通道**：`.github/workflows/desktop-production-release.yml` 保留为发布策略事实源（`product.manifest.json#release.workflow` 与 release-publisher-policy 门禁按它校验发布纪律），GitHub 侧不再作为供货通道。
 
 ---
 
